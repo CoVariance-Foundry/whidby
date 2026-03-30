@@ -12,7 +12,7 @@ const navLinks = [
 ];
 
 interface NavbarProps {
-  onOpenWaitlist: () => void;
+  onOpenWaitlist: (source: string) => void;
 }
 
 export function Navbar({ onOpenWaitlist }: NavbarProps) {
@@ -20,7 +20,7 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
 
   const handleWaitlistClick = () => {
     trackCTAClick('join_waitlist', 'navbar');
-    onOpenWaitlist();
+    onOpenWaitlist('navbar');
   };
 
   return (
@@ -41,7 +41,7 @@ export function Navbar({ onOpenWaitlist }: NavbarProps) {
               </svg>
             </div>
             <span className="font-sans font-bold text-lg text-dark tracking-tight">
-              Rankread
+              Widby
             </span>
           </a>
 
