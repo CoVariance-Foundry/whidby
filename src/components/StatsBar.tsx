@@ -2,13 +2,7 @@
 
 import { motion } from 'framer-motion';
 
-const tags = [
-  'Rank & Rent',
-  'Local Lead Gen',
-  'Digital Landlords',
-  'Local SEO',
-  'Portfolio Operators',
-];
+const tags = ['Rank & Rent', 'Local Lead Gen', 'Digital Landlords', 'Local SEO', 'Portfolio Operators'];
 
 export function StatsBar() {
   return (
@@ -21,9 +15,7 @@ export function StatsBar() {
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
-          <span className="text-sm text-neutral-400 shrink-0">
-            Built for practitioners who know
-          </span>
+          <span className="text-sm text-neutral-400 shrink-0">Built for practitioners who know</span>
           <div className="hidden sm:block w-px h-5 bg-gray-200" />
           <div className="flex flex-wrap items-center gap-2.5">
             {tags.map((tag) => (

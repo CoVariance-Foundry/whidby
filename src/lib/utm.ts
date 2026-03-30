@@ -1,58 +1,51 @@
-'use client';
-
 const UTM_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
 const SESSION_KEY = 'rr_session_id';
 const UTM_KEY = 'rr_utm';
 
-export interface UTMData {
-  utm_source: string | null;
-  utm_medium: string | null;
-  utm_campaign: string | null;
-  utm_term: string | null;
-  utm_content: string | null;
-}
+export type UTMParams = {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_term?: string;
+  utm_content?: string;
+};
 
 export function getSessionId(): string {
   if (typeof window === 'undefined') return '';
-  let id = sessionStorage.getItem(SESSION_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(SESSION_KEY, id);
+  let sessionId = sessionStorage.getItem(SESSION_KEY);
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    sessionStorage.setItem(SESSION_KEY, sessionId);
   }
-  return id;
+  return sessionId;
 }
 
-export function captureUTMParams(): UTMData {
-  if (typeof window === 'undefined') {
-    return { utm_source: null, utm_medium: null, utm_campaign: null, utm_term: null, utm_content: null };
-  }
+export function captureUTMParams(): UTMParams {
+  if (typeof window === 'undefined') return {};
 
-  const stored = sessionStorage.getItem(UTM_KEY);
-  if (stored) {
-    return JSON.parse(stored);
-  }
+  const url = new URL(window.location.href);
+  const params: UTMParams = {};
+  let hasNew = false;
 
-  const params = new URLSearchParams(window.location.search);
-  const utm: UTMData = {
-    utm_source: null,
-    utm_medium: null,
-    utm_campaign: null,
-    utm_term: null,
-    utm_content: null,
-  };
-
-  let hasUtm = false;
   for (const key of UTM_PARAMS) {
-    const val = params.get(key);
-    if (val) {
-      utm[key] = val;
-      hasUtm = true;
+    const value = url.searchParams.get(key);
+    if (value) {
+      params[key] = value;
+      hasNew = true;
     }
   }
 
-  if (hasUtm) {
-    sessionStorage.setItem(UTM_KEY, JSON.stringify(utm));
+  if (hasNew) {
+    sessionStorage.setItem(UTM_KEY, JSON.stringify(params));
+    return params;
   }
 
-  return utm;
+  const stored = sessionStorage.getItem(UTM_KEY);
+  return stored ? JSON.parse(stored) : {};
+}
+
+export function getStoredUTMParams(): UTMParams {
+  if (typeof window === 'undefined') return {};
+  const stored = sessionStorage.getItem(UTM_KEY);
+  return stored ? JSON.parse(stored) : {};
 }

@@ -12,20 +12,9 @@ const metrics = [
   { label: 'Rentability signal', value: 84, color: '#14B8A6' },
 ];
 
-function ProgressBar({
-  label,
-  value,
-  color,
-  delay,
-}: {
-  label: string;
-  value: number;
-  color: string;
-  delay: number;
-}) {
+function ProgressBar({ label, value, color, delay }: { label: string; value: number; color: string; delay: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true });
-
   return (
     <div ref={ref} className="flex items-center gap-4">
       <span className="text-sm text-neutral-500 w-36 shrink-0">{label}</span>
@@ -38,27 +27,25 @@ function ProgressBar({
           transition={{ duration: 0.8, delay, ease: 'easeOut' }}
         />
       </div>
-      <span className="text-sm font-semibold text-dark w-8 text-right">
-        {value}
-      </span>
+      <span className="text-sm font-semibold text-dark w-8 text-right">{value}</span>
     </div>
   );
 }
 
 interface HeroSectionProps {
-  onWaitlistOpen: () => void;
+  onOpenWaitlist: () => void;
 }
 
-export function HeroSection({ onWaitlistOpen }: HeroSectionProps) {
-  function handleEarlyAccess() {
+export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
+  const handleRequestAccess = () => {
     trackCTAClick('request_early_access', 'hero');
-    onWaitlistOpen();
-  }
+    onOpenWaitlist();
+  };
 
-  function handleSeeHow() {
+  const handleSeeHowItWorks = () => {
     trackCTAClick('see_how_it_works', 'hero');
     document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
-  }
+  };
 
   return (
     <section data-section="hero" className="pt-28 pb-8 lg:pt-36 lg:pb-12 bg-white">
@@ -70,41 +57,35 @@ export function HeroSection({ onWaitlistOpen }: HeroSectionProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            {/* Badge */}
             <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-gray-200 text-sm text-neutral-700 mb-8">
               <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
               Now in early access
             </span>
 
-            {/* Headline */}
             <h1 className="font-serif text-5xl md:text-6xl lg:text-[3.75rem] leading-[1.1] text-dark mb-6">
               You can rank it.
               <br />
               <em className="not-italic italic">But can you</em>
               <br />
-              <span className="line-through decoration-neutral-400 decoration-2">
-                guess
-              </span>{' '}
+              <span className="line-through decoration-neutral-400 decoration-2">guess</span>{' '}
               <em className="italic text-accent">rent it?</em>
             </h1>
 
-            {/* Body */}
             <p className="text-base md:text-lg text-neutral-500 leading-relaxed max-w-md mb-8">
               AI market intelligence for rank-and-rent practitioners. Score any
               niche + city for both rankability and rentability before you build
               a single page.
             </p>
 
-            {/* CTAs */}
             <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={handleEarlyAccess}
+                onClick={handleRequestAccess}
                 className="px-6 py-3 text-base font-medium rounded-lg bg-dark text-white hover:bg-neutral-800 transition-colors"
               >
                 Request Early Access &rarr;
               </button>
               <button
-                onClick={handleSeeHow}
+                onClick={handleSeeHowItWorks}
                 className="px-6 py-3 text-base font-medium rounded-lg border border-gray-300 text-neutral-600 hover:bg-gray-50 transition-colors"
               >
                 See how it works
@@ -119,55 +100,37 @@ export function HeroSection({ onWaitlistOpen }: HeroSectionProps) {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="relative"
           >
-            {/* Top badge */}
             <div className="absolute -top-3 right-4 z-10">
               <span className="inline-block px-3.5 py-1.5 bg-accent text-white text-sm font-semibold rounded-lg shadow-md">
-                87 / 100 — Build here
+                87 / 100 &mdash; Build here
               </span>
             </div>
 
-            {/* Card */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6 md:p-8">
-              {/* Header */}
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <h3 className="text-xl font-bold text-dark">Tree Service</h3>
-                  <p className="text-sm text-neutral-400 mt-0.5">
-                    Austin, TX &middot; analyzed just now
-                  </p>
+                  <p className="text-sm text-neutral-400 mt-0.5">Austin, TX &middot; analyzed just now</p>
                 </div>
                 <div className="score-circle">
-                  <span className="text-2xl font-bold text-accent leading-none">
-                    87
-                  </span>
-                  <span className="text-[9px] font-semibold text-accent uppercase tracking-wider">
-                    Score
-                  </span>
+                  <span className="text-2xl font-bold text-accent leading-none">87</span>
+                  <span className="text-[9px] font-semibold text-accent uppercase tracking-wider">Score</span>
                 </div>
               </div>
 
-              {/* Progress Bars */}
               <div className="space-y-4 mb-6">
                 {metrics.map((m, i) => (
-                  <ProgressBar
-                    key={m.label}
-                    label={m.label}
-                    value={m.value}
-                    color={m.color}
-                    delay={0.3 + i * 0.1}
-                  />
+                  <ProgressBar key={m.label} label={m.label} value={m.value} color={m.color} delay={0.3 + i * 0.1} />
                 ))}
               </div>
 
-              {/* Success Message */}
               <div className="bg-accent-bg border border-accent/20 rounded-xl p-4 flex gap-3">
                 <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shrink-0 mt-0.5">
                   <CheckIcon className="w-3 h-3 text-white" strokeWidth={3} />
                 </div>
                 <p className="text-sm text-neutral-700 leading-relaxed">
                   <strong className="font-semibold">Strong opportunity.</strong>{' '}
-                  12 local businesses running paid ads. High ticket value
-                  ($1,200+ avg job). Map pack has 2 weak incumbents. Build here.
+                  12 local businesses running paid ads. High ticket value ($1,200+ avg job). Map pack has 2 weak incumbents. Build here.
                 </p>
               </div>
             </div>

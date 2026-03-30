@@ -1,50 +1,40 @@
-'use client';
+import { getSessionId, getStoredUTMParams } from './utm';
 
-import { getSessionId, captureUTMParams } from './utm';
+type EventData = Record<string, unknown>;
 
-interface EventPayload {
-  event_name: string;
-  event_data?: Record<string, unknown>;
-  page_url?: string;
-  referrer?: string;
-}
-
-let pageLoadTime: number | null = null;
+let pageLoadTime = 0;
 
 export function initAnalytics() {
   pageLoadTime = Date.now();
 }
 
-function getTimeSinceLoad(): number {
-  if (!pageLoadTime) return 0;
-  return Math.round((Date.now() - pageLoadTime) / 1000);
-}
+export async function trackEvent(eventName: string, eventData: EventData = {}) {
+  const utm = getStoredUTMParams();
+  const sessionId = getSessionId();
 
-export async function trackEvent(name: string, data?: Record<string, unknown>) {
+  const payload = {
+    event_name: eventName,
+    event_data: eventData,
+    page_url: window.location.href,
+    referrer: document.referrer || null,
+    utm_source: utm.utm_source || null,
+    utm_medium: utm.utm_medium || null,
+    utm_campaign: utm.utm_campaign || null,
+    utm_term: utm.utm_term || null,
+    utm_content: utm.utm_content || null,
+    session_id: sessionId,
+    user_agent: navigator.userAgent,
+    screen_width: window.innerWidth,
+  };
+
   try {
-    const utm = captureUTMParams();
-    const sessionId = getSessionId();
-
-    const payload: EventPayload = {
-      event_name: name,
-      event_data: data || {},
-      page_url: window.location.href,
-      referrer: document.referrer || undefined,
-    };
-
     await fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...payload,
-        ...utm,
-        session_id: sessionId,
-        user_agent: navigator.userAgent,
-        screen_width: window.innerWidth,
-      }),
+      body: JSON.stringify(payload),
     });
   } catch {
-    // Silently fail - analytics should never break the app
+    // Silently fail — analytics should never break the UI
   }
 }
 
@@ -53,31 +43,20 @@ export function trackPageView() {
 }
 
 export function trackCTAClick(ctaName: string, ctaLocation: string) {
-  trackEvent('cta_click', {
-    cta_name: ctaName,
-    cta_location: ctaLocation,
-    time_on_page: getTimeSinceLoad(),
-  });
+  trackEvent('cta_click', { cta_name: ctaName, cta_location: ctaLocation });
 }
 
 export function trackSectionView(sectionId: string) {
-  trackEvent('section_view', {
-    section_id: sectionId,
-    time_on_page: getTimeSinceLoad(),
-  });
+  const timeOnPage = Math.round((Date.now() - pageLoadTime) / 1000);
+  trackEvent('section_view', { section_id: sectionId, time_on_page: timeOnPage });
 }
 
-export function trackScrollDepth(percent: number) {
-  trackEvent('scroll_depth', {
-    depth_percent: percent,
-    time_to_reach: getTimeSinceLoad(),
-  });
+export function trackScrollDepth(depthPercent: number) {
+  const timeToReach = Math.round((Date.now() - pageLoadTime) / 1000);
+  trackEvent('scroll_depth', { depth_percent: depthPercent, time_to_reach: timeToReach });
 }
 
-export function trackWaitlistSignup(email: string, sourceSection: string) {
-  trackEvent('waitlist_signup', {
-    email_domain: email.split('@')[1],
-    source_section: sourceSection,
-    time_on_page: getTimeSinceLoad(),
-  });
+export function trackWaitlistSignup(email: string) {
+  const emailHash = btoa(email).slice(0, 12);
+  trackEvent('waitlist_signup', { email_hash: emailHash });
 }

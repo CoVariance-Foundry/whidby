@@ -12,16 +12,16 @@ const navLinks = [
 ];
 
 interface NavbarProps {
-  onWaitlistOpen: () => void;
+  onOpenWaitlist: () => void;
 }
 
-export function Navbar({ onWaitlistOpen }: NavbarProps) {
+export function Navbar({ onOpenWaitlist }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  function handleWaitlistClick() {
+  const handleWaitlistClick = () => {
     trackCTAClick('join_waitlist', 'navbar');
-    onWaitlistOpen();
-  }
+    onOpenWaitlist();
+  };
 
   return (
     <motion.nav
@@ -74,11 +74,7 @@ export function Navbar({ onWaitlistOpen }: NavbarProps) {
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
-            {mobileOpen ? (
-              <XIcon className="w-5 h-5" />
-            ) : (
-              <MenuIcon className="w-5 h-5" />
-            )}
+            {mobileOpen ? <XIcon className="w-5 h-5" /> : <MenuIcon className="w-5 h-5" />}
           </button>
         </div>
       </div>

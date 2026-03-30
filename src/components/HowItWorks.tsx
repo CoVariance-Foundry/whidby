@@ -27,18 +27,14 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" data-section="how-it-works" className="py-16 lg:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        {/* Section Header */}
         <div className="mb-16 max-w-2xl">
-          <p className="text-sm font-medium uppercase tracking-[0.1em] text-neutral-400 mb-4">
-            Why Rankread
-          </p>
+          <p className="text-sm font-medium uppercase tracking-[0.1em] text-neutral-400 mb-4">Why Rankread</p>
           <h2 className="font-serif text-4xl md:text-5xl text-dark leading-[1.1]">
             The intelligence layer your R&R stack is{' '}
             <em className="italic text-accent">missing.</em>
           </h2>
         </div>
 
-        {/* Feature Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
           {features.map((feature, index) => (
             <motion.div
@@ -49,15 +45,9 @@ export function HowItWorks() {
               transition={{ duration: 0.4, delay: index * 0.15 }}
               className="card-gradient-border pt-8"
             >
-              <span className="font-mono text-sm text-neutral-400 block mb-4">
-                {feature.num}
-              </span>
-              <h3 className="font-sans text-lg font-bold text-dark mb-3 leading-snug">
-                {feature.title}
-              </h3>
-              <p className="text-neutral-500 leading-relaxed">
-                {feature.description}
-              </p>
+              <span className="font-mono text-sm text-neutral-400 block mb-4">{feature.num}</span>
+              <h3 className="font-sans text-lg font-bold text-dark mb-3 leading-snug">{feature.title}</h3>
+              <p className="text-neutral-500 leading-relaxed">{feature.description}</p>
             </motion.div>
           ))}
         </div>

@@ -5,14 +5,14 @@ import { CheckIcon } from 'lucide-react';
 import { trackCTAClick } from '@/lib/analytics';
 
 interface CTASectionProps {
-  onWaitlistOpen: () => void;
+  onOpenWaitlist: () => void;
 }
 
-export function CTASection({ onWaitlistOpen }: CTASectionProps) {
-  function handleEarlyAccess() {
+export function CTASection({ onOpenWaitlist }: CTASectionProps) {
+  const handleRequestAccess = () => {
     trackCTAClick('request_early_access', 'cta_section');
-    onWaitlistOpen();
-  }
+    onOpenWaitlist();
+  };
 
   return (
     <section data-section="cta" className="py-20 lg:py-28 bg-white">
@@ -25,15 +25,14 @@ export function CTASection({ onWaitlistOpen }: CTASectionProps) {
           className="flex flex-col items-center"
         >
           <h2 className="font-serif text-3xl md:text-4xl text-dark mb-6 leading-tight">
-            Stop guessing. Start{' '}
-            <em className="italic text-accent">scoring.</em>
+            Stop guessing. Start <em className="italic text-accent">scoring.</em>
           </h2>
           <p className="text-neutral-500 max-w-md mb-8 leading-relaxed">
-            Join the practitioners who validate markets in minutes, not days.
-            Get access to Rankread before the competition does.
+            Join the practitioners who validate markets in minutes, not days. Get access to Rankread before the
+            competition does.
           </p>
           <button
-            onClick={handleEarlyAccess}
+            onClick={handleRequestAccess}
             className="px-6 py-3 text-base font-medium rounded-lg bg-dark text-white hover:bg-neutral-800 transition-colors mb-6"
           >
             Request Early Access &rarr;
