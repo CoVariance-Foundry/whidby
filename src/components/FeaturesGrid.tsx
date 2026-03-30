@@ -5,22 +5,22 @@ import { CheckIcon } from 'lucide-react';
 import { trackCTAClick } from '@/lib/analytics';
 
 const capabilities = [
-  { name: 'Rankability scoring', rankread: true, others: true },
-  { name: 'Rentability analysis', rankread: true, others: false },
-  { name: 'Business density signals', rankread: true, others: false },
-  { name: 'Ad spend indicators', rankread: true, others: false },
-  { name: 'R&R-specific scoring', rankread: true, others: false },
-  { name: 'Live SERP analysis', rankread: true, others: false },
+  { name: 'Rankability scoring', widby: true, others: true },
+  { name: 'Rentability analysis', widby: true, others: false },
+  { name: 'Business density signals', widby: true, others: false },
+  { name: 'Ad spend indicators', widby: true, others: false },
+  { name: 'R&R-specific scoring', widby: true, others: false },
+  { name: 'Live SERP analysis', widby: true, others: false },
 ];
 
 interface FeaturesGridProps {
-  onOpenWaitlist: () => void;
+  onOpenWaitlist: (source: string) => void;
 }
 
 export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
   const handleStopGuessing = () => {
     trackCTAClick('stop_guessing', 'features_grid');
-    onOpenWaitlist();
+    onOpenWaitlist('features_grid');
   };
 
   return (
@@ -63,7 +63,7 @@ export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
             <div className="bg-dark-card rounded-2xl overflow-hidden border border-neutral-800">
               <div className="grid grid-cols-[1fr_100px_100px] px-6 py-4 border-b border-neutral-800">
                 <span className="text-xs font-medium uppercase tracking-wider text-neutral-500">Capability</span>
-                <span className="text-xs font-medium uppercase tracking-wider text-accent text-center">Rankread</span>
+                <span className="text-xs font-medium uppercase tracking-wider text-accent text-center">Widby</span>
                 <span className="text-xs font-medium uppercase tracking-wider text-neutral-500 text-center">Others</span>
               </div>
 
@@ -74,7 +74,7 @@ export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
                 >
                   <span className="text-sm text-neutral-300">{cap.name}</span>
                   <div className="flex justify-center">
-                    {cap.rankread && <CheckIcon className="w-4 h-4 text-accent" strokeWidth={3} />}
+                    {cap.widby && <CheckIcon className="w-4 h-4 text-accent" strokeWidth={3} />}
                   </div>
                   <div className="flex justify-center">
                     {cap.others ? (

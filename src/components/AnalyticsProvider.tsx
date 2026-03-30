@@ -5,7 +5,7 @@ import { initAnalytics, trackPageView, trackScrollDepth, trackSectionView } from
 import { captureUTMParams } from '@/lib/utm';
 
 const SCROLL_MILESTONES = [25, 50, 75, 100];
-const SECTION_IDS = ['hero', 'stats-bar', 'how-it-works', 'features-grid', 'cta', 'footer'];
+const SECTION_IDS = ['hero', 'stats-bar', 'how-it-works', 'features-grid', 'pricing', 'cta', 'footer'];
 
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const trackedScrollDepths = useRef(new Set<number>());

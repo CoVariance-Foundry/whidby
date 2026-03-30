@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rankread — AI Market Intelligence for Rank & Rent",
+  title: "Widby — AI Market Intelligence for Rank & Rent",
   description:
     "Score any niche + city for both rankability and rentability before you build a single page. AI market intelligence for rank-and-rent practitioners.",
   openGraph: {
-    title: "Rankread — AI Market Intelligence for Rank & Rent",
+    title: "Widby — AI Market Intelligence for Rank & Rent",
     description:
       "Score any niche + city for both rankability and rentability before you build a single page.",
     type: "website",

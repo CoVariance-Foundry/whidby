@@ -28,7 +28,7 @@ export function HowItWorks() {
     <section id="how-it-works" data-section="how-it-works" className="py-16 lg:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="mb-16 max-w-2xl">
-          <p className="text-sm font-medium uppercase tracking-[0.1em] text-neutral-400 mb-4">Why Rankread</p>
+          <p className="text-sm font-medium uppercase tracking-[0.1em] text-neutral-400 mb-4">Why Widby</p>
           <h2 className="font-serif text-4xl md:text-5xl text-dark leading-[1.1]">
             The intelligence layer your R&R stack is{' '}
             <em className="italic text-accent">missing.</em>

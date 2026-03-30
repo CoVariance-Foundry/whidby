@@ -10,7 +10,7 @@ export function Footer() {
                 <circle cx="8" cy="8" r="2.5" fill="#10B981" />
               </svg>
             </div>
-            <span className="font-sans font-semibold text-sm text-dark">Rankread</span>
+            <span className="font-sans font-semibold text-sm text-dark">Widby</span>
           </div>
 
           <div className="flex items-center gap-6">
@@ -20,7 +20,7 @@ export function Footer() {
           </div>
 
           <p className="text-sm text-neutral-400">
-            &copy; {new Date().getFullYear()} Rankread. All rights reserved.
+            &copy; 2026 Widby. All rights reserved.
           </p>
         </div>
       </div>

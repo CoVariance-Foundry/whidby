@@ -3,9 +3,18 @@ import { getSessionId, getStoredUTMParams } from './utm';
 type EventData = Record<string, unknown>;
 
 let pageLoadTime = 0;
+let sawPricing = false;
 
 export function initAnalytics() {
   pageLoadTime = Date.now();
+}
+
+export function markPricingSeen() {
+  sawPricing = true;
+}
+
+export function hasSawPricing(): boolean {
+  return sawPricing;
 }
 
 export async function trackEvent(eventName: string, eventData: EventData = {}) {
@@ -47,6 +56,7 @@ export function trackCTAClick(ctaName: string, ctaLocation: string) {
 }
 
 export function trackSectionView(sectionId: string) {
+  if (sectionId === 'pricing') markPricingSeen();
   const timeOnPage = Math.round((Date.now() - pageLoadTime) / 1000);
   trackEvent('section_view', { section_id: sectionId, time_on_page: timeOnPage });
 }
@@ -56,7 +66,12 @@ export function trackScrollDepth(depthPercent: number) {
   trackEvent('scroll_depth', { depth_percent: depthPercent, time_to_reach: timeToReach });
 }
 
-export function trackWaitlistSignup(email: string) {
+export function trackWaitlistSignup(email: string, source: string, portfolioSize: string) {
   const emailHash = btoa(email).slice(0, 12);
-  trackEvent('waitlist_signup', { email_hash: emailHash });
+  trackEvent('waitlist_signup', {
+    email_hash: emailHash,
+    signup_source: source,
+    portfolio_size: portfolioSize,
+    saw_pricing: hasSawPricing(),
+  });
 }

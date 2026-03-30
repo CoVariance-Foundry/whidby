@@ -9,10 +9,12 @@ import { trackWaitlistSignup } from '@/lib/analytics';
 interface WaitlistModalProps {
   isOpen: boolean;
   onClose: () => void;
+  source: string;
 }
 
-export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
+export function WaitlistModal({ isOpen, onClose, source }: WaitlistModalProps) {
   const [email, setEmail] = useState('');
+  const [portfolioSize, setPortfolioSize] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'duplicate'>('idle');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,6 +34,8 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
           utm_medium: utm.utm_medium,
           utm_campaign: utm.utm_campaign,
           referrer: document.referrer || null,
+          signup_source: source,
+          portfolio_size: portfolioSize || null,
         }),
       });
 
@@ -43,7 +47,7 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
       if (!res.ok) throw new Error('Failed');
 
       setStatus('success');
-      trackWaitlistSignup(email);
+      trackWaitlistSignup(email, source, portfolioSize);
     } catch {
       setStatus('error');
     }
@@ -93,7 +97,7 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
               <>
                 <h3 className="font-serif text-2xl text-dark mb-2">Join the Waitlist</h3>
                 <p className="text-neutral-500 mb-6">
-                  Get early access to Rankread and start scoring markets before anyone else.
+                  Get early access to Widby and start scoring markets before anyone else.
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -112,6 +116,23 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
                     {status === 'error' && (
                       <p className="text-sm text-red-500 mt-2">Something went wrong. Please try again.</p>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-dark mb-1.5">
+                      How many R&R sites do you currently manage?
+                    </label>
+                    <select
+                      value={portfolioSize}
+                      onChange={(e) => setPortfolioSize(e.target.value)}
+                      className={`w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent transition-colors ${portfolioSize ? 'text-dark' : 'text-neutral-400'}`}
+                    >
+                      <option value="" disabled>Select your experience level</option>
+                      <option value="0">None yet — just getting started</option>
+                      <option value="1-5">1–5 sites</option>
+                      <option value="6-20">6–20 sites</option>
+                      <option value="20+">20+ sites</option>
+                    </select>
                   </div>
 
                   <button

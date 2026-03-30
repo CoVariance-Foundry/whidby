@@ -33,13 +33,13 @@ function ProgressBar({ label, value, color, delay }: { label: string; value: num
 }
 
 interface HeroSectionProps {
-  onOpenWaitlist: () => void;
+  onOpenWaitlist: (source: string) => void;
 }
 
 export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
   const handleRequestAccess = () => {
     trackCTAClick('request_early_access', 'hero');
-    onOpenWaitlist();
+    onOpenWaitlist('hero');
   };
 
   const handleSeeHowItWorks = () => {

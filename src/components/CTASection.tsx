@@ -5,13 +5,13 @@ import { CheckIcon } from 'lucide-react';
 import { trackCTAClick } from '@/lib/analytics';
 
 interface CTASectionProps {
-  onOpenWaitlist: () => void;
+  onOpenWaitlist: (source: string) => void;
 }
 
 export function CTASection({ onOpenWaitlist }: CTASectionProps) {
   const handleRequestAccess = () => {
     trackCTAClick('request_early_access', 'cta_section');
-    onOpenWaitlist();
+    onOpenWaitlist('cta_section');
   };
 
   return (
@@ -28,7 +28,7 @@ export function CTASection({ onOpenWaitlist }: CTASectionProps) {
             Stop guessing. Start <em className="italic text-accent">scoring.</em>
           </h2>
           <p className="text-neutral-500 max-w-md mb-8 leading-relaxed">
-            Join the practitioners who validate markets in minutes, not days. Get access to Rankread before the
+            Join the practitioners who validate markets in minutes, not days. Get access to Widby before the
             competition does.
           </p>
           <button
