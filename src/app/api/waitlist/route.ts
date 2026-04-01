@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +13,7 @@ export async function POST(request: Request) {
       ? signup_source.replace('pricing_', '')
       : null;
 
+    const supabase = getSupabase();
     const { error } = await supabase.from('waitlist_signups').insert({
       email: email.toLowerCase().trim(),
       utm_source,
