@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Widby — AI Market Intelligence for Rank & Rent",
+  title: "Widby | AI market intelligence for rank and rent",
   description:
-    "Score any niche + city for both rankability and rentability before you build a single page. AI market intelligence for rank-and-rent practitioners.",
+    "Score any niche and city for rankability and rentability before you build. Built for rank-and-rent operators.",
   openGraph: {
-    title: "Widby — AI Market Intelligence for Rank & Rent",
+    title: "Widby | AI market intelligence for rank and rent",
     description:
-      "Score any niche + city for both rankability and rentability before you build a single page.",
+      "Score any niche and city for rankability and rentability before you build.",
     type: "website",
   },
 };

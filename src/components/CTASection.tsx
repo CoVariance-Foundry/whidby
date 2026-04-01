@@ -28,8 +28,8 @@ export function CTASection({ onOpenWaitlist }: CTASectionProps) {
             Stop guessing. Start <em className="italic text-accent">scoring.</em>
           </h2>
           <p className="text-neutral-500 max-w-md mb-8 leading-relaxed">
-            Join the practitioners who validate markets in minutes, not days. Get access to Widby before the
-            competition does.
+            Validate a market in minutes instead of days. Request access and we will
+            email you when your spot opens.
           </p>
           <button
             onClick={handleRequestAccess}

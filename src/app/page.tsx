@@ -7,6 +7,7 @@ import { StatsBar } from '@/components/StatsBar';
 import { HowItWorks } from '@/components/HowItWorks';
 import { FeaturesGrid } from '@/components/FeaturesGrid';
 import { PricingSection } from '@/components/PricingSection';
+import { AboutSection } from '@/components/AboutSection';
 import { CTASection } from '@/components/CTASection';
 import { Footer } from '@/components/Footer';
 import { WaitlistModal } from '@/components/WaitlistModal';
@@ -30,6 +31,7 @@ export default function Home() {
         <HowItWorks />
         <FeaturesGrid onOpenWaitlist={openWaitlist} />
         <PricingSection onOpenWaitlist={openWaitlist} />
+        <AboutSection />
         <CTASection onOpenWaitlist={openWaitlist} />
       </main>
       <Footer />
