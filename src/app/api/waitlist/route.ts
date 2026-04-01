@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase';
+import { createOrUpdateContact, addTagToContact } from '@/lib/activecampaign';
 
 export async function POST(request: Request) {
   try {
@@ -9,13 +10,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Valid email is required' }, { status: 400 });
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
     const selected_tier = signup_source?.startsWith('pricing_')
       ? signup_source.replace('pricing_', '')
       : null;
 
     const supabase = getSupabase();
     const { error } = await supabase.from('waitlist_signups').insert({
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       utm_source,
       utm_medium,
       utm_campaign,
@@ -33,7 +36,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to sign up' }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true });
+    // Sync to ActiveCampaign (non-blocking — don't fail the request if AC is down)
+    let contactId: number | null = null;
+    try {
+      contactId = await createOrUpdateContact(normalizedEmail);
+      await addTagToContact(contactId, 'waitlist-signup');
+      if (selected_tier) {
+        await addTagToContact(contactId, `tier-${selected_tier}`);
+      }
+    } catch (acError) {
+      console.error('ActiveCampaign sync error:', acError);
+    }
+
+    return NextResponse.json({ ok: true, contactId });
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
