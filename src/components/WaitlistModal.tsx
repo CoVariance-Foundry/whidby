@@ -148,6 +148,7 @@ export function WaitlistModal({ isOpen, onClose, source }: WaitlistModalProps) {
 
   const handleClose = () => {
     onClose();
+    setSubmitting(false);
     setTimeout(() => {
       setStep(1);
       setEmail('');
@@ -227,7 +228,7 @@ export function WaitlistModal({ isOpen, onClose, source }: WaitlistModalProps) {
                 >
                   <h3 className="font-serif text-2xl text-dark mb-2">Join the Waitlist</h3>
                   <p className="text-neutral-500 mb-6">
-                    Get early access to Rankread and start scoring markets before anyone else.
+                    Get early access to Widby and start scoring markets before anyone else.
                   </p>
                   <form onSubmit={handleEmailSubmit} className="space-y-4">
                     <div>
