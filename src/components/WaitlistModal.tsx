@@ -29,7 +29,7 @@ const SITES_MANAGED = [
 const USE_CASES = [
   { value: 'niche-discovery', label: 'Niche discovery', desc: 'Find profitable niches' },
   { value: 'market-validation', label: 'Market validation', desc: 'Score before you build' },
-  { value: 'competitor-analysis', label: 'Competitor analysis', desc: 'Understand the landscape' },
+  { value: 'competitor-analysis', label: 'Competitor analysis', desc: 'See who ranks' },
   { value: 'portfolio-management', label: 'Portfolio management', desc: 'Track existing sites' },
 ];
 
@@ -139,7 +139,7 @@ export function WaitlistModal({ isOpen, onClose, source }: WaitlistModalProps) {
         use_cases: useCases,
       });
     } catch {
-      // Non-blocking — still show thank you
+      // Non-blocking; still show thank you
     }
 
     setSubmitting(false);
@@ -228,7 +228,8 @@ export function WaitlistModal({ isOpen, onClose, source }: WaitlistModalProps) {
                 >
                   <h3 className="font-serif text-2xl text-dark mb-2">Join the Waitlist</h3>
                   <p className="text-neutral-500 mb-6">
-                    Get early access to Widby and start scoring markets before anyone else.
+                    Get early access to Widby and start scoring markets as soon as it
+                    is ready.
                   </p>
                   <form onSubmit={handleEmailSubmit} className="space-y-4">
                     <div>

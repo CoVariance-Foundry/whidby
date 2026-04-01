@@ -51,7 +51,7 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
     <section data-section="hero" className="pt-28 pb-8 lg:pt-36 lg:pb-12 bg-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          {/* Left — Copy */}
+          {/* Left column: headline and CTAs */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -72,9 +72,8 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
             </h1>
 
             <p className="text-base md:text-lg text-neutral-500 leading-relaxed max-w-md mb-8">
-              AI market intelligence for rank-and-rent practitioners. Score any
-              niche + city for both rankability and rentability before you build
-              a single page.
+              Score any niche and city for rankability and rentability before you
+              ship a page. Built for rank-and-rent operators.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -93,7 +92,7 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
             </div>
           </motion.div>
 
-          {/* Right — Score Card */}
+          {/* Right column: example score card */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -102,7 +101,7 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
           >
             <div className="absolute -top-3 right-4 z-10">
               <span className="inline-block px-3.5 py-1.5 bg-accent text-white text-sm font-semibold rounded-lg shadow-md">
-                87 / 100 &mdash; Build here
+                87 / 100 · Build here
               </span>
             </div>
 

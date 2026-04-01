@@ -5,21 +5,21 @@ import { motion } from 'framer-motion';
 const features = [
   {
     num: '01',
-    title: 'Rankability — can you win this market?',
+    title: 'Rankability: can you win this market?',
     description:
-      'SERP depth, map pack saturation, domain authority of incumbents. 340+ signals synthesized into a single rankability score. Not a keyword tool. A viability engine.',
+      'SERP depth, map pack saturation, incumbent domain strength. 340+ signals roll up into one rankability score so you are not guessing from keywords alone.',
   },
   {
     num: '02',
-    title: 'Rentability — will businesses pay for these leads?',
+    title: 'Rentability: will businesses pay for these leads?',
     description:
-      'Business density, ad spend signals, average ticket value by vertical. The question no other tool asks — and the one that determines whether your ranked site makes money.',
+      'Business density, ad spend, average ticket size by vertical. That is what tells you whether a ranked site can actually monetize.',
   },
   {
     num: '03',
     title: 'Real SERP data, not a static niche list.',
     description:
-      "Live analysis of local SERPs — not a spreadsheet, not a course handout. AI-synthesized intelligence from the markets you're actually targeting, on demand.",
+      'Live local SERPs for the markets you pick, refreshed on demand. No recycled spreadsheet and no course PDF.',
   },
 ];
 
@@ -30,8 +30,8 @@ export function HowItWorks() {
         <div className="mb-16 max-w-2xl">
           <p className="text-sm font-medium uppercase tracking-[0.1em] text-neutral-400 mb-4">Why Widby</p>
           <h2 className="font-serif text-4xl md:text-5xl text-dark leading-[1.1]">
-            The intelligence layer your R&R stack is{' '}
-            <em className="italic text-accent">missing.</em>
+            The missing piece in most R&R{' '}
+            <em className="italic text-accent">workflows.</em>
           </h2>
         </div>
 

@@ -27,7 +27,7 @@ export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
     <section data-section="features-grid" className="py-16 lg:py-24 bg-dark">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-          {/* Left — Copy */}
+          {/* Left column: copy */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -41,9 +41,9 @@ export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
               <em className="italic text-accent">And you still weren&apos;t sure.</em>
             </h2>
             <p className="text-neutral-400 leading-relaxed max-w-md mb-8">
-              The average R&R practitioner spends 18+ hours manually validating a single market — bouncing between
-              keyword tools, checking map packs, counting reviews, estimating ticket values. And still gets it wrong
-              half the time.
+              Most people burn 18+ hours checking one market: keyword tools, map
+              packs, reviews, ticket-size guesses. Half the time the call is still
+              wrong.
             </p>
             <button
               onClick={handleStopGuessing}
@@ -53,7 +53,7 @@ export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
             </button>
           </motion.div>
 
-          {/* Right — Comparison Table */}
+          {/* Right column: comparison table */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -80,7 +80,9 @@ export function FeaturesGrid({ onOpenWaitlist }: FeaturesGridProps) {
                     {cap.others ? (
                       <CheckIcon className="w-4 h-4 text-neutral-500" strokeWidth={3} />
                     ) : (
-                      <span className="text-neutral-600">&mdash;</span>
+                      <span className="text-neutral-600" aria-hidden>
+                        -
+                      </span>
                     )}
                   </div>
                 </div>
