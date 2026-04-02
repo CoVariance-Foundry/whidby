@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { trackCTAClick } from '@/lib/analytics';
 
-const navLinks = [
+const allNavLinks = [
   { label: 'How it works', href: '#how-it-works' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'About', href: '#about' },
@@ -13,10 +13,12 @@ const navLinks = [
 
 interface NavbarProps {
   onOpenWaitlist: (source: string) => void;
+  showPricing?: boolean;
 }
 
-export function Navbar({ onOpenWaitlist }: NavbarProps) {
+export function Navbar({ onOpenWaitlist, showPricing = true }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navLinks = showPricing ? allNavLinks : allNavLinks.filter(l => l.href !== '#pricing');
 
   const handleWaitlistClick = () => {
     trackCTAClick('join_waitlist', 'navbar');

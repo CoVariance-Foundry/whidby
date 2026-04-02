@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase';
-import { createOrUpdateContact, addTagToContact } from '@/lib/activecampaign';
+import { createOrUpdateContact, addTagToContact, addContactToAutomation } from '@/lib/activecampaign';
 
 export async function POST(request: Request) {
   try {
@@ -44,6 +44,8 @@ export async function POST(request: Request) {
       if (selected_tier) {
         await addTagToContact(contactId, `tier-${selected_tier}`);
       }
+      // Enroll in the 7-day waitlist education series (automation ID 1)
+      await addContactToAutomation(contactId, 1);
     } catch (acError) {
       console.error('ActiveCampaign sync error:', acError);
     }

@@ -1,41 +1,8 @@
-'use client';
+import { getFlag } from '@/lib/flags';
+import HomeClient from './HomeClient';
 
-import { useState } from 'react';
-import { Navbar } from '@/components/Navbar';
-import { HeroSection } from '@/components/HeroSection';
-import { StatsBar } from '@/components/StatsBar';
-import { HowItWorks } from '@/components/HowItWorks';
-import { FeaturesGrid } from '@/components/FeaturesGrid';
-import { PricingSection } from '@/components/PricingSection';
-import { AboutSection } from '@/components/AboutSection';
-import { CTASection } from '@/components/CTASection';
-import { Footer } from '@/components/Footer';
-import { WaitlistModal } from '@/components/WaitlistModal';
-import { AnalyticsProvider } from '@/components/AnalyticsProvider';
+export default async function Home() {
+  const showPricing = await getFlag('show_pricing', true);
 
-export default function Home() {
-  const [waitlistOpen, setWaitlistOpen] = useState(false);
-  const [waitlistSource, setWaitlistSource] = useState('');
-
-  const openWaitlist = (source: string) => {
-    setWaitlistSource(source);
-    setWaitlistOpen(true);
-  };
-
-  return (
-    <AnalyticsProvider>
-      <Navbar onOpenWaitlist={openWaitlist} />
-      <main>
-        <HeroSection onOpenWaitlist={openWaitlist} />
-        <StatsBar />
-        <HowItWorks />
-        <FeaturesGrid onOpenWaitlist={openWaitlist} />
-        <PricingSection onOpenWaitlist={openWaitlist} />
-        <AboutSection />
-        <CTASection onOpenWaitlist={openWaitlist} />
-      </main>
-      <Footer />
-      <WaitlistModal isOpen={waitlistOpen} onClose={() => setWaitlistOpen(false)} source={waitlistSource} />
-    </AnalyticsProvider>
-  );
+  return <HomeClient showPricing={showPricing} />;
 }

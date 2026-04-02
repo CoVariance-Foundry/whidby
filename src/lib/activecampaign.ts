@@ -70,6 +70,19 @@ export async function addTagToContact(contactId: number, tagName: string): Promi
   }
 }
 
+export async function addContactToAutomation(contactId: number, automationId: number): Promise<void> {
+  const res = await acFetch('contactAutomations', {
+    method: 'POST',
+    body: JSON.stringify({
+      contactAutomation: { contact: contactId, automation: automationId },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`AC automation enroll failed: ${res.status} ${body}`);
+  }
+}
+
 export async function tagContactFromSurvey(
   contactId: number,
   data: { businessSize: string; sitesManaged: string; useCases: string[] }
