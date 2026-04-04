@@ -12,6 +12,11 @@ dependencies = [
     "httpx",
     "supabase",
     "pydantic>=2",
+    "deepagents",
+    "langgraph",
+    "langchain-core",
+    "langchain-anthropic",
+    "networkx",
 ]
 
 [project.optional-dependencies]

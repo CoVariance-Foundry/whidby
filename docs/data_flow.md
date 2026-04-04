@@ -156,3 +156,45 @@ Supabase: rentability_signals table
 
 M7: Scoring Engine reads rentability_signals to calibrate monetization_score
 ```
+
+## Research Agent Feedback Loop
+
+```
+Scoring Output (M7-M9)        Research Agent
+──────────────────────         ──────────────
+MetroScores {                  RalphResearchLoop {
+  demand: 72                     1. select_task (hypothesis from backlog)
+  organic_competition: 45  →     2. run_experiment (modify params, re-score)
+  local_competition: 58          3. evaluate (baseline vs candidate)
+  monetization: 81               4. record_learning (filesystem + graph)
+  ai_resilience: 92              5. reprioritize (update backlog)
+  opportunity: 71              }
+}
+     │                              │
+     ▼                              ▼
+
+HypothesisGenerator              FilesystemStore
+───────────────────              ───────────────
+Analyzes weak proxies            research_runs/{run_id}/
+Generates hypotheses    →          progress.jsonl
+Ranks by priority                  backlog.json
+                                   experiment_results/
+     │                             snapshots/
+     ▼
+                                    │
+ExperimentPlanner                   ▼
+─────────────────
+target_proxy              ResearchGraphStore
+modifications        →    ──────────────────
+rollback_condition         hypothesis nodes
+sample_requirements        experiment nodes
+                           supports/contradicts edges
+     │                     recommendation nodes
+     ▼
+
+Recommender
+───────────
+Synthesizes validated outcomes
+Generates prioritized recommendations  →  docs/algo_spec_v1_1.md updates
+Produces improvement report               docs/system_design.md updates
+```

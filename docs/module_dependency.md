@@ -39,6 +39,33 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | M15: Experiment Analysis | M14, M2 | M7 (feedback loop) |
 | M16: Eval Frontend | All modules | — |
 
+## Research Agent Layer
+
+```
+                                    ┌──────────────────────────────────────────┐
+                                    │          RESEARCH AGENT (RA)              │
+                                    │                                          │
+M7 (Scoring) output ──────────────→ │  RA-1: Hypothesis Generator              │
+M0 (DataForSEO Client) ──────────→ │  RA-2: Experiment Planner                │
+M1 (Metro Database) ──────────────→ │  RA-3: Ralph Research Loop               │
+M3 (LLM Client) ─────────────────→ │  RA-4: Evaluator + Recommender           │
+                                    │  RA-5: Graph Memory + Filesystem Store   │
+                                    └──────────────┬───────────────────────────┘
+                                                   │
+                                                   ▼
+                                    Recommendations → M7 parameter updates
+```
+
+| Module | Depends On | Depended On By |
+|--------|-----------|----------------|
+| RA-1: Hypothesis Generator | M7 output | RA-2 |
+| RA-2: Experiment Planner | RA-1 | RA-3 |
+| RA-3: Ralph Research Loop | RA-2, RA-4, RA-5 | — |
+| RA-4: Evaluator + Recommender | RA-3 | M7 (parameter proposals) |
+| RA-5: Memory (Graph + FS) | — | RA-1, RA-3, RA-4 |
+
+See `docs/research_agent_design.md` for full architecture, loop semantics, and tool contracts.
+
 ## Parallel Build Opportunities
 
 These modules have no dependencies on each other and can be built simultaneously:
@@ -46,3 +73,4 @@ These modules have no dependencies on each other and can be built simultaneously
 - M0, M1, M2, M3 (all foundation — build in parallel in Week 1)
 - M10-M12 can start as soon as M0 + M1 + M3 are done (don't need M4-M9)
 - M8 and M9 can be built in parallel (M8 needs M6+M7, M9 needs M4-M8 but can be built alongside M8)
+- RA modules can be built after M0, M1, M3 are complete (independent of M4-M9 pipeline)

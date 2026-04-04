@@ -38,6 +38,8 @@ STRATEGY_PROFILES: dict[str, dict[str, float]] = {
 
 # --- DataForSEO (Algo Spec V1.1, §14) ---
 DFS_BASE_URL = "https://api.dataforseo.com/v3/"
+DFS_DEFAULT_LANGUAGE_CODE = "en"
+DFS_DEFAULT_LOCATION_NAME = "United States"
 DFS_RATE_LIMIT = 2000  # calls per minute
 DFS_CACHE_TTL = 86400  # 24 hours in seconds
 DFS_MAX_RETRIES = 3

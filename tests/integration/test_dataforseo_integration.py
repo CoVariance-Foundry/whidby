@@ -41,3 +41,49 @@ class TestRealAPI:
         )
         assert result.status == "ok"
         assert result.data is not None
+
+    @pytest.mark.asyncio
+    async def test_keyword_volume(self):
+        client = _real_client()
+        result = await client.keyword_volume(
+            keywords=["plumber near me"], location_code=1012873
+        )
+        assert result.status == "ok"
+        assert result.data is not None
+
+    @pytest.mark.asyncio
+    async def test_serp_organic(self):
+        client = _real_client()
+        result = await client.serp_organic(
+            keyword="plumber", location_code=1012873, depth=5
+        )
+        assert result.status == "ok"
+        assert result.data is not None
+
+    @pytest.mark.asyncio
+    async def test_keyword_suggestions(self):
+        client = _real_client()
+        result = await client.keyword_suggestions(
+            keyword="plumber", limit=5
+        )
+        assert result.status == "ok"
+        assert result.data is not None
+
+    @pytest.mark.asyncio
+    async def test_cost_tracking(self):
+        client = _real_client()
+        await client.locations()
+        await client.business_listings(
+            category="Plumber", location_code=1012873, limit=3
+        )
+        assert len(client.cost_log) >= 2
+
+    @pytest.mark.asyncio
+    async def test_caching(self):
+        client = _real_client()
+        first = await client.locations()
+        assert first.status == "ok"
+        second = await client.locations()
+        assert second.status == "ok"
+        assert second.cached is True
+        assert second.cost == 0

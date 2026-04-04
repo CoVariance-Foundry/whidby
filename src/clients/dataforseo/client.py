@@ -17,6 +17,8 @@ import httpx
 from src.config.constants import (
     DFS_BASE_URL,
     DFS_CACHE_TTL,
+    DFS_DEFAULT_LANGUAGE_CODE,
+    DFS_DEFAULT_LOCATION_NAME,
     DFS_MAX_RETRIES,
     DFS_QUEUE_MAX_WAIT,
     DFS_QUEUE_POLL_INTERVAL,
@@ -97,8 +99,14 @@ class DataForSEOClient:
         keyword: str,
         location_code: int,
         depth: int = 10,
+        language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
     ) -> APIResponse:
-        params = {"keyword": keyword, "location_code": location_code, "depth": depth}
+        params = {
+            "keyword": keyword,
+            "location_code": location_code,
+            "language_code": language_code,
+            "depth": depth,
+        }
         return await self._queued_request(ep.SERP_ORGANIC, params)
 
     async def serp_maps(
@@ -106,8 +114,14 @@ class DataForSEOClient:
         keyword: str,
         location_code: int,
         depth: int = 10,
+        language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
     ) -> APIResponse:
-        params = {"keyword": keyword, "location_code": location_code, "depth": depth}
+        params = {
+            "keyword": keyword,
+            "location_code": location_code,
+            "language_code": language_code,
+            "depth": depth,
+        }
         return await self._queued_request(ep.SERP_MAPS, params)
 
     async def keyword_volume(
@@ -121,10 +135,18 @@ class DataForSEOClient:
     async def keyword_suggestions(
         self,
         keyword: str,
-        location_code: int,
+        location_name: str = DFS_DEFAULT_LOCATION_NAME,
         limit: int = 50,
+        language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
     ) -> APIResponse:
-        payload = [{"keyword": keyword, "location_code": location_code, "limit": limit}]
+        payload = [
+            {
+                "keyword": keyword,
+                "location_name": location_name,
+                "language_code": language_code,
+                "limit": limit,
+            }
+        ]
         return await self._live_request(ep.KEYWORD_SUGGESTIONS, payload)
 
     async def business_listings(
@@ -265,7 +287,9 @@ class DataForSEOClient:
         task = self._extract_task(body)
         if task is None:
             # Some endpoints (like locations) return result directly
-            data = body.get("tasks", [{}])[0].get("result") if "tasks" in body else body
+            tasks = body.get("tasks", [])
+            first = tasks[0] if tasks and isinstance(tasks[0], dict) else {}
+            data = first.get("result", body)
             ms = self._elapsed_ms(start)
             self._cache.put(endpoint.post_path, cp, data)
             self._tracker.record(endpoint.post_path, "direct", 0, False, ms, cp)
