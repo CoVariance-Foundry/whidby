@@ -1,0 +1,73 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  python-quality:
+    name: Python Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.x"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Ruff check
+        run: uv run ruff check src/ tests/
+
+      - name: Unit tests
+        run: uv run pytest tests/unit/ -v --tb=short
+
+  web-quality:
+    name: Web Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+  spec-artifact-check:
+    name: Spec Artifact Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check spec artifacts for module changes
+        run: |
+          bash .github/scripts/check-spec-artifacts.sh "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}"
+
+  docs-sync-check:
+    name: Docs Sync Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check architecture docs updated for interface changes
+        run: |
+          bash .github/scripts/check-docs-sync.sh "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}"

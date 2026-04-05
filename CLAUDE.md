@@ -58,11 +58,13 @@ pytest tests/unit/test_research_agent_loop.py tests/unit/test_graph_memory_store
 The pipeline is **deliberately not using any agent framework** for V1 scoring (no LangGraph, CrewAI, etc.). It's deterministic Python async functions with fixed execution order. The LLM (Anthropic SDK) is a utility, not an orchestrator.
 
 ### Module build order (sequential dependencies)
+
 - **Phase 1 — Foundation:** M0 (DataForSEO client) → M1 (Metro DB) → M2 (Supabase schema) → M3 (LLM client)
 - **Phase 2 — Scoring Pipeline:** M4 (keyword expansion) → M5 (data collection) → M6 (signal extraction) → M7 (scoring) → M8 (classification) → M9 (report assembly)
 - **Phase 3 — Experiment Framework:** M10–M15 (outreach validation, can start after Phase 1)
 
 ### Key design rules
+
 - Scoring functions are **pure** — no side effects, no API calls
 - All business logic, schemas, and formulas live in spec docs under `docs/` — read the relevant spec before implementing
 - `docs/product_breakdown.md` is the module decomposition reference — it defines file structure, I/O contracts, and eval criteria per module
@@ -71,18 +73,21 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 
 ## Specs Are the Source of Truth
 
-| Spec | Location | Covers |
-|------|----------|--------|
-| Algo Spec V1.1 | `docs/algo_spec_v1_1.md` | Scoring algorithm, signal definitions, API endpoints, output schema |
-| Experiment Framework | `docs/outreach_experiment.md` | Business discovery, site scanning, audit generation, outreach, response tracking |
-| Product Breakdown | `docs/product_breakdown.md` | Module decomposition, file structure, input/output contracts, eval criteria |
-| Module Dependencies | `docs/module_dependency.md` | Build order, which modules depend on which |
-| Data Flow | `docs/data_flow.md` | How data moves between modules |
-| Research Agent Design | `docs/research_agent_design.md` | Loop semantics, tool contracts, memory architecture, failure modes |
+
+| Spec                  | Location                        | Covers                                                                           |
+| --------------------- | ------------------------------- | -------------------------------------------------------------------------------- |
+| Algo Spec V1.1        | `docs/algo_spec_v1_1.md`        | Scoring algorithm, signal definitions, API endpoints, output schema              |
+| Experiment Framework  | `docs/outreach_experiment.md`   | Business discovery, site scanning, audit generation, outreach, response tracking |
+| Product Breakdown     | `docs/product_breakdown.md`     | Module decomposition, file structure, input/output contracts, eval criteria      |
+| Module Dependencies   | `docs/module_dependency.md`     | Build order, which modules depend on which                                       |
+| Data Flow             | `docs/data_flow.md`             | How data moves between modules                                                   |
+| Research Agent Design | `docs/research_agent_design.md` | Loop semantics, tool contracts, memory architecture, failure modes               |
+
 
 ## Environment Variables
 
 Required (see `.env.example`):
+
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase
 - `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` — DataForSEO API
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
@@ -91,9 +96,24 @@ Required (see `.env.example`):
 ## TDD Workflow
 
 Tests are written **before** implementation. For each module:
+
 1. Read the module spec in `docs/product_breakdown.md`
 2. Create test files from eval criteria
 3. Run tests (expect red) → implement → green → refactor → commit
+
+## Spec-Kit (Spec-Driven Development)
+
+This project uses [github/spec-kit](https://github.com/github/spec-kit) v0.5.0 for all remaining module delivery. The spec-kit workspace lives in `.specify/` and Cursor commands are in `.cursor/commands/speckit.*.md`.
+
+**Mandatory lifecycle for every module (M4-M15, M16 pages):**
+
+1. `/speckit.specify` — Define scope and acceptance criteria
+2. `/speckit.clarify` — Resolve ambiguity
+3. `/speckit.plan` — Technical implementation plan
+4. `/speckit.tasks` — TDD-first task breakdown
+5. `/speckit.implement` — Build with hard CI gates
+
+See `docs/spec_workflow_guide.md` for the full workflow, naming conventions, and gate definitions. The project constitution is in `.specify/memory/constitution.md`.
 
 ## App-Specific Guidance
 

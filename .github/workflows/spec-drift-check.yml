@@ -1,0 +1,23 @@
+name: Spec Drift Check
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  drift-check:
+    name: Spec-Code Drift Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check spec coverage for implemented modules
+        run: bash .github/scripts/check-spec-drift.sh
+
+      - name: Check constitution compliance
+        run: bash .github/scripts/check-constitution.sh
+
+      - name: Generate drift report
+        if: always()
+        run: bash .github/scripts/generate-drift-report.sh

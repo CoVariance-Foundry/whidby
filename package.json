@@ -8,7 +8,8 @@
     "lint": "turbo lint",
     "dev:web": "turbo dev --filter=whidby",
     "dev:app": "turbo dev --filter=nichefinder-app",
-    "dev:api": "uvicorn src.research_agent.api:app --reload --port 8000"
+    "dev:api": "docker compose up api --build",
+    "dev:api:local": "uvicorn src.research_agent.api:app --reload --port 8000"
   },
   "devDependencies": {
     "turbo": "^2"
