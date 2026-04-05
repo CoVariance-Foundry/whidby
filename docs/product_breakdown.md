@@ -486,7 +486,8 @@ src/
 raw_data = collect_data(
     keywords=keyword_expansion,
     metros=[metro_1, metro_2, ...],
-    strategy_profile="balanced"
+    strategy_profile="balanced",
+    client=dataforseo_client
 )
 
 # Output: RawCollectionResult — organized raw API responses per metro
@@ -507,7 +508,15 @@ raw_data = collect_data(
     "total_api_calls": 482,
     "total_cost_usd": 2.48,
     "collection_time_seconds": 312,
-    "errors": []
+    "errors": [
+      {
+        "task_id": "dep-00001",
+        "task_type": "google_reviews",
+        "metro_id": "38060",
+        "message": "google_reviews failed",
+        "is_retryable": true
+      }
+    ]
   }
 }
 ```
@@ -518,14 +527,19 @@ src/
   pipeline/
     data_collection.py        # Main orchestrator
     collection_plan.py        # Generates the API call plan from keywords + metros
+    task_graph.py             # Dependency graph validation + ordering
     batch_executor.py         # Executes calls with dependency ordering
+    errors.py                 # Normalized failure record helpers
+    types.py                  # Request/task/result contracts
     result_assembler.py       # Organizes raw responses by metro
-  tests/
+tests/
+  unit/
+    test_collection_plan.py
+    test_batch_executor.py
+    test_result_assembler.py
     test_data_collection.py
-    fixtures/
-      mock_serp_response.json
-      mock_keyword_response.json
-      mock_business_response.json
+  fixtures/
+    m5_collection_fixtures.py
 ```
 
 **Eval criteria:**

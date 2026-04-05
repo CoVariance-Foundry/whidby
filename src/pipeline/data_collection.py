@@ -1,0 +1,44 @@
+"""Top-level M5 orchestration entrypoint."""
+
+from __future__ import annotations
+
+import time
+from typing import Any
+
+from .batch_executor import execute_collection_plan
+from .collection_plan import build_collection_plan
+from .result_assembler import assemble_raw_collection_result
+from .types import RawCollectionResult, build_collection_request
+
+
+async def collect_data(
+    keywords: list[dict[str, Any]],
+    metros: list[dict[str, Any]],
+    strategy_profile: str,
+    client: Any,
+) -> RawCollectionResult:
+    """Collect M5 raw data for all requested metros.
+
+    Args:
+        keywords: Expanded keyword descriptors from M4.
+        metros: Metro records from M1.
+        strategy_profile: Strategy profile string.
+        client: DataForSEO client-compatible object.
+
+    Returns:
+        Raw collection result with per-metro categories and run metadata.
+
+    Raises:
+        ValueError: If request validation fails.
+    """
+    started = time.monotonic()
+    request = build_collection_request(
+        keywords=keywords,
+        metros=metros,
+        strategy_profile=strategy_profile,
+    )
+    plan = build_collection_plan(request)
+    state = await execute_collection_plan(plan, request, client)
+    elapsed = time.monotonic() - started
+    return assemble_raw_collection_result(request, state, elapsed)
+

@@ -11,6 +11,8 @@ import os
 import pytest
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.pipeline.data_collection import collect_data
+from tests.fixtures.m5_collection_fixtures import SAMPLE_KEYWORDS
 
 
 pytestmark = pytest.mark.integration
@@ -87,3 +89,12 @@ class TestRealAPI:
         assert second.status == "ok"
         assert second.cached is True
         assert second.cost == 0
+
+    @pytest.mark.asyncio
+    async def test_m5_collect_data_contract_with_real_client(self):
+        """Smoke test for M5 orchestration against real client boundary."""
+        client = _real_client()
+        metros = [{"metro_id": "38060", "location_code": 1012873, "principal_city": "Phoenix"}]
+        result = await collect_data(SAMPLE_KEYWORDS, metros, "balanced", client)
+        assert "38060" in result.metros
+        assert result.meta.total_api_calls > 0
