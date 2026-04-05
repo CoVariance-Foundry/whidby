@@ -27,7 +27,11 @@ app = FastAPI(title="Widby Research Agent API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001", "https://app.thewidby.com"],
+    allow_origins=[
+        "http://localhost:3001",
+        "https://app.thewidby.com",
+        "https://whidby-1.onrender.com",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
