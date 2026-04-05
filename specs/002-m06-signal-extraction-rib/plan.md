@@ -86,3 +86,9 @@ tests/
 ## Complexity Tracking
 
 No constitution violations requiring exception tracking.
+
+## Implementation Validation
+
+- Lint: `python3 -m ruff check src/pipeline tests/fixtures/m6_signal_extraction_fixtures.py tests/unit/test_signal_extraction.py tests/unit/test_serp_parser.py tests/unit/test_domain_classifier.py tests/unit/test_effective_volume.py tests/unit/test_review_velocity.py tests/unit/test_gbp_completeness.py tests/unit/test_signal_extractors.py` -> **passed**
+- Unit tests: `python3 -m pytest tests/unit/test_signal_extraction.py tests/unit/test_serp_parser.py tests/unit/test_domain_classifier.py tests/unit/test_effective_volume.py tests/unit/test_review_velocity.py tests/unit/test_gbp_completeness.py tests/unit/test_signal_extractors.py -v` -> **23 passed**
+- Contract checks: M6 output categories and key counts validated in `tests/unit/test_signal_extraction.py` and extractor-level assertions in `tests/unit/test_signal_extractors.py`

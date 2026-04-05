@@ -17,10 +17,10 @@
 
 **Purpose**: Initialize M6 file layout and test fixture scaffolding.
 
-- [ ] T001 Create extractor package scaffolding in `src/pipeline/extractors/__init__.py`
-- [ ] T002 Create M6 fixture scaffolding in `tests/fixtures/m6_signal_extraction_fixtures.py`
-- [ ] T003 [P] Add extractor test module skeleton in `tests/unit/test_signal_extractors.py`
-- [ ] T004 [P] Add orchestrator test module skeleton in `tests/unit/test_signal_extraction.py`
+- [X] T001 Create extractor package scaffolding in `src/pipeline/extractors/__init__.py`
+- [X] T002 Create M6 fixture scaffolding in `tests/fixtures/m6_signal_extraction_fixtures.py`
+- [X] T003 [P] Add extractor test module skeleton in `tests/unit/test_signal_extractors.py`
+- [X] T004 [P] Add orchestrator test module skeleton in `tests/unit/test_signal_extraction.py`
 
 ---
 
@@ -30,16 +30,16 @@
 
 **CRITICAL**: User story implementation starts only after this phase completes.
 
-- [ ] T005 [P] Add failing tests for SERP feature normalization in `tests/unit/test_serp_parser.py`
-- [ ] T006 [P] Add failing tests for domain role classification in `tests/unit/test_domain_classifier.py`
-- [ ] T007 [P] Add failing tests for AIO-adjusted volume math in `tests/unit/test_effective_volume.py`
-- [ ] T008 [P] Add failing tests for review velocity computation in `tests/unit/test_review_velocity.py`
-- [ ] T009 [P] Add failing tests for GBP completeness scoring in `tests/unit/test_gbp_completeness.py`
-- [ ] T010 Implement shared SERP feature parser in `src/pipeline/serp_parser.py`
-- [ ] T011 Implement shared domain classifier in `src/pipeline/domain_classifier.py`
-- [ ] T012 Implement shared effective volume utility in `src/pipeline/effective_volume.py`
-- [ ] T013 Implement shared review velocity utility in `src/pipeline/review_velocity.py`
-- [ ] T014 Implement shared GBP completeness utility in `src/pipeline/gbp_completeness.py`
+- [X] T005 [P] Add failing tests for SERP feature normalization in `tests/unit/test_serp_parser.py`
+- [X] T006 [P] Add failing tests for domain role classification in `tests/unit/test_domain_classifier.py`
+- [X] T007 [P] Add failing tests for AIO-adjusted volume math in `tests/unit/test_effective_volume.py`
+- [X] T008 [P] Add failing tests for review velocity computation in `tests/unit/test_review_velocity.py`
+- [X] T009 [P] Add failing tests for GBP completeness scoring in `tests/unit/test_gbp_completeness.py`
+- [X] T010 Implement shared SERP feature parser in `src/pipeline/serp_parser.py`
+- [X] T011 Implement shared domain classifier in `src/pipeline/domain_classifier.py`
+- [X] T012 Implement shared effective volume utility in `src/pipeline/effective_volume.py`
+- [X] T013 Implement shared review velocity utility in `src/pipeline/review_velocity.py`
+- [X] T014 Implement shared GBP completeness utility in `src/pipeline/gbp_completeness.py`
 
 **Checkpoint**: Foundational utilities and their tests are green.
 
@@ -51,11 +51,11 @@
 
 **Independent Test**: `demand` category always returns 8 required keys and matches transactional/informational discount expectations from Algo §6.1.
 
-- [ ] T015 [P] [US1] Add failing demand extractor tests (keys, ranges, head-term logic) in `tests/unit/test_signal_extractors.py`
-- [ ] T016 [P] [US1] Add failing effective-volume integration assertions in `tests/unit/test_signal_extraction.py`
-- [ ] T017 [US1] Implement demand signal extractor in `src/pipeline/extractors/demand_signals.py`
-- [ ] T018 [US1] Wire demand extraction into orchestrator in `src/pipeline/signal_extraction.py`
-- [ ] T019 [US1] Add null-safe demand defaults and normalization guards in `src/pipeline/signal_extraction.py`
+- [X] T015 [P] [US1] Add failing demand extractor tests (keys, ranges, head-term logic) in `tests/unit/test_signal_extractors.py`
+- [X] T016 [P] [US1] Add failing effective-volume integration assertions in `tests/unit/test_signal_extraction.py`
+- [X] T017 [US1] Implement demand signal extractor in `src/pipeline/extractors/demand_signals.py`
+- [X] T018 [US1] Wire demand extraction into orchestrator in `src/pipeline/signal_extraction.py`
+- [X] T019 [US1] Add null-safe demand defaults and normalization guards in `src/pipeline/signal_extraction.py`
 
 **Checkpoint**: US1 is independently functional and testable.
 
@@ -67,11 +67,11 @@
 
 **Independent Test**: `organic_competition` category always returns 8 keys; known aggregator domains increase `aggregator_count`.
 
-- [ ] T020 [P] [US2] Add failing organic competition signal tests in `tests/unit/test_signal_extractors.py`
-- [ ] T021 [P] [US2] Add failing aggregator/domain-classification integration tests in `tests/unit/test_signal_extraction.py`
-- [ ] T022 [US2] Implement organic competition extractor in `src/pipeline/extractors/organic_competition.py`
-- [ ] T023 [US2] Integrate organic competition extraction path in `src/pipeline/signal_extraction.py`
-- [ ] T024 [US2] Add shared-value consistency checks for aggregator-derived fields in `src/pipeline/signal_extraction.py`
+- [X] T020 [P] [US2] Add failing organic competition signal tests in `tests/unit/test_signal_extractors.py`
+- [X] T021 [P] [US2] Add failing aggregator/domain-classification integration tests in `tests/unit/test_signal_extraction.py`
+- [X] T022 [US2] Implement organic competition extractor in `src/pipeline/extractors/organic_competition.py`
+- [X] T023 [US2] Integrate organic competition extraction path in `src/pipeline/signal_extraction.py`
+- [X] T024 [US2] Add shared-value consistency checks for aggregator-derived fields in `src/pipeline/signal_extraction.py`
 
 **Checkpoint**: US2 is independently functional and testable.
 
@@ -83,12 +83,12 @@
 
 **Independent Test**: `local_competition` always returns 10 keys, with correct parsing when pack exists and safe defaults when absent.
 
-- [ ] T025 [P] [US3] Add failing local-pack parsing tests in `tests/unit/test_signal_extractors.py`
-- [ ] T026 [P] [US3] Add failing no-pack default handling tests in `tests/unit/test_signal_extraction.py`
-- [ ] T027 [US3] Implement local competition extractor in `src/pipeline/extractors/local_competition.py`
-- [ ] T028 [US3] Integrate local competition extraction in `src/pipeline/signal_extraction.py`
-- [ ] T029 [US3] Implement local-pack metric default strategy in `src/pipeline/extractors/local_competition.py`
-- [ ] T030 [US3] Add source-to-signal trace comments for local pack derivations in `src/pipeline/extractors/local_competition.py`
+- [X] T025 [P] [US3] Add failing local-pack parsing tests in `tests/unit/test_signal_extractors.py`
+- [X] T026 [P] [US3] Add failing no-pack default handling tests in `tests/unit/test_signal_extraction.py`
+- [X] T027 [US3] Implement local competition extractor in `src/pipeline/extractors/local_competition.py`
+- [X] T028 [US3] Integrate local competition extraction in `src/pipeline/signal_extraction.py`
+- [X] T029 [US3] Implement local-pack metric default strategy in `src/pipeline/extractors/local_competition.py`
+- [X] T030 [US3] Add source-to-signal trace comments for local pack derivations in `src/pipeline/extractors/local_competition.py`
 
 **Checkpoint**: US3 is independently functional and testable.
 
@@ -100,12 +100,12 @@
 
 **Independent Test**: `ai_resilience` returns 5 keys and `monetization` returns 6 keys; AIO detection and ads/LSA flags are correctly reflected.
 
-- [ ] T031 [P] [US4] Add failing AI resilience tests in `tests/unit/test_signal_extractors.py`
-- [ ] T032 [P] [US4] Add failing monetization signal tests in `tests/unit/test_signal_extractors.py`
-- [ ] T033 [P] [US4] Add failing category-level integration tests in `tests/unit/test_signal_extraction.py`
-- [ ] T034 [US4] Implement AI resilience extractor in `src/pipeline/extractors/ai_resilience.py`
-- [ ] T035 [US4] Implement monetization extractor in `src/pipeline/extractors/monetization.py`
-- [ ] T036 [US4] Integrate AI resilience and monetization in `src/pipeline/signal_extraction.py`
+- [X] T031 [P] [US4] Add failing AI resilience tests in `tests/unit/test_signal_extractors.py`
+- [X] T032 [P] [US4] Add failing monetization signal tests in `tests/unit/test_signal_extractors.py`
+- [X] T033 [P] [US4] Add failing category-level integration tests in `tests/unit/test_signal_extraction.py`
+- [X] T034 [US4] Implement AI resilience extractor in `src/pipeline/extractors/ai_resilience.py`
+- [X] T035 [US4] Implement monetization extractor in `src/pipeline/extractors/monetization.py`
+- [X] T036 [US4] Integrate AI resilience and monetization in `src/pipeline/signal_extraction.py`
 
 **Checkpoint**: US4 is independently functional and testable.
 
@@ -117,10 +117,10 @@
 
 **Independent Test**: Domain appearing in 8/20 metros is classified as national and affects downstream local-vs-national counting.
 
-- [ ] T037 [P] [US5] Add failing cross-metro classification tests in `tests/unit/test_domain_classifier.py`
-- [ ] T038 [P] [US5] Add failing orchestrator cross-metro context tests in `tests/unit/test_signal_extraction.py`
-- [ ] T039 [US5] Implement cross-metro threshold logic in `src/pipeline/domain_classifier.py`
-- [ ] T040 [US5] Thread optional `cross_metro_domain_stats` through orchestrator in `src/pipeline/signal_extraction.py`
+- [X] T037 [P] [US5] Add failing cross-metro classification tests in `tests/unit/test_domain_classifier.py`
+- [X] T038 [P] [US5] Add failing orchestrator cross-metro context tests in `tests/unit/test_signal_extraction.py`
+- [X] T039 [US5] Implement cross-metro threshold logic in `src/pipeline/domain_classifier.py`
+- [X] T040 [US5] Thread optional `cross_metro_domain_stats` through orchestrator in `src/pipeline/signal_extraction.py`
 
 **Checkpoint**: US5 is independently functional and testable.
 
@@ -132,10 +132,10 @@
 
 **Independent Test**: 5/7 GBP fields yields ~0.71 score and review timestamps produce correct reviews/month.
 
-- [ ] T041 [P] [US6] Add failing edge-case tests for review velocity in `tests/unit/test_review_velocity.py`
-- [ ] T042 [P] [US6] Add failing edge-case tests for GBP completeness in `tests/unit/test_gbp_completeness.py`
-- [ ] T043 [US6] Finalize review velocity edge-case handling in `src/pipeline/review_velocity.py`
-- [ ] T044 [US6] Finalize GBP completeness edge-case handling in `src/pipeline/gbp_completeness.py`
+- [X] T041 [P] [US6] Add failing edge-case tests for review velocity in `tests/unit/test_review_velocity.py`
+- [X] T042 [P] [US6] Add failing edge-case tests for GBP completeness in `tests/unit/test_gbp_completeness.py`
+- [X] T043 [US6] Finalize review velocity edge-case handling in `src/pipeline/review_velocity.py`
+- [X] T044 [US6] Finalize GBP completeness edge-case handling in `src/pipeline/gbp_completeness.py`
 
 **Checkpoint**: US6 is independently functional and testable.
 
@@ -145,10 +145,10 @@
 
 **Purpose**: Final consistency, docs, and full validation across all stories.
 
-- [ ] T045 [P] Add contract conformance regression assertions in `tests/unit/test_signal_extraction.py`
-- [ ] T046 [P] Add/refresh fixture coverage for sparse and mixed SERP payloads in `tests/fixtures/m6_signal_extraction_fixtures.py`
-- [ ] T047 Run M6-focused lint and unit test commands in `specs/002-m06-signal-extraction-rib/quickstart.md`
-- [ ] T048 Update implementation notes and validation outcomes in `specs/002-m06-signal-extraction-rib/plan.md`
+- [X] T045 [P] Add contract conformance regression assertions in `tests/unit/test_signal_extraction.py`
+- [X] T046 [P] Add/refresh fixture coverage for sparse and mixed SERP payloads in `tests/fixtures/m6_signal_extraction_fixtures.py`
+- [X] T047 Run M6-focused lint and unit test commands in `specs/002-m06-signal-extraction-rib/quickstart.md`
+- [X] T048 Update implementation notes and validation outcomes in `specs/002-m06-signal-extraction-rib/plan.md`
 
 ---
 
