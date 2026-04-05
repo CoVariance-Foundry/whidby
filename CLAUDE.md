@@ -7,7 +7,7 @@ This is a Turborepo monorepo for the NicheFinder/Widby project.
 ```
 apps/
   web/     — Marketing landing page (Next.js 16, deployed as "whidby" on Vercel)
-  app/     — Product app (coming soon)
+  app/     — Research Agent Dashboard (Next.js 16, port 3001, deploys to app.thewidby.com)
 packages/
   (none yet)
 ```
@@ -39,6 +39,17 @@ python -m src.research_agent.run_research_agent              # Run with demo dat
 python -m src.research_agent.run_research_agent --scoring-input scores.json  # Run with real data
 pytest tests/unit/test_research_agent_loop.py tests/unit/test_graph_memory_store.py -v  # Agent tests
 ```
+
+## Research Agent Dashboard (apps/app)
+
+Interactive frontend for the research agent: chat interface, dashboard, experiments, graph explorer, and recommendations.
+
+```bash
+npm run dev:app     # Next.js frontend on port 3001
+npm run dev:api     # FastAPI bridge on port 8000 (run in separate terminal)
+```
+
+Pages: `/chat` (primary), `/dashboard`, `/experiments`, `/graph`, `/recommendations`
 
 ## App-Specific Guidance
 
