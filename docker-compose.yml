@@ -12,6 +12,7 @@ services:
     env_file:
       - .env
     environment:
+      - PORT=8000
       - RESEARCH_RUNS_DIR=/data/research_runs
       - RESEARCH_GRAPH_PATH=/data/research_graph.json
     command: ["uvicorn", "src.research_agent.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

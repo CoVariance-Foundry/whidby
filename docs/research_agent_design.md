@@ -263,3 +263,79 @@ pytest tests/unit/test_graph_memory_store.py -v
 # Full unit test suite
 pytest tests/unit/ -v
 ```
+
+---
+
+## 11. Docker Setup
+
+The API runs in Docker to avoid architecture-specific binary issues (e.g., pydantic arm64/x86 mismatch on Apple Silicon).
+
+### Local Dev
+
+```bash
+# Start the API in Docker (builds image, mounts source for hot-reload)
+npm run dev:api
+
+# Or use docker compose directly
+docker compose up api --build
+
+# Fallback: run without Docker (if your local Python env is clean)
+npm run dev:api:local
+```
+
+Docker Compose mounts `./src` and `./research_runs` so code changes are reflected immediately and run artifacts persist on the host.
+
+### Docker Files
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile.api` | Production-ready image: Python 3.11-slim, installs from pyproject.toml, runs uvicorn |
+| `docker-compose.yml` | Local dev: builds from Dockerfile.api, adds volume mounts, hot-reload, env passthrough |
+| `.dockerignore` | Excludes node_modules, apps/, tests/, docs/ from Docker build context |
+
+---
+
+## 12. Production Deployment (Render)
+
+The FastAPI research agent API deploys as a Docker web service on Render. The Next.js frontend stays on Vercel.
+
+```
+Browser → Vercel (app.thewidby.com) → /api/agent/* proxy → Render (api.thewidby.com) → FastAPI
+```
+
+### Deploy to Render
+
+1. Create a **Web Service** on Render, connect your GitHub repo
+2. Set the following:
+   - **Environment:** Docker
+   - **Dockerfile Path:** `Dockerfile.api`
+   - **Instance Type:** Starter ($7/mo)
+3. Add a **Persistent Disk** mounted at `/data` (1GB free tier)
+4. Set environment variables:
+   - `ANTHROPIC_API_KEY`
+   - `DATAFORSEO_LOGIN`
+   - `DATAFORSEO_PASSWORD`
+   - `RESEARCH_RUNS_DIR=/data/research_runs`
+   - `RESEARCH_GRAPH_PATH=/data/research_graph.json`
+5. Optionally add a custom domain: `api.thewidby.com`
+
+### Connect Frontend to API
+
+On Vercel, set the environment variable for the `nichefinder-app` project:
+
+```
+NEXT_PUBLIC_API_URL=https://api.thewidby.com
+```
+
+The Next.js proxy routes in `apps/app/src/app/api/agent/` forward requests to this URL.
+
+### Required Environment Variables (Production)
+
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `ANTHROPIC_API_KEY` | Render | Claude API for LLM client |
+| `DATAFORSEO_LOGIN` | Render | DataForSEO API auth |
+| `DATAFORSEO_PASSWORD` | Render | DataForSEO API auth |
+| `RESEARCH_RUNS_DIR` | Render | Path to persistent volume for run artifacts |
+| `RESEARCH_GRAPH_PATH` | Render | Path to persistent graph JSON |
+| `NEXT_PUBLIC_API_URL` | Vercel | URL of the Render API service |

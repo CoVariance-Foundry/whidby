@@ -17,6 +17,7 @@ ENV RESEARCH_RUNS_DIR=/data/research_runs
 ENV RESEARCH_GRAPH_PATH=/data/research_graph.json
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
+ENV PORT=8000
+EXPOSE ${PORT}
 
-CMD ["uvicorn", "src.research_agent.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn src.research_agent.api:app --host 0.0.0.0 --port ${PORT}
