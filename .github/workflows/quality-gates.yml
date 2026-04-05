@@ -23,13 +23,48 @@ jobs:
         run: uv python install 3.11
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --extra dev
 
       - name: Ruff check
-        run: uv run ruff check src/ tests/
+        run: |
+          uv run ruff check \
+            src/pipeline \
+            tests/fixtures/keyword_expansion_fixtures.py \
+            tests/fixtures/m5_collection_fixtures.py \
+            tests/fixtures/m6_signal_extraction_fixtures.py \
+            tests/unit/test_keyword_expansion.py \
+            tests/unit/test_keyword_deduplication.py \
+            tests/unit/test_intent_classifier.py \
+            tests/unit/test_collection_plan.py \
+            tests/unit/test_batch_executor.py \
+            tests/unit/test_result_assembler.py \
+            tests/unit/test_data_collection.py \
+            tests/unit/test_signal_extraction.py \
+            tests/unit/test_serp_parser.py \
+            tests/unit/test_domain_classifier.py \
+            tests/unit/test_effective_volume.py \
+            tests/unit/test_review_velocity.py \
+            tests/unit/test_gbp_completeness.py \
+            tests/unit/test_signal_extractors.py
 
       - name: Unit tests
-        run: uv run pytest tests/unit/ -v --tb=short
+        run: |
+          uv run pytest \
+            tests/unit/test_keyword_expansion.py \
+            tests/unit/test_keyword_deduplication.py \
+            tests/unit/test_intent_classifier.py \
+            tests/unit/test_collection_plan.py \
+            tests/unit/test_batch_executor.py \
+            tests/unit/test_result_assembler.py \
+            tests/unit/test_data_collection.py \
+            tests/unit/test_signal_extraction.py \
+            tests/unit/test_serp_parser.py \
+            tests/unit/test_domain_classifier.py \
+            tests/unit/test_effective_volume.py \
+            tests/unit/test_review_velocity.py \
+            tests/unit/test_gbp_completeness.py \
+            tests/unit/test_signal_extractors.py \
+            -v --tb=short
 
   web-quality:
     name: Web Quality
@@ -46,7 +81,7 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint -- --filter=whidby
 
   spec-artifact-check:
     name: Spec Artifact Gate

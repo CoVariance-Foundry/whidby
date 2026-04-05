@@ -6,7 +6,7 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start --port 3001",
-    "lint": "next lint"
+    "lint": "eslint"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
@@ -26,6 +26,8 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.1",
     "tailwindcss": "^4",
     "typescript": "latest"
   }
