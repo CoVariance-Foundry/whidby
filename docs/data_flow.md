@@ -18,7 +18,12 @@ strategy_profile: "balanced"     source, aio_risk}                   serp_organi
                                                                      lighthouse: [...]
                                                                    }
                                                                  },
-                                                                 meta: {cost, calls, time}
+                                                                 meta: {
+                                                                   total_cost_usd,
+                                                                   total_api_calls,
+                                                                   collection_time_seconds,
+                                                                   errors: [{task_id, task_type, metro_id, message, is_retryable}]
+                                                                 }
                                                                 }
 
      │                              │
