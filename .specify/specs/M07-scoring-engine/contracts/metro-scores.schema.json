@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MetroScores",
+  "type": "object",
+  "required": [
+    "demand",
+    "organic_competition",
+    "local_competition",
+    "monetization",
+    "ai_resilience",
+    "opportunity",
+    "confidence",
+    "resolved_weights"
+  ],
+  "properties": {
+    "demand": {"type": "number", "minimum": 0, "maximum": 100},
+    "organic_competition": {"type": "number", "minimum": 0, "maximum": 100},
+    "local_competition": {"type": "number", "minimum": 0, "maximum": 100},
+    "monetization": {"type": "number", "minimum": 0, "maximum": 100},
+    "ai_resilience": {"type": "number", "minimum": 0, "maximum": 100},
+    "opportunity": {"type": "number", "minimum": 0, "maximum": 100},
+    "confidence": {
+      "type": "object",
+      "required": ["score", "flags"],
+      "properties": {
+        "score": {"type": "number", "minimum": 0, "maximum": 100},
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "penalty"],
+            "properties": {
+              "code": {"type": "string"},
+              "penalty": {"type": "number"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "resolved_weights": {
+      "type": "object",
+      "required": ["organic", "local"],
+      "properties": {
+        "organic": {"type": "number", "minimum": 0, "maximum": 0.35},
+        "local": {"type": "number", "minimum": 0, "maximum": 0.35}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
