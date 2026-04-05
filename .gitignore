@@ -42,3 +42,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.pytest_cache/
+dist/
+
+# research agent runtime
+research_runs/
+research_graph.json
+
+# docker
+docker-compose.override.yml
+
+# playwright
+.playwright-mcp/

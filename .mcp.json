@@ -6,6 +6,12 @@
       "headers": {
         "Api-Token": "3b22eabcb8d2b6e8a4ea36f31be35011d4e074e9886bafdbbf8c776070ada59f586a05d6"
       }
+    },
+    "render": {
+      "url": "https://mcp.render.com/mcp",
+      "headers": {
+        "Authorization": "Bearer rnd_jJk2PAnl1YUMXqkk2tQ3AUsm6zBT"
+      }
     }
   }
 }
