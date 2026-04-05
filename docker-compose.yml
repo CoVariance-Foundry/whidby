@@ -1,0 +1,20 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./research_runs:/data/research_runs
+      - research_graph:/data
+    env_file:
+      - .env
+    environment:
+      - RESEARCH_RUNS_DIR=/data/research_runs
+      - RESEARCH_GRAPH_PATH=/data/research_graph.json
+    command: ["uvicorn", "src.research_agent.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+volumes:
+  research_graph:
