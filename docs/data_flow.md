@@ -56,6 +56,7 @@ strategy_profile: "balanced"     source, aio_risk}                   serp_organi
      │                          ai_resilience: 92
      │                          opportunity: 71
      │                          confidence: {score: 95, flags: []}
+     │                          resolved_weights: {organic: 0.15, local: 0.20}
      │                        }
      │                              │
      │                              ▼

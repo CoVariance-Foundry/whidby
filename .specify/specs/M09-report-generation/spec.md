@@ -95,10 +95,11 @@ As a downstream integrator, I need the report JSON to validate against the publi
 
 ## Source specifications
 
-| Document | Role |
-|----------|------|
-| `docs/algo_spec_v1_1.md` | §10 Output Schema — report shape, required fields, meta/cost |
-| `docs/algo_spec_v1_1.md` | §9 Feedback Logging — persistence semantics and nullability |
-| `docs/product_breakdown.md` | Module map and eval criteria for M9 |
-| `docs/module_dependency.md` | M9 as consumer of M4–M8 and M2 |
-| `docs/data_flow.md` | End-to-end assembly order and artifact names |
+
+| Document                    | Role                                                         |
+| --------------------------- | ------------------------------------------------------------ |
+| `docs/algo_spec_v1_1.md`    | §10 Output Schema — report shape, required fields, meta/cost |
+| `docs/algo_spec_v1_1.md`    | §9 Feedback Logging — persistence semantics and nullability  |
+| `docs/product_breakdown.md` | Module map and eval criteria for M9                          |
+| `docs/module_dependency.md` | M9 as consumer of M4–M8 and M2                               |
+| `docs/data_flow.md`         | End-to-end assembly order and artifact names                 |

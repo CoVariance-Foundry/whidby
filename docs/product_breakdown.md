@@ -705,10 +705,11 @@ scores = compute_scores(
 }
 ```
 
-**Files to create:**
+**Files (implemented):**
 ```
 src/
   scoring/
+    __init__.py               # Package exports: compute_scores, compute_batch_scores
     engine.py                 # Main scoring orchestrator
     demand_score.py
     organic_competition_score.py
@@ -717,13 +718,22 @@ src/
     ai_resilience_score.py
     composite_score.py        # Opportunity score + threshold gates
     confidence_score.py
-    strategy_profiles.py      # Profile definitions + weight resolver
+    strategy_profiles.py      # Profile definitions + weight resolver (incl. auto)
     normalization.py          # scale, inverse_scale, percentile_rank, clamp
-  tests/
-    test_scoring_engine.py
-    test_each_score.py        # Individual score function tests
-    test_strategy_profiles.py
-    test_normalization.py
+tests/
+  fixtures/
+    m07_scoring_fixtures.py   # Deterministic metro signal fixtures
+  unit/
+    test_m07_scores_us1.py
+    test_m07_reproducibility_us1.py
+    test_m07_competition_inversion_us1.py
+    test_m07_monetization_ads_key_us1.py
+    test_m07_strategy_profiles_us2.py
+    test_m07_composite_profiles_us2.py
+    test_m07_confidence_us3.py
+    test_m07_percentiles_us3.py
+    test_m07_rule_gates_us3.py
+    test_m07_ai_resilience_us3.py
 ```
 
 **Eval criteria:**
