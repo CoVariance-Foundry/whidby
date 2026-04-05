@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowUpRight,
@@ -34,6 +34,14 @@ interface Experiment {
 }
 
 export default function ExperimentsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-[var(--color-text-muted)]">Loading...</div>}>
+      <ExperimentsContent />
+    </Suspense>
+  );
+}
+
+function ExperimentsContent() {
   const searchParams = useSearchParams();
   const runId = searchParams.get("run");
   const [sessions, setSessions] = useState<Array<{ run_id: string }>>([]);
