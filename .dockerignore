@@ -23,3 +23,5 @@ research_graph.json
 *.yml
 !docker-compose.yml
 Dockerfile*
+coverage/
+*.log*

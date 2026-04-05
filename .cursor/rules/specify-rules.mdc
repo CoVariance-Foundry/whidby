@@ -1,0 +1,35 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# speckit-m05-data-collection-xij Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-04-04
+
+## Active Technologies
+
+- Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio` (001-refresh-m5-data-collection)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] pytest [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] ruff check .
+
+## Code Style
+
+Python 3.11+: Follow standard conventions
+
+## Recent Changes
+
+- 001-refresh-m5-data-collection: Added Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio`
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->
