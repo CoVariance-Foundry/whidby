@@ -61,13 +61,18 @@ strategy_profile: "balanced"     source, aio_risk}                   serp_organi
      │                              │
      │                              ▼
      │
-     │                        M8: Classification
-     │                        ─────────────────
-     │                        MetroClassification {
+     │                        M8: Classification + Guidance
+     │                        ────────────────────────────
+     │                        Validates required nested numeric fields
+     │                        (fail-fast on missing/malformed inputs).
+     │                        ClassificationGuidanceBundle {
      │                          serp_archetype: "LOCAL_PACK_VULNERABLE"
      │                          ai_exposure: "AI_SHIELDED"
      │                          difficulty_tier: "MODERATE"
-     │                          guidance: {headline, strategy, actions}
+     │                          guidance: {headline, strategy, priority_actions,
+     │                                     ai_resilience_note, guidance_status}
+     │                          metadata: {serp_rule_id, difficulty_inputs,
+     │                                     guidance_fallback_reason}
      │                        }
      │                              │
      ▼                              ▼

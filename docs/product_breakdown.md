@@ -773,18 +773,29 @@ tests/
 
 **Dependencies:** M6 (Signals), M7 (Scores)
 
-**Files to create:**
+**Files:**
 ```
 src/
   classification/
-    serp_archetype.py        # 8 archetype classifier
-    ai_exposure.py           # 4-level AI exposure classifier
-    difficulty_tier.py       # EASY / MODERATE / HARD / VERY_HARD
-    guidance_generator.py    # Template-based + LLM guidance
+    __init__.py              # Package exports
+    types.py                 # Typed contracts (ClassificationInput, ClassificationGuidanceBundle)
+    serp_archetype.py        # 8 archetype classifier (ordered rule chain)
+    ai_exposure.py           # 4-level AI exposure classifier (threshold-based)
+    difficulty_tier.py       # EASY / MODERATE / HARD / VERY_HARD (strategy-weighted)
+    guidance_generator.py    # Orchestration + template-based + LLM guidance + validation
     templates/
-      guidance_templates.py  # Per archetype × difficulty templates
-  tests/
-    test_classification.py
+      __init__.py
+      guidance_templates.py  # Per archetype × difficulty template matrix
+
+tests/
+  fixtures/
+    m8_classification_fixtures.py
+  unit/
+    test_serp_archetype.py
+    test_ai_exposure.py
+    test_difficulty_tier.py
+    test_guidance_generator.py
+    test_classification_pipeline.py
 ```
 
 **Eval criteria:**
