@@ -17,11 +17,11 @@
 
 **Purpose**: Create feature-local design artifacts and base scaffolding required for implementation.
 
-- [X] T001 Create rule-mapping notes in `.specify/specs/M07-scoring-engine/research.md`
-- [X] T002 Define M07 input/output entities in `.specify/specs/M07-scoring-engine/data-model.md`
-- [X] T003 [P] Add execution and validation scenarios in `.specify/specs/M07-scoring-engine/quickstart.md`
-- [X] T004 [P] Define `MetroScores` contract schema in `.specify/specs/M07-scoring-engine/contracts/metro-scores.schema.json`
-- [X] T005 [P] Add M07 constants placeholders and documented defaults in `src/config/constants.py`
+- T001 Create rule-mapping notes in `.specify/specs/M07-scoring-engine/research.md`
+- T002 Define M07 input/output entities in `.specify/specs/M07-scoring-engine/data-model.md`
+- T003 [P] Add execution and validation scenarios in `.specify/specs/M07-scoring-engine/quickstart.md`
+- T004 [P] Define `MetroScores` contract schema in `.specify/specs/M07-scoring-engine/contracts/metro-scores.schema.json`
+- T005 [P] Add M07 constants placeholders and documented defaults in `src/config/constants.py`
 
 ---
 
@@ -31,15 +31,15 @@
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete.
 
-- [X] T006 Create deterministic scoring fixtures in `tests/fixtures/m07_scoring_fixtures.py`
-- [X] T007 [P] Implement base normalization helpers (`clamp`, safe scaling, percentile helpers scaffold) in `src/scoring/normalization.py`
-- [X] T008 [P] Add score module skeletons with typed function signatures in `src/scoring/demand_score.py`
-- [X] T009 [P] Add score module skeletons with typed function signatures in `src/scoring/organic_competition_score.py`
-- [X] T010 [P] Add score module skeletons with typed function signatures in `src/scoring/local_competition_score.py`
-- [X] T011 [P] Add score module skeletons with typed function signatures in `src/scoring/monetization_score.py`
-- [X] T012 [P] Add score module skeletons with typed function signatures in `src/scoring/ai_resilience_score.py`
-- [X] T013 [P] Add typed composite and profile resolver scaffolds in `src/scoring/composite_score.py` and `src/scoring/strategy_profiles.py`
-- [X] T014 [P] Add engine/confidence orchestration scaffolds in `src/scoring/engine.py` and `src/scoring/confidence_score.py`
+- T006 Create deterministic scoring fixtures in `tests/fixtures/m07_scoring_fixtures.py`
+- T007 [P] Implement base normalization helpers (`clamp`, safe scaling, percentile helpers scaffold) in `src/scoring/normalization.py`
+- T008 [P] Add score module skeletons with typed function signatures in `src/scoring/demand_score.py`
+- T009 [P] Add score module skeletons with typed function signatures in `src/scoring/organic_competition_score.py`
+- T010 [P] Add score module skeletons with typed function signatures in `src/scoring/local_competition_score.py`
+- T011 [P] Add score module skeletons with typed function signatures in `src/scoring/monetization_score.py`
+- T012 [P] Add score module skeletons with typed function signatures in `src/scoring/ai_resilience_score.py`
+- T013 [P] Add typed composite and profile resolver scaffolds in `src/scoring/composite_score.py` and `src/scoring/strategy_profiles.py`
+- T014 [P] Add engine/confidence orchestration scaffolds in `src/scoring/engine.py` and `src/scoring/confidence_score.py`
 
 **Checkpoint**: Foundation ready - user story implementation can begin.
 
@@ -53,19 +53,19 @@
 
 ### Tests for User Story 1 (required)
 
-- [X] T015 [P] [US1] Add sub-score presence/range tests in `tests/unit/test_m07_scores_us1.py`
-- [X] T016 [P] [US1] Add reproducibility tests for repeated identical runs in `tests/unit/test_m07_reproducibility_us1.py`
-- [X] T017 [P] [US1] Add competition inversion behavior tests in `tests/unit/test_m07_competition_inversion_us1.py`
+- T015 [P] [US1] Add sub-score presence/range tests in `tests/unit/test_m07_scores_us1.py`
+- T016 [P] [US1] Add reproducibility tests for repeated identical runs in `tests/unit/test_m07_reproducibility_us1.py`
+- T017 [P] [US1] Add competition inversion behavior tests in `tests/unit/test_m07_competition_inversion_us1.py`
 
 ### Implementation for User Story 1
 
-- [X] T018 [P] [US1] Implement demand score calculations in `src/scoring/demand_score.py`
-- [X] T019 [P] [US1] Implement organic competition score calculations in `src/scoring/organic_competition_score.py`
-- [X] T020 [P] [US1] Implement local competition score calculations in `src/scoring/local_competition_score.py`
-- [X] T021 [P] [US1] Implement monetization score calculations in `src/scoring/monetization_score.py`
-- [X] T022 [P] [US1] Implement baseline AI resilience scoring in `src/scoring/ai_resilience_score.py`
-- [X] T023 [US1] Implement baseline opportunity composition with competition inversion in `src/scoring/composite_score.py`
-- [X] T024 [US1] Wire US1 sub-score orchestration and output shaping in `src/scoring/engine.py`
+- T018 [P] [US1] Implement demand score calculations in `src/scoring/demand_score.py`
+- T019 [P] [US1] Implement organic competition score calculations in `src/scoring/organic_competition_score.py`
+- T020 [P] [US1] Implement local competition score calculations in `src/scoring/local_competition_score.py`
+- T021 [P] [US1] Implement monetization score calculations in `src/scoring/monetization_score.py`
+- T022 [P] [US1] Implement baseline AI resilience scoring in `src/scoring/ai_resilience_score.py`
+- T023 [US1] Implement baseline opportunity composition with competition inversion in `src/scoring/composite_score.py`
+- T024 [US1] Wire US1 sub-score orchestration and output shaping in `src/scoring/engine.py`
 
 **Checkpoint**: User Story 1 is independently functional and testable.
 
@@ -79,14 +79,14 @@
 
 ### Tests for User Story 2 (required)
 
-- [X] T025 [P] [US2] Add strategy profile constraints and normalization tests in `tests/unit/test_m07_strategy_profiles_us2.py`
-- [X] T026 [P] [US2] Add profile-dependent composite outcome tests in `tests/unit/test_m07_composite_profiles_us2.py`
+- T025 [P] [US2] Add strategy profile constraints and normalization tests in `tests/unit/test_m07_strategy_profiles_us2.py`
+- T026 [P] [US2] Add profile-dependent composite outcome tests in `tests/unit/test_m07_composite_profiles_us2.py`
 
 ### Implementation for User Story 2
 
-- [X] T027 [US2] Implement profile definitions, resolution, and bounds checks in `src/scoring/strategy_profiles.py`
-- [X] T028 [US2] Integrate profile-resolved weights into opportunity composition in `src/scoring/composite_score.py`
-- [X] T029 [US2] Emit `resolved_weights` in engine output contracts in `src/scoring/engine.py`
+- T027 [US2] Implement profile definitions, resolution, and bounds checks in `src/scoring/strategy_profiles.py`
+- T028 [US2] Integrate profile-resolved weights into opportunity composition in `src/scoring/composite_score.py`
+- T029 [US2] Emit `resolved_weights` in engine output contracts in `src/scoring/engine.py`
 
 **Checkpoint**: User Stories 1 and 2 work independently with profile-aware behavior.
 
@@ -100,17 +100,17 @@
 
 ### Tests for User Story 3 (required)
 
-- [X] T030 [P] [US3] Add confidence penalty/flag tests in `tests/unit/test_m07_confidence_us3.py`
-- [X] T031 [P] [US3] Add cohort percentile sensitivity and isolation tests in `tests/unit/test_m07_percentiles_us3.py`
-- [X] T032 [P] [US3] Add review barrier/no-local-pack/CPC/threshold/AI floor tests in `tests/unit/test_m07_rule_gates_us3.py`
-- [X] T033 [P] [US3] Add AI resilience niche-type split tests (local-service vs informational) in `tests/unit/test_m07_ai_resilience_us3.py`
+- T030 [P] [US3] Add confidence penalty/flag tests in `tests/unit/test_m07_confidence_us3.py`
+- T031 [P] [US3] Add cohort percentile sensitivity and isolation tests in `tests/unit/test_m07_percentiles_us3.py`
+- T032 [P] [US3] Add review barrier/no-local-pack/CPC/threshold/AI floor tests in `tests/unit/test_m07_rule_gates_us3.py`
+- T033 [P] [US3] Add AI resilience niche-type split tests (local-service vs informational) in `tests/unit/test_m07_ai_resilience_us3.py`
 
 ### Implementation for User Story 3
 
-- [X] T034 [US3] Implement confidence scoring and flags in `src/scoring/confidence_score.py`
-- [X] T035 [US3] Implement percentile ranking and small-cohort fallback rules in `src/scoring/normalization.py`
-- [X] T036 [US3] Implement review barrier/no-local-pack/CPC/threshold/AI floor logic in `src/scoring/demand_score.py`, `src/scoring/local_competition_score.py`, `src/scoring/monetization_score.py`, and `src/scoring/ai_resilience_score.py`
-- [X] T037 [US3] Integrate confidence and percentile-dependent components in `src/scoring/engine.py`
+- T034 [US3] Implement confidence scoring and flags in `src/scoring/confidence_score.py`
+- T035 [US3] Implement percentile ranking and small-cohort fallback rules in `src/scoring/normalization.py`
+- T036 [US3] Implement review barrier/no-local-pack/CPC/threshold/AI floor logic in `src/scoring/demand_score.py`, `src/scoring/local_competition_score.py`, `src/scoring/monetization_score.py`, and `src/scoring/ai_resilience_score.py`
+- T037 [US3] Integrate confidence and percentile-dependent components in `src/scoring/engine.py`
 
 **Checkpoint**: All three user stories are independently functional and testable.
 
@@ -120,11 +120,11 @@
 
 **Purpose**: Final validation, docs sync, and quality gates across all stories.
 
-- [X] T038 [P] Update scoring exports and module docs in `src/scoring/__init__.py`
-- [X] T039 [P] Update canonical contracts as needed in `docs-canonical/DATA-MODEL.md`, `docs-canonical/REQUIREMENTS.md`, and `docs-canonical/TEST-SPEC.md`
-- [X] T040 [P] Sync detailed scoring flow docs in `docs/data_flow.md` and `docs/product_breakdown.md`
-- [X] T041 Run `ruff check src tests` and record results in `.specify/specs/M07-scoring-engine/quickstart.md`
-- [X] T042 Run `pytest tests/unit/ -v` and record results in `.specify/specs/M07-scoring-engine/quickstart.md`
+- T038 [P] Update scoring exports and module docs in `src/scoring/__init__.py`
+- T039 [P] Update canonical contracts as needed in `docs-canonical/DATA-MODEL.md`, `docs-canonical/REQUIREMENTS.md`, and `docs-canonical/TEST-SPEC.md`
+- T040 [P] Sync detailed scoring flow docs in `docs/data_flow.md` and `docs/product_breakdown.md`
+- T041 Run `ruff check src tests` and record results in `.specify/specs/M07-scoring-engine/quickstart.md`
+- T042 Run `pytest tests/unit/ -v` and record results in `.specify/specs/M07-scoring-engine/quickstart.md`
 
 ---
 

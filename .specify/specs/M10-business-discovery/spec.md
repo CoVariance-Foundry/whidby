@@ -74,15 +74,17 @@ For a given niche+metro, the experiment framework discovers candidate businesses
 
 ## Success Criteria
 
-| ID | Criterion | Pass condition |
-|----|-----------|----------------|
-| SC-1 | Discovery volume | Typical niche+metro yields **≥ 50** businesses in discovery set per AS-1.1 |
-| SC-2 | Chain filtering | Chains excluded or marked ineligible with reason per AS-2.1 |
-| SC-3 | Email discovery | Email fields populated where spec expects; sources recorded per AS-3.1 |
-| SC-4 | No website gate | No-website businesses ineligible per AS-4.1 |
-| SC-5 | High-quality gate | High-quality sites ineligible for weak-site arm per AS-4.2 |
+
+| ID   | Criterion          | Pass condition                                                                |
+| ---- | ------------------ | ----------------------------------------------------------------------------- |
+| SC-1 | Discovery volume   | Typical niche+metro yields **≥ 50** businesses in discovery set per AS-1.1    |
+| SC-2 | Chain filtering    | Chains excluded or marked ineligible with reason per AS-2.1                   |
+| SC-3 | Email discovery    | Email fields populated where spec expects; sources recorded per AS-3.1        |
+| SC-4 | No website gate    | No-website businesses ineligible per AS-4.1                                   |
+| SC-5 | High-quality gate  | High-quality sites ineligible for weak-site arm per AS-4.2                    |
 | SC-6 | Stratified buckets | Three buckets with reproducible assignment under fixed seed per AS-5.1–AS-5.2 |
-| SC-7 | Traceability | Exclusions carry reason codes per AS-2.2 |
+| SC-7 | Traceability       | Exclusions carry reason codes per AS-2.2                                      |
+
 
 ## Assumptions
 

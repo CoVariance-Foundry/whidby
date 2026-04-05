@@ -1,96 +1,105 @@
 # Data Model
 
-<!-- docguard:version 1.0.0 -->
-<!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-05 -->
-<!-- docguard:owner @widby-team -->
-
 > **Canonical document** — Design intent. This file describes the data structures and their relationships.
 > Schema changes require this doc to be updated FIRST.
 
-| Metadata | Value |
-|----------|-------|
-| **Status** | approved |
-| **Version** | `1.0.0` |
-| **Last Updated** | 2026-04-05 |
-| **Owner** | @widby-team |
+
+| Metadata         | Value       |
+| ---------------- | ----------- |
+| **Status**       | approved    |
+| **Version**      | `1.0.0`     |
+| **Last Updated** | 2026-04-05  |
+| **Owner**        | @widby-team |
+
 
 ---
 
 ## Entities
 
-| Entity | Storage | Primary Key | Description |
-|--------|---------|-------------|-------------|
-| KeywordExpansion | In-memory (M4 output) | niche (string) | Expanded keyword set with intent/tier/AIO labels |
-| RawCollectionResult | In-memory (M5 output) | niche + geo | Raw API responses organized per metro |
-| MetroSignals | In-memory (M6 output) | cbsa_code | Derived demand/competition/AI/monetization signals |
-| MetroScores | In-memory (M7 output) | cbsa_code | Computed scores (0-100) per signal domain |
-| MetroClassification | In-memory (M8 output) | cbsa_code | SERP archetype, AI exposure, difficulty tier, guidance |
-| Report | Supabase `reports` table | report_id (UUID) | Complete report with all metro results |
-| FeedbackLog | Supabase `feedback_log` table | log_id (UUID) | Input context + scores for future optimization |
+
+| Entity              | Storage                       | Primary Key      | Description                                            |
+| ------------------- | ----------------------------- | ---------------- | ------------------------------------------------------ |
+| KeywordExpansion    | In-memory (M4 output)         | niche (string)   | Expanded keyword set with intent/tier/AIO labels       |
+| RawCollectionResult | In-memory (M5 output)         | niche + geo      | Raw API responses organized per metro                  |
+| MetroSignals        | In-memory (M6 output)         | cbsa_code        | Derived demand/competition/AI/monetization signals     |
+| MetroScores         | In-memory (M7 output)         | cbsa_code        | Computed scores (0-100) per signal domain              |
+| MetroClassification | In-memory (M8 output)         | cbsa_code        | SERP archetype, AI exposure, difficulty tier, guidance |
+| Report              | Supabase `reports` table      | report_id (UUID) | Complete report with all metro results                 |
+| FeedbackLog         | Supabase `feedback_log` table | log_id (UUID)    | Input context + scores for future optimization         |
+
 
 ## Schema Definitions
 
 ### KeywordExpansion (M4 Output)
 
-| Field | Type | Required | Constraints | Description |
-|-------|------|----------|-------------|-------------|
-| `niche` | string | Yes | non-empty | Normalized seed niche term |
-| `expanded_keywords` | array | Yes | — | List of ExpandedKeyword records |
-| `total_keywords` | integer | Yes | >= 0 | Count of all keywords |
-| `actionable_keywords` | integer | Yes | >= 0 | Count with actionable=true |
-| `informational_keywords_excluded` | integer | Yes | >= 0 | Count of informational exclusions |
-| `expansion_confidence` | string | Yes | `high`, `medium`, `low` | Overlap-based confidence |
+
+| Field                             | Type    | Required | Constraints             | Description                       |
+| --------------------------------- | ------- | -------- | ----------------------- | --------------------------------- |
+| `niche`                           | string  | Yes      | non-empty               | Normalized seed niche term        |
+| `expanded_keywords`               | array   | Yes      | —                       | List of ExpandedKeyword records   |
+| `total_keywords`                  | integer | Yes      | >= 0                    | Count of all keywords             |
+| `actionable_keywords`             | integer | Yes      | >= 0                    | Count with actionable=true        |
+| `informational_keywords_excluded` | integer | Yes      | >= 0                    | Count of informational exclusions |
+| `expansion_confidence`            | string  | Yes      | `high`, `medium`, `low` | Overlap-based confidence          |
+
 
 ### ExpandedKeyword (M4 Keyword Record)
 
-| Field | Type | Required | Constraints | Description |
-|-------|------|----------|-------------|-------------|
-| `keyword` | string | Yes | non-empty, unique per result | Normalized keyword text |
-| `tier` | integer | Yes | 1, 2, or 3 | Head / Service / Long-tail |
-| `intent` | string | Yes | `transactional`, `commercial`, `informational` | Search intent |
-| `source` | string | Yes | `input`, `llm`, `dataforseo_suggestions`, `merged` | Discovery origin |
-| `aio_risk` | string | Yes | `low`, `moderate`, `high` | AI Overview exposure risk |
-| `actionable` | boolean | Yes | — | True for transactional/commercial |
+
+| Field        | Type    | Required | Constraints                                        | Description                       |
+| ------------ | ------- | -------- | -------------------------------------------------- | --------------------------------- |
+| `keyword`    | string  | Yes      | non-empty, unique per result                       | Normalized keyword text           |
+| `tier`       | integer | Yes      | 1, 2, or 3                                         | Head / Service / Long-tail        |
+| `intent`     | string  | Yes      | `transactional`, `commercial`, `informational`     | Search intent                     |
+| `source`     | string  | Yes      | `input`, `llm`, `dataforseo_suggestions`, `merged` | Discovery origin                  |
+| `aio_risk`   | string  | Yes      | `low`, `moderate`, `high`                          | AI Overview exposure risk         |
+| `actionable` | boolean | Yes      | —                                                  | True for transactional/commercial |
+
 
 ### MetroSignals (M6 Output)
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `demand.volume` | integer | Effective search volume (AIO-adjusted) |
-| `demand.cpc` | float | Average CPC across actionable keywords |
-| `demand.breadth` | integer | Number of Tier 2 keywords with volume > threshold |
-| `organic_competition.da` | integer | Average DA of top-5 organic results |
-| `organic_competition.aggregators` | integer | Count of known aggregator domains in top-10 |
-| `local_competition.reviews` | object | Review count avg/max, velocity |
-| `local_competition.gbp` | object | GBP completeness, photo count, posting activity |
-| `ai_resilience.aio_rate` | float | AIO trigger rate across tested keywords |
-| `ai_resilience.intent_ratio` | float | Transactional keyword ratio |
-| `monetization.cpc` | float | Average CPC |
-| `monetization.density` | integer | Business density count |
-| `monetization.lsa` | boolean | Local Service Ads present |
+
+| Field                             | Type    | Description                                       |
+| --------------------------------- | ------- | ------------------------------------------------- |
+| `demand.volume`                   | integer | Effective search volume (AIO-adjusted)            |
+| `demand.cpc`                      | float   | Average CPC across actionable keywords            |
+| `demand.breadth`                  | integer | Number of Tier 2 keywords with volume > threshold |
+| `organic_competition.da`          | integer | Average DA of top-5 organic results               |
+| `organic_competition.aggregators` | integer | Count of known aggregator domains in top-10       |
+| `local_competition.reviews`       | object  | Review count avg/max, velocity                    |
+| `local_competition.gbp`           | object  | GBP completeness, photo count, posting activity   |
+| `ai_resilience.aio_rate`          | float   | AIO trigger rate across tested keywords           |
+| `ai_resilience.intent_ratio`      | float   | Transactional keyword ratio                       |
+| `monetization.cpc`                | float   | Average CPC                                       |
+| `monetization.density`            | integer | Business density count                            |
+| `monetization.lsa`                | boolean | Local Service Ads present                         |
+
 
 ### MetroScores (M7 Output)
 
-| Field | Type | Range | Description |
-|-------|------|-------|-------------|
-| `demand` | integer | 0-100 | Demand score |
-| `organic_competition` | integer | 0-100 | Organic competition score |
-| `local_competition` | integer | 0-100 | Local competition score |
-| `monetization` | integer | 0-100 | Monetization score |
-| `ai_resilience` | integer | 0-100 | AI resilience score |
-| `opportunity` | integer | 0-100 | Composite opportunity score |
-| `confidence.score` | integer | 0-100 | Confidence score |
-| `confidence.flags` | array | — | Warning flags |
+
+| Field                 | Type    | Range | Description                 |
+| --------------------- | ------- | ----- | --------------------------- |
+| `demand`              | integer | 0-100 | Demand score                |
+| `organic_competition` | integer | 0-100 | Organic competition score   |
+| `local_competition`   | integer | 0-100 | Local competition score     |
+| `monetization`        | integer | 0-100 | Monetization score          |
+| `ai_resilience`       | integer | 0-100 | AI resilience score         |
+| `opportunity`         | integer | 0-100 | Composite opportunity score |
+| `confidence.score`    | integer | 0-100 | Confidence score            |
+| `confidence.flags`    | array   | —     | Warning flags               |
+
 
 ### MetroClassification (M8 Output)
 
-| Field | Type | Values | Description |
-|-------|------|--------|-------------|
-| `serp_archetype` | string | `LOCAL_PACK_VULNERABLE`, `AGGREGATOR_DOMINATED`, `ORGANIC_OPEN`, etc. | SERP structure classification |
-| `ai_exposure` | string | `AI_SHIELDED`, `AI_MODERATE`, `AI_EXPOSED` | AI Overview exposure level |
-| `difficulty_tier` | string | `EASY`, `MODERATE`, `HARD`, `VERY_HARD` | Ranking difficulty |
-| `guidance` | object | — | Headline, strategy, priority actions, time estimate |
+
+| Field             | Type   | Values                                                                | Description                                         |
+| ----------------- | ------ | --------------------------------------------------------------------- | --------------------------------------------------- |
+| `serp_archetype`  | string | `LOCAL_PACK_VULNERABLE`, `AGGREGATOR_DOMINATED`, `ORGANIC_OPEN`, etc. | SERP structure classification                       |
+| `ai_exposure`     | string | `AI_SHIELDED`, `AI_MODERATE`, `AI_EXPOSED`                            | AI Overview exposure level                          |
+| `difficulty_tier` | string | `EASY`, `MODERATE`, `HARD`, `VERY_HARD`                               | Ranking difficulty                                  |
+| `guidance`        | object | —                                                                     | Headline, strategy, priority actions, time estimate |
+
 
 ## Data Flow: Scoring Pipeline (M4 → M9)
 
@@ -157,16 +166,21 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 
 ## Migration Strategy
 
-| Strategy | Tool | Notes |
-|----------|------|-------|
-| SQL migrations | Supabase CLI | `supabase/migrations/` directory, RLS policies included |
-| In-memory contracts | Pydantic / TypedDict | Validated at module boundaries, no ORM |
+
+| Strategy            | Tool                 | Notes                                                   |
+| ------------------- | -------------------- | ------------------------------------------------------- |
+| SQL migrations      | Supabase CLI         | `supabase/migrations/` directory, RLS policies included |
+| In-memory contracts | Pydantic / TypedDict | Validated at module boundaries, no ORM                  |
+
 
 ---
 
 ## Revision History
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
-| 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md`, `docs/data_flow.md` |
+
+| Version | Date       | Author        | Changes                                                      |
+| ------- | ---------- | ------------- | ------------------------------------------------------------ |
+| 0.1.0   | 2026-04-05 | DocGuard Init | Initial template                                             |
+| 1.0.0   | 2026-04-05 | Migration     | Populated from `docs/algo_spec_v1_1.md`, `docs/data_flow.md` |
+
+
