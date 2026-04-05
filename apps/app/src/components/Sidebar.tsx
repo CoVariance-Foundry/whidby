@@ -1,30 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   MessageSquare,
-  LayoutDashboard,
-  FlaskConical,
-  GitFork,
-  Lightbulb,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/experiments", label: "Experiments", icon: FlaskConical },
-  { href: "/graph", label: "Graph", icon: GitFork },
-  { href: "/recommendations", label: "Recommendations", icon: Lightbulb },
+  { href: "/chat", label: "Agent", icon: MessageSquare },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   return (
     <aside
@@ -36,7 +39,7 @@ export default function Sidebar() {
       <div className="flex items-center justify-between px-4 py-5 border-b border-[var(--color-dark-border)]">
         {!collapsed && (
           <span className="text-sm font-semibold tracking-wide text-[var(--color-accent)]">
-            Widby Research
+            Widby Dev
           </span>
         )}
         <button
@@ -68,12 +71,19 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="px-4 py-4 border-t border-[var(--color-dark-border)]">
-        {!collapsed && (
-          <p className="text-xs text-[var(--color-text-muted)]">
-            Research Agent v0.1
-          </p>
-        )}
+      <div className="px-2 pb-4 border-t border-[var(--color-dark-border)] pt-3">
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
+            "text-[var(--color-text-muted)] hover:bg-[var(--color-dark-hover)] hover:text-[var(--color-negative)]",
+            signingOut && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          <LogOut size={18} />
+          {!collapsed && <span>{signingOut ? "Signing out..." : "Sign out"}</span>}
+        </button>
       </div>
     </aside>
   );

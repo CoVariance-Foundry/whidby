@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Project-level generated artifacts:
+    "node_modules/**",
+    "coverage/**",
   ]),
 ]);
 

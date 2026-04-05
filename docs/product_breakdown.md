@@ -1,5 +1,10 @@
 # Widby — Product Breakdown & Spec-Driven Development Guide
 
+> **Canonical notice:** Architecture, requirements, and test obligations from this file
+> have been migrated to `docs-canonical/ARCHITECTURE.md`, `docs-canonical/REQUIREMENTS.md`,
+> and `docs-canonical/TEST-SPEC.md`. This file is retained as detailed reference.
+> Update canonical docs first when making structural changes.
+
 **Purpose:** Decompose the full Widby product into buildable, testable modules with clear boundaries. Each module has its own spec slice, eval criteria, and a minimal frontend surface for experimentation.
 
 **Stack:** Python (backend) · Supabase (database + auth + storage) · Vercel (frontend hosting) · Next.js or simple HTML (eval frontend) · DataForSEO (data APIs) · Anthropic Python SDK (`anthropic`) for LLM inference

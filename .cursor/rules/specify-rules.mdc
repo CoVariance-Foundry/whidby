@@ -1,0 +1,35 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# main Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-04-04
+
+## Active Technologies
+
+- Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py` (001-keyword-expansion)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] pytest [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] ruff check .
+
+## Code Style
+
+Python 3.11+: Follow standard conventions
+
+## Recent Changes
+
+- 001-keyword-expansion: Added Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py`
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

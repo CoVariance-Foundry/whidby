@@ -1,7 +1,10 @@
 {
   "name": "nichefinder",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -14,5 +17,8 @@
   "devDependencies": {
     "turbo": "^2"
   },
-  "packageManager": "npm@11.6.0"
+  "packageManager": "npm@11.6.0",
+  "dependencies": {
+    "vercel": "^50.39.0"
+  }
 }

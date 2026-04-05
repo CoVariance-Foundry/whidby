@@ -24,9 +24,17 @@ The pipeline is 80% deterministic data processing and 20% LLM calls. We use `ant
 - Specific exception handling with logging (`exc_info=True` for exceptions)
 - ESLint for all TypeScript/Next.js code in `apps/`
 
-### V. Documentation as Code
+### V. Documentation as Code (Canonical-First)
 
-All code changes require documentation updates. Spec artifacts (`spec.md`, `plan.md`, `tasks.md`) are mandatory deliverables alongside implementation. Architecture docs (`product_breakdown.md`, `module_dependency.md`, `data_flow.md`) must be updated when module interfaces or data flows change. Every public function has at least one unit test. Every input/output contract from the spec has a corresponding test.
+All code changes require documentation updates. **Canonical docs** in `docs-canonical/` are the maintained source of truth for architecture, requirements, data models, test obligations, and environment configuration. When changing module interfaces, data flows, or requirements, update canonical docs **first**, then update detailed reference docs in `docs/` and spec-kit artifacts as needed.
+
+- `docs-canonical/ARCHITECTURE.md` — system overview, module map, dependencies, tech stack
+- `docs-canonical/REQUIREMENTS.md` — functional/non-functional requirements, success criteria
+- `docs-canonical/DATA-MODEL.md` — entity schemas, data flow, research constants
+- `docs-canonical/TEST-SPEC.md` — test obligations, coverage rules, quality gates
+- `docs-canonical/ENVIRONMENT.md` — prerequisites, env vars, setup steps
+
+Detailed reference docs (`docs/algo_spec_v1_1.md`, `docs/product_breakdown.md`, etc.) are retained for deep algorithm context and per-module I/O contracts. Spec-kit artifacts (`spec.md`, `plan.md`, `tasks.md`) are mandatory deliverables alongside implementation. Every public function has at least one unit test. Every input/output contract from the spec has a corresponding test.
 
 ### VI. Simplicity and Determinism
 

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://widby.local/contracts/keyword-expansion.schema.json",
+  "title": "KeywordExpansion",
+  "description": "Contract for M4 keyword expansion output consumed by downstream scoring modules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "niche",
+    "expanded_keywords",
+    "total_keywords",
+    "actionable_keywords",
+    "informational_keywords_excluded",
+    "expansion_confidence"
+  ],
+  "properties": {
+    "niche": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expanded_keywords": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExpandedKeyword"
+      }
+    },
+    "total_keywords": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "actionable_keywords": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "informational_keywords_excluded": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expansion_confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    }
+  },
+  "$defs": {
+    "ExpandedKeyword": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyword",
+        "tier",
+        "intent",
+        "source",
+        "aio_risk",
+        "actionable"
+      ],
+      "properties": {
+        "keyword": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tier": {
+          "type": "integer",
+          "enum": [1, 2, 3]
+        },
+        "intent": {
+          "type": "string",
+          "enum": ["transactional", "commercial", "informational"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["input", "llm", "dataforseo_suggestions", "merged"]
+        },
+        "aio_risk": {
+          "type": "string",
+          "enum": ["low", "moderate", "high"]
+        },
+        "actionable": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

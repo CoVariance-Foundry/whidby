@@ -1,5 +1,11 @@
 # Widby Niche Scoring Algorithm — V1.1 Specification
 
+> **Canonical notice:** Requirements, data models, test obligations, and environment
+> config from this spec have been migrated to `docs-canonical/REQUIREMENTS.md`,
+> `docs-canonical/DATA-MODEL.md`, `docs-canonical/TEST-SPEC.md`, and
+> `docs-canonical/ENVIRONMENT.md`. This file is retained as the authoritative
+> algorithm reference. Update canonical docs first when making scoring/schema changes.
+
 **Status:** Draft — Research-Updated
 **Author:** Antwoine Flowers / Kael
 **Date:** 2026-04-03
