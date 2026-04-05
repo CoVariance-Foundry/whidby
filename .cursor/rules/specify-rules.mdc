@@ -6,11 +6,13 @@ alwaysApply: true
 
 # speckit-m05-data-collection-xij Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-04
+Auto-generated from all feature plans. Last updated: 2026-04-05
 
 ## Active Technologies
 - Python 3.11+ + `pydantic>=2`, existing pipeline types/utilities, `src/config/constants.py` constants (`AIO_CTR_REDUCTION`, `INTENT_AIO_RATES`, `KNOWN_AGGREGATORS`) (002-m06-signal-extraction-rib)
 - N/A (in-memory signal derivation from provided M5 payloads) (002-m06-signal-extraction-rib)
+- Python 3.11+ + `pydantic>=2`, existing M3 `LLMClient`, M6/M7 typed outputs, shared constants/utilities in `src/config/constants.py` (008-m08-classification-guidance-g3j)
+- N/A (in-memory derivation and text generation; persistence handled downstream by M9/reporting) (008-m08-classification-guidance-g3j)
 
 - Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio` (001-refresh-m5-data-collection)
 - Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py` (001-keyword-expansion)
@@ -31,10 +33,10 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 008-m08-classification-guidance-g3j: Added Python 3.11+ + `pydantic>=2`, existing M3 `LLMClient`, M6/M7 typed outputs, shared constants/utilities in `src/config/constants.py`
 - 002-m06-signal-extraction-rib: Added Python 3.11+ + `pydantic>=2`, existing pipeline types/utilities, `src/config/constants.py` constants (`AIO_CTR_REDUCTION`, `INTENT_AIO_RATES`, `KNOWN_AGGREGATORS`)
 
 - 001-refresh-m5-data-collection: Added Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio`
-- 001-keyword-expansion: Added Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py`
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

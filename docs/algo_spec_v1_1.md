@@ -823,27 +823,30 @@ def classify_ai_exposure(signals):
 
 ### 8.3 Difficulty Tier
 
+**Scoring direction:** M7 competition scores use inverse scaling — higher scores indicate *weaker* competition (easier to rank). The `combined_comp` value inherits this direction, so a high value means the competitive landscape is favorable. Thresholds map directly: high combined score → easy tier, low combined score → very hard tier.
+
 ```python
 def difficulty_tier(organic_comp, local_comp, strategy_profile="balanced", signals=None):
     # Use the same strategy profile weights as the composite score
-    # so difficulty and opportunity are internally consistent
+    # so difficulty and opportunity are internally consistent.
+    # organic_comp and local_comp are M7 scores where higher = weaker competition.
     org_w, loc_w = resolve_strategy_weights(strategy_profile, signals)
     total_comp_weight = org_w + loc_w
-    
+
     # Normalize to proportional blend
     org_proportion = org_w / total_comp_weight
     loc_proportion = loc_w / total_comp_weight
-    
+
     combined_comp = (local_comp * loc_proportion) + (organic_comp * org_proportion)
 
     if combined_comp >= 70:
-        return "EASY"       # "You can likely rank within 2-4 months"
+        return "EASY"       # Weak competition — rank within 2-4 months
     elif combined_comp >= 45:
-        return "MODERATE"   # "Expect 4-8 months with consistent effort"
+        return "MODERATE"   # Moderate competition — expect 4-8 months
     elif combined_comp >= 25:
-        return "HARD"       # "Requires 8-12+ months, review generation, and link building"
+        return "HARD"       # Strong competition — 8-12+ months, link building needed
     else:
-        return "VERY_HARD"  # "Not recommended unless you have existing authority in the space"
+        return "VERY_HARD"  # Very strong competition — not recommended without existing authority
 ```
 
 ### 8.4 Guidance Generation
