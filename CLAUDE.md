@@ -19,7 +19,8 @@ apps/
 src/                — Python scoring engine (modules M0–M15)
   research_agent/   — Autonomous research agent (Deep Agents + Ralph loop)
 tests/              — pytest: unit/, integration/, fixtures/
-docs/               — Algo spec, product breakdown, data flow specs
+docs-canonical/     — Canonical docs (architecture, requirements, data model, tests, env) — maintained source
+docs/               — Detailed reference specs (algo spec, product breakdown, data flow, experiment spec)
 packages/           — (none yet)
 ```
 
@@ -71,17 +72,30 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 - Research constants (AIO rates, scoring weights, rate limits) live in `src/config/constants.py`, never hardcoded
 - Test file names mirror source: `src/scoring/demand_score.py` → `tests/unit/test_demand_score.py`
 
-## Specs Are the Source of Truth
+## Documentation (Canonical-First)
 
+**Read canonical docs first**, then fall back to detailed reference docs for deep context.
 
-| Spec                  | Location                        | Covers                                                                           |
-| --------------------- | ------------------------------- | -------------------------------------------------------------------------------- |
-| Algo Spec V1.1        | `docs/algo_spec_v1_1.md`        | Scoring algorithm, signal definitions, API endpoints, output schema              |
-| Experiment Framework  | `docs/outreach_experiment.md`   | Business discovery, site scanning, audit generation, outreach, response tracking |
-| Product Breakdown     | `docs/product_breakdown.md`     | Module decomposition, file structure, input/output contracts, eval criteria      |
-| Module Dependencies   | `docs/module_dependency.md`     | Build order, which modules depend on which                                       |
-| Data Flow             | `docs/data_flow.md`             | How data moves between modules                                                   |
-| Research Agent Design | `docs/research_agent_design.md` | Loop semantics, tool contracts, memory architecture, failure modes               |
+### Canonical Docs (`docs-canonical/`)
+
+| Document | Covers |
+|----------|--------|
+| `docs-canonical/ARCHITECTURE.md` | System overview, module map, dependency graph, tech stack, build sequence |
+| `docs-canonical/REQUIREMENTS.md` | Functional/non-functional requirements, success criteria, traceability matrix |
+| `docs-canonical/DATA-MODEL.md` | Entity schemas, data flow diagrams, research constants |
+| `docs-canonical/TEST-SPEC.md` | Test obligations, coverage rules, quality gates, validation commands |
+| `docs-canonical/ENVIRONMENT.md` | Prerequisites, env vars, setup steps, commands |
+
+### Detailed Reference Docs (`docs/`)
+
+| Spec | Location | Covers |
+|------|----------|--------|
+| Algo Spec V1.1 | `docs/algo_spec_v1_1.md` | Full scoring algorithm, signal definitions, formulas, output schema |
+| Experiment Framework | `docs/outreach_experiment.md` | Business discovery, site scanning, audit generation, outreach |
+| Product Breakdown | `docs/product_breakdown.md` | Per-module I/O contracts, eval criteria, file trees |
+| Module Dependencies | `docs/module_dependency.md` | Full dependency graph and parallel build opportunities |
+| Data Flow | `docs/data_flow.md` | Detailed data flow diagrams between all modules |
+| Research Agent Design | `docs/research_agent_design.md` | Loop semantics, tool contracts, memory architecture |
 
 
 ## Environment Variables

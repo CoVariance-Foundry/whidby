@@ -11,6 +11,7 @@ Auto-generated from all feature plans. Last updated: 2026-04-04
 ## Active Technologies
 
 - Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio` (001-refresh-m5-data-collection)
+- Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py` (001-keyword-expansion)
 
 ## Project Structure
 
@@ -30,6 +31,7 @@ Python 3.11+: Follow standard conventions
 ## Recent Changes
 
 - 001-refresh-m5-data-collection: Added Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio`
+- 001-keyword-expansion: Added Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py`
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

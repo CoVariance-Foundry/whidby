@@ -5,6 +5,8 @@
 .vercel
 .env*
 .pytest_cache
+.venv
+venv
 .playwright-mcp
 __pycache__
 *.pyc

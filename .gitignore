@@ -50,6 +50,8 @@ __pycache__/
 *.egg-info/
 *.egg
 .pytest_cache/
+.venv/
+venv/
 dist/
 .venv/
 venv/
@@ -60,6 +62,11 @@ research_graph.json
 
 # docker
 docker-compose.override.yml
+
+# editor + logs
+.vscode/
+.idea/
+*.log
 
 # playwright
 .playwright-mcp/

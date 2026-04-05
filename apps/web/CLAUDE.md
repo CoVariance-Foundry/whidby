@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> **Canonical docs** for project-wide architecture, requirements, and environment live in
+> `docs-canonical/` at the repo root. This file covers app-specific guidance for `apps/web/`.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
