@@ -17,6 +17,24 @@ INTENT_AIO_RATES: dict[str, float] = {
 # Source: Ahrefs — local/visit-in-person queries
 LOCAL_QUERY_AIO_RATE = 0.079
 
+# --- M4 Keyword Expansion ---
+M4_ALLOWED_INTENTS: tuple[str, ...] = ("transactional", "commercial", "informational")
+M4_ALLOWED_TIERS: tuple[int, ...] = (1, 2, 3)
+M4_ALLOWED_CONFIDENCE: tuple[str, ...] = ("high", "medium", "low")
+M4_ALLOWED_AIO_RISK: tuple[str, ...] = ("low", "moderate", "high")
+M4_ALLOWED_SOURCES: tuple[str, ...] = ("input", "llm", "dataforseo_suggestions", "merged")
+
+# Confidence mapping from LLM-vs-DFS overlap ratio.
+M4_CONFIDENCE_LOW_THRESHOLD = 0.30
+M4_CONFIDENCE_HIGH_THRESHOLD = 0.60
+
+# Deterministic ordering for final keyword output.
+M4_INTENT_PRIORITY: dict[str, int] = {
+    "transactional": 0,
+    "commercial": 1,
+    "informational": 2,
+}
+
 # --- Scoring Calibration ---
 # To be calibrated from first 50 reports
 MEDIAN_LOCAL_SERVICE_CPC = 5.00

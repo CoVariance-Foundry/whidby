@@ -1,5 +1,9 @@
 # Data Flow
 
+> **Canonical notice:** Entity schemas and data flow diagrams have been migrated to
+> `docs-canonical/DATA-MODEL.md`. This file is retained as detailed reference.
+> Update canonical docs first when making data shape changes.
+
 ## Niche Scoring Pipeline (M4 → M9)
 
 ```

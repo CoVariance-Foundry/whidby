@@ -1,5 +1,9 @@
 # Module Dependency Graph
 
+> **Canonical notice:** Dependency matrix and build order have been migrated to
+> `docs-canonical/ARCHITECTURE.md`. This file is retained as detailed reference.
+> Update canonical docs first when making dependency changes.
+
 ## Build Order (Critical Path)
 
 ```
