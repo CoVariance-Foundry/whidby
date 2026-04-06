@@ -773,18 +773,29 @@ tests/
 
 **Dependencies:** M6 (Signals), M7 (Scores)
 
-**Files to create:**
+**Files:**
 ```
 src/
   classification/
-    serp_archetype.py        # 8 archetype classifier
-    ai_exposure.py           # 4-level AI exposure classifier
-    difficulty_tier.py       # EASY / MODERATE / HARD / VERY_HARD
-    guidance_generator.py    # Template-based + LLM guidance
+    __init__.py              # Package exports
+    types.py                 # Typed contracts (ClassificationInput, ClassificationGuidanceBundle)
+    serp_archetype.py        # 8 archetype classifier (ordered rule chain)
+    ai_exposure.py           # 4-level AI exposure classifier (threshold-based)
+    difficulty_tier.py       # EASY / MODERATE / HARD / VERY_HARD (strategy-weighted)
+    guidance_generator.py    # Orchestration + template-based + LLM guidance + validation
     templates/
-      guidance_templates.py  # Per archetype × difficulty templates
-  tests/
-    test_classification.py
+      __init__.py
+      guidance_templates.py  # Per archetype × difficulty template matrix
+
+tests/
+  fixtures/
+    m8_classification_fixtures.py
+  unit/
+    test_serp_archetype.py
+    test_ai_exposure.py
+    test_difficulty_tier.py
+    test_guidance_generator.py
+    test_classification_pipeline.py
 ```
 
 **Eval criteria:**
@@ -811,28 +822,36 @@ src/
 
 **Spec reference:** Algo Spec V1.1, §10 (Output Schema), §9 (Feedback Logging)
 
-**What it does:** Assembles all scored and classified metros into the final report JSON. Ranks metros by opportunity score. Writes the feedback log entry.
+**What it does:** Assembles all scored and classified metros into the final report JSON, enforces deterministic ranking (`opportunity` desc with stable tie-breakers), and writes one feedback row per ranked metro with nullable outcome fields.
 
-**Dependencies:** M4-M8 (full pipeline output)
+**Dependencies:** M4-M8 (full pipeline output), M2 Supabase persistence
 
 **Files to create:**
 ```
 src/
   pipeline/
-    report_generator.py      # Assemble full report
-    feedback_logger.py       # Write bandit training tuple
-  tests/
+    report_generator.py      # Assemble + validate report contract
+    feedback_logger.py       # Write per-metro feedback tuples
+tests/
+  fixtures/
+    m9_report_fixtures.py
+  unit/
     test_report_generator.py
+    test_feedback_logger.py
+    test_report_contract.py
+  integration/
+    test_report_feedback_integration.py
 ```
 
 **Eval criteria:**
 | Test | Method | Pass Criteria |
 |------|--------|--------------|
 | Report schema | Generate full report | Validates against JSON schema from spec §10.1 |
-| Metro ordering | 20 metros | Sorted by opportunity score descending |
-| Meta accuracy | Check total_cost_usd | Matches sum of all API calls in the run |
-| Feedback log | Generate report | Row created in feedback_log table with correct context + signals + scores |
-| Feedback log: null outcomes | Check outcome fields | All null (to be filled later) |
+| Metro ordering | Equal and non-equal opportunity metros | Sorted by opportunity score descending with deterministic tie-breaks |
+| Meta accuracy | Check total_cost_usd and call counts | Matches fixture inputs exactly |
+| Feedback log | Log from generated report | One row per ranked metro with context + signals + scores + classification |
+| Feedback log: null outcomes | Check outcome fields | All outcome fields persist as null until later updates |
+| Failure integrity | Force persistence failure | Failure surfaced while generated report remains unchanged |
 
 **Eval frontend surface:**
 - Full report viewer: ranked metro list with expandable detail per metro

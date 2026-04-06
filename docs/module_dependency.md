@@ -33,7 +33,7 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | M5: Data Collection | M0, M1, M4 | M6 |
 | M6: Signal Extraction | M5 | M7 |
 | M7: Scoring Engine | M6 | M8, M9, M15 |
-| M8: Classification | M6, M7, M3 | M9 |
+| M8: Classification + Guidance | M6, M7, M3 | M9 |
 | M9: Report Generation | M4-M8, M2 | — |
 | M10: Business Discovery | M0, M1 | M11 |
 | M11: Site Scanning | M0, M10 | M12 |

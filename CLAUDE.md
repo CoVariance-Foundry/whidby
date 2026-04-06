@@ -137,6 +137,21 @@ Tests are written **before** implementation. For each module:
 2. Create test files from eval criteria
 3. Run tests (expect red) → implement → green → refactor → commit
 
+## Pre-Commit Quality Gates (MANDATORY)
+
+Before every `git commit && git push` on module code (`src/`), you **must** run the same checks CI enforces:
+
+1. **Lint**: `ruff check src/ tests/` — must pass with zero errors
+2. **Unit tests**: `pytest tests/unit/ -v` — all tests must pass
+3. **Docs sync**: If any files under `src/pipeline/`, `src/scoring/`, `src/classification/`, `src/experiment/`, `src/clients/`, or `src/data/` are changed, at least one of these docs must also be updated in the same commit:
+   - `docs/product_breakdown.md` (I/O contracts, file trees)
+   - `docs/module_dependency.md` (dependency changes)
+   - `docs/data_flow.md` (data shape changes)
+   - If no doc changes are needed, add `[docs-sync-skip]` to the commit message to bypass
+4. **Spec artifacts**: If the branch name matches a feature pattern (`NNN-*`), a corresponding `specs/` directory must exist
+
+Skipping these gates results in CI failure on push. Run them locally first.
+
 ## Spec-Kit (Spec-Driven Development)
 
 This project uses [github/spec-kit](https://github.com/github/spec-kit) v0.5.0 for all remaining module delivery. The spec-kit workspace lives in `.specify/` and Cursor commands are in `.cursor/commands/speckit.*.md`.

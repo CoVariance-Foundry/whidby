@@ -168,3 +168,110 @@ def build_collection_request(
         strategy_profile=strategy_profile,
     )
 
+
+@dataclass(frozen=True)
+class ReportMeta:
+    """Meta block for final report output."""
+
+    total_api_calls: int
+    total_cost_usd: float
+    processing_time_seconds: float
+    feedback_log_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ReportOutcome:
+    """Nullable delayed outcome fields for feedback records."""
+
+    user_acted: bool | None = None
+    site_built: bool | None = None
+    ranking_achieved_days: int | None = None
+    local_pack_entered_days: int | None = None
+    first_lead_days: int | None = None
+    monthly_lead_volume: float | None = None
+    monthly_revenue: float | None = None
+    user_satisfaction_rating: int | None = None
+    outcome_reported_at: str | None = None
+
+
+REQUIRED_REPORT_INPUT_PATHS: tuple[str, ...] = (
+    "run_id",
+    "input",
+    "keyword_expansion",
+    "metros",
+    "meta.total_api_calls",
+    "meta.total_cost_usd",
+    "meta.processing_time_seconds",
+)
+
+REQUIRED_METRO_ENTRY_PATHS: tuple[str, ...] = (
+    "cbsa_code",
+    "cbsa_name",
+    "population",
+    "scores.demand",
+    "scores.organic_competition",
+    "scores.local_competition",
+    "scores.monetization",
+    "scores.ai_resilience",
+    "scores.opportunity",
+    "confidence",
+    "serp_archetype",
+    "ai_exposure",
+    "difficulty_tier",
+    "signals",
+    "guidance",
+)
+
+REQUIRED_REPORT_DOCUMENT_PATHS: tuple[str, ...] = (
+    "report_id",
+    "generated_at",
+    "spec_version",
+    "input",
+    "keyword_expansion",
+    "metros",
+    "meta.total_api_calls",
+    "meta.total_cost_usd",
+    "meta.processing_time_seconds",
+    "meta.feedback_log_id",
+)
+
+
+def require_paths(payload: dict[str, Any], paths: tuple[str, ...]) -> None:
+    """Validate that all dotted paths exist and are non-null.
+
+    Args:
+        payload: Dictionary to validate.
+        paths: Dotted field paths to require.
+
+    Raises:
+        ValueError: If a required path is missing or null.
+    """
+    for path in paths:
+        current: Any = payload
+        for segment in path.split("."):
+            if not isinstance(current, dict) or segment not in current:
+                raise ValueError(f"missing required field: {path}")
+            current = current[segment]
+        if current is None:
+            raise ValueError(f"required field is null: {path}")
+
+
+def coerce_numeric(value: Any, path: str, target_type: type) -> int | float:
+    """Coerce a value to int or float with a path-specific error message.
+
+    Args:
+        value: Value to coerce.
+        path: Dotted field path for error messages.
+        target_type: Target numeric type (int or float).
+
+    Returns:
+        Coerced numeric value.
+
+    Raises:
+        ValueError: If the value cannot be coerced.
+    """
+    try:
+        return target_type(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid numeric value at {path}: {exc}") from exc
+

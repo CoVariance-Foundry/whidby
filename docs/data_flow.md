@@ -61,31 +61,43 @@ strategy_profile: "balanced"     source, aio_risk}                   serp_organi
      │                              │
      │                              ▼
      │
-     │                        M8: Classification
-     │                        ─────────────────
-     │                        MetroClassification {
+     │                        M8: Classification + Guidance
+     │                        ────────────────────────────
+     │                        Validates required nested numeric fields
+     │                        (fail-fast on missing/malformed inputs).
+     │                        ClassificationGuidanceBundle {
      │                          serp_archetype: "LOCAL_PACK_VULNERABLE"
      │                          ai_exposure: "AI_SHIELDED"
      │                          difficulty_tier: "MODERATE"
-     │                          guidance: {headline, strategy, actions}
+     │                          guidance: {headline, strategy, priority_actions,
+     │                                     ai_resilience_note, guidance_status}
+     │                          metadata: {serp_rule_id, difficulty_inputs,
+     │                                     guidance_fallback_reason}
      │                        }
      │                              │
      ▼                              ▼
      
-M9: Report Generation
-─────────────────────
+M9: Report Generation + Feedback Logging
+───────────────────────────────────────
 Report {
+  report_id: UUID
+  generated_at: ISO-8601
+  spec_version: "1.1"
   input: {niche, geo, strategy_profile, resolved_weights}
   keyword_expansion: {...}
   metros: [
     {cbsa, scores, confidence, archetype, ai_exposure, difficulty, signals, guidance}
-    ... (sorted by opportunity score desc)
+    ... (sorted by opportunity score desc, then cbsa_code/cbsa_name tie-break)
   ]
-  meta: {cost, time, feedback_log_id}
+  meta: {total_api_calls, total_cost_usd, processing_time_seconds}
 }
      │
      ▼
-
+Feedback rows (one per ranked metro): {
+  context, signals, scores, classification, recommendation_rank, outcome:nullables
+}
+     │
+     ▼
 Supabase: reports table + feedback_log table
 ```
 
