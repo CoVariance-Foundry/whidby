@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "observation-store-contracts",
+  "title": "Observation Store I/O Contracts",
+  "description": "Contracts for the ObservationStore class that wraps M0 DataForSEO client with persistent caching.",
+
+  "$defs": {
+    "CacheCheckResult": {
+      "type": "object",
+      "description": "Result of checking the observation store for a fresh cached response.",
+      "required": ["hit", "query_hash"],
+      "properties": {
+        "hit": { "type": "boolean" },
+        "query_hash": { "type": "string", "minLength": 64, "maxLength": 64 },
+        "observation_id": { "type": ["string", "null"], "format": "uuid" },
+        "payload": { "description": "Deserialized API response data, present only on hit" },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+
+    "ObservationRecord": {
+      "type": "object",
+      "description": "The index row written to the observations table after an API call.",
+      "required": ["id", "endpoint", "query_params", "query_hash", "observed_at", "source", "cost_usd", "storage_path", "ttl_category", "expires_at", "status"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "endpoint": { "type": "string" },
+        "query_params": { "type": "object" },
+        "query_hash": { "type": "string", "minLength": 64, "maxLength": 64 },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "source": { "type": "string", "enum": ["pipeline", "anchor", "manual"] },
+        "run_id": { "type": ["string", "null"], "format": "uuid" },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "api_queue_mode": { "type": ["string", "null"], "enum": ["standard", "live", null] },
+        "storage_path": { "type": "string", "pattern": "^observations/" },
+        "payload_size_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "ttl_category": { "type": "string", "enum": ["serp", "keyword", "business", "review", "technical", "reference"] },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["ok", "error"] },
+        "error_message": { "type": ["string", "null"] }
+      }
+    },
+
+    "BenchmarkResult": {
+      "type": "object",
+      "description": "A resolved benchmark value returned by get_benchmark().",
+      "required": ["niche_keyword", "metric_name", "metric_value", "sample_size", "source", "valid_until"],
+      "properties": {
+        "niche_keyword": { "type": "string" },
+        "metro_size_tier": { "type": ["string", "null"], "enum": ["major", "mid", "small", null] },
+        "metric_name": { "type": "string" },
+        "metric_value": { "type": "number" },
+        "sample_size": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "enum": ["computed", "external"] },
+        "computed_at": { "type": "string", "format": "date-time" },
+        "valid_until": { "type": "string", "format": "date-time" },
+        "is_stale": { "type": "boolean" }
+      }
+    },
+
+    "SignalSnapshot": {
+      "type": "object",
+      "description": "Daily signal summary produced by an anchor run.",
+      "required": ["niche_keyword", "cbsa_code", "snapshot_date", "observation_ids"],
+      "properties": {
+        "niche_keyword": { "type": "string" },
+        "cbsa_code": { "type": "string" },
+        "snapshot_date": { "type": "string", "format": "date" },
+        "serp_avg_da_top5": { "type": ["number", "null"] },
+        "serp_aggregator_count": { "type": ["integer", "null"] },
+        "serp_local_biz_count": { "type": ["integer", "null"] },
+        "serp_aio_present": { "type": ["boolean", "null"] },
+        "serp_local_pack_present": { "type": ["boolean", "null"] },
+        "local_pack_review_avg": { "type": ["number", "null"] },
+        "local_pack_review_max": { "type": ["integer", "null"] },
+        "local_pack_review_velocity": { "type": ["number", "null"] },
+        "keyword_volume_total": { "type": ["integer", "null"] },
+        "keyword_cpc_avg": { "type": ["number", "null"] },
+        "observation_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+      }
+    }
+  }
+}

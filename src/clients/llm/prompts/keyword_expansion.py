@@ -25,7 +25,7 @@ Assign each keyword a tier:
   - 2 (Service): sub-service or modifier + niche
   - 3 (Long-tail): problem description, specific job
 
-Assign aio_risk: "low" for transactional, "medium" for commercial, "high" for informational.
+Assign aio_risk: "low" for transactional, "moderate" for commercial, "high" for informational.
 
 Output as JSON matching this schema:
 {{
