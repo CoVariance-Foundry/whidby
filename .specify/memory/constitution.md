@@ -12,7 +12,7 @@ The product is decomposed into buildable, testable modules (M0-M16) with clear b
 
 ### III. No Framework for V1 (Plain Python + Claude API)
 
-The pipeline is 80% deterministic data processing and 20% LLM calls. We use `anthropic` Python SDK directly, `asyncio` for concurrency, plain Python functions with explicit dependency ordering, and Supabase for state. No agent orchestration frameworks (LangGraph, CrewAI, Agent SDK) for the scoring/outreach pipeline. The Research Agent layer is the sole exception where LangChain/DeepAgents are used.
+The pipeline is 80% deterministic data processing and 20% LLM calls. We use `anthropic` Python SDK directly, `asyncio` for concurrency, plain Python functions with explicit dependency ordering, and Supabase for state. No agent orchestration frameworks (LangGraph, CrewAI, Agent SDK) anywhere in the codebase. The Research Agent uses the same Anthropic SDK as the rest of the pipeline, with native tool-use for agent reasoning and a plugin registry for modular tool loading.
 
 ### IV. Code Quality Standards
 
@@ -51,7 +51,7 @@ Start simple, follow YAGNI. The LLM is a utility called at specific points, not 
 | Frontend (marketing) | Next.js 16, Tailwind v4, Vercel | `apps/web` |
 | Frontend (eval) | Next.js or plain HTML | `apps/app` or standalone |
 | Monorepo | Turborepo | `npm` workspaces |
-| Research Agent | LangChain + DeepAgents + NetworkX | Exception to "no framework" rule |
+| Research Agent | Anthropic SDK tool-use + NetworkX + Plugin Registry | Same SDK as pipeline; no framework exception needed |
 
 ## Development Workflow (Spec-Kit Lifecycle)
 
@@ -105,4 +105,4 @@ This constitution supersedes ad-hoc practices. Amendments require:
 
 All PRs must verify compliance with these principles. The spec-kit workflow is the single path for delivering new module work. Skipping steps requires explicit justification documented in the PR.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-04
+**Version**: 1.1.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-04

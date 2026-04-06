@@ -1,14 +1,14 @@
 # Research Agent Design
 
-**Version:** 0.1 — Initial
-**Date:** 2026-04-04
+**Version:** 1.0 — Claude-Native Redesign
+**Date:** 2026-04-06
 **Status:** Implementation Complete
 
 ---
 
 ## 1. Purpose
 
-The research agent is an autonomous system that systematically improves Widby's niche scoring algorithm. It identifies weaknesses in scoring outputs, generates hypotheses about parameter adjustments, runs controlled experiments, evaluates results, and produces evidence-based recommendations — all in iterative loops modeled after the Ralph autonomous agent pattern.
+The research agent is an autonomous system that systematically improves Widby's niche scoring algorithm. It identifies weaknesses in scoring outputs, generates hypotheses about parameter adjustments, runs controlled experiments using the real M5/M6/M7 scoring pipeline, evaluates results, and produces evidence-based recommendations — all in iterative loops modeled after the Ralph autonomous agent pattern, powered by Claude's native tool-use reasoning.
 
 ---
 
@@ -20,7 +20,8 @@ The research agent is an autonomous system that systematically improves Widby's 
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ORCHESTRATION                                                   │
-│  ├── DeepAgentCoordinator (LangChain Deep Agents SDK)            │
+│  ├── ClaudeAgent (Anthropic SDK tool-use)                        │
+│  ├── PluginRegistry (modular tool loading)                       │
 │  ├── RalphResearchLoop (iterative experiment loop)               │
 │  └── CLI Entrypoint (run_research_agent.py)                      │
 │                                                                  │
@@ -36,13 +37,54 @@ The research agent is an autonomous system that systematically improves Widby's 
 │  ├── FilesystemStore (artifacts, progress, replay bundles)       │
 │  └── ResearchGraphStore (hypothesis/evidence knowledge graph)    │
 │                                                                  │
-│  TOOL ADAPTERS                                                   │
-│  ├── DataForSEO tools (SERP, keywords, business, backlinks)     │
-│  ├── MetroDB tools (geo scope expansion)                         │
-│  └── LLM tools (keyword expansion, intent, generation)          │
+│  TOOL PLUGINS                                                    │
+│  ├── ScoringPlugin (M5/M6/M7 pipeline for real experiments)     │
+│  ├── DataForSEOPlugin (SERP, keywords, business, backlinks)     │
+│  ├── MetroDBPlugin (geo scope expansion)                         │
+│  └── LLMPlugin (keyword expansion, intent, generation)          │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Claude Agent Tool-Use Flow
+
+The experiment runner uses the Anthropic Python SDK's `messages.create()` with the `tools` parameter. Claude reasons about which tools to call for each hypothesis:
+
+```
+hypothesis + baseline data
+    │
+    ▼
+ClaudeAgent.run_experiment()
+    │
+    ├── messages.create(tools=registry.get_tool_definitions())
+    │       │
+    │       ▼ (stop_reason="tool_use")
+    │   PluginRegistry.execute(tool_name, args)
+    │       │
+    │       ├── ScoringPlugin.rescore_with_modifications → M7 scores
+    │       ├── DataForSEOPlugin.fetch_* → raw API data + cost_usd
+    │       ├── MetroDBPlugin.expand_geo_scope → metro records
+    │       └── LLMPlugin.expand_keywords → keyword set + cost_usd
+    │       │
+    │       ▼ (tool_result appended to messages)
+    │   [loop until end_turn or budget exceeded]
+    │
+    ▼
+ExperimentResult: candidate_scores, cost_usd, tool_calls
+```
+
+### Plugin System
+
+The `PluginRegistry` loads self-contained tool plugins at startup. Each plugin declares its tools as Anthropic-compatible schema dicts and handles execution:
+
+| Plugin | Tools | Wraps |
+|--------|-------|-------|
+| ScoringPlugin | `rescore_with_modifications` | M7 `compute_batch_scores()` |
+| DataForSEOPlugin | 8 fetch tools | `DataForSEOClient` |
+| MetroDBPlugin | `expand_geo_scope` | `MetroDB` |
+| LLMPlugin | `expand_keywords`, `classify_search_intent`, `llm_generate` | `LLMClient` |
+
+Plugins are registered via `registry.register_safe()` which isolates failures — if one plugin fails to load (e.g. missing credentials), others continue.
 
 ---
 
@@ -59,11 +101,13 @@ Each research session runs an iterative loop inspired by [snarktank/ralph](https
 │                    │                         │
 │                    ▼                         │
 │  2. RUN EXPERIMENT                           │
-│     Execute via tools, record artifacts      │
+│     ClaudeAgent reasons + calls tools        │
+│     via PluginRegistry                       │
 │                    │                         │
 │                    ▼                         │
 │  3. EVALUATE                                 │
 │     Compare baseline vs candidate scores     │
+│     (real non-zero deltas from M7)           │
 │                    │                         │
 │                    ▼                         │
 │  4. RECORD LEARNING                          │
@@ -104,7 +148,7 @@ research_runs/{run_id}/
   progress.jsonl           # append-only learning log
   backlog.json             # current hypothesis backlog
   loop_state.json          # crash recovery state
-  experiment_results/      # per-experiment snapshots
+  experiment_results/      # per-experiment snapshots with real scores
     {experiment_id}.json
   tool_outputs/            # raw tool responses for replay
     {step}_{tool}.json
@@ -169,11 +213,37 @@ Every experiment plan includes:
 | rollback_condition | When to revert the modification |
 | sample_requirements | Minimum metros, keywords for validity |
 
+### Experiment Runner Output
+
+The `claude_experiment_runner` returns:
+
+```python
+{
+    "experiment_id": str,
+    "cost_usd": float,           # 0.0 for fast mode, real cost for full mode
+    "modifications": list[dict],
+    "candidate_scores": {
+        "metros": [
+            {"scores": {"demand": float, "organic_competition": float, ...
+                         "opportunity": float}, "cbsa_code": str},
+        ]
+    },
+    "tool_calls": list[dict],    # audit log of all tool invocations
+    "plan": dict,                # experiment plan
+}
+```
+
+### Experiment Modes
+
+**Fast mode (parameter-only, zero API cost):** Claude calls `rescore_with_modifications` which applies signal overrides to baseline data and re-scores via M7's `compute_batch_scores()`.
+
+**Full mode (data refresh, real API cost):** Claude calls DataForSEO tools to gather fresh data, then scores via the M5 → M6 → M7 pipeline. Cost is tracked from each tool call.
+
 ---
 
 ## 7. Tool Contracts
 
-### DataForSEO Adapters
+### Plugin: DataForSEOPlugin
 
 | Tool | Wraps | Purpose |
 |------|-------|---------|
@@ -186,16 +256,25 @@ Every experiment plan includes:
 | fetch_backlinks_summary | DataForSEOClient.backlinks_summary | Domain authority data |
 | fetch_lighthouse | DataForSEOClient.lighthouse | Performance audits |
 
-### Research-Specific Tools
+### Plugin: ScoringPlugin
 
-| Tool | Purpose |
-|------|---------|
-| generate_research_hypotheses | Analyze scoring results, produce hypothesis backlog |
-| plan_research_experiment | Convert hypothesis to structured experiment plan |
-| propose_novel_hypothesis | Free-form hypothesis from agent reasoning |
-| expand_geo_scope | Metro resolution for geographic targeting |
-| expand_keywords | LLM-powered keyword expansion |
-| classify_search_intent | Search intent classification |
+| Tool | Wraps | Purpose |
+|------|-------|---------|
+| rescore_with_modifications | `compute_batch_scores()` (M7) | Re-score baseline with parameter changes |
+
+### Plugin: MetroDBPlugin
+
+| Tool | Wraps | Purpose |
+|------|-------|---------|
+| expand_geo_scope | `MetroDB.expand_scope()` | Geographic scope expansion |
+
+### Plugin: LLMPlugin
+
+| Tool | Wraps | Purpose |
+|------|-------|---------|
+| expand_keywords | `LLMClient.keyword_expansion()` | LLM-powered keyword expansion |
+| classify_search_intent | `LLMClient.classify_intent()` | Search intent classification |
+| llm_generate | `LLMClient.generate()` | Free-form LLM generation |
 
 ---
 
@@ -203,10 +282,12 @@ Every experiment plan includes:
 
 | Failure | Behavior |
 |---------|----------|
-| API rate limit | Tool returns error; loop continues to next hypothesis |
+| API rate limit | Tool returns error; agent decides to retry or skip; loop continues |
 | Experiment runner exception | Hypothesis marked `failed`; loop continues |
 | Evaluation exception | Hypothesis marked `eval_failed`; loop continues |
-| Budget exceeded | Loop exits with `BUDGET_EXCEEDED` stop reason |
+| Budget exceeded | Agent stops tool calls; loop exits with `BUDGET_EXCEEDED` |
+| Tool execution failure | Agent logs error, continues with available data |
+| Plugin load failure | `register_safe()` logs error; other plugins still load |
 | Graph write failure | Logged as warning; filesystem remains source of truth |
 | Crash mid-iteration | `loop_state.json` enables resume from last checkpoint |
 
@@ -254,7 +335,17 @@ for rec in result["recommendations"]:
 ## 10. Testing
 
 ```bash
-# All research agent unit tests (no API keys needed)
+# Plugin system tests
+pytest tests/unit/test_plugin_registry.py -v
+pytest tests/unit/test_scoring_plugin.py -v
+
+# Claude agent tests (mocked Anthropic client, no API key needed)
+pytest tests/unit/test_claude_agent.py -v
+
+# Experiment runner tests
+pytest tests/unit/test_experiment_runner.py -v
+
+# Existing research agent tests
 pytest tests/unit/test_research_agent_loop.py -v
 pytest tests/unit/test_hypothesis_generator.py -v
 pytest tests/unit/test_recommendation_engine.py -v
@@ -264,11 +355,13 @@ pytest tests/unit/test_graph_memory_store.py -v
 pytest tests/unit/ -v
 ```
 
+All unit tests run without API keys. The Anthropic client is mocked in `test_claude_agent.py` and `test_experiment_runner.py`.
+
 ---
 
 ## 11. Docker Setup
 
-The API runs in Docker to avoid architecture-specific binary issues (e.g., pydantic arm64/x86 mismatch on Apple Silicon).
+The API runs in Docker for consistent environments.
 
 ### Local Dev
 
@@ -333,9 +426,47 @@ The Next.js proxy routes in `apps/app/src/app/api/agent/` forward requests to th
 
 | Variable | Where | Purpose |
 |----------|-------|---------|
-| `ANTHROPIC_API_KEY` | Render | Claude API for LLM client |
+| `ANTHROPIC_API_KEY` | Render | Claude API for agent reasoning and LLM tools |
 | `DATAFORSEO_LOGIN` | Render | DataForSEO API auth |
 | `DATAFORSEO_PASSWORD` | Render | DataForSEO API auth |
 | `RESEARCH_RUNS_DIR` | Render | Path to persistent volume for run artifacts |
 | `RESEARCH_GRAPH_PATH` | Render | Path to persistent graph JSON |
 | `NEXT_PUBLIC_API_URL` | Vercel | URL of the Render API service |
+
+---
+
+## 13. Source Code Layout
+
+```
+src/research_agent/
+├── __init__.py
+├── deep_agent.py              # Session orchestrator (run_research_session)
+├── run_research_agent.py      # CLI entrypoint
+├── api.py                     # FastAPI bridge
+├── agent/                     # Claude-native agent
+│   ├── __init__.py            # claude_experiment_runner
+│   ├── claude_agent.py        # ClaudeAgent tool-use loop
+│   └── prompts.py             # System prompt
+├── plugins/                   # Plugin system
+│   ├── __init__.py
+│   ├── base.py                # ToolPlugin ABC + PluginRegistry
+│   ├── scoring_plugin.py      # M7 re-scoring
+│   ├── dataforseo_plugin.py   # DataForSEO tools
+│   ├── metro_plugin.py        # MetroDB tools
+│   └── llm_plugin.py          # LLM tools
+├── tools/
+│   └── api_tools.py           # Plain adapter functions (no framework deps)
+├── hypothesis/
+│   ├── generator.py           # Weakness pattern detection
+│   └── experiment_planner.py  # Structured experiment plans
+├── evaluation/
+│   └── evaluator.py           # Baseline vs candidate comparison
+├── recommendations/
+│   └── recommender.py         # Prioritized improvement synthesis
+├── loop/
+│   └── ralph_loop.py          # Iterative research loop
+└── memory/
+    ├── filesystem_store.py    # Per-run artifact persistence
+    ├── graph_store.py         # NetworkX knowledge graph
+    └── models.py              # Typed graph node/edge schemas
+```

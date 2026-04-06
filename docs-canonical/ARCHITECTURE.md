@@ -49,7 +49,7 @@ Three subsystems compose the platform:
 | Response Tracking (M14) | Event collection + reply classification | `src/experiment/` | `tests/unit/test_response_tracking.py` |
 | Experiment Analysis (M15) | A/B analysis + rentability signal | `src/experiment/` | `tests/unit/test_experiment_analysis.py` |
 | Eval Frontend (M16) | Dashboard pages per module | `apps/app/` | — |
-| Research Agent | Autonomous scoring improvement (Ralph loop) | `src/research_agent/` | `tests/unit/test_research_agent_loop.py` |
+| Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |
 | Marketing Site | Waitlist signup + analytics | `apps/web/` | — |
 
 ## Module Dependency Graph
@@ -99,7 +99,7 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | `src/scoring/` (M7) | `src/config/` | `src/clients/`, `src/pipeline/`, `src/experiment/` |
 | `src/classification/` (M8) | `src/config/`, `src/clients/llm/` | `src/pipeline/`, `src/experiment/` |
 | `src/experiment/` (M10-M15) | `src/clients/`, `src/config/`, `src/data/` | `src/pipeline/`, `src/scoring/` |
-| `src/research_agent/` | `src/clients/`, `src/config/`, `src/scoring/` | `src/experiment/` |
+| `src/research_agent/` | `src/clients/`, `src/config/`, `src/scoring/`, `src/pipeline/`, `src/data/` | `src/experiment/` |
 | `apps/web/` | Own `src/` only | `src/` (Python engine) |
 | `apps/app/` | Own `src/`, FastAPI bridge | `src/` (Python engine) directly |
 
@@ -115,7 +115,7 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | Frontend Framework | Next.js | 16 | Tailwind CSS v4 |
 | Monorepo | Turborepo | latest | `npm` workspaces |
 | Hosting | Vercel | — | Marketing site + eval dashboard |
-| Research Agent | LangChain + DeepAgents + NetworkX | — | Exception to "no framework" rule |
+| Research Agent | Anthropic SDK tool-use + NetworkX + Plugin Registry | — | Same SDK as pipeline; no framework exception |
 | Linting (Python) | ruff | — | line-length 100, target py311 |
 | Linting (JS/TS) | ESLint | — | core-web-vitals + typescript |
 | Testing | pytest + pytest-asyncio + pytest-mock | — | Unit + integration |

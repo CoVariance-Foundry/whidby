@@ -1,7 +1,7 @@
-"""Deep Agent tool adapters wrapping existing project clients.
+"""Tool adapter functions wrapping existing project clients.
 
 Thin facades that expose DataForSEO, MetroDB, and LLM client methods
-as tool-callable functions for the research agent.
+as callable functions for the research agent plugins.
 """
 
 from __future__ import annotations
@@ -10,8 +10,6 @@ import asyncio
 import json
 import os
 from typing import Any
-
-from langchain_core.tools import tool
 
 from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.llm.client import LLMClient
@@ -53,7 +51,6 @@ def _run_async(coro: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-@tool
 def fetch_serp_organic(keyword: str, location_code: int, depth: int = 10) -> str:
     """Fetch organic SERP results for a keyword at a specific DataForSEO location.
 
@@ -70,7 +67,6 @@ def fetch_serp_organic(keyword: str, location_code: int, depth: int = 10) -> str
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
 def fetch_serp_maps(keyword: str, location_code: int, depth: int = 10) -> str:
     """Fetch Google Maps SERP results for a keyword at a specific location.
 
@@ -87,7 +83,6 @@ def fetch_serp_maps(keyword: str, location_code: int, depth: int = 10) -> str:
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
 def fetch_keyword_volume(keywords: list[str], location_code: int) -> str:
     """Fetch search volume and metrics for a list of keywords.
 
@@ -103,8 +98,9 @@ def fetch_keyword_volume(keywords: list[str], location_code: int) -> str:
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
-def fetch_keyword_suggestions(keyword: str, location_name: str = "United States", limit: int = 50) -> str:
+def fetch_keyword_suggestions(
+    keyword: str, location_name: str = "United States", limit: int = 50
+) -> str:
     """Fetch keyword suggestions related to a seed keyword.
 
     Args:
@@ -116,12 +112,15 @@ def fetch_keyword_suggestions(keyword: str, location_name: str = "United States"
         JSON string of the API response.
     """
     client = _get_dfs_client()
-    resp = _run_async(client.keyword_suggestions(keyword, location_name=location_name, limit=limit))
+    resp = _run_async(
+        client.keyword_suggestions(keyword, location_name=location_name, limit=limit)
+    )
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
-def fetch_business_listings(category: str, location_code: int, limit: int = 100) -> str:
+def fetch_business_listings(
+    category: str, location_code: int, limit: int = 100
+) -> str:
     """Fetch business listings for a category in a location.
 
     Args:
@@ -137,8 +136,9 @@ def fetch_business_listings(category: str, location_code: int, limit: int = 100)
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
-def fetch_google_reviews(keyword: str, location_code: int, depth: int = 20) -> str:
+def fetch_google_reviews(
+    keyword: str, location_code: int, depth: int = 20
+) -> str:
     """Fetch Google review data for a keyword/location combination.
 
     Args:
@@ -154,7 +154,6 @@ def fetch_google_reviews(keyword: str, location_code: int, depth: int = 20) -> s
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
 def fetch_backlinks_summary(target: str) -> str:
     """Fetch backlink summary for a target domain.
 
@@ -169,7 +168,6 @@ def fetch_backlinks_summary(target: str) -> str:
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
-@tool
 def fetch_lighthouse(url: str) -> str:
     """Run a Lighthouse performance audit on a URL.
 
@@ -189,7 +187,6 @@ def fetch_lighthouse(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@tool
 def expand_geo_scope(scope: str, target: str, depth: str = "standard") -> str:
     """Expand a geographic scope into a list of metros.
 
@@ -228,7 +225,6 @@ def expand_geo_scope(scope: str, target: str, depth: str = "standard") -> str:
 # ---------------------------------------------------------------------------
 
 
-@tool
 def expand_keywords(niche: str) -> str:
     """Use the LLM to expand a niche keyword into classified keyword set.
 
@@ -245,7 +241,6 @@ def expand_keywords(niche: str) -> str:
     )
 
 
-@tool
 def classify_search_intent(query: str) -> str:
     """Classify the search intent of a query string.
 
@@ -260,7 +255,6 @@ def classify_search_intent(query: str) -> str:
     return json.dumps({"intent": intent})
 
 
-@tool
 def llm_generate(system_prompt: str, user_prompt: str) -> str:
     """Free-form LLM generation for analysis, reasoning, or content.
 
@@ -279,7 +273,7 @@ def llm_generate(system_prompt: str, user_prompt: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool registry
+# Tool registry (plain function list for backward compatibility)
 # ---------------------------------------------------------------------------
 
 ALL_TOOLS = [
