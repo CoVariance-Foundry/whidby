@@ -77,20 +77,27 @@ strategy_profile: "balanced"     source, aio_risk}                   serp_organi
      │                              │
      ▼                              ▼
      
-M9: Report Generation
-─────────────────────
+M9: Report Generation + Feedback Logging
+───────────────────────────────────────
 Report {
+  report_id: UUID
+  generated_at: ISO-8601
+  spec_version: "1.1"
   input: {niche, geo, strategy_profile, resolved_weights}
   keyword_expansion: {...}
   metros: [
     {cbsa, scores, confidence, archetype, ai_exposure, difficulty, signals, guidance}
-    ... (sorted by opportunity score desc)
+    ... (sorted by opportunity score desc, then cbsa_code/cbsa_name tie-break)
   ]
-  meta: {cost, time, feedback_log_id}
+  meta: {total_api_calls, total_cost_usd, processing_time_seconds}
 }
      │
      ▼
-
+Feedback rows (one per ranked metro): {
+  context, signals, scores, classification, recommendation_rank, outcome:nullables
+}
+     │
+     ▼
 Supabase: reports table + feedback_log table
 ```
 
