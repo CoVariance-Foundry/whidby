@@ -1,8 +1,8 @@
-"""Deep Agent coordinator for the research agent.
+"""Research session orchestrator.
 
-Initializes a LangChain Deep Agent with project-specific tools,
-manages the research loop lifecycle, and provides the primary
-interface for running research sessions.
+Manages the research loop lifecycle and provides the primary
+interface for running research sessions with the Claude-native
+plugin-based experiment runner.
 """
 
 from __future__ import annotations
@@ -10,22 +10,18 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain_core.tools import tool
-
+from src.research_agent.agent import claude_experiment_runner
 from src.research_agent.evaluation.evaluator import evaluate_experiment
-from src.research_agent.hypothesis.experiment_planner import plan_experiment
 from src.research_agent.hypothesis.generator import (
     generate_hypotheses,
     generate_novel_hypothesis,
 )
 from src.research_agent.loop.ralph_loop import LoopConfig, RalphResearchLoop
-from src.research_agent.memory.filesystem_store import FilesystemStore
 from src.research_agent.memory.graph_store import ResearchGraphStore
 from src.research_agent.recommendations.recommender import (
     generate_improvement_report,
     synthesize_recommendations,
 )
-from src.research_agent.tools.api_tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -59,119 +55,6 @@ The scoring algorithm uses five proxy dimensions (Algo Spec V1.1):
 
 Each dimension is weighted and combined into a composite opportunity score.
 """
-
-
-# ---------------------------------------------------------------------------
-# Research-specific tools (higher-level than API tools)
-# ---------------------------------------------------------------------------
-
-
-@tool
-def generate_research_hypotheses(scoring_results_json: str) -> str:
-    """Generate hypotheses from scoring results by identifying weak proxy dimensions.
-
-    Args:
-        scoring_results_json: JSON string of scoring results with per-metro data.
-
-    Returns:
-        JSON string of hypothesis list.
-    """
-    import json
-
-    results = json.loads(scoring_results_json)
-    hypotheses = generate_hypotheses(results)
-    return json.dumps(hypotheses, indent=2)
-
-
-@tool
-def plan_research_experiment(hypothesis_json: str) -> str:
-    """Convert a hypothesis into a structured experiment plan.
-
-    Args:
-        hypothesis_json: JSON string of a single hypothesis dict.
-
-    Returns:
-        JSON string of the experiment plan.
-    """
-    import json
-
-    hypothesis = json.loads(hypothesis_json)
-    plan = plan_experiment(hypothesis)
-    return json.dumps(plan, indent=2)
-
-
-@tool
-def propose_novel_hypothesis(observation: str) -> str:
-    """Propose a novel hypothesis from a free-form observation or idea.
-
-    Args:
-        observation: Description of the observation that motivated the hypothesis.
-
-    Returns:
-        JSON string of the hypothesis.
-    """
-    import json
-
-    hypothesis = generate_novel_hypothesis(observation)
-    return json.dumps(hypothesis, indent=2)
-
-
-RESEARCH_TOOLS = ALL_TOOLS + [
-    generate_research_hypotheses,
-    plan_research_experiment,
-    propose_novel_hypothesis,
-]
-
-
-# ---------------------------------------------------------------------------
-# Agent factory
-# ---------------------------------------------------------------------------
-
-
-def create_research_agent(
-    system_prompt: str | None = None,
-    tools: list | None = None,
-) -> Any:
-    """Create a Deep Agent configured for research.
-
-    Args:
-        system_prompt: Override for the default research system prompt.
-        tools: Override for the default tool set.
-
-    Returns:
-        A configured deep agent instance.
-    """
-    from deepagents import create_deep_agent
-
-    return create_deep_agent(
-        tools=tools or RESEARCH_TOOLS,
-        system_prompt=system_prompt or RESEARCH_SYSTEM_PROMPT,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Research session orchestrator
-# ---------------------------------------------------------------------------
-
-
-def default_experiment_runner(
-    hypothesis: dict[str, Any],
-    fs: FilesystemStore,
-) -> dict[str, Any]:
-    """Default experiment runner that simulates parameter modification.
-
-    In production, this would re-run the scoring pipeline with modified
-    parameters. For now, it creates the experiment plan and records it.
-    """
-    plan = plan_experiment(hypothesis)
-    fs.save_experiment_result(plan["experiment_id"], plan)
-    return {
-        "experiment_id": plan["experiment_id"],
-        "cost_usd": 0.0,
-        "modifications": plan["modifications"],
-        "candidate_scores": {},
-        "plan": plan,
-    }
 
 
 def run_research_session(
@@ -209,7 +92,7 @@ def run_research_session(
 
     loop = RalphResearchLoop(
         config=cfg,
-        experiment_runner=default_experiment_runner,
+        experiment_runner=claude_experiment_runner,
         evaluator=evaluate_experiment,
     )
 

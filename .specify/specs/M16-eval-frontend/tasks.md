@@ -15,7 +15,7 @@
 **Purpose**: Add dependencies and environment contract
 
 - [x] T001 Add `@supabase/supabase-js` and `@supabase/ssr` to apps/app/package.json
-- [x] T002 [P] Create `.env.local.example` documenting `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in apps/app/
+- [x] T002 [P] Create `.env.local.example` documenting `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` in apps/app/
 
 ---
 
