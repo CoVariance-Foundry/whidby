@@ -390,37 +390,80 @@ Docker Compose mounts `./src` and `./research_runs` so code changes are reflecte
 
 ## 12. Production Deployment (Render)
 
-The FastAPI research agent API deploys as a Docker web service on Render. The Next.js frontend stays on Vercel.
+The FastAPI research agent API deploys as a Docker web service on Render. The Next.js dashboard stays on Vercel.
+
+**Verified production (Render API, Whidby workspace):** Web service **`whidby-1`**, public URL **`https://whidby-1.onrender.com`**, Docker **`./Dockerfile.api`**, context **`.`**, region **Oregon**, branch **`main`**, repo **`CoVariance-Foundry/whidby`**, latest deploy **live**. Dashboard: `https://dashboard.render.com/web/srv-d78t9ruuk2gs73e177u0`.
 
 ```
-Browser → Vercel (app.thewidby.com) → /api/agent/* proxy → Render (api.thewidby.com) → FastAPI
+Browser → Vercel (app.thewidby.com) → /api/agent/* proxy → Render (whidby-1.onrender.com) → FastAPI
 ```
+
+Optional later: custom domain **`api.thewidby.com`** (DNS + Render custom domain) — then set `NEXT_PUBLIC_API_URL` to that URL instead.
 
 ### Deploy to Render
 
-1. Create a **Web Service** on Render, connect your GitHub repo
+1. Create a **Web Service** on Render, connect your GitHub repo (production uses **`CoVariance-Foundry/whidby`**; local monorepo clones may use a different remote name).
 2. Set the following:
    - **Environment:** Docker
    - **Dockerfile Path:** `Dockerfile.api`
-   - **Instance Type:** Starter ($7/mo)
-3. Add a **Persistent Disk** mounted at `/data` (1GB free tier)
+   - **Docker Context:** `.` (repository root)
+   - **Instance Type:** Starter (or as needed)
+3. Add a **Persistent Disk** mounted at **`/data`** (recommended 1GB+) so `research_runs` and the knowledge graph survive restarts. Align with `RESEARCH_RUNS_DIR` / `RESEARCH_GRAPH_PATH` below.
 4. Set environment variables:
    - `ANTHROPIC_API_KEY`
    - `DATAFORSEO_LOGIN`
    - `DATAFORSEO_PASSWORD`
    - `RESEARCH_RUNS_DIR=/data/research_runs`
    - `RESEARCH_GRAPH_PATH=/data/research_graph.json`
-5. Optionally add a custom domain: `api.thewidby.com`
+5. **HTTP health check:** In the Render Dashboard, set the health check path to **`/api/sessions`** (returns `200` with a JSON list) until a dedicated **`GET /health`** exists on the API. As of last review, the service had no health check path configured in the API.
+6. Optionally add a custom domain: `api.thewidby.com`
 
 ### Connect Frontend to API
 
-On Vercel, set the environment variable for the `nichefinder-app` project:
+On Vercel, set the environment variable for the **`nichefinder-app`** project (Production and Preview as needed):
 
 ```
-NEXT_PUBLIC_API_URL=https://api.thewidby.com
+NEXT_PUBLIC_API_URL=https://whidby-1.onrender.com
 ```
+
+If this is **unset**, Route Handlers fall back to `http://localhost:8000`, which fails on Vercel — the dashboard will return **502** for `/api/agent/*` even when Render is healthy.
 
 The Next.js proxy routes in `apps/app/src/app/api/agent/` forward requests to this URL.
+
+### Example `render.yaml` (Blueprint)
+
+Keep this in a repo root **`render.yaml`** and connect it from the Render Dashboard so infrastructure matches docs. **Do not** commit secret values; use `sync: false` and set keys in the Dashboard.
+
+```yaml
+version: "1"
+services:
+  - type: web
+    name: whidby-1
+    runtime: docker
+    region: oregon
+    plan: starter
+    branch: main
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /api/sessions
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: RESEARCH_RUNS_DIR
+        value: /data/research_runs
+      - key: RESEARCH_GRAPH_PATH
+        value: /data/research_graph.json
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATAFORSEO_LOGIN
+        sync: false
+      - key: DATAFORSEO_PASSWORD
+        sync: false
+    disk:
+      name: widby-research-data
+      mountPath: /data
+      sizeGB: 1
+```
 
 ### Required Environment Variables (Production)
 
@@ -431,7 +474,8 @@ The Next.js proxy routes in `apps/app/src/app/api/agent/` forward requests to th
 | `DATAFORSEO_PASSWORD` | Render | DataForSEO API auth |
 | `RESEARCH_RUNS_DIR` | Render | Path to persistent volume for run artifacts |
 | `RESEARCH_GRAPH_PATH` | Render | Path to persistent graph JSON |
-| `NEXT_PUBLIC_API_URL` | Vercel | URL of the Render API service |
+| `NEXT_PUBLIC_API_URL` | Vercel | Public base URL of the Render API (e.g. `https://whidby-1.onrender.com`) |
+| `PORT` | Render | Injected by Render; Docker image must bind uvicorn to this port (see `Dockerfile.api`) |
 
 ---
 

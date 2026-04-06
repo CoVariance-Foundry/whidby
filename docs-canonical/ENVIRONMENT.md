@@ -1,6 +1,6 @@
 # Environment & Configuration
 
-<!-- docguard:version 1.0.0 -->
+<!-- docguard:version 1.0.1 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-04-05 -->
 <!-- docguard:owner @widby-team -->
@@ -24,7 +24,7 @@
 | Variable | Required | Default | Description | Where to Get |
 |----------|----------|---------|-------------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | — | Supabase project URL | Supabase Dashboard → Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | — | Supabase anon/public key | Supabase Dashboard → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Yes | — | Supabase publishable key (replaces legacy anon key) | Supabase Dashboard → Settings → API Keys |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | — | Supabase service role key (server-only) | Supabase Dashboard → Settings → API |
 | `DATAFORSEO_LOGIN` | Yes | — | DataForSEO API login | app.dataforseo.com |
 | `DATAFORSEO_PASSWORD` | Yes | — | DataForSEO API password | app.dataforseo.com |
@@ -34,6 +34,19 @@
 | `ACTIVECAMPAIGN_API_KEY` | Yes (web app) | — | ActiveCampaign API key | ActiveCampaign → Settings → Developer |
 | `VERCEL_PROJECT_ID` | No | — | Vercel project ID for deployments | Vercel Dashboard |
 | `VERCEL_ORG_ID` | No | — | Vercel organization ID | Vercel Dashboard |
+| `NEXT_PUBLIC_API_URL` | Yes (dashboard in production) | `http://localhost:8000` | Base URL of the FastAPI research agent API used by `apps/app` Route Handlers (`/api/agent/*`) | Render web service URL, e.g. `https://whidby-1.onrender.com` |
+
+### Research agent API (Render)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | Yes (Render) | Injected by Render; uvicorn must listen on this port (`Dockerfile.api`). |
+| `RESEARCH_RUNS_DIR` | Recommended | Directory for per-run artifacts; use `/data/research_runs` with a disk mounted at `/data`. |
+| `RESEARCH_GRAPH_PATH` | Recommended | Path to knowledge graph JSON; e.g. `/data/research_graph.json` with same disk. |
+| `ANTHROPIC_API_KEY` | Yes | Claude / agent tool-use. |
+| `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Yes | DataForSEO when plugins call live SEO APIs. |
+
+See `docs/research_agent_design.md` §12 for production architecture, verified service name/URL, and an example `render.yaml`.
 
 ## Configuration Files
 
@@ -99,3 +112,4 @@
 |---------|------|--------|---------|
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from CLAUDE.md, apps/web/CLAUDE.md, .env.example |
+| 1.0.1 | 2026-04-05 | Render alignment | `NEXT_PUBLIC_API_URL`, Render research API env table, pointer to research_agent_design §12 |

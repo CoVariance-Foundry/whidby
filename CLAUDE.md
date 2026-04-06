@@ -123,7 +123,8 @@ The research agent uses **Claude-native tool-use** (Anthropic SDK `messages.crea
 
 Required (see `.env.example`):
 
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase
+- `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/app` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
 - `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` — DataForSEO API
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)

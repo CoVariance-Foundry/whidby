@@ -1,0 +1,30 @@
+# Render Blueprint — Widby research agent API.
+# Secrets use sync: false; set actual values in the Render Dashboard.
+version: "1"
+services:
+  - type: web
+    name: whidby-1
+    runtime: docker
+    region: oregon
+    plan: starter
+    branch: main
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: RESEARCH_RUNS_DIR
+        value: /data/research_runs
+      - key: RESEARCH_GRAPH_PATH
+        value: /data/research_graph.json
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATAFORSEO_LOGIN
+        sync: false
+      - key: DATAFORSEO_PASSWORD
+        sync: false
+    disk:
+      name: widby-research-data
+      mountPath: /data
+      sizeGB: 1

@@ -1,6 +1,6 @@
 # Architecture
 
-<!-- docguard:version 1.0.0 -->
+<!-- docguard:version 1.0.1 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-04-05 -->
 <!-- docguard:owner @widby-team -->
@@ -11,7 +11,7 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.0.0` |
+| **Version** | `1.0.1` |
 | **Last Updated** | 2026-04-05 |
 | **Owner** | @widby-team |
 
@@ -27,6 +27,8 @@ Three subsystems compose the platform:
 2. **Outreach Experiment Framework** (`src/`) — Validation pipeline (M10–M15)
 3. **Marketing Site** (`apps/web/`) — Next.js 16 pre-launch landing page
 4. **Research Agent Dashboard** (`apps/app/`) — Next.js 16 eval UI
+
+**Production split:** The dashboard is hosted on **Vercel** (`app.thewidby.com`). The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/app/src/app/api/agent/` proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Supabase backs auth and product data for the app. Details: `docs/research_agent_design.md` §12.
 
 ## Component Map
 
@@ -199,3 +201,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 |---------|------|--------|---------|
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/product_breakdown.md`, `docs/module_dependency.md`, `docs/algo_spec_v1_1.md` |
+| 1.0.1 | 2026-04-05 | Render alignment | Production split Vercel / Render / Supabase in system overview |

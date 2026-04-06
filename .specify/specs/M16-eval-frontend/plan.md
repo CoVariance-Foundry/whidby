@@ -66,7 +66,7 @@ apps/app/
 │   │   └── utils.ts                 # (existing)
 │   └── middleware.ts                 # Supabase session refresh + auth redirect
 ├── package.json
-└── .env.local                       # NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+└── .env.local                       # NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 ```
 
 ## Auth Flow

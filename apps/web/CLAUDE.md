@@ -56,7 +56,7 @@ The entire page (`src/app/page.tsx`) is a single `'use client'` component tree. 
 | `/api/onboarding` | Post-signup survey → Supabase + ActiveCampaign tags |
 
 ### Key libraries (`src/lib/`)
-- `supabase.ts` — Singleton Supabase client (uses `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+- `supabase.ts` — Singleton Supabase client (uses `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`)
 - `activecampaign.ts` — AC API wrapper (uses `ACTIVECAMPAIGN_API_URL` + `ACTIVECAMPAIGN_API_KEY`). Respects AC's 5 req/s rate limit by tagging sequentially.
 - `analytics.ts` — Client-side event tracking functions
 - `utm.ts` — UTM param capture/storage utilities
@@ -76,7 +76,7 @@ Required server-side:
 
 Required (public):
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
 
 ### Routing config
 `next.config.ts` has a redirect from `/podcast` → `/?utm_source=podcast&utm_medium=audio&utm_campaign=launch_2026`

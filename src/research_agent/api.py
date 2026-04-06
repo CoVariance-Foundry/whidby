@@ -36,6 +36,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health() -> dict[str, str]:
+    """Liveness probe for Render and monitoring."""
+    return {"status": "ok"}
+
+
 RUNS_DIR = Path(os.environ.get("RESEARCH_RUNS_DIR", "research_runs"))
 GRAPH_PATH = Path(os.environ.get("RESEARCH_GRAPH_PATH", "research_graph.json"))
 

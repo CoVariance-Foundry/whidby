@@ -81,6 +81,8 @@ All endpoints served by `src/research_agent/api.py`:
 | GET | `/api/graph/{node_id}/neighborhood` | Neighborhood of a graph node | `ResearchGraphStore.neighborhood()` |
 | GET | `/api/experiments/{run_id}` | List experiment results for a run | Reads `experiment_results/*.json` via `FilesystemStore` |
 
+**Liveness / health:** Use **`GET /api/sessions`** as an HTTP health probe (returns `200` + JSON). A dedicated **`GET /health`** is recommended for a stable contract once added to `api.py`.
+
 **CORS allowlist:** `http://localhost:3001`, `https://app.thewidby.com`, `https://whidby-1.onrender.com`.
 
 ---
@@ -108,13 +110,19 @@ npm run dev:app    # turbo dev --filter=nichefinder-app (port 3001)
 
 **Target architecture:**
 ```
-Browser -> Vercel (app.thewidby.com) -> /api/agent/* proxy -> Render (api.thewidby.com) -> FastAPI
+Browser -> Vercel (app.thewidby.com) -> /api/agent/* proxy -> Render (whidby-1.onrender.com) -> FastAPI
 ```
 
-**Render setup (manual, no `render.yaml` in repo):**
-1. Web Service with Docker environment, `Dockerfile.api`.
-2. Persistent disk at `/data` (1GB free tier).
+**Render (verified via Render MCP, Whidby workspace):** Web service **`whidby-1`**, URL **`https://whidby-1.onrender.com`**, Docker **`./Dockerfile.api`**, internal port **10000** (Render sets **`PORT`**; image must listen on it). Repo **`CoVariance-Foundry/whidby`**, branch **`main`**, region **Oregon**, latest deploy **live**. Service dashboard: `https://dashboard.render.com/web/srv-d78t9ruuk2gs73e177u0`.
+
+**Vercel:** Set **`NEXT_PUBLIC_API_URL=https://whidby-1.onrender.com`** for `nichefinder-app`. Without it, proxies default to `localhost:8000` and return **502**.
+
+**Render setup checklist:**
+1. Web Service with Docker, `Dockerfile.api` at repo root.
+2. Persistent disk at **`/data`** (confirm in Dashboard; MCP service payload may omit disk details).
 3. Env vars: `ANTHROPIC_API_KEY`, `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD`, `RESEARCH_RUNS_DIR=/data/research_runs`, `RESEARCH_GRAPH_PATH=/data/research_graph.json`.
+4. Optional: commit **`render.yaml`** at repo root — example embedded in `docs/research_agent_design.md` §12.
+5. Set **Health Check Path** in Render to **`/api/sessions`** (or `/health` when implemented).
 
 ---
 
@@ -284,8 +292,8 @@ Remaining in `pyproject.toml`:
 |------------|--------|--------|
 | Structured logging (JSON to stdout) | Missing | Cloud log aggregators can't parse easily |
 | Request-ID correlation | Missing | No tracing across API request -> loop -> agent |
-| Health check endpoint | Missing | No `/health` for Render probes |
-| Deployment IaC | Missing | No `render.yaml`; manual deploy |
+| Health check endpoint | Partial | Use **`GET /api/sessions`** as probe today; dedicated **`GET /health`** optional |
+| Deployment IaC | Partial | Example **`render.yaml`** in `docs/research_agent_design.md` §12; add file at repo root when ready |
 | Docker build in CI | Missing | `quality-gates.yml` does not test Docker |
 
 ---
