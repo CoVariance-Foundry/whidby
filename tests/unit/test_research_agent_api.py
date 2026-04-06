@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
-from src.research_agent.api import app
 
-client = TestClient(app)
+@pytest.fixture()
+def client() -> TestClient:
+    from src.research_agent.api import app
+
+    return TestClient(app)
 
 
-def test_health_returns_ok() -> None:
+def test_health_returns_ok(client: TestClient) -> None:
     res = client.get("/health")
     assert res.status_code == 200
     assert res.json() == {"status": "ok"}

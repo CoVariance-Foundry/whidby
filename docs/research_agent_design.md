@@ -415,7 +415,7 @@ Optional later: custom domain **`api.thewidby.com`** (DNS + Render custom domain
    - `DATAFORSEO_PASSWORD`
    - `RESEARCH_RUNS_DIR=/data/research_runs`
    - `RESEARCH_GRAPH_PATH=/data/research_graph.json`
-5. **HTTP health check:** In the Render Dashboard, set the health check path to **`/api/sessions`** (returns `200` with a JSON list) until a dedicated **`GET /health`** exists on the API. As of last review, the service had no health check path configured in the API.
+5. **HTTP health check:** In the Render Dashboard, set the health check path to **`/health`** (returns `200` with `{"status": "ok"}`).
 6. Optionally add a custom domain: `api.thewidby.com`
 
 ### Connect Frontend to API
@@ -445,7 +445,7 @@ services:
     branch: main
     dockerfilePath: ./Dockerfile.api
     dockerContext: .
-    healthCheckPath: /api/sessions
+    healthCheckPath: /health
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"

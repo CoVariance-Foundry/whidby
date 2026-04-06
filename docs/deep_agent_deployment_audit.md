@@ -81,7 +81,7 @@ All endpoints served by `src/research_agent/api.py`:
 | GET | `/api/graph/{node_id}/neighborhood` | Neighborhood of a graph node | `ResearchGraphStore.neighborhood()` |
 | GET | `/api/experiments/{run_id}` | List experiment results for a run | Reads `experiment_results/*.json` via `FilesystemStore` |
 
-**Liveness / health:** Use **`GET /api/sessions`** as an HTTP health probe (returns `200` + JSON). A dedicated **`GET /health`** is recommended for a stable contract once added to `api.py`.
+**Liveness / health:** **`GET /health`** returns `{"status": "ok"}` (200). Use this for Render health checks and external monitoring.
 
 **CORS allowlist:** `http://localhost:3001`, `https://app.thewidby.com`, `https://whidby-1.onrender.com`.
 
@@ -122,7 +122,7 @@ Browser -> Vercel (app.thewidby.com) -> /api/agent/* proxy -> Render (whidby-1.o
 2. Persistent disk at **`/data`** (confirm in Dashboard; MCP service payload may omit disk details).
 3. Env vars: `ANTHROPIC_API_KEY`, `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD`, `RESEARCH_RUNS_DIR=/data/research_runs`, `RESEARCH_GRAPH_PATH=/data/research_graph.json`.
 4. Optional: commit **`render.yaml`** at repo root — example embedded in `docs/research_agent_design.md` §12.
-5. Set **Health Check Path** in Render to **`/api/sessions`** (or `/health` when implemented).
+5. Set **Health Check Path** in Render to **`/health`** (returns `200` with `{"status": "ok"}`).
 
 ---
 
@@ -292,8 +292,8 @@ Remaining in `pyproject.toml`:
 |------------|--------|--------|
 | Structured logging (JSON to stdout) | Missing | Cloud log aggregators can't parse easily |
 | Request-ID correlation | Missing | No tracing across API request -> loop -> agent |
-| Health check endpoint | Partial | Use **`GET /api/sessions`** as probe today; dedicated **`GET /health`** optional |
-| Deployment IaC | Partial | Example **`render.yaml`** in `docs/research_agent_design.md` §12; add file at repo root when ready |
+| Health check endpoint | Done | **`GET /health`** returns `{"status": "ok"}` with test in `test_research_agent_api.py` |
+| Deployment IaC | Done | **`render.yaml`** at repo root matches production service; example also in `docs/research_agent_design.md` §12 |
 | Docker build in CI | Missing | `quality-gates.yml` does not test Docker |
 
 ---
