@@ -1,8 +1,8 @@
 # Architecture
 
-<!-- docguard:version 1.0.1 -->
+<!-- docguard:version 1.0.2 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-05 -->
+<!-- docguard:last-reviewed 2026-04-07 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file describes WHAT the system is designed to be.
@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.0.1` |
-| **Last Updated** | 2026-04-05 |
+| **Version** | `1.0.2` |
+| **Last Updated** | 2026-04-07 |
 | **Owner** | @widby-team |
 
 ---
@@ -135,15 +135,15 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 
 ### Phase 1: Foundation (M0, M1, M2, M3, M16 scaffold)
 
-All four foundation modules can be built in parallel. M16 scaffold is set up alongside.
+Teams build the four foundation modules in parallel and scaffold M16 in the same phase.
 
 ### Phase 2: Scoring Pipeline (M4 → M5 → M6 → M7 → M8 → M9)
 
-Sequential dependencies. Each module consumes the output of the previous.
+This phase follows strict sequential dependencies, and each module consumes the output of the previous module.
 
 ### Phase 3: Experiment Framework (M10 → M11 → M12 → M13 → M14 → M15)
 
-Can start as soon as M0 + M1 + M3 are done. Independent of M4-M9 pipeline.
+Teams can start this phase as soon as M0 + M1 + M3 are complete because it is independent of M4-M9.
 
 ### Parallel Opportunities
 
@@ -151,6 +151,21 @@ Can start as soon as M0 + M1 + M3 are done. Independent of M4-M9 pipeline.
 - M10-M12 can start as soon as M0 + M1 + M3 are done (independent of M4-M9)
 - M8 and M9 can be built in parallel (M8 needs M6+M7; M9 needs M4-M8 but can be built alongside M8)
 - Research Agent modules can be built after M0, M1, M3 (independent of scoring pipeline)
+
+## Repository Config Surfaces
+
+| Path | Role |
+|------|------|
+| `.docguard.json` | DocGuard profile, required canonical files, and validator toggles |
+| `.mcp.json` | MCP server configuration used by local coding agents |
+| `.githooks/` | Project-managed git hook scripts used by quality gates |
+| `.agent/` | Generated DocGuard/agent skills and local agent metadata |
+| `.claude/` | Claude plugin and local assistant configuration cache |
+| `turbo.json` | Turborepo task graph and workspace pipeline configuration |
+| `.turbo/` | Local Turborepo cache/output artifacts (generated) |
+| `.venv/` | Local Python virtual environment (generated) |
+| `.pytest_cache/` | Local pytest cache/state (generated) |
+| `.ruff_cache/` | Local ruff cache/state (generated) |
 
 ## Processing Pipeline
 
@@ -202,3 +217,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/product_breakdown.md`, `docs/module_dependency.md`, `docs/algo_spec_v1_1.md` |
 | 1.0.1 | 2026-04-05 | Render alignment | Production split Vercel / Render / Supabase in system overview |
+| 1.0.2 | 2026-04-07 | Doc alignment pass | Added repository config surfaces and tightened active voice in build sequencing |
