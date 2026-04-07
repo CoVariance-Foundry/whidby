@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   MessageSquare,
+  Compass,
+  Search,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -13,6 +15,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
+  { href: "/", label: "Niche Finder", icon: Search },
+  { href: "/exploration", label: "Exploration", icon: Compass },
   { href: "/chat", label: "Agent", icon: MessageSquare },
 ];
 
@@ -52,7 +56,10 @@ export default function Sidebar() {
 
       <nav className="flex-1 py-3 space-y-1 px-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+          const active =
+            href === "/"
+              ? pathname === "/"
+              : pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}

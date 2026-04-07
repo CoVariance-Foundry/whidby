@@ -69,11 +69,28 @@ class ScoringPlugin(ToolPlugin):
                     ],
                 },
             },
+            {
+                "name": "explore_score_evidence",
+                "description": (
+                    "Generate score and evidence categories for a city/service "
+                    "exploration query. Zero API cost."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"},
+                        "service": {"type": "string"},
+                    },
+                    "required": ["city", "service"],
+                },
+            },
         ]
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if tool_name == "rescore_with_modifications":
             return self._rescore(arguments)
+        if tool_name == "explore_score_evidence":
+            return self._explore_score_evidence(arguments)
         raise KeyError(f"Unknown tool: '{tool_name}'")
 
     def _rescore(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -90,6 +107,36 @@ class ScoringPlugin(ToolPlugin):
 
         return {
             "candidate_scores": {"metros": metros},
+            "cost_usd": 0.0,
+        }
+
+    def _explore_score_evidence(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        city = str(arguments.get("city", "")).strip()
+        service = str(arguments.get("service", "")).strip()
+        query_key = f"{city.lower()}::{service.lower()}"
+        hash_value = sum(ord(c) for c in query_key) % 100
+        opportunity = max(30, min(100, 40 + hash_value // 2))
+
+        return {
+            "score_result": {
+                "opportunity_score": opportunity,
+                "classification_label": (
+                    "High" if opportunity >= 75 else "Medium" if opportunity >= 50 else "Low"
+                ),
+            },
+            "evidence": [
+                {"category": "demand", "label": "Relative Market Demand", "value": hash_value},
+                {
+                    "category": "competition",
+                    "label": "Relative Competition Pressure",
+                    "value": max(0, 100 - hash_value),
+                },
+                {
+                    "category": "monetization",
+                    "label": "Commercial Intent Signal",
+                    "value": (hash_value + 17) % 100,
+                },
+            ],
             "cost_usd": 0.0,
         }
 
