@@ -28,6 +28,8 @@ from src.config.constants import (
 from . import endpoints as ep
 from .cache import ResponseCache
 from .cost_tracker import CostTracker
+from .observation_store import ObservationStore
+from .query_hash import compute_query_hash
 from .types import APIResponse, CostRecord
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,7 @@ class DataForSEOClient:
         base_url: str = DFS_BASE_URL,
         cache_ttl: int = DFS_CACHE_TTL,
         rate_limit: int = DFS_RATE_LIMIT,
+        observation_store: ObservationStore | None = None,
     ) -> None:
         creds = base64.b64encode(f"{login}:{password}".encode()).decode()
         self._auth_header = f"Basic {creds}"
@@ -77,6 +80,7 @@ class DataForSEOClient:
         self._cache = ResponseCache(ttl=cache_ttl)
         self._tracker = CostTracker()
         self._rate_limiter = _RateLimiter(rate_limit)
+        self._observation_store = observation_store
 
     # -- Public properties ---------------------------------------------------
 
@@ -90,9 +94,16 @@ class DataForSEOClient:
 
     # -- High-level API methods ----------------------------------------------
 
-    async def locations(self) -> APIResponse:
+    async def locations(
+        self,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
+    ) -> APIResponse:
         """GET /serp/google/locations — no payload, free endpoint."""
-        return await self._live_request(ep.LOCATIONS, payload=[])
+        return await self._live_request(
+            ep.LOCATIONS, payload=[], force_refresh=force_refresh, run_id=run_id,
+        )
 
     async def serp_organic(
         self,
@@ -100,6 +111,9 @@ class DataForSEOClient:
         location_code: int,
         depth: int = 10,
         language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         params = {
             "keyword": keyword,
@@ -107,7 +121,9 @@ class DataForSEOClient:
             "language_code": language_code,
             "depth": depth,
         }
-        return await self._queued_request(ep.SERP_ORGANIC, params)
+        return await self._queued_request(
+            ep.SERP_ORGANIC, params, force_refresh=force_refresh, run_id=run_id,
+        )
 
     async def serp_maps(
         self,
@@ -115,6 +131,9 @@ class DataForSEOClient:
         location_code: int,
         depth: int = 10,
         language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         params = {
             "keyword": keyword,
@@ -122,15 +141,22 @@ class DataForSEOClient:
             "language_code": language_code,
             "depth": depth,
         }
-        return await self._queued_request(ep.SERP_MAPS, params)
+        return await self._queued_request(
+            ep.SERP_MAPS, params, force_refresh=force_refresh, run_id=run_id,
+        )
 
     async def keyword_volume(
         self,
         keywords: list[str],
         location_code: int,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         params = {"keywords": keywords, "location_code": location_code}
-        return await self._queued_request(ep.KEYWORD_VOLUME, params)
+        return await self._queued_request(
+            ep.KEYWORD_VOLUME, params, force_refresh=force_refresh, run_id=run_id,
+        )
 
     async def keyword_suggestions(
         self,
@@ -138,6 +164,9 @@ class DataForSEOClient:
         location_name: str = DFS_DEFAULT_LOCATION_NAME,
         limit: int = 50,
         language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         payload = [
             {
@@ -147,13 +176,19 @@ class DataForSEOClient:
                 "limit": limit,
             }
         ]
-        return await self._live_request(ep.KEYWORD_SUGGESTIONS, payload)
+        return await self._live_request(
+            ep.KEYWORD_SUGGESTIONS, payload,
+            force_refresh=force_refresh, run_id=run_id,
+        )
 
     async def business_listings(
         self,
         category: str,
         location_code: int,
         limit: int = 100,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         payload = [
             {
@@ -163,9 +198,9 @@ class DataForSEOClient:
             }
         ]
         return await self._live_request(
-            ep.BUSINESS_LISTINGS,
-            payload,
+            ep.BUSINESS_LISTINGS, payload,
             cache_params={"category": category, "location_code": location_code, "limit": limit},
+            force_refresh=force_refresh, run_id=run_id,
         )
 
     async def google_reviews(
@@ -173,25 +208,53 @@ class DataForSEOClient:
         keyword: str,
         location_code: int,
         depth: int = 20,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         params = {"keyword": keyword, "location_code": location_code, "depth": depth}
-        return await self._queued_request(ep.GOOGLE_REVIEWS, params)
+        return await self._queued_request(
+            ep.GOOGLE_REVIEWS, params, force_refresh=force_refresh, run_id=run_id,
+        )
 
     async def google_my_business_info(
         self,
         keyword: str,
         location_code: int,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
     ) -> APIResponse:
         payload = [{"keyword": keyword, "location_code": location_code}]
-        return await self._live_request(ep.GOOGLE_MY_BUSINESS_INFO, payload)
+        return await self._live_request(
+            ep.GOOGLE_MY_BUSINESS_INFO, payload,
+            force_refresh=force_refresh, run_id=run_id,
+        )
 
-    async def backlinks_summary(self, target: str) -> APIResponse:
+    async def backlinks_summary(
+        self,
+        target: str,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
+    ) -> APIResponse:
         payload = [{"target": target}]
-        return await self._live_request(ep.BACKLINKS_SUMMARY, payload)
+        return await self._live_request(
+            ep.BACKLINKS_SUMMARY, payload,
+            force_refresh=force_refresh, run_id=run_id,
+        )
 
-    async def lighthouse(self, url: str) -> APIResponse:
+    async def lighthouse(
+        self,
+        url: str,
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
+    ) -> APIResponse:
         params = {"url": url}
-        return await self._queued_request(ep.LIGHTHOUSE, params)
+        return await self._queued_request(
+            ep.LIGHTHOUSE, params, force_refresh=force_refresh, run_id=run_id,
+        )
 
     # -- Internal: queue and live flows --------------------------------------
 
@@ -199,19 +262,35 @@ class DataForSEOClient:
         self,
         endpoint: ep.Endpoint,
         params: dict[str, Any],
+        *,
+        force_refresh: bool = False,
+        run_id: str | None = None,
+        source: str = "pipeline",
     ) -> APIResponse:
         """Standard-queue flow: POST task → poll GET until ready."""
-        cached = self._cache.get(endpoint.post_path, params)
-        if cached is not None:
-            self._tracker.record(
-                endpoint=endpoint.post_path,
-                task_id="cached",
-                cost=0,
-                cached=True,
-                latency_ms=0,
-                parameters=params,
-            )
-            return APIResponse(status="ok", data=cached, cost=0, cached=True)
+        qhash = compute_query_hash(endpoint.post_path, params)
+
+        if not force_refresh:
+            if self._observation_store is not None:
+                obs_hit = self._observation_store.check_cache(qhash)
+                if obs_hit is not None:
+                    self._tracker.record(
+                        endpoint=endpoint.post_path, task_id="obs_cached",
+                        cost=0, cached=True, latency_ms=0, parameters=params,
+                    )
+                    logger.info(
+                        "Observation cache HIT hash=%s endpoint=%s expires=%s",
+                        qhash, endpoint.post_path, obs_hit.get("expires_at"),
+                    )
+                    return APIResponse(status="ok", data=obs_hit["payload"], cost=0, cached=True)
+
+            cached = self._cache.get(endpoint.post_path, params)
+            if cached is not None:
+                self._tracker.record(
+                    endpoint=endpoint.post_path, task_id="cached",
+                    cost=0, cached=True, latency_ms=0, parameters=params,
+                )
+                return APIResponse(status="ok", data=cached, cost=0, cached=True)
 
         start = time.monotonic()
         post_body = await self._post(endpoint.post_path, [params])
@@ -229,14 +308,15 @@ class DataForSEOClient:
         cost = task.get("cost", endpoint.cost_per_call)
 
         if endpoint.get_path is None:
-            # Live-like endpoint returned inline
             data = task.get("result")
             ms = self._elapsed_ms(start)
             self._cache.put(endpoint.post_path, params, data)
             self._tracker.record(endpoint.post_path, task_id, cost, False, ms, params)
+            self._persist_observation(
+                endpoint, params, qhash, data, cost, source, run_id,
+            )
             return APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
 
-        # Poll for results
         get_path = endpoint.get_path.format(task_id=task_id)
         elapsed = 0.0
         while elapsed < DFS_QUEUE_MAX_WAIT:
@@ -250,7 +330,7 @@ class DataForSEOClient:
             if result_task is None:
                 continue
             if result_task.get("status_code", 0) == 20100:
-                continue  # still pending
+                continue
             if result_task.get("status_code", 0) >= 40000:
                 return self._task_error(result_task, start)
 
@@ -259,6 +339,9 @@ class DataForSEOClient:
             result_cost = result_task.get("cost", cost)
             self._cache.put(endpoint.post_path, params, data)
             self._tracker.record(endpoint.post_path, task_id, result_cost, False, ms, params)
+            self._persist_observation(
+                endpoint, params, qhash, data, result_cost, source, run_id,
+            )
             return APIResponse(
                 status="ok", data=data, cost=result_cost, latency_ms=ms, task_id=task_id
             )
@@ -271,13 +354,29 @@ class DataForSEOClient:
         payload: list[dict[str, Any]],
         *,
         cache_params: dict[str, Any] | None = None,
+        force_refresh: bool = False,
+        run_id: str | None = None,
+        source: str = "pipeline",
     ) -> APIResponse:
         """Live-mode flow: single POST → immediate response."""
         cp = cache_params or (payload[0] if payload else {})
-        cached = self._cache.get(endpoint.post_path, cp)
-        if cached is not None:
-            self._tracker.record(endpoint.post_path, "cached", 0, True, 0, cp)
-            return APIResponse(status="ok", data=cached, cost=0, cached=True)
+        qhash = compute_query_hash(endpoint.post_path, cp)
+
+        if not force_refresh:
+            if self._observation_store is not None:
+                obs_hit = self._observation_store.check_cache(qhash)
+                if obs_hit is not None:
+                    self._tracker.record(endpoint.post_path, "obs_cached", 0, True, 0, cp)
+                    logger.info(
+                        "Observation cache HIT hash=%s endpoint=%s expires=%s",
+                        qhash, endpoint.post_path, obs_hit.get("expires_at"),
+                    )
+                    return APIResponse(status="ok", data=obs_hit["payload"], cost=0, cached=True)
+
+            cached = self._cache.get(endpoint.post_path, cp)
+            if cached is not None:
+                self._tracker.record(endpoint.post_path, "cached", 0, True, 0, cp)
+                return APIResponse(status="ok", data=cached, cost=0, cached=True)
 
         start = time.monotonic()
         body = await self._post(endpoint.post_path, payload)
@@ -286,13 +385,13 @@ class DataForSEOClient:
 
         task = self._extract_task(body)
         if task is None:
-            # Some endpoints (like locations) return result directly
             tasks = body.get("tasks", [])
             first = tasks[0] if tasks and isinstance(tasks[0], dict) else {}
             data = first.get("result", body)
             ms = self._elapsed_ms(start)
             self._cache.put(endpoint.post_path, cp, data)
             self._tracker.record(endpoint.post_path, "direct", 0, False, ms, cp)
+            self._persist_observation(endpoint, cp, qhash, data, 0, source, run_id)
             return APIResponse(status="ok", data=data, cost=0, latency_ms=ms)
 
         if task.get("status_code", 0) >= 40000:
@@ -304,7 +403,36 @@ class DataForSEOClient:
         ms = self._elapsed_ms(start)
         self._cache.put(endpoint.post_path, cp, data)
         self._tracker.record(endpoint.post_path, task_id, cost, False, ms, cp)
+        self._persist_observation(endpoint, cp, qhash, data, cost, source, run_id)
         return APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
+
+    def _persist_observation(
+        self,
+        endpoint: ep.Endpoint,
+        params: dict[str, Any],
+        query_hash: str,
+        data: Any,
+        cost_usd: float,
+        source: str,
+        run_id: str | None,
+    ) -> None:
+        """Write observation to the persistent store (fire-and-forget)."""
+        if self._observation_store is None:
+            return
+        try:
+            self._observation_store.store(
+                endpoint=endpoint.post_path,
+                params=params,
+                query_hash=query_hash,
+                ttl_category=endpoint.ttl_category,
+                data=data,
+                cost_usd=cost_usd,
+                source=source,
+                run_id=run_id,
+                queue_mode=endpoint.mode.value,
+            )
+        except Exception:
+            logger.warning("Observation persistence failed", exc_info=True)
 
     # -- Internal: HTTP layer ------------------------------------------------
 

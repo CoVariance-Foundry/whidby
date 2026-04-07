@@ -8,7 +8,14 @@ from .types import CostRecord
 
 
 class CostTracker:
-    """Accumulates cost records in-memory. Future: flush to Supabase api_usage_log."""
+    """Accumulates cost records in-memory for backward-compatible access.
+
+    When an ``ObservationStore`` is configured on the ``DataForSEOClient``,
+    cost is also persisted to the ``observations.cost_usd`` column.  The
+    ``api_usage_log`` table is deprecated — cost writes now go to
+    ``observations`` instead.  This in-memory tracker is retained so that
+    ``client.cost_log`` and ``client.total_cost`` continue to work.
+    """
 
     def __init__(self) -> None:
         self._records: list[CostRecord] = []
