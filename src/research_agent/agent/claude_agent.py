@@ -135,6 +135,98 @@ class ClaudeAgent:
             "tool_calls": tool_calls_log,
         }
 
+    def run_exploration_followup(
+        self,
+        *,
+        city: str,
+        service: str,
+        question: str,
+    ) -> dict[str, Any]:
+        """Execute an exploration-mode follow-up query.
+
+        This path is intentionally constrained to existing plugin-backed tools,
+        and returns evidence references suitable for the exploration UI.
+        """
+        tool_calls_log: list[dict[str, Any]] = []
+        evidence_refs: list[dict[str, str]] = []
+        answer_parts: list[str] = []
+
+        try:
+            score_result = self._registry.execute(
+                "explore_score_evidence", {"city": city, "service": service}
+            )
+            tool_calls_log.append(
+                {
+                    "tool_name": "explore_score_evidence",
+                    "arguments": {"city": city, "service": service},
+                }
+            )
+            for item in score_result.get("evidence", []):
+                category = str(item.get("category", "unknown"))
+                label = str(item.get("label", "evidence"))
+                evidence_refs.append({"category": category, "reference_label": label})
+
+            summary = score_result.get("score_result", {})
+            answer_parts.append(
+                "Score context suggests "
+                f"{summary.get('classification_label', 'unknown')} opportunity "
+                f"({summary.get('opportunity_score', '?')})."
+            )
+        except Exception as error:
+            logger.error("Exploration score evidence tool failed: %s", error, exc_info=True)
+            return {
+                "status": "unsupported",
+                "answer": (
+                    "I could not evaluate score evidence for this follow-up. "
+                    "Try narrowing the question to demand, competition, or monetization."
+                ),
+                "evidence_references": [],
+                "tool_calls": tool_calls_log,
+            }
+
+        if "serp" in question.lower() or "result" in question.lower():
+            try:
+                serp_result = self._registry.execute(
+                    "explore_serp_snapshot",
+                    {
+                        "keyword": f"{service} {city}",
+                        "location_code": 2840,
+                        "depth": 5,
+                    },
+                )
+                tool_calls_log.append(
+                    {
+                        "tool_name": "explore_serp_snapshot",
+                        "arguments": {
+                            "keyword": f"{service} {city}",
+                            "location_code": 2840,
+                            "depth": 5,
+                        },
+                    }
+                )
+                status = serp_result.get("status", "ok")
+                answer_parts.append(f"SERP snapshot status: {status}.")
+                evidence_refs.append(
+                    {"category": "serp", "reference_label": "Organic SERP snapshot"}
+                )
+            except Exception as error:
+                logger.warning("SERP exploration tool failed: %s", error, exc_info=True)
+                answer_parts.append(
+                    "SERP snapshot was unavailable for this request, but core score evidence was returned."
+                )
+
+        if not answer_parts:
+            answer_parts.append(
+                "Follow-up completed with limited evidence. Try asking for a specific evidence category."
+            )
+
+        return {
+            "status": "success",
+            "answer": " ".join(answer_parts),
+            "evidence_references": evidence_refs,
+            "tool_calls": tool_calls_log,
+        }
+
     def _execute_tool(self, block: Any) -> dict[str, Any]:
         """Execute a single tool call and return an audit record."""
         start = time.monotonic()

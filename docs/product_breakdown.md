@@ -1151,6 +1151,16 @@ src/
 
 **Build approach:** Scaffold the shell with navigation in Phase 1. Add page content as each module is built. Each module's eval section above describes the frontend surface for its corresponding page.
 
+#### Niche Finder Exploration Surfaces (M16 extension)
+
+The eval frontend now supports two coordinated surfaces for niche scoring validation:
+
+- **Standard Niche Finder** (`apps/app/src/app/(protected)/page.tsx`): city + service input, normalized query submission, and score output for routine screening.
+- **Exploration Surface** (`apps/app/src/app/(protected)/exploration/page.tsx`): same query and score pathway with score-driving evidence display and parity checks.
+- **Exploration Assistant** (`apps/app/src/components/niche-finder/ExplorationAssistantPanel.tsx`): follow-up Q&A flow that routes through approved plugin-backed assistant tooling and returns evidence references for human review.
+
+Design intent: keep scoring deterministic and shared while making evidence inspectable for operator trust calibration.
+
 ---
 
 ## Development Docs Package

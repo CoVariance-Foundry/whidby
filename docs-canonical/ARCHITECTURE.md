@@ -30,6 +30,16 @@ Three subsystems compose the platform:
 
 **Production split:** The dashboard is hosted on **Vercel** (`app.thewidby.com`). The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/app/src/app/api/agent/` proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Supabase backs auth and product data for the app. Details: `docs/research_agent_design.md` §12.
 
+### Niche Finder Dual-Surface Interface
+
+The Research Agent Dashboard includes a dual-surface niche finder flow:
+
+- **Standard surface**: city + service input returns an opportunity score for quick triage.
+- **Exploration surface**: same input and score pathway, plus evidence categories that explain score rationale.
+- **Exploration assistant**: follow-up query panel that uses approved scoring/search plugin capabilities to retrieve deeper evidence while preserving active city/service context.
+
+Both surfaces are contractually bound to shared query normalization and score parity so operators can trust that exploration explains the same score seen on the standard surface.
+
 ## Component Map
 
 | Component | Responsibility | Location | Tests |
