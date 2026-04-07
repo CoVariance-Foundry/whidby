@@ -76,6 +76,29 @@ STRATEGY_PROFILES: dict[str, dict[str, float]] = {
     "local_dominant": {"organic_weight": 0.05, "local_weight": 0.35},
 }
 
+# --- Benchmark Integration (010-data-persistence-layer) ---
+BENCHMARK_SCORING_ENABLED = False
+
+# Observation store TTL durations in seconds, keyed by ttl_category.
+TTL_DURATIONS: dict[str, int] = {
+    "serp": 86_400,        # 24 hours
+    "keyword": 2_592_000,  # 30 days
+    "business": 604_800,   # 7 days
+    "review": 604_800,     # 7 days
+    "technical": 1_209_600,  # 14 days
+    "reference": 7_776_000,  # 90 days
+}
+
+# Minimum observation count required to produce a computed benchmark.
+BENCHMARK_MIN_SAMPLE_SIZE = 5
+
+# Window (days) of observations used when computing benchmarks.
+BENCHMARK_OBSERVATION_WINDOW_DAYS = 90
+
+# Benchmark validity period after computation.
+BENCHMARK_COMPUTED_VALID_DAYS = 7
+BENCHMARK_EXTERNAL_VALID_DAYS = 90
+
 # --- DataForSEO (Algo Spec V1.1, §14) ---
 DFS_BASE_URL = "https://api.dataforseo.com/v3/"
 DFS_DEFAULT_LANGUAGE_CODE = "en"

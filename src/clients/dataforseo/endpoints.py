@@ -20,6 +20,7 @@ class Endpoint:
     get_path: str | None  # None for live endpoints
     mode: QueueMode
     cost_per_call: float
+    ttl_category: str = "serp"
 
     @property
     def is_live(self) -> bool:
@@ -33,6 +34,7 @@ SERP_ORGANIC = Endpoint(
     get_path="serp/google/organic/task_get/advanced/{task_id}",
     mode=QueueMode.STANDARD,
     cost_per_call=0.0006,
+    ttl_category="serp",
 )
 
 SERP_MAPS = Endpoint(
@@ -40,6 +42,7 @@ SERP_MAPS = Endpoint(
     get_path="serp/google/maps/task_get/advanced/{task_id}",
     mode=QueueMode.STANDARD,
     cost_per_call=0.0006,
+    ttl_category="serp",
 )
 
 KEYWORD_VOLUME = Endpoint(
@@ -47,6 +50,7 @@ KEYWORD_VOLUME = Endpoint(
     get_path="keywords_data/google/search_volume/task_get/{task_id}",
     mode=QueueMode.STANDARD,
     cost_per_call=0.05,
+    ttl_category="keyword",
 )
 
 KEYWORD_SUGGESTIONS = Endpoint(
@@ -54,6 +58,7 @@ KEYWORD_SUGGESTIONS = Endpoint(
     get_path=None,
     mode=QueueMode.LIVE,
     cost_per_call=0.05,
+    ttl_category="keyword",
 )
 
 BUSINESS_LISTINGS = Endpoint(
@@ -61,6 +66,7 @@ BUSINESS_LISTINGS = Endpoint(
     get_path=None,
     mode=QueueMode.LIVE,
     cost_per_call=0.01,
+    ttl_category="business",
 )
 
 GOOGLE_MY_BUSINESS_INFO = Endpoint(
@@ -68,6 +74,7 @@ GOOGLE_MY_BUSINESS_INFO = Endpoint(
     get_path=None,
     mode=QueueMode.LIVE,
     cost_per_call=0.004,
+    ttl_category="business",
 )
 
 GOOGLE_REVIEWS = Endpoint(
@@ -75,6 +82,7 @@ GOOGLE_REVIEWS = Endpoint(
     get_path="business_data/google/reviews/task_get/{task_id}",
     mode=QueueMode.STANDARD,
     cost_per_call=0.005,
+    ttl_category="review",
 )
 
 BACKLINKS_SUMMARY = Endpoint(
@@ -82,6 +90,7 @@ BACKLINKS_SUMMARY = Endpoint(
     get_path=None,
     mode=QueueMode.LIVE,
     cost_per_call=0.002,
+    ttl_category="technical",
 )
 
 LIGHTHOUSE = Endpoint(
@@ -89,6 +98,7 @@ LIGHTHOUSE = Endpoint(
     get_path="on_page/lighthouse/task_get/{task_id}",
     mode=QueueMode.STANDARD,
     cost_per_call=0.002,
+    ttl_category="technical",
 )
 
 LOCATIONS = Endpoint(
@@ -96,4 +106,5 @@ LOCATIONS = Endpoint(
     get_path=None,
     mode=QueueMode.LIVE,
     cost_per_call=0.0,
+    ttl_category="reference",
 )

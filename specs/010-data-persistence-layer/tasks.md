@@ -27,15 +27,15 @@
 
 **Purpose**: Migrations, shared utilities, and project scaffolding that all user stories depend on.
 
-- [ ] T001 Create `observations` table migration in `supabase/migrations/005_observation_store.sql` per data-model.md schema (id, endpoint, query_params, query_hash, observed_at, source, run_id, cost_usd, api_queue_mode, storage_path, payload_size_bytes, ttl_category, expires_at, status, error_message, payload_purged columns; 4 indexes on query_hash+expires_at, query_hash+observed_at, source+observed_at, expires_at)
-- [ ] T002 [P] Create `canonical_metros`, `canonical_benchmarks`, `canonical_niches` tables migration in `supabase/migrations/006_canonical_reference.sql` per data-model.md schemas
-- [ ] T003 [P] Create `anchor_configs`, `anchor_runs`, `signal_snapshots` tables migration in `supabase/migrations/007_anchor_system.sql` per data-model.md schemas (includes UNIQUE constraints and indexes)
-- [ ] T004 [P] Create RLS policies for all 7 new tables in `supabase/migrations/008_persistence_rls.sql` (same service_role pattern as 004_rls_policies.sql)
-- [ ] T005 Update `test_supabase_schema.py` assertions to include all 7 new tables in RLS checks and add structural assertions for `observations`, `canonical_benchmarks`, `anchor_configs`, and `signal_snapshots` in `tests/unit/test_supabase_schema.py`
-- [ ] T006 [P] Add `TTL_DURATIONS` dict and `BENCHMARK_SCORING_ENABLED = False` flag to `src/config/constants.py` (TTL values: serp=24h, keyword=30d, business=7d, review=7d, technical=14d, reference=90d)
-- [ ] T007 [P] Add `ttl_category: str` field to the frozen `Endpoint` dataclass in `src/clients/dataforseo/endpoints.py` and assign a category to each of the 10 existing endpoint constants (SERP_ORGANIC→serp, KEYWORD_VOLUME→keyword, BUSINESS_LISTINGS→business, etc.)
-- [ ] T008 [P] Create `src/clients/dataforseo/query_hash.py` — extract hash logic from `cache.py`'s `_key()` method into a standalone `compute_query_hash(endpoint: str, params: dict) -> str` function with EXCLUDED_KEYS set for non-semantic fields
-- [ ] T009 [P] Create test fixtures in `tests/fixtures/observation_fixtures.py` (sample observation records, gzipped payloads, TTL category mappings, cache-hit/miss scenarios) and `tests/fixtures/benchmark_fixtures.py` (sample benchmarks, canonical metro data, niche taxonomy entries)
+- [x] T001 Create `observations` table migration in `supabase/migrations/005_observation_store.sql` per data-model.md schema (id, endpoint, query_params, query_hash, observed_at, source, run_id, cost_usd, api_queue_mode, storage_path, payload_size_bytes, ttl_category, expires_at, status, error_message, payload_purged columns; 4 indexes on query_hash+expires_at, query_hash+observed_at, source+observed_at, expires_at)
+- [x] T002 [P] Create `canonical_metros`, `canonical_benchmarks`, `canonical_niches` tables migration in `supabase/migrations/006_canonical_reference.sql` per data-model.md schemas
+- [x] T003 [P] Create `anchor_configs`, `anchor_runs`, `signal_snapshots` tables migration in `supabase/migrations/007_anchor_system.sql` per data-model.md schemas (includes UNIQUE constraints and indexes)
+- [x] T004 [P] Create RLS policies for all 7 new tables in `supabase/migrations/008_persistence_rls.sql` (same service_role pattern as 004_rls_policies.sql)
+- [x] T005 Update `test_supabase_schema.py` assertions to include all 7 new tables in RLS checks and add structural assertions for `observations`, `canonical_benchmarks`, `anchor_configs`, and `signal_snapshots` in `tests/unit/test_supabase_schema.py`
+- [x] T006 [P] Add `TTL_DURATIONS` dict and `BENCHMARK_SCORING_ENABLED = False` flag to `src/config/constants.py` (TTL values: serp=24h, keyword=30d, business=7d, review=7d, technical=14d, reference=90d)
+- [x] T007 [P] Add `ttl_category: str` field to the frozen `Endpoint` dataclass in `src/clients/dataforseo/endpoints.py` and assign a category to each of the 10 existing endpoint constants (SERP_ORGANIC→serp, KEYWORD_VOLUME→keyword, BUSINESS_LISTINGS→business, etc.)
+- [x] T008 [P] Create `src/clients/dataforseo/query_hash.py` — extract hash logic from `cache.py`'s `_key()` method into a standalone `compute_query_hash(endpoint: str, params: dict) -> str` function with EXCLUDED_KEYS set for non-semantic fields
+- [x] T009 [P] Create test fixtures in `tests/fixtures/observation_fixtures.py` (sample observation records, gzipped payloads, TTL category mappings, cache-hit/miss scenarios) and `tests/fixtures/benchmark_fixtures.py` (sample benchmarks, canonical metro data, niche taxonomy entries)
 
 **Checkpoint**: All migrations pass `supabase db push`. Schema tests pass. Shared constants and utilities ready.
 

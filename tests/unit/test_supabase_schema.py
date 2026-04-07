@@ -20,6 +20,10 @@ class TestMigrationFiles:
             "002_experiment_schema.sql",
             "003_shared_tables.sql",
             "004_rls_policies.sql",
+            "005_observation_store.sql",
+            "006_canonical_reference.sql",
+            "007_anchor_system.sql",
+            "008_persistence_rls.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -108,4 +112,103 @@ class TestRLSPolicies:
 
     def test_service_role_policies_exist(self, sql: str):
         assert "CREATE POLICY" in sql
+        assert "service_role" in sql
+
+
+class TestObservationStore:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "005_observation_store.sql").read_text()
+
+    def test_observations_table(self, sql: str):
+        assert "observations" in sql
+        assert "query_hash" in sql
+        assert "ttl_category" in sql
+        assert "expires_at" in sql
+        assert "storage_path" in sql
+        assert "payload_purged" in sql
+
+    def test_observations_indexes(self, sql: str):
+        assert "idx_obs_hash_fresh" in sql
+        assert "idx_obs_hash_time" in sql
+        assert "idx_obs_source_time" in sql
+        assert "idx_obs_expires" in sql
+
+    def test_observations_check_constraints(self, sql: str):
+        assert "'pipeline'" in sql
+        assert "'anchor'" in sql
+        assert "'manual'" in sql
+        assert "'ok'" in sql
+        assert "'error'" in sql
+        assert "'partial'" in sql
+
+
+class TestCanonicalReference:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "006_canonical_reference.sql").read_text()
+
+    def test_canonical_metros_table(self, sql: str):
+        assert "canonical_metros" in sql
+        assert "metro_size_tier" in sql
+        assert "population" in sql
+
+    def test_canonical_benchmarks_table(self, sql: str):
+        assert "canonical_benchmarks" in sql
+        assert "metric_name" in sql
+        assert "sample_size" in sql
+        assert "valid_until" in sql
+        assert "UNIQUE(niche_keyword, metro_size_tier, metric_name)" in sql
+
+    def test_canonical_niches_table(self, sql: str):
+        assert "canonical_niches" in sql
+        assert "parent_vertical" in sql
+        assert "modifier_patterns" in sql
+
+
+class TestAnchorSystem:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "007_anchor_system.sql").read_text()
+
+    def test_anchor_configs_table(self, sql: str):
+        assert "anchor_configs" in sql
+        assert "tracked_keywords" in sql
+        assert "max_daily_cost_usd" in sql
+        assert "UNIQUE(niche_keyword, cbsa_code)" in sql
+
+    def test_anchor_runs_table(self, sql: str):
+        assert "anchor_runs" in sql
+        assert "REFERENCES anchor_configs(id)" in sql
+
+    def test_signal_snapshots_table(self, sql: str):
+        assert "signal_snapshots" in sql
+        assert "snapshot_date" in sql
+        assert "observation_ids" in sql
+        assert "UNIQUE(anchor_config_id, snapshot_date)" in sql
+        assert "idx_snapshots_niche_metro" in sql
+
+
+class TestPersistenceRLS:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "008_persistence_rls.sql").read_text()
+
+    def test_rls_enabled_on_all_persistence_tables(self, sql: str):
+        tables = [
+            "observations",
+            "canonical_metros",
+            "canonical_benchmarks",
+            "canonical_niches",
+            "anchor_configs",
+            "anchor_runs",
+            "signal_snapshots",
+        ]
+        for table in tables:
+            assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+                f"RLS not enabled for {table}"
+            )
+
+    def test_service_role_policies_exist(self, sql: str):
+        assert sql.count("CREATE POLICY") == 7
         assert "service_role" in sql
