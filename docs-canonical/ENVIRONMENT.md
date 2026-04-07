@@ -1,8 +1,8 @@
 # Environment & Configuration
 
-<!-- docguard:version 1.0.1 -->
+<!-- docguard:version 1.0.2 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-05 -->
+<!-- docguard:last-reviewed 2026-04-06 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file documents everything needed to run this project.
@@ -53,10 +53,22 @@ See `docs/research_agent_design.md` §12 for production architecture, verified s
 | File | Purpose | Template |
 |------|---------|----------|
 | `.env` / `.env.local` | Local dev secrets | `.env.example` |
+| `apps/app/.env.local` | Dashboard app local secrets | `apps/app/.env.local.example` |
 | `pyproject.toml` | Python build config, ruff, pytest settings | — |
 | `package.json` | Turborepo workspace config | — |
 | `apps/web/next.config.ts` | Next.js config (redirects) | — |
+| `apps/app/next.config.ts` | Dashboard app Next.js config | — |
 | `src/config/constants.py` | Scoring engine constants (AIO rates, weights, thresholds) | — |
+
+### Vercel deployment checklist (`whidby-agent` / `apps/app`)
+
+The dashboard deploys to Vercel as project `whidby-agent`. The middleware requires these env vars at edge runtime — missing or invalid values cause `MIDDLEWARE_INVOCATION_FAILED`. Set them in the Vercel project settings for **both Production and Preview** environments:
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Must be a valid `https://<project>.supabase.co` URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Yes | Publishable (anon) key from Supabase Dashboard |
+| `NEXT_PUBLIC_API_URL` | Yes (production) | Render API URL, e.g. `https://whidby-1.onrender.com` |
 
 ## Setup Steps
 
@@ -113,3 +125,4 @@ See `docs/research_agent_design.md` §12 for production architecture, verified s
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from CLAUDE.md, apps/web/CLAUDE.md, .env.example |
 | 1.0.1 | 2026-04-05 | Render alignment | `NEXT_PUBLIC_API_URL`, Render research API env table, pointer to research_agent_design §12 |
+| 1.0.2 | 2026-04-06 | Middleware fix | Added Vercel deployment checklist, `apps/app` config files, `NEXT_PUBLIC_API_URL` to root `.env.example` |

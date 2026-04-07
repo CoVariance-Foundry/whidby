@@ -20,5 +20,8 @@
   "packageManager": "npm@11.6.0",
   "dependencies": {
     "vercel": "^50.39.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-x64": "^4.60.1"
   }
 }
