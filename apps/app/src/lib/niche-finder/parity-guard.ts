@@ -15,7 +15,7 @@ export function compareScoreParity(
   }
 
   const delta = Math.abs(
-    standard.scoreResult.opportunityScore - exploration.scoreResult.opportunityScore
+    standard.score_result.opportunity_score - exploration.score_result.opportunity_score
   );
 
   return {

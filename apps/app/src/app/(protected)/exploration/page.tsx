@@ -48,6 +48,8 @@ export default function ExplorationPage() {
     ]);
 
     if (standardResponse.status !== "success" || explorationResponse.status === "validation_error") {
+      setStandard(null);
+      setExploration(null);
       setError(
         standardResponse.message ??
           explorationResponse.message ??

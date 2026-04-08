@@ -12,8 +12,8 @@ export interface NormalizedNicheQuery {
 }
 
 export interface ScoreResult {
-  opportunityScore: number;
-  classificationLabel: "High" | "Medium" | "Low";
+  opportunity_score: number;
+  classification_label: "High" | "Medium" | "Low";
 }
 
 export type StandardResponseStatus =
@@ -23,7 +23,7 @@ export type StandardResponseStatus =
 
 export interface StandardSurfaceResponse {
   query: NicheQueryInput;
-  scoreResult: ScoreResult;
+  score_result: ScoreResult;
   status: StandardResponseStatus;
   message?: string;
 }

@@ -16,10 +16,13 @@ export default function LoginPage() {
     setErrorMsg("");
 
     const supabase = createClient();
+    const frontendOrigin =
+      process.env.NEXT_PUBLIC_APP_FRONTEND_URL?.replace(/\/$/, "") ??
+      window.location.origin;
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${frontendOrigin}/auth/callback?next=/`,
       },
     });
 

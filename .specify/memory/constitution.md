@@ -21,6 +21,7 @@ The pipeline is 80% deterministic data processing and 20% LLM calls. We use `ant
 - Google-style docstrings with Args/Returns/Raises sections
 - Import order: standard library, third-party, local modules
 - PascalCase for classes, snake_case for everything else
+- **API contract casing**: All JSON payloads crossing service boundaries (Next.js route handlers <-> FastAPI backend, spec contracts, client-facing responses) use **snake_case** keys. Frontend-internal component props/state may use idiomatic TypeScript naming but must convert at the boundary.
 - Specific exception handling with logging (`exc_info=True` for exceptions)
 - ESLint for all TypeScript/Next.js code in `apps/`
 
@@ -105,4 +106,4 @@ This constitution supersedes ad-hoc practices. Amendments require:
 
 All PRs must verify compliance with these principles. The spec-kit workflow is the single path for delivering new module work. Skipping steps requires explicit justification documented in the PR.
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-04
+**Version**: 1.2.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-08

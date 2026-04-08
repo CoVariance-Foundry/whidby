@@ -22,8 +22,8 @@ export default function ExplorationAssistantPanel({
 
     setLoading(true);
     const next = await askExplorationAssistant({
-      sessionId: "exploration-session",
-      queryContext,
+      session_id: "exploration-session",
+      query_context: queryContext,
       question,
     });
     setResponse(next);
@@ -62,15 +62,15 @@ export default function ExplorationAssistantPanel({
               {response.answer}
             </div>
           )}
-          {response.evidenceReferences.length > 0 && (
+          {response.evidence_references.length > 0 && (
             <div className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark)] p-3">
               <p className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
                 Evidence References
               </p>
               <ul className="mt-2 space-y-1 text-sm text-[var(--color-text-secondary)]">
-                {response.evidenceReferences.map((item) => (
-                  <li key={`${item.category}-${item.referenceLabel}`}>
-                    {item.category}: {item.referenceLabel}
+                {response.evidence_references.map((item) => (
+                  <li key={`${item.category}-${item.reference_label}`}>
+                    {item.category}: {item.reference_label}
                   </li>
                 ))}
               </ul>

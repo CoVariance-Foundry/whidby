@@ -12,10 +12,10 @@ export default function StandardScoreResult({ result }: StandardScoreResultProps
       </p>
       <div className="mt-2 flex items-end gap-3">
         <p className="text-3xl font-semibold text-[var(--color-accent)]">
-          {result.scoreResult.opportunityScore}
+          {result.score_result.opportunity_score}
         </p>
         <p className="text-sm text-[var(--color-text-secondary)]">
-          {result.scoreResult.classificationLabel} Opportunity
+          {result.score_result.classification_label} Opportunity
         </p>
       </div>
       <p className="mt-3 text-sm text-[var(--color-text-muted)]">
