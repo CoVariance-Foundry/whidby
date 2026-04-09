@@ -5,7 +5,7 @@ export interface EvidenceRecord {
   label: string;
   value: string | number | boolean;
   source: string;
-  isAvailable: boolean;
+  is_available: boolean;
 }
 
 export type ExplorationResponseStatus =
@@ -16,30 +16,30 @@ export type ExplorationResponseStatus =
 
 export interface ExplorationSurfaceResponse {
   query: NicheQueryInput;
-  scoreResult: ScoreResult;
+  score_result: ScoreResult;
   evidence: EvidenceRecord[];
   status: ExplorationResponseStatus;
   message?: string;
 }
 
 export interface ExplorationAssistantRequest {
-  sessionId: string;
-  queryContext: NicheQueryInput;
+  session_id: string;
+  query_context: NicheQueryInput;
   question: string;
 }
 
 export interface AssistantEvidenceReference {
   category: string;
-  referenceLabel: string;
+  reference_label: string;
 }
 
 export type ExplorationAssistantStatus = "success" | "partial" | "unsupported";
 
 export interface ExplorationAssistantResponse {
-  responseId: string;
-  sessionId: string;
-  queryContext: NicheQueryInput;
+  response_id: string;
+  session_id: string;
+  query_context: NicheQueryInput;
   answer: string;
-  evidenceReferences: AssistantEvidenceReference[];
+  evidence_references: AssistantEvidenceReference[];
   status: ExplorationAssistantStatus;
 }

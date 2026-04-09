@@ -6,7 +6,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const validation = validateNicheQueryInput(body.queryContext ?? {});
+    const ctx = body.query_context ?? {};
+    const validation = validateNicheQueryInput(ctx);
 
     if (!validation.ok || !body.question?.trim()) {
       return NextResponse.json(
@@ -18,29 +19,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const enrichedPrompt = [
-      "Exploration follow-up for niche finder.",
-      `City: ${body.queryContext.city}`,
-      `Service: ${body.queryContext.service}`,
-      `Question: ${body.question}`,
-      "Return evidence-backed answer suitable for operator review.",
-    ].join("\n");
-
-    const res = await fetch(`${API_BASE}/api/chat`, {
+    const res = await fetch(`${API_BASE}/api/exploration/followup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: enrichedPrompt }),
+      body: JSON.stringify({
+        city: ctx.city.trim(),
+        service: ctx.service.trim(),
+        question: body.question.trim(),
+      }),
     });
 
     if (!res.ok) {
       return NextResponse.json(
         {
-          responseId: crypto.randomUUID(),
-          sessionId: body.sessionId,
-          queryContext: body.queryContext,
+          response_id: crypto.randomUUID(),
+          session_id: body.session_id ?? "",
+          query_context: ctx,
           answer:
-            "The exploration assistant could not complete this request right now. Try narrowing the question.",
-          evidenceReferences: [],
+            "The exploration assistant could not complete this request. Try narrowing the question.",
+          evidence_references: [],
           status: "unsupported",
         },
         { status: 502 }
@@ -48,21 +45,14 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json();
-    const answer = data.response ?? "No response returned.";
 
     return NextResponse.json({
-      responseId: crypto.randomUUID(),
-      sessionId: body.sessionId,
-      queryContext: body.queryContext,
-      answer,
-      evidenceReferences: [
-        { category: "demand", referenceLabel: "Demand context from query intent" },
-        {
-          category: "competition",
-          referenceLabel: "Competition context from follow-up analysis",
-        },
-      ],
-      status: "success",
+      response_id: crypto.randomUUID(),
+      session_id: body.session_id ?? "",
+      query_context: ctx,
+      answer: data.answer ?? "No response returned.",
+      evidence_references: data.evidence_references ?? [],
+      status: data.status ?? "success",
     });
   } catch {
     return NextResponse.json(

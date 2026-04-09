@@ -17,7 +17,7 @@ function scoreHash(input: string): number {
   return hash;
 }
 
-function classifyScore(score: number): ScoreResult["classificationLabel"] {
+function classifyScore(score: number): ScoreResult["classification_label"] {
   if (score >= 75) return "High";
   if (score >= 50) return "Medium";
   return "Low";
@@ -29,16 +29,16 @@ export function buildScoreResult(input: NicheQueryInput): ScoreResult {
   const opportunityScore = 30 + (raw % 71);
 
   return {
-    opportunityScore,
-    classificationLabel: classifyScore(opportunityScore),
+    opportunity_score: opportunityScore,
+    classification_label: classifyScore(opportunityScore),
   };
 }
 
 function buildEvidence(score: ScoreResult, input: NicheQueryInput): EvidenceRecord[] {
   const normalized = normalizeQueryInput(input);
-  const demand = (score.opportunityScore + scoreHash(normalized.normalizedCity)) % 100;
+  const demand = (score.opportunity_score + scoreHash(normalized.normalizedCity)) % 100;
   const competition =
-    (scoreHash(normalized.normalizedService) + score.opportunityScore) % 100;
+    (scoreHash(normalized.normalizedService) + score.opportunity_score) % 100;
   const monetization = (demand + competition + 17) % 100;
   const resilience = (100 - competition + 23) % 100;
 
@@ -48,28 +48,28 @@ function buildEvidence(score: ScoreResult, input: NicheQueryInput): EvidenceReco
       label: "Relative Market Demand",
       value: demand,
       source: "Derived exploration baseline",
-      isAvailable: true,
+      is_available: true,
     },
     {
       category: "competition",
       label: "Relative Competition Pressure",
       value: competition,
       source: "Derived exploration baseline",
-      isAvailable: true,
+      is_available: true,
     },
     {
       category: "monetization",
       label: "Commercial Intent Signal",
       value: monetization,
       source: "Derived exploration baseline",
-      isAvailable: true,
+      is_available: true,
     },
     {
       category: "ai_resilience",
       label: "AI Resilience Signal",
       value: resilience,
       source: "Derived exploration baseline",
-      isAvailable: true,
+      is_available: true,
     },
   ];
 }
@@ -77,18 +77,18 @@ function buildEvidence(score: ScoreResult, input: NicheQueryInput): EvidenceReco
 export function buildStandardResponse(query: NicheQueryInput): StandardSurfaceResponse {
   return {
     query,
-    scoreResult: buildScoreResult(query),
+    score_result: buildScoreResult(query),
     status: "success",
   };
 }
 
 export function buildExplorationResponse(query: NicheQueryInput): ExplorationSurfaceResponse {
-  const scoreResult = buildScoreResult(query);
-  const evidence = buildEvidence(scoreResult, query);
+  const score_result = buildScoreResult(query);
+  const evidence = buildEvidence(score_result, query);
 
   return {
     query,
-    scoreResult,
+    score_result,
     evidence,
     status: evidence.length > 0 ? "success" : "partial_evidence",
   };

@@ -63,6 +63,7 @@ npx docguard-cli diff     # Show documentation/code drift details
 
 - Python: PEP 8 via ruff, type annotations required, Google-style docstrings
 - TypeScript: ESLint with core-web-vitals + typescript
+- **API contract casing**: All JSON payloads at service boundaries use **snake_case** keys (Next.js route handlers, FastAPI endpoints, spec contracts). No camelCase in wire payloads.
 - Test file names mirror source: `src/pipeline/keyword_expansion.py` → `tests/unit/test_keyword_expansion.py`
 - Constants in `src/config/constants.py`, never hardcoded
 - Prompt templates in versioned files under `src/clients/llm/prompts/`

@@ -63,6 +63,12 @@ class ChatRequest(BaseModel):
     run_id: str | None = None
 
 
+class ExplorationFollowupRequest(BaseModel):
+    city: str
+    service: str
+    question: str
+
+
 # ---------------------------------------------------------------------------
 # Session endpoints
 # ---------------------------------------------------------------------------
@@ -172,6 +178,38 @@ def chat(req: ChatRequest) -> dict[str, Any]:
             }
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Exploration follow-up endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/exploration/followup")
+def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
+    """Run a plugin-backed exploration follow-up query.
+
+    Uses ClaudeAgent.run_exploration_followup to invoke approved scoring/search
+    plugin tools while preserving the active city/service context.
+    """
+    from src.research_agent.agent import _build_registry
+    from src.research_agent.agent.claude_agent import ClaudeAgent
+
+    try:
+        registry = _build_registry()
+        agent = ClaudeAgent(registry=registry)
+        result = agent.run_exploration_followup(
+            city=req.city.strip(),
+            service=req.service.strip(),
+            question=req.question.strip(),
+        )
+        return result
+    except Exception:
+        logger.error("Exploration follow-up failed", exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Exploration follow-up failed. Try a simpler question.",
+        )
 
 
 # ---------------------------------------------------------------------------

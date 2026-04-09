@@ -72,6 +72,7 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 - All business logic, schemas, and formulas live in spec docs under `docs/` — read the relevant spec before implementing
 - `docs/product_breakdown.md` is the module decomposition reference — it defines file structure, I/O contracts, and eval criteria per module
 - Research constants (AIO rates, scoring weights, rate limits) live in `src/config/constants.py`, never hardcoded
+- **API contract casing**: All JSON payloads at service boundaries (Next.js route handlers <-> FastAPI, spec contracts) use **snake_case** keys. No camelCase in wire payloads.
 - Test file names mirror source: `src/scoring/demand_score.py` → `tests/unit/test_demand_score.py`
 
 ## Architecture: Research Agent

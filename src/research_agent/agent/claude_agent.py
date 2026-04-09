@@ -150,6 +150,7 @@ class ClaudeAgent:
         tool_calls_log: list[dict[str, Any]] = []
         evidence_refs: list[dict[str, str]] = []
         answer_parts: list[str] = []
+        had_tool_failure = False
 
         try:
             score_result = self._registry.execute(
@@ -212,16 +213,20 @@ class ClaudeAgent:
             except Exception as error:
                 logger.warning("SERP exploration tool failed: %s", error, exc_info=True)
                 answer_parts.append(
-                    "SERP snapshot was unavailable for this request, but core score evidence was returned."
+                    "SERP snapshot was unavailable for this request, "
+                    "but core score evidence was returned."
                 )
+                had_tool_failure = True
 
         if not answer_parts:
             answer_parts.append(
-                "Follow-up completed with limited evidence. Try asking for a specific evidence category."
+                "Follow-up completed with limited evidence. "
+                "Try asking for a specific evidence category."
             )
 
+        status = "partial" if had_tool_failure else "success"
         return {
-            "status": "success",
+            "status": status,
             "answer": " ".join(answer_parts),
             "evidence_references": evidence_refs,
             "tool_calls": tool_calls_log,

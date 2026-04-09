@@ -28,7 +28,7 @@ Three subsystems compose the platform:
 3. **Marketing Site** (`apps/web/`) — Next.js 16 pre-launch landing page
 4. **Research Agent Dashboard** (`apps/app/`) — Next.js 16 eval UI
 
-**Production split:** The dashboard is hosted on **Vercel** (`app.thewidby.com`). The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/app/src/app/api/agent/` proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Supabase backs auth and product data for the app. Details: `docs/research_agent_design.md` §12.
+**Production split:** The dashboard is hosted on **Vercel** (`app.thewidby.com`). The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/app/src/app/api/agent/` proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Auth magic-link callbacks redirect to the dashboard frontend via **`NEXT_PUBLIC_APP_FRONTEND_URL`** (the Vercel origin, not the API). Supabase backs auth and product data for the app. Details: `docs/research_agent_design.md` §12.
 
 ### Niche Finder Dual-Surface Interface
 
