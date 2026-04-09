@@ -84,7 +84,7 @@ export default function ExplorationPage() {
           <ExplorationScoreSummary result={exploration} />
           <div className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] p-3 text-sm">
             Score parity with standard surface:{" "}
-            <span className={parity.isParity ? "text-green-400" : "text-yellow-400"}>
+            <span data-testid="parity-status" className={parity.isParity ? "text-green-400" : "text-yellow-400"}>
               {parity.isParity ? "Matched" : `Delta ${parity.delta}`}
             </span>
           </div>

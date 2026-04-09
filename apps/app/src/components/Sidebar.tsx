@@ -15,9 +15,9 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Niche Finder", icon: Search },
-  { href: "/exploration", label: "Exploration", icon: Compass },
-  { href: "/chat", label: "Agent", icon: MessageSquare },
+  { href: "/", label: "Niche Finder", icon: Search, testId: "nav-niche-finder" },
+  { href: "/exploration", label: "Exploration", icon: Compass, testId: "nav-exploration" },
+  { href: "/chat", label: "Agent", icon: MessageSquare, testId: "nav-agent" },
 ];
 
 export default function Sidebar() {
@@ -55,7 +55,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 py-3 space-y-1 px-2">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon, testId }) => {
           const active =
             href === "/"
               ? pathname === "/"
@@ -64,6 +64,7 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
+              data-testid={testId}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
                 active

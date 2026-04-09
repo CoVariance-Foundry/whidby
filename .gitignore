@@ -70,6 +70,9 @@ docker-compose.override.yml
 
 # playwright
 .playwright-mcp/
+test-results/
+playwright-report/
+blob-report/
 
 # editor/system
 Thumbs.db

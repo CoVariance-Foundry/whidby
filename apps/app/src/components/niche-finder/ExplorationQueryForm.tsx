@@ -26,6 +26,7 @@ export default function ExplorationQueryForm({
       }}
     >
       <input
+        data-testid="explore-city-input"
         className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark)] px-3 py-2 text-sm"
         placeholder="City"
         value={city}
@@ -33,6 +34,7 @@ export default function ExplorationQueryForm({
         disabled={disabled}
       />
       <input
+        data-testid="explore-service-input"
         className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark)] px-3 py-2 text-sm"
         placeholder="Service"
         value={service}
@@ -40,6 +42,7 @@ export default function ExplorationQueryForm({
         disabled={disabled}
       />
       <button
+        data-testid="explore-btn"
         type="submit"
         disabled={disabled}
         className="rounded-md bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-dark)] disabled:cursor-not-allowed disabled:opacity-60"

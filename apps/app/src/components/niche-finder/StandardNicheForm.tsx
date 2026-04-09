@@ -26,6 +26,7 @@ export default function StandardNicheForm({
       }}
     >
       <input
+        data-testid="city-input"
         className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark)] px-3 py-2 text-sm"
         placeholder="City (e.g. Phoenix)"
         value={city}
@@ -33,6 +34,7 @@ export default function StandardNicheForm({
         disabled={disabled}
       />
       <input
+        data-testid="service-input"
         className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark)] px-3 py-2 text-sm"
         placeholder="Service (e.g. roofing)"
         value={service}
@@ -40,6 +42,7 @@ export default function StandardNicheForm({
         disabled={disabled}
       />
       <button
+        data-testid="score-niche-btn"
         type="submit"
         disabled={disabled}
         className="rounded-md bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-dark)] disabled:cursor-not-allowed disabled:opacity-60"

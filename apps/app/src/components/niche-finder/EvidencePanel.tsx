@@ -7,12 +7,13 @@ interface EvidencePanelProps {
 
 export default function EvidencePanel({ evidence }: EvidencePanelProps) {
   return (
-    <section className="rounded-lg border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] p-4">
+    <section data-testid="evidence-panel" className="rounded-lg border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] p-4">
       <h2 className="text-sm font-semibold">Score-Driving Evidence</h2>
       <div className="mt-3 space-y-3">
         {evidence.map((item) =>
           item.is_available ? (
             <div
+              data-testid="evidence-item"
               key={`${item.category}-${item.label}`}
               className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark)] p-3"
             >
