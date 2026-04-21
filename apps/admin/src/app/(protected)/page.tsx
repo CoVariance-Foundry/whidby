@@ -24,19 +24,24 @@ export default function Home() {
   async function handleSubmit(nextQuery: NicheQueryInput) {
     setLoading(true);
     setError(null);
+    setResult(null);
     setQuery(nextQuery);
     saveQueryContext(nextQuery);
 
-    const response = await fetchStandardScore(nextQuery);
-    if (response.status !== "success") {
-      setResult(null);
-      setError(response.message ?? "Unable to calculate score.");
-      setLoading(false);
-      return;
-    }
+    try {
+      const response = await fetchStandardScore(nextQuery);
+      if (response.status !== "success") {
+        setError(response.message ?? "Unable to calculate score.");
+        setLoading(false);
+        return;
+      }
 
-    setResult(response);
-    setLoading(false);
+      setResult(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error — please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

@@ -13,7 +13,7 @@ export default function ExplorationScoreSummary({
         Exploration Score
       </p>
       <div className="mt-2 flex items-end gap-3">
-        <p data-testid="exploration-score-value" className="text-3xl font-semibold text-[var(--color-accent)]">
+        <p data-testid="opportunity-score" className="text-3xl font-semibold text-[var(--color-accent)]">
           {result.score_result.opportunity_score}
         </p>
         <p data-testid="exploration-classification" className="text-sm text-[var(--color-text-secondary)]">

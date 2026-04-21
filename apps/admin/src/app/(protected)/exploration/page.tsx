@@ -39,29 +39,38 @@ export default function ExplorationPage() {
   async function handleSubmit(nextQuery: NicheQueryInput) {
     setLoading(true);
     setError(null);
+    setStandard(null);
+    setExploration(null);
     setQuery(nextQuery);
     saveQueryContext(nextQuery);
 
-    const [standardResponse, explorationResponse] = await Promise.all([
-      fetchStandardScore(nextQuery),
-      fetchExploration(nextQuery),
-    ]);
+    try {
+      const [standardResponse, explorationResponse] = await Promise.all([
+        fetchStandardScore(nextQuery),
+        fetchExploration(nextQuery),
+      ]);
 
-    if (standardResponse.status !== "success" || explorationResponse.status === "validation_error") {
-      setStandard(null);
-      setExploration(null);
-      setError(
-        standardResponse.message ??
-          explorationResponse.message ??
-          "Unable to load exploration data."
-      );
+      if (
+        standardResponse.status !== "success" ||
+        explorationResponse.status === "validation_error" ||
+        explorationResponse.status === "unavailable"
+      ) {
+        setError(
+          standardResponse.message ??
+            explorationResponse.message ??
+            "Unable to load exploration data."
+        );
+        setLoading(false);
+        return;
+      }
+
+      setStandard(standardResponse);
+      setExploration(explorationResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error — please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setStandard(standardResponse);
-    setExploration(explorationResponse);
-    setLoading(false);
   }
 
   const parity = compareScoreParity(standard, exploration);
