@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isSafeNext } from "@/lib/auth/safe-next";
 
 type Status = "idle" | "loading" | "error";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -28,7 +30,9 @@ export default function LoginPage() {
       setErrorMsg(error.message);
       setStatus("error");
     } else {
-      router.replace("/");
+      const nextParam = searchParams.get("next");
+      const dest = isSafeNext(nextParam) ? nextParam : "/";
+      router.replace(dest);
       router.refresh();
     }
   }
@@ -96,5 +100,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }
