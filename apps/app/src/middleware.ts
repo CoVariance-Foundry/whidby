@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isPublic = isPublicRoute(pathname);
 
-  if (pathname.startsWith("/auth/callback")) {
+  if (pathname === "/auth/callback") {
     return NextResponse.next({ request });
   }
 
