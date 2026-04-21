@@ -49,7 +49,7 @@ describe("StatCardRow", () => {
           { label: "Niches scored", value: "42" },
           { label: "Watchlist", value: "8" },
           { label: "Avg score", value: "67" },
-          { label: "Reports", value: "42" },
+          { label: "Reports", value: "38" },
         ]}
       />,
     );
@@ -57,6 +57,7 @@ describe("StatCardRow", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("Watchlist")).toBeInTheDocument();
     expect(screen.getByText("67")).toBeInTheDocument();
+    expect(screen.getByText("38")).toBeInTheDocument();
   });
 
   it("renders an optional delta below the value when provided", () => {
