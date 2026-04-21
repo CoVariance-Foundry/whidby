@@ -28,8 +28,10 @@ class Recipe:
             ``"agency"``, or ``"app_builder"``. Used by the UI to group recipes.
         required_plugins: Plugin ``name`` strings that MUST be registered for
             the recipe to run. A missing required plugin blocks execution.
+            Tuple to preserve the frozen dataclass immutability guarantee.
         optional_plugins: Plugin names whose absence degrades the recipe
-            output but does not block it.
+            output but does not block it. Tuple for the same immutability
+            reason as ``required_plugins``.
         inputs_schema: JSON Schema dict describing the recipe's required
             runtime inputs. Shape matches the Anthropic tool ``input_schema``
             convention so the same dict can be forwarded to Claude if needed.
@@ -45,8 +47,8 @@ class Recipe:
 
     recipe_id: str
     audience: str
-    required_plugins: list[str]
-    optional_plugins: list[str]
+    required_plugins: tuple[str, ...]
+    optional_plugins: tuple[str, ...]
     inputs_schema: dict[str, Any]
     system_prompt: str
     template_name: str
@@ -99,8 +101,7 @@ class RecipeRegistry:
 
         Results are returned in ``recipe_id`` order for UI stability.
         """
-        return [
-            self._recipes[rid]
-            for rid in sorted(self._recipes)
-            if self._recipes[rid].audience == audience
-        ]
+        return sorted(
+            (r for r in self._recipes.values() if r.audience == audience),
+            key=lambda r: r.recipe_id,
+        )

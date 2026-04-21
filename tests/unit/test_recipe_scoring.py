@@ -227,7 +227,7 @@ class TestTypeContract:
         assert isinstance(res["components"], dict)
         assert isinstance(res["weights"], dict)
 
-    def test_batch_must_contain_market(self) -> None:
+    def test_probe_market_not_in_batch_is_allowed(self) -> None:
         # A market not in the batch is still allowed (caller might be probing),
         # normalize against batch range. Just ensure no crash.
         a = _market(search_volume=5000)

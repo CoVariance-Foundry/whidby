@@ -10,8 +10,8 @@ from src.research_agent.recipes.base import Recipe, RecipeRegistry
 def _make_recipe(
     recipe_id: str = "market_opportunity",
     audience: str = "rank_and_rent",
-    required_plugins: list[str] | None = None,
-    optional_plugins: list[str] | None = None,
+    required_plugins: tuple[str, ...] | None = None,
+    optional_plugins: tuple[str, ...] | None = None,
     inputs_schema: dict | None = None,
     system_prompt: str = "You are a market opportunity analyst.",
     template_name: str = "market_opportunity.html",
@@ -20,8 +20,8 @@ def _make_recipe(
     return Recipe(
         recipe_id=recipe_id,
         audience=audience,
-        required_plugins=required_plugins or ["dataforseo"],
-        optional_plugins=optional_plugins or [],
+        required_plugins=required_plugins if required_plugins is not None else ("dataforseo",),
+        optional_plugins=optional_plugins if optional_plugins is not None else (),
         inputs_schema=inputs_schema
         or {
             "type": "object",
@@ -39,8 +39,8 @@ class TestRecipeConstruction:
         recipe = _make_recipe()
         assert recipe.recipe_id == "market_opportunity"
         assert recipe.audience == "rank_and_rent"
-        assert recipe.required_plugins == ["dataforseo"]
-        assert recipe.optional_plugins == []
+        assert recipe.required_plugins == ("dataforseo",)
+        assert recipe.optional_plugins == ()
         assert recipe.inputs_schema["type"] == "object"
         assert recipe.system_prompt.startswith("You are")
         assert recipe.template_name == "market_opportunity.html"
@@ -55,8 +55,8 @@ class TestRecipeConstruction:
         assert recipe.scoring_fn({}) == {"score": 1.0}
 
     def test_recipe_accepts_optional_plugins(self) -> None:
-        recipe = _make_recipe(optional_plugins=["serpapi"])
-        assert recipe.optional_plugins == ["serpapi"]
+        recipe = _make_recipe(optional_plugins=("serpapi",))
+        assert recipe.optional_plugins == ("serpapi",)
 
 
 class TestRecipeRegistry:
