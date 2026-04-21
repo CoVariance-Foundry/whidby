@@ -6,7 +6,7 @@ const PUBLIC_ROUTES = ["/login", "/auth/callback", "/api/"];
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
   const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
 
   if (pathname.startsWith("/auth/callback")) {
@@ -16,9 +16,7 @@ export async function middleware(request: NextRequest) {
   if (!supabaseUrl || !supabaseKey) {
     console.error("[middleware] Missing Supabase env vars");
     if (!isPublic) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return redirectToLogin(request, null);
     }
     return NextResponse.next({ request });
   }
@@ -40,8 +38,8 @@ export async function middleware(request: NextRequest) {
             cookiesToSet.forEach(({ name, value, options }) =>
               supabaseResponse.cookies.set(name, value, options)
             );
-          } catch {
-            // Cookie write failures should not crash the middleware.
+          } catch (error) {
+            console.warn("[middleware] Cookie setAll failed", error);
           }
         },
       },
@@ -52,26 +50,52 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user && !isPublic) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return redirectToLogin(request, supabaseResponse, `${pathname}${search}`);
     }
 
     if (user && pathname === "/login") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/reports";
-      return NextResponse.redirect(url);
+      const nextParam = request.nextUrl.searchParams.get("next");
+      const dest = nextParam && nextParam.startsWith("/") ? nextParam : "/reports";
+      const url = new URL(dest, request.nextUrl.origin);
+      return redirectWithCookies(url, supabaseResponse);
     }
   } catch (error) {
     console.error("[middleware] Auth check failed", error);
     if (!isPublic) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return redirectToLogin(request, supabaseResponse);
     }
   }
 
   return supabaseResponse;
+}
+
+// Copies cookies from a supabaseResponse (possibly holding refreshed tokens)
+// onto a fresh redirect so the browser actually receives Set-Cookie headers.
+function redirectWithCookies(
+  url: URL,
+  supabaseResponse: NextResponse | null,
+): NextResponse {
+  const redirect = NextResponse.redirect(url);
+  if (supabaseResponse) {
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirect.cookies.set(cookie);
+    });
+  }
+  return redirect;
+}
+
+function redirectToLogin(
+  request: NextRequest,
+  supabaseResponse: NextResponse | null,
+  nextPath?: string,
+): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = "";
+  if (nextPath && !PUBLIC_ROUTES.some((r) => nextPath.startsWith(r))) {
+    url.searchParams.set("next", nextPath);
+  }
+  return redirectWithCookies(url, supabaseResponse);
 }
 
 export const config = {
