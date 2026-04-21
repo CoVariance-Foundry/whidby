@@ -20,7 +20,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error("[middleware] Missing Supabase env vars");
+    console.error("[proxy] Missing Supabase env vars");
     if (!isPublic) {
       return redirectToLogin(request, null);
     }
@@ -45,7 +45,7 @@ export async function proxy(request: NextRequest) {
               supabaseResponse.cookies.set(name, value, options)
             );
           } catch (error) {
-            console.warn("[middleware] Cookie setAll failed", error);
+            console.warn("[proxy] Cookie setAll failed", error);
           }
         },
       },
@@ -68,7 +68,7 @@ export async function proxy(request: NextRequest) {
       return redirectWithCookies(url, supabaseResponse);
     }
   } catch (error) {
-    console.error("[middleware] Auth check failed", error);
+    console.error("[proxy] Auth check failed", error);
     if (!isPublic) {
       return redirectToLogin(request, supabaseResponse);
     }
