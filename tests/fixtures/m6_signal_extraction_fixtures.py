@@ -135,3 +135,31 @@ def build_no_local_pack_bundle() -> dict:
 
 def build_keyword_expansion() -> list[dict]:
     return deepcopy(SAMPLE_KEYWORD_EXPANSION)
+
+
+def fixture_metro_signals() -> dict[str, dict]:
+    """Return pre-computed M6 signal dict from the canonical sample bundle.
+
+    Calls extract_signals on existing fixture data so the result is always
+    contract-compliant and deterministic. Used by the orchestrator dry-run path.
+    """
+    from src.pipeline.signal_extraction import extract_signals  # local import avoids circular deps
+
+    return extract_signals(
+        raw_metro_bundle=build_sample_bundle(),
+        keyword_expansion=build_keyword_expansion(),
+        cross_metro_domain_stats=None,
+        total_metros=1,
+    )
+
+
+def fixture_keyword_expansion(niche: str) -> dict:
+    """Return a keyword expansion dict shaped like M4 output for the given niche.
+
+    Reuses SAMPLE_KEYWORD_EXPANSION keywords; only the niche name is substituted.
+    Used by the orchestrator dry-run path.
+    """
+    return {
+        "niche": niche,
+        "keywords": deepcopy(SAMPLE_KEYWORD_EXPANSION),
+    }

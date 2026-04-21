@@ -128,3 +128,34 @@ def test_score_niche_raises_valueerror_on_unknown_city() -> None:
                 dataforseo_client=object(),
             )
         )
+
+
+def test_dry_run_returns_deterministic_report_without_clients() -> None:
+    first = asyncio.run(
+        score_niche_for_metro(
+            niche="roofing",
+            city="Phoenix",
+            state="AZ",
+            llm_client=None,
+            dataforseo_client=None,
+            dry_run=True,
+        )
+    )
+    second = asyncio.run(
+        score_niche_for_metro(
+            niche="roofing",
+            city="Phoenix",
+            state="AZ",
+            llm_client=None,
+            dataforseo_client=None,
+            dry_run=True,
+        )
+    )
+    assert first.opportunity_score == second.opportunity_score
+    assert first.report["metros"][0]["cbsa_code"] == second.report["metros"][0]["cbsa_code"]
+    assert first.report["meta"]["total_cost_usd"] == 0.0
+    # Report must satisfy M9 contract
+    assert first.report["spec_version"] == "1.1"
+    assert first.report["input"]["niche_keyword"] == "roofing"
+    assert 0 <= first.opportunity_score <= 100
+    assert len(first.evidence) == 4

@@ -36,6 +36,7 @@ async def score_niche_for_metro(
     llm_client: Any,
     dataforseo_client: Any,
     metro_db: MetroDB | None = None,
+    dry_run: bool = False,
 ) -> ScoreNicheResult:
     """Score a (niche, city, state) pair end-to-end.
 
@@ -56,6 +57,17 @@ async def score_niche_for_metro(
     )
     if target is None:
         raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
+
+    if dry_run:
+        return await _dry_run_result(
+            niche=niche,
+            city=city,
+            state=state,
+            target=target,
+            strategy_profile=strategy_profile,
+            started=started,
+            run_id=f"score-dry-{uuid4()}",
+        )
 
     if not target.dataforseo_location_codes:
         raise ValueError(
@@ -159,6 +171,94 @@ async def score_niche_for_metro(
         report=report,
         opportunity_score=int(round(scores["opportunity"])),
         evidence=evidence,
+    )
+
+
+async def _dry_run_result(
+    *,
+    niche: str,
+    city: str,
+    state: str,
+    target: Any,
+    strategy_profile: str,
+    started: float,
+    run_id: str,
+) -> ScoreNicheResult:
+    """Return a contract-compliant ScoreNicheResult using fixture data, no live calls.
+
+    Loads M6 signals from the canonical test fixture bundle, then runs real M7 scoring
+    and M8 classification so the returned report has the same shape as a live run.
+    The LLM guidance step falls back to rule-based templates (llm_client=None is safe).
+    """
+    # Lazy import so the test-fixture dependency is only loaded in dry_run=True path.
+    from tests.fixtures.m6_signal_extraction_fixtures import (  # noqa: PLC0415
+        fixture_keyword_expansion,
+        fixture_metro_signals,
+    )
+
+    signals = fixture_metro_signals()
+    expansion = fixture_keyword_expansion(niche)
+
+    scores = compute_scores(
+        metro_signals=signals,
+        all_metro_signals=[signals],
+        strategy_profile=strategy_profile,
+    )
+
+    ai_exposure = classify_ai_exposure(signals)
+    serp_archetype, _rule_id = classify_serp_archetype(signals)
+    difficulty, _combined_comp, _resolved = compute_difficulty_tier(
+        scores=scores,
+        strategy_profile=strategy_profile,
+        signals=signals,
+    )
+
+    classification_input: dict[str, Any] = {
+        "niche": niche,
+        "metro_name": target.cbsa_name,
+        "signals": signals,
+        "scores": scores,
+        "strategy_profile": strategy_profile,
+    }
+    # llm_client=None — guidance_generator safely falls back to rule-based templates.
+    guidance_bundle = await classify_and_generate_guidance(classification_input, None)
+
+    run_input = {
+        "run_id": run_id,
+        "input": {
+            "niche_keyword": niche,
+            "geo_scope": "city",
+            "geo_target": f"{city}, {state}",
+            "report_depth": "standard",
+            "strategy_profile": strategy_profile,
+        },
+        "keyword_expansion": expansion,
+        "metros": [
+            {
+                "cbsa_code": target.cbsa_code,
+                "cbsa_name": target.cbsa_name,
+                "population": target.population,
+                "scores": scores,
+                "confidence": scores["confidence"],
+                "serp_archetype": serp_archetype,
+                "ai_exposure": ai_exposure,
+                "difficulty_tier": difficulty,
+                "signals": signals,
+                "guidance": guidance_bundle,
+            }
+        ],
+        "meta": {
+            "total_api_calls": 0,
+            "total_cost_usd": 0.0,
+            "processing_time_seconds": time.monotonic() - started,
+        },
+    }
+
+    report = generate_report(run_input)
+    return ScoreNicheResult(
+        report=report,
+        opportunity_score=int(round(scores["opportunity"])),
+        evidence=_build_evidence_from_signals(signals),
     )
 
 
