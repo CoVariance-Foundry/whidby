@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import CityAutocomplete from "@/components/niche-finder/CityAutocomplete";
+import NicheFinderTabs, { type TabKey } from "@/components/niche-finder/NicheFinderTabs";
+import StrategyPresetRail from "@/components/niche-finder/StrategyPresetRail";
+import PinnedRecentRail from "@/components/niche-finder/PinnedRecentRail";
 import type { MetroSuggestion } from "@/lib/niche-finder/metro-suggest";
 import type { StandardSurfaceResponse } from "@/lib/niche-finder/types";
+import type { HistoryEntry } from "@/lib/niche-finder/history-storage";
 import { validateNicheQueryInput } from "@/lib/niche-finder/request-validation";
+import { loadPinned, loadRecent, pushRecent } from "@/lib/niche-finder/history-storage";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +56,42 @@ function ClassificationPill({ label }: { label: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+
+function Toast({ message, onDone }: { message: string; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2400);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: "fixed",
+        bottom: 24,
+        left: "50%",
+        transform: "translateX(-50%)",
+        background: "var(--ink)",
+        color: "var(--card)",
+        fontFamily: "var(--sans)",
+        fontSize: 13.5,
+        fontWeight: 500,
+        padding: "10px 20px",
+        borderRadius: 999,
+        boxShadow: "0 4px 20px rgba(31,27,22,0.18)",
+        zIndex: 9999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {message}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -59,17 +100,25 @@ export default function NicheFinderPage() {
   const [state, setState] = useState<string | undefined>(undefined);
   const [service, setService] = useState("");
   const [pageState, setPageState] = useState<PageState>({ kind: "idle" });
+  const [activeTab, setActiveTab] = useState<TabKey>("niche");
+  const [pinned, setPinned] = useState<HistoryEntry[]>([]);
+  const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
 
-  // Called by CityAutocomplete: free-type clears resolved state; selection sets both.
+  useEffect(() => {
+    setPinned(loadPinned());
+    setRecent(loadRecent());
+  }, []);
+
+  const showToast = useCallback((msg: string) => setToast(msg), []);
+  const dismissToast = useCallback(() => setToast(null), []);
+
   const handleCityChange = (newCity: string, suggestion?: MetroSuggestion) => {
     if (suggestion) {
-      // Dropdown selection passes a display string like "Phoenix, AZ".
-      // Keep query city canonical for API payloads.
       setCity(suggestion.city);
       setState(suggestion.state);
     } else {
       setCity(newCity);
-      // Free-typed text — clear any previously resolved state
       setState(undefined);
     }
   };
@@ -106,6 +155,8 @@ export default function NicheFinderPage() {
       }
 
       setPageState({ kind: "success", data: json });
+      pushRecent({ city: city.trim(), service: service.trim(), at: Date.now() });
+      setRecent(loadRecent());
     } catch (err) {
       setPageState({
         kind: "error",
@@ -114,231 +165,246 @@ export default function NicheFinderPage() {
     }
   };
 
+  const handleRailPick = (entry: HistoryEntry) => {
+    setCity(entry.city);
+    setService(entry.service);
+    setState(undefined);
+    setActiveTab("niche");
+  };
+
   const isLoading = pageState.kind === "loading";
 
   return (
-    <div className="app">
+    <div className="app density-roomy">
       <Sidebar active="finder" />
       <div className="main">
         <Topbar crumbs={["Niche finder"]} />
-        <div className="page">
-          {/* ── Header ── */}
-          <div style={{ marginBottom: 28 }}>
-            <div className="kicker">Score a niche</div>
-            <div className="page-h1" style={{ marginTop: 6 }}>
-              Find a niche
+        <div className="page" style={{ display: "flex", gap: 32 }}>
+          {/* ── Left: main column ── */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ marginBottom: 20 }}>
+              <div className="kicker">Score a niche</div>
+              <div className="page-h1" style={{ marginTop: 6 }}>
+                Find a niche
+              </div>
+              <div className="page-sub">
+                Score a service-area business opportunity in a specific metro.
+              </div>
             </div>
-            <div className="page-sub">
-              Score a service-area business opportunity in a specific metro.
-            </div>
-          </div>
 
-          {/* ── Form card ── */}
-          <div
-            style={{
-              background: "var(--card)",
-              border: "1px solid var(--rule)",
-              borderRadius: 10,
-              padding: "24px 24px 20px",
-              maxWidth: 520,
-            }}
-          >
-            <form onSubmit={handleSubmit} noValidate>
-              {/* City input */}
-              <div style={{ marginBottom: 16 }}>
-                <label
-                  htmlFor="nf-city"
-                  className="field-label"
-                  style={{ display: "block", marginBottom: 6 }}
+            <div style={{ marginBottom: 20 }}>
+              <NicheFinderTabs active={activeTab} onChange={setActiveTab} />
+            </div>
+
+            {/* ── Niche & city tab ── */}
+            {activeTab === "niche" && (
+              <>
+                <form
+                  onSubmit={handleSubmit}
+                  noValidate
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-end",
+                    flexWrap: "wrap",
+                    marginBottom: 20,
+                  }}
                 >
-                  City
-                </label>
-                <CityAutocomplete
-                  value={city}
-                  onChange={handleCityChange}
-                  disabled={isLoading}
-                  placeholder="City (e.g. Phoenix, AZ)"
-                  data-testid="city-input"
-                />
-              </div>
-
-              {/* Service input */}
-              <div style={{ marginBottom: 20 }}>
-                <label
-                  htmlFor="nf-service"
-                  className="field-label"
-                  style={{ display: "block", marginBottom: 6 }}
-                >
-                  Service
-                </label>
-                <div className="input-wrap">
-                  <input
-                    id="nf-service"
-                    data-testid="service-input"
-                    type="text"
-                    value={service}
-                    onChange={(e) => setService(e.target.value)}
-                    disabled={isLoading}
-                    placeholder="e.g. roofing, water damage restoration"
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                className="btn-primary"
-                disabled={isLoading}
-                style={{ width: "100%", justifyContent: "center" }}
-                data-testid="submit-btn"
-              >
-                {isLoading ? "Scoring…" : "Score niche"}
-              </button>
-            </form>
-          </div>
-
-          {/* ── Loading state ── */}
-          {pageState.kind === "loading" && (
-            <div
-              role="status"
-              aria-live="polite"
-              data-testid="loading-banner"
-              style={{
-                marginTop: 20,
-                maxWidth: 520,
-                background: "var(--info-soft)",
-                border: "1px solid var(--info)",
-                borderRadius: 8,
-                padding: "14px 16px",
-                fontFamily: "var(--serif)",
-                fontStyle: "italic",
-                fontSize: 14,
-                color: "var(--info)",
-              }}
-            >
-              Running live scoring pipeline — this takes up to a minute on first run.
-            </div>
-          )}
-
-          {/* ── Error state ── */}
-          {pageState.kind === "error" && (
-            <div
-              role="alert"
-              data-testid="error-banner"
-              style={{
-                marginTop: 20,
-                maxWidth: 520,
-                background: "var(--danger-soft)",
-                border: "1px solid var(--danger)",
-                borderRadius: 8,
-                padding: "14px 16px",
-                fontFamily: "var(--serif)",
-                fontSize: 14,
-                color: "var(--danger)",
-              }}
-            >
-              {pageState.message}
-            </div>
-          )}
-
-          {/* ── Success: result card ── */}
-          {pageState.kind === "success" && (
-            <div
-              data-testid="result-card"
-              style={{
-                marginTop: 20,
-                maxWidth: 520,
-                background: "var(--card)",
-                border: "1px solid var(--rule)",
-                borderRadius: 10,
-                padding: "24px",
-              }}
-            >
-              {/* Metro label */}
-              <div
-                style={{
-                  fontFamily: "var(--serif)",
-                  fontStyle: "italic",
-                  fontSize: 13,
-                  color: "var(--ink-3)",
-                  marginBottom: 12,
-                }}
-              >
-                {pageState.data.query.city}
-                {pageState.data.query.state ? `, ${pageState.data.query.state}` : ""}
-                {" · "}
-                {pageState.data.query.service}
-              </div>
-
-              {/* Score row */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  gap: 16,
-                  marginBottom: 16,
-                }}
-              >
-                <div>
-                  <div
-                    className="field-label"
-                    style={{ marginBottom: 4 }}
-                  >
-                    Opportunity score
+                  <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+                    <label
+                      htmlFor="nf-city"
+                      className="field-label"
+                      style={{ display: "block", marginBottom: 6 }}
+                    >
+                      City
+                    </label>
+                    <CityAutocomplete
+                      value={city}
+                      onChange={handleCityChange}
+                      disabled={isLoading}
+                      placeholder="City (e.g. Phoenix, AZ)"
+                      data-testid="city-input"
+                    />
                   </div>
-                  <div
-                    data-testid="opportunity-score"
-                    className="score"
-                    style={{ fontSize: 48, lineHeight: 1 }}
-                  >
-                    {pageState.data.score_result.opportunity_score}
-                  </div>
-                  {/* Score bar */}
-                  <div style={{ width: 120, marginTop: 8 }}>
-                    <div className="score-bar">
-                      <div
-                        style={{
-                          width: pageState.data.score_result.opportunity_score + "%",
-                        }}
+
+                  <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+                    <label
+                      htmlFor="nf-service"
+                      className="field-label"
+                      style={{ display: "block", marginBottom: 6 }}
+                    >
+                      Service
+                    </label>
+                    <div className="input-wrap">
+                      <input
+                        id="nf-service"
+                        data-testid="service-input"
+                        type="text"
+                        value={service}
+                        onChange={(e) => setService(e.target.value)}
+                        disabled={isLoading}
+                        placeholder="e.g. roofing, water damage restoration"
+                        autoComplete="off"
                       />
                     </div>
                   </div>
-                </div>
 
-                {/* Classification pill */}
-                <div style={{ paddingBottom: 6 }}>
-                  <ClassificationPill
-                    label={pageState.data.score_result.classification_label}
-                  />
-                </div>
-              </div>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={isLoading}
+                    data-testid="submit-btn"
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {isLoading ? "Scoring…" : "Score niche"}
+                  </button>
+                </form>
 
-              {/* CTA */}
-              {pageState.data.report_id ? (
-                <Link
-                  href={`/reports/${pageState.data.report_id}`}
-                  className="btn-ghost"
-                  style={{ textDecoration: "none", display: "inline-flex" }}
-                >
-                  View full report →
-                </Link>
-              ) : (
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: "var(--ink-3)",
-                    fontFamily: "var(--serif)",
-                    fontStyle: "italic",
-                  }}
-                >
-                  Full report not yet available.
-                </span>
-              )}
-            </div>
-          )}
+                {pageState.kind === "loading" && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    data-testid="loading-banner"
+                    style={{
+                      marginBottom: 16,
+                      background: "var(--info-soft)",
+                      border: "1px solid var(--info)",
+                      borderRadius: 8,
+                      padding: "14px 16px",
+                      fontFamily: "var(--serif)",
+                      fontStyle: "italic",
+                      fontSize: 14,
+                      color: "var(--info)",
+                    }}
+                  >
+                    Running live scoring pipeline — this takes up to a minute on first run.
+                  </div>
+                )}
+
+                {pageState.kind === "error" && (
+                  <div
+                    role="alert"
+                    data-testid="error-banner"
+                    style={{
+                      marginBottom: 16,
+                      background: "var(--danger-soft)",
+                      border: "1px solid var(--danger)",
+                      borderRadius: 8,
+                      padding: "14px 16px",
+                      fontFamily: "var(--serif)",
+                      fontSize: 14,
+                      color: "var(--danger)",
+                    }}
+                  >
+                    {pageState.message}
+                  </div>
+                )}
+
+                {pageState.kind === "success" && (
+                  <div
+                    data-testid="result-card"
+                    style={{
+                      background: "var(--card)",
+                      border: "1px solid var(--rule)",
+                      borderRadius: 10,
+                      padding: "24px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: "var(--serif)",
+                        fontStyle: "italic",
+                        fontSize: 13,
+                        color: "var(--ink-3)",
+                        marginBottom: 12,
+                      }}
+                    >
+                      {pageState.data.query.city}
+                      {pageState.data.query.state ? `, ${pageState.data.query.state}` : ""}
+                      {" · "}
+                      {pageState.data.query.service}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-end",
+                        gap: 16,
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div>
+                        <div className="field-label" style={{ marginBottom: 4 }}>
+                          Opportunity score
+                        </div>
+                        <div
+                          data-testid="opportunity-score"
+                          className="score"
+                          style={{ fontSize: 48, lineHeight: 1 }}
+                        >
+                          {pageState.data.score_result.opportunity_score}
+                        </div>
+                        <div style={{ width: 120, marginTop: 8 }}>
+                          <div className="score-bar">
+                            <div
+                              style={{
+                                width: pageState.data.score_result.opportunity_score + "%",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ paddingBottom: 6 }}>
+                        <ClassificationPill
+                          label={pageState.data.score_result.classification_label}
+                        />
+                      </div>
+                    </div>
+
+                    {pageState.data.report_id ? (
+                      <Link
+                        href={`/reports/${pageState.data.report_id}`}
+                        className="btn-ghost"
+                        style={{ textDecoration: "none", display: "inline-flex" }}
+                      >
+                        View full report →
+                      </Link>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: "var(--ink-3)",
+                          fontFamily: "var(--serif)",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        Full report not yet available.
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── Strategy tab ── */}
+            {activeTab === "strategy" && (
+              <StrategyPresetRail
+                onPick={() => showToast("Strategy search coming soon — Phase 3.")}
+              />
+            )}
+          </div>
+
+          {/* ── Right rail ── */}
+          <PinnedRecentRail
+            pinned={pinned}
+            recent={recent}
+            onPick={handleRailPick}
+          />
         </div>
       </div>
+
+      {toast && <Toast message={toast} onDone={dismissToast} />}
     </div>
   );
 }
