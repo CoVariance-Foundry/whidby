@@ -338,6 +338,12 @@ button { font-family: inherit; }
 .app.density-compact .btn-primary { padding: 8px 12px; font-size: 12.5px; }
 .app.density-compact .score { font-size: 17px; }
 
+/* ── User menu ───────────────────────────────────── */
+.user-menu-item:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
 /* Small decorative touches */
 .rule-hair { height: 1px; background: var(--rule); margin: 18px 0; }
 .kicker {
