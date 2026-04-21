@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.data.metro_db import Metro, MetroDB
 from src.clients.llm.client import LLMClient
 from src.clients.supabase_persistence import SupabasePersistence
 from src.pipeline.orchestrator import score_niche_for_metro
@@ -60,10 +61,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_METRO_DB: MetroDB | None = None
+
+
+def _metro_db() -> MetroDB:
+    global _METRO_DB
+    if _METRO_DB is None:
+        _METRO_DB = MetroDB.from_seed()
+    return _METRO_DB
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Liveness probe for Render and monitoring."""
     return {"status": "ok"}
+
+
+@app.get("/api/metros/suggest")
+def metros_suggest(q: str, limit: int = 10) -> list[dict[str, Any]]:
+    """Autocomplete metros by city prefix; returns highest-population matches first."""
+    q_norm = q.strip().lower()
+    if len(q_norm) < 2:
+        return []
+    clamped = max(1, min(limit, 20))
+
+    rows: list[tuple[Metro, str]] = []
+    for metro in _metro_db().all_metros():
+        principal_match = next(
+            (pc for pc in metro.principal_cities if pc.strip().lower().startswith(q_norm)),
+            None,
+        )
+        if principal_match is not None:
+            rows.append((metro, principal_match))
+            continue
+        if metro.cbsa_name.lower().startswith(q_norm):
+            # Fall back to the CBSA's first principal city for the "city" label.
+            display = metro.principal_cities[0] if metro.principal_cities else metro.cbsa_name
+            rows.append((metro, display))
+
+    rows.sort(key=lambda pair: pair[0].population, reverse=True)
+    rows = rows[:clamped]
+
+    return [
+        {
+            "cbsa_code": m.cbsa_code,
+            "city": city,
+            "state": m.state,
+            "cbsa_name": m.cbsa_name,
+            "population": m.population,
+        }
+        for m, city in rows
+    ]
 
 
 RUNS_DIR = Path(os.environ.get("RESEARCH_RUNS_DIR", "research_runs"))

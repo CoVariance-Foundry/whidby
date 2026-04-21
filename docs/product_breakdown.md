@@ -239,6 +239,10 @@ src/
     test_metro_db.py
 ```
 
+**Added methods (post-013):**
+- `all_metros() -> list[Metro]` — returns a flat copy of all seeded metros (unsorted), used by the autocomplete endpoint.
+- `find_by_city(city, state=None) -> Metro | None` — resolves a city name to its highest-population CBSA.
+
 **Eval criteria:**
 | Test | Method | Pass Criteria |
 |------|--------|--------------|
@@ -897,8 +901,9 @@ Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
 
 - `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run` in the request body.
 - `GET /api/niches/{report_id}` — reads the row back from Supabase.
+- `GET /api/metros/suggest?q=<prefix>&limit=<int>` — city autocomplete. Matches `q` (min 2 chars) against `principal_cities` (prefix) and `cbsa_name` (prefix fallback); emits one row per matching principal city. Returns highest-population matches first, capped at `limit` (default 10, max 20). Response shape: `[{cbsa_code, city, state, cbsa_name, population}]`. Module-level `MetroDB` singleton loaded once at import time.
 
-Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted).
+Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted). The `/api/metros/suggest` route is proxied by `apps/admin/src/app/api/agent/metros/suggest/route.ts`.
 
 ---
 

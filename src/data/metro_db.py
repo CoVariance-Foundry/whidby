@@ -64,6 +64,10 @@ class MetroDB:
 
     # -- Public API ----------------------------------------------------------
 
+    def all_metros(self) -> list[Metro]:
+        """Return all seeded metros (unsorted)."""
+        return list(self._all)
+
     def expand_scope(
         self,
         scope: str,
