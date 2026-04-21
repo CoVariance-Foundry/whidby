@@ -192,6 +192,22 @@ def fetch_lighthouse(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _missing_serpapi_key_payload(field: str) -> str:
+    """Return a tool-result payload for an unset SERPAPI_KEY env var."""
+    return json.dumps(
+        {
+            "status": "error",
+            "data": {
+                "error": (
+                    "SERPAPI_KEY is not configured in this environment; "
+                    f"cannot fetch {field}."
+                )
+            },
+            "cost": 0.0,
+        }
+    )
+
+
 def fetch_serpapi_google(
     keyword: str, location: str, gl: str = "us", hl: str = "en"
 ) -> str:
@@ -204,9 +220,15 @@ def fetch_serpapi_google(
         hl: UI language (default "en").
 
     Returns:
-        JSON string of the API response.
+        JSON string of the API response. When ``SERPAPI_KEY`` is not set,
+        returns a structured error payload instead of raising, so the
+        Claude tool-use loop can surface the misconfiguration as a tool
+        result rather than crash the runner.
     """
-    client = _get_serpapi_client()
+    try:
+        client = _get_serpapi_client()
+    except ValueError:
+        return _missing_serpapi_key_payload("serpapi_google")
     resp = _run_async(client.serp_google(q=keyword, location=location, gl=gl, hl=hl))
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
@@ -219,9 +241,13 @@ def fetch_serpapi_maps(keyword: str, ll: str) -> str:
         ll: Lat/lng/zoom string (e.g. "@40.7128,-74.0060,14z").
 
     Returns:
-        JSON string of the API response.
+        JSON string of the API response. When ``SERPAPI_KEY`` is not set,
+        returns a structured error payload instead of raising.
     """
-    client = _get_serpapi_client()
+    try:
+        client = _get_serpapi_client()
+    except ValueError:
+        return _missing_serpapi_key_payload("serpapi_maps")
     resp = _run_async(client.serp_maps(q=keyword, ll=ll))
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 

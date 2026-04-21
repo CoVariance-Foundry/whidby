@@ -114,6 +114,8 @@ class SerpAPIClient:
 
     # -- Internal: HTTP ------------------------------------------------------
 
+    _MAX_ERROR_BODY_CHARS: int = 500
+
     async def _get(self, params: dict[str, Any]) -> SerpAPIResponse:
         """Execute a single GET and normalize the response."""
         try:
@@ -124,7 +126,8 @@ class SerpAPIClient:
 
         if resp.status_code >= 400:
             raise SerpAPIError(
-                f"SerpAPI returned HTTP {resp.status_code}: {resp.text}"
+                f"SerpAPI returned HTTP {resp.status_code}: "
+                f"{self._redact_body(resp.text)}"
             )
 
         try:
@@ -133,3 +136,18 @@ class SerpAPIClient:
             raise SerpAPIError(f"invalid JSON body: {exc}") from exc
 
         return SerpAPIResponse(status="ok", data=body, cost=SERPAPI_SEARCH_COST_USD)
+
+    def _redact_body(self, body: str) -> str:
+        """Redact the API key from an error body before logging/raising.
+
+        SerpAPI sometimes echoes the failing request back in error responses,
+        which includes the ``api_key`` query parameter. We must strip it
+        before the message enters the tool-call audit log (which is
+        persisted to disk and fed back into the Claude conversation).
+        """
+        redacted = body or ""
+        if self._api_key:
+            redacted = redacted.replace(self._api_key, "***")
+        if len(redacted) > self._MAX_ERROR_BODY_CHARS:
+            redacted = redacted[: self._MAX_ERROR_BODY_CHARS] + "..."
+        return redacted

@@ -233,3 +233,44 @@ class TestErrorHandling:
         with pytest.raises(SerpAPIError) as excinfo:
             await client.serp_google(q="x", location="y")
         assert "invalid JSON body" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_4xx_error_redacts_api_key_from_body(self, mocker):
+        # SerpAPI sometimes echoes the request (including api_key) back in
+        # error bodies. The client MUST strip the key before raising so the
+        # audit log / tool-result transcript never leaks it.
+        mocker.patch("src.clients.serpapi.client.httpx.AsyncClient", _FakeAsyncClient)
+        api_key = "sk-very-secret-12345"
+        echoed_body = (
+            f'{{"error":"Invalid request","request_url":'
+            f'"https://serpapi.com/search?q=x&api_key={api_key}"}}'
+        )
+        _FakeAsyncClient._response = _FakeResponse(
+            400,
+            json_body={"error": "Invalid request"},
+            text=echoed_body,
+        )
+
+        client = SerpAPIClient(api_key=api_key)
+        with pytest.raises(SerpAPIError) as excinfo:
+            await client.serp_google(q="x", location="y")
+        msg = str(excinfo.value)
+        assert api_key not in msg, "API key must not appear in error message"
+        assert "***" in msg
+        assert "400" in msg
+
+    @pytest.mark.asyncio
+    async def test_4xx_error_body_truncated_to_500_chars(self, mocker):
+        mocker.patch("src.clients.serpapi.client.httpx.AsyncClient", _FakeAsyncClient)
+        _FakeAsyncClient._response = _FakeResponse(
+            500, text="A" * 2000
+        )
+
+        client = SerpAPIClient(api_key="k")
+        with pytest.raises(SerpAPIError) as excinfo:
+            await client.serp_google(q="x", location="y")
+        msg = str(excinfo.value)
+        # 500 body chars + "..." suffix means the error body in the message
+        # has "A" repeated some finite number of times, not 2000.
+        assert msg.count("A") <= 500 + 10, "error body must be truncated"
+        assert "..." in msg
