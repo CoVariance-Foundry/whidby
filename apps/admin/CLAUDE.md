@@ -41,7 +41,7 @@ apps/admin/
       niche-finder/               Types, validators, session context, service wrappers
       supabase/                   SSR client factories
       archetypes.ts               Niche strategy archetype catalog
-    middleware.ts                 Auth guard (redirects to /login)
+    proxy.ts                      Auth guard (redirects to /login)
   e2e/                            Playwright specs (run via playwright.config.ts)
   vitest.config.ts                Vitest excludes e2e/ so Playwright specs don't collide
 ```
@@ -87,4 +87,4 @@ Test accounts are documented in `docs-canonical/ENVIRONMENT.md` under "E2E test 
 ## Known footguns
 
 - The FastAPI bridge must be running for any `/api/agent/*` call to succeed. The admin `/api/agent/health` route surfaces bridge state — hit it when debugging "nothing renders."
-- Middleware auth guard treats `/api/agent/*` as protected (session required) but `/api/agent/health` is useful uncredentialed for diagnostics; confirm middleware lets it through if you add health-checking from CI.
+- The proxy auth guard treats `/api/agent/*` as protected (session required) but `/api/agent/health` is useful uncredentialed for diagnostics; confirm the proxy lets it through if you add health-checking from CI.

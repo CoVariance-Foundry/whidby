@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Icon, I } from "@/lib/icons";
+import UserMenu from "./UserMenu";
 
 type NavId = "home" | "finder" | "recs" | "reports";
 
@@ -17,6 +18,8 @@ const SAVED = [
 ];
 
 export default function Sidebar({ active }: { active: NavId }) {
+  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3001";
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -49,13 +52,12 @@ export default function Sidebar({ active }: { active: NavId }) {
         </div>
       ))}
 
-      <div className="sidebar-foot">
-        <div className="sidebar-foot-av">AR</div>
-        <div>
-          <div style={{ color: "var(--ink)", fontWeight: 500 }}>Alex Rivera</div>
-          <div style={{ color: "var(--ink-3)", fontSize: 11 }}>Pro plan</div>
-        </div>
-      </div>
+      <UserMenu
+        name="Alex Rivera"
+        plan="Pro plan"
+        initials="AR"
+        adminUrl={adminUrl}
+      />
     </aside>
   );
 }

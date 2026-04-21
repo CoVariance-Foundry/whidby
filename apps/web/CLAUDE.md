@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Whidby** (branded as "Widby") is a pre-launch landing page for an AI market intelligence tool targeting rank-and-rent SEO practitioners. The site collects waitlist signups via a multi-step onboarding modal and tracks visitor analytics. There is no authenticated app yet — this is a marketing/waitlist site.
+**Whidby** (branded as "Widby") is a pre-launch landing page for an AI market intelligence tool targeting rank-and-rent SEO practitioners. The site collects waitlist signups via a multi-step onboarding modal and tracks visitor analytics. A login page (`/login`) is available for existing authenticated users; successful login redirects to the consumer app (`apps/app`) via `NEXT_PUBLIC_CONSUMER_APP_URL`. All marketing pages remain public (no auth gate).
 
 ## Commands
 
@@ -48,6 +48,12 @@ The entire page (`src/app/page.tsx`) is a single `'use client'` component tree. 
 - UTM params are captured from URL and persisted in sessionStorage (`rr_utm` key)
 - Session IDs are generated per browser session (`rr_session_id` key)
 
+### Auth flow
+- `/login` — Email/password sign-in via Supabase `signInWithPassword`. On success, redirects to consumer app origin (`NEXT_PUBLIC_CONSUMER_APP_URL`). No auth gate on marketing pages.
+- `/auth/callback` — Forward-compatibility OAuth/magic-link callback. Exchanges code for session and redirects to consumer app.
+- Auth utilities: `src/lib/supabase/client.ts` (browser), `src/lib/supabase/server.ts` (server), `src/lib/auth/safe-next.ts` (redirect validation).
+- The existing singleton client in `src/lib/supabase.ts` is used by API routes for anonymous Supabase inserts and is not part of the auth flow.
+
 ### API routes
 | Route | Purpose |
 |---|---|
@@ -77,6 +83,7 @@ Required server-side:
 Required (public):
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
+- `NEXT_PUBLIC_CONSUMER_APP_URL` — Consumer app origin for post-login redirect (e.g. `http://localhost:3002`)
 
 ### Routing config
 `next.config.ts` has a redirect from `/podcast` → `/?utm_source=podcast&utm_medium=audio&utm_campaign=launch_2026`
