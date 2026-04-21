@@ -320,3 +320,52 @@ def test_get_report_download_404_when_missing(
 
     res = client.get("/api/reports/nope/none/download")
     assert res.status_code == 404
+
+
+def test_post_reports_rejects_traversal_in_run_id(
+    client: TestClient,
+) -> None:
+    # Pydantic validator on ReportRequest.run_id rejects "../" and similar;
+    # FastAPI returns 422 Unprocessable Entity for request-validation errors.
+    res = client.post(
+        "/api/reports",
+        json={
+            "recipe_id": "market_opportunity",
+            "inputs": {"service": "plumber", "cities": []},
+            "run_id": "../escape",
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_post_reports_rejects_unsafe_recipe_id(client: TestClient) -> None:
+    res = client.post(
+        "/api/reports",
+        json={
+            "recipe_id": "../../etc/passwd",
+            "inputs": {},
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_get_report_rejects_traversal_in_identifiers(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # FastAPI path-param regex rejects characters outside the safe set.
+    # Starlette's default path converter doesn't decode `%2F`, so the
+    # nested-slash form manifests as a 422 (regex mismatch) or 404
+    # (path didn't resolve to a route), never a file read outside RUNS_DIR.
+    import src.research_agent.api as api_module
+
+    monkeypatch.setattr(api_module, "RUNS_DIR", tmp_path)
+
+    # Dots aren't in the safe set.
+    res = client.get("/api/reports/..%2F..%2Fetc/passwd")
+    assert res.status_code in {404, 422}
+
+    # Explicit "." traversal segment.
+    res = client.get("/api/reports/bad.id/report")
+    assert res.status_code == 422

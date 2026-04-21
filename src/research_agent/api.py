@@ -8,22 +8,24 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import anthropic
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path as FastAPIPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
 from src.research_agent.memory.filesystem_store import FilesystemStore
 from src.research_agent.memory.graph_store import ResearchGraphStore
 from src.research_agent.plugins.registry_builder import build_plugin_registry
+from src.research_agent.plugins.report_plugin import REPORT_TIMESTAMP_FORMAT
 from src.research_agent.recipes.registry_builder import build_recipe_registry
 from src.research_agent.recipes.runner import RecipeRunner, RecipeRunnerError
 
@@ -256,10 +258,36 @@ def get_experiments(run_id: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+# Path-safe identifier: letters, digits, underscore, hyphen. Rejects "..",
+# "/", and anything that could escape the reports root.
+_SAFE_ID_PATTERN: str = r"^[A-Za-z0-9_-]+$"
+_SAFE_ID_RE = re.compile(_SAFE_ID_PATTERN)
+
+
 class ReportRequest(BaseModel):
     recipe_id: str
     inputs: dict[str, Any]
     run_id: str | None = None
+
+    @field_validator("recipe_id")
+    @classmethod
+    def _recipe_id_safe(cls, v: str) -> str:
+        if not _SAFE_ID_RE.match(v):
+            raise ValueError(
+                "recipe_id must contain only letters, digits, '-', or '_'"
+            )
+        return v
+
+    @field_validator("run_id")
+    @classmethod
+    def _run_id_safe(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _SAFE_ID_RE.match(v):
+            raise ValueError(
+                "run_id must contain only letters, digits, '-', or '_'"
+            )
+        return v
 
 
 class ReportResponse(BaseModel):
@@ -309,16 +337,16 @@ def _ensure_path_under(child: Path, parent: Path) -> None:
 def _parse_report_filename(stem: str) -> tuple[str, str]:
     """Split ``{recipe_id}_{timestamp}`` into ``(recipe_id, created_at_iso)``.
 
-    Mirrors the filename convention produced by
-    :class:`ReportPlugin` (``%Y%m%dT%H%M%SZ``). Returns the timestamp in
-    ISO-8601 (``%Y-%m-%dT%H:%M:%SZ``). Unrecognised formats fall back to
+    Mirrors the filename convention produced by :class:`ReportPlugin` via
+    :data:`REPORT_TIMESTAMP_FORMAT`. Returns the timestamp in ISO-8601
+    (``%Y-%m-%dT%H:%M:%SZ``). Unrecognised formats fall back to
     ``(stem, "")``.
     """
     if "_" not in stem:
         return stem, ""
     recipe_id, timestamp = stem.rsplit("_", 1)
     try:
-        parsed = datetime.strptime(timestamp, "%Y%m%dT%H%M%SZ").replace(
+        parsed = datetime.strptime(timestamp, REPORT_TIMESTAMP_FORMAT).replace(
             tzinfo=timezone.utc
         )
     except ValueError:
@@ -339,16 +367,20 @@ def create_report(req: ReportRequest) -> ReportResponse:
 
     run_id = req.run_id or str(uuid.uuid4())[:8]
     output_dir = RUNS_DIR / run_id / "reports"
+
+    # Validate path containment BEFORE creating any directories so a crafted
+    # run_id can't pre-create a directory outside the reports root even if
+    # _ensure_path_under later rejects the write.
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
     _ensure_path_under(output_dir, RUNS_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         anthropic_client = anthropic.Anthropic(
             api_key=os.environ.get("ANTHROPIC_API_KEY", "")
         )
     except ValueError as exc:
-        logger.info("Anthropic client construction failed: %s", exc)
+        logger.warning("Anthropic client construction failed: %s", exc)
         raise HTTPException(400, f"Anthropic client error: {exc}") from exc
 
     runner = RecipeRunner(
@@ -360,10 +392,10 @@ def create_report(req: ReportRequest) -> ReportResponse:
     try:
         result = runner.run(recipe, req.inputs, output_dir)
     except RecipeRunnerError as exc:
-        logger.info("Recipe runner error for '%s': %s", req.recipe_id, exc)
+        logger.warning("Recipe runner error for '%s': %s", req.recipe_id, exc)
         raise HTTPException(422, str(exc)) from exc
     except ValueError as exc:
-        logger.info("Invalid recipe input for '%s': %s", req.recipe_id, exc)
+        logger.warning("Invalid recipe input for '%s': %s", req.recipe_id, exc)
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Unexpected error running recipe '%s'", req.recipe_id)
@@ -421,14 +453,21 @@ def list_reports() -> ReportListResponse:
 
 
 @app.get("/api/reports/{run_id}/{report_id}")
-def get_report(run_id: str, report_id: str) -> dict[str, Any]:
+def get_report(
+    run_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+    report_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+) -> dict[str, Any]:
     """Return a single report's metadata plus its HTML contents."""
     report_path = RUNS_DIR / run_id / "reports" / f"{report_id}.html"
+
+    # Containment is checked BEFORE any filesystem access so a crafted
+    # identifier can't cause is_file() on a path outside the reports root.
+    _ensure_path_under(report_path, RUNS_DIR)
+
     if not report_path.is_file():
         raise HTTPException(
             404, f"Report '{report_id}' not found for run '{run_id}'"
         )
-    _ensure_path_under(report_path, RUNS_DIR)
 
     recipe_id, created_at = _parse_report_filename(report_id)
     html = report_path.read_text(encoding="utf-8")
@@ -443,14 +482,19 @@ def get_report(run_id: str, report_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/reports/{run_id}/{report_id}/download")
-def download_report(run_id: str, report_id: str) -> FileResponse:
+def download_report(
+    run_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+    report_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+) -> FileResponse:
     """Return the raw HTML file for a report."""
     report_path = RUNS_DIR / run_id / "reports" / f"{report_id}.html"
+
+    _ensure_path_under(report_path, RUNS_DIR)
+
     if not report_path.is_file():
         raise HTTPException(
             404, f"Report '{report_id}' not found for run '{run_id}'"
         )
-    _ensure_path_under(report_path, RUNS_DIR)
     return FileResponse(
         path=str(report_path),
         media_type="text/html",

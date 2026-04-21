@@ -29,6 +29,10 @@ TEMPLATE_DIR: Path = Path(__file__).resolve().parent.parent / "templates"
 
 ALLOWED_TEMPLATES: frozenset[str] = frozenset({"market_opportunity.html"})
 
+# UTC timestamp format used in report filenames. Shared between the plugin
+# (which writes) and the FastAPI layer (which parses for display).
+REPORT_TIMESTAMP_FORMAT: str = "%Y%m%dT%H%M%SZ"
+
 
 class ReportPlugin(ToolPlugin):
     """Plugin exposing the ``compose_report`` tool for recipe report rendering."""
@@ -109,7 +113,7 @@ class ReportPlugin(ToolPlugin):
         template = self._env.get_template(template_name)
         rendered = template.render(**context)
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(timezone.utc).strftime(REPORT_TIMESTAMP_FORMAT)
         filename = f"{recipe_id}_{timestamp}.html"
 
         output_dir.mkdir(parents=True, exist_ok=True)
