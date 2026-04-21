@@ -2,13 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isSafeNext } from "@/lib/auth/safe-next";
 
-const PUBLIC_ROUTES = ["/login", "/auth/callback", "/api/"];
+// Routes bypassed by the auth gate. Default API routes through the gate;
+// only add explicit opt-outs here (e.g. webhooks).
+const PUBLIC_ROUTES = ["/login", "/auth/callback"];
+
+const isPublicRoute = (pathname: string) =>
+  PUBLIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
   const { pathname, search } = request.nextUrl;
-  const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+  const isPublic = isPublicRoute(pathname);
 
   if (pathname.startsWith("/auth/callback")) {
     return NextResponse.next({ request });
@@ -95,7 +100,7 @@ function redirectToLogin(
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.search = "";
-  if (nextPath && !PUBLIC_ROUTES.some((r) => nextPath.startsWith(r))) {
+  if (nextPath && !isPublicRoute(nextPath)) {
     url.searchParams.set("next", nextPath);
   }
   return redirectWithCookies(url, supabaseResponse);
