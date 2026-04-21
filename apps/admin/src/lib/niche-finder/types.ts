@@ -1,6 +1,8 @@
 export interface NicheQueryInput {
   city: string;
   service: string;
+  /** Two-letter state abbreviation resolved via CityAutocomplete (optional). */
+  state?: string;
 }
 
 export interface NormalizedNicheQuery {
