@@ -53,9 +53,10 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",
-        "https://app.thewidby.com",
-        "https://whidby-1.onrender.com",
+        "http://localhost:3001",  # apps/admin dev
+        "http://localhost:3002",  # apps/app (consumer) dev
+        "https://app.thewidby.com",  # admin prod
+        "https://whidby-1.onrender.com",  # FastAPI self-host origin for health checks
     ],
     allow_methods=["*"],
     allow_headers=["*"],

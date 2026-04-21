@@ -62,10 +62,13 @@ export default function NicheFinderPage() {
 
   // Called by CityAutocomplete: free-type clears resolved state; selection sets both.
   const handleCityChange = (newCity: string, suggestion?: MetroSuggestion) => {
-    setCity(newCity);
     if (suggestion) {
+      // Dropdown selection passes a display string like "Phoenix, AZ".
+      // Keep query city canonical for API payloads.
+      setCity(suggestion.city);
       setState(suggestion.state);
     } else {
+      setCity(newCity);
       // Free-typed text — clear any previously resolved state
       setState(undefined);
     }

@@ -33,18 +33,33 @@ vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
     "data-testid": testId = "city-input",
   }: {
     value: string;
-    onChange: (city: string) => void;
+    onChange: (city: string, suggestion?: { city: string; state: string }) => void;
     disabled?: boolean;
     "data-testid"?: string;
   }) => (
-    <input
-      data-testid={testId}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      role="combobox"
-      aria-expanded={false}
-    />
+    <>
+      <input
+        data-testid={testId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        role="combobox"
+        aria-expanded={false}
+      />
+      <button
+        type="button"
+        data-testid="city-select-phoenix-az"
+        disabled={disabled}
+        onClick={() =>
+          onChange("Phoenix, AZ", {
+            city: "Phoenix",
+            state: "AZ",
+          })
+        }
+      >
+        Select Phoenix AZ
+      </button>
+    </>
   ),
 }));
 
@@ -133,6 +148,29 @@ describe("NicheFinderPage", () => {
       expect(screen.getByTestId("opportunity-score")).toBeInTheDocument();
     });
     expect(screen.getByTestId("opportunity-score")).toHaveTextContent("72");
+  });
+
+  it("selected autocomplete suggestion sends canonical city + state", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(SUCCESS_RESPONSE), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    render(<NicheFinderPage />);
+    fireEvent.click(screen.getByTestId("city-select-phoenix-az"));
+    fireEvent.change(screen.getByTestId("service-input"), {
+      target: { value: "roofing" },
+    });
+    fireEvent.click(screen.getByTestId("submit-btn"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.city).toBe("Phoenix");
+    expect(body.state).toBe("AZ");
+    expect(body.city).not.toBe("Phoenix, AZ");
   });
 
   it("success response renders a View full report link", async () => {
