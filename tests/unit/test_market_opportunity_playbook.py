@@ -283,6 +283,25 @@ def test_summarize_three_markets_median_is_middle_score() -> None:
     assert s["median_score"] == 0.5
 
 
+def test_summarize_top_market_tie_break_is_deterministic() -> None:
+    # Two markets share the highest score. The alphabetically earlier
+    # city must always win, regardless of input order.
+    forward = _summarize(
+        [
+            {"city": "Austin, TX", "score": 0.9},
+            {"city": "Boise, ID", "score": 0.9},
+        ]
+    )
+    reversed_order = _summarize(
+        [
+            {"city": "Boise, ID", "score": 0.9},
+            {"city": "Austin, TX", "score": 0.9},
+        ]
+    )
+    assert forward["top_market"] == "Austin, TX"
+    assert reversed_order["top_market"] == "Austin, TX"
+
+
 # ---------------------------------------------------------------------------
 # Registry integration
 # ---------------------------------------------------------------------------

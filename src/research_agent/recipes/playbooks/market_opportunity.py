@@ -146,7 +146,10 @@ def _summarize(markets: list[dict[str, Any]]) -> dict[str, Any]:
         }
 
     scores = [float(m["score"]) for m in markets]
-    top = max(markets, key=lambda m: m["score"])
+    # Deterministic tie-break: sort by (score desc, city asc) and take the
+    # first. Two markets with identical scores always pick the same "top"
+    # regardless of input order.
+    top = sorted(markets, key=lambda m: (-m["score"], m["city"]))[0]
     return {
         "total_markets": len(markets),
         "top_market": top["city"],
@@ -165,10 +168,9 @@ def compute_market_opportunity_context(collected: dict[str, Any]) -> dict[str, A
 
     scored_markets: list[dict[str, Any]] = []
     for market in raw_markets:
-        result = opportunity_score(market, batch=raw_markets) if raw_markets else {
-            "score": 0.0,
-            "components": {},
-        }
+        # raw_markets is truthy here by virtue of being iterable non-empty;
+        # opportunity_score handles the single-element case (0.5 neutral).
+        result = opportunity_score(market, batch=raw_markets)
         scored = {
             **market,
             "score": float(result["score"]),
