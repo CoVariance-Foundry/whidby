@@ -21,7 +21,11 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         niche: body.service.trim(),
         city: body.city.trim(),
-        state: (body.state ?? "").trim() || "AZ",
+        // state is optional — omitted lets the backend search all seeded
+        // metros. Only pass when the caller explicitly sets it.
+        ...(typeof body.state === "string" && body.state.trim()
+          ? { state: body.state.trim() }
+          : {}),
         strategy_profile: body.strategy_profile ?? "balanced",
         dry_run: dryRun,
       }),

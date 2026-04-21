@@ -31,38 +31,32 @@ async def score_niche_for_metro(
     *,
     niche: str,
     city: str,
-    state: str,
+    state: str | None = None,
     strategy_profile: str = "balanced",
     llm_client: Any,
     dataforseo_client: Any,
     metro_db: MetroDB | None = None,
     dry_run: bool = False,
 ) -> ScoreNicheResult:
-    """Score a (niche, city, state) pair end-to-end.
+    """Score a (niche, city, state?) tuple end-to-end.
 
-    Runs M4 -> M5 -> M6 -> M7 -> M8 -> M9 against the single metro that
-    matches (city, state). Raises ValueError if the metro is unknown.
+    Runs M4 -> M5 -> M6 -> M7 -> M8 -> M9 against the single metro whose
+    `principal_cities` (or fallback `cbsa_name`) matches `city`. If `state`
+    is provided it narrows the search (useful when a city name collides
+    across states). Raises ValueError if no metro in the seed matches.
     """
     started = time.monotonic()
     metros_db = metro_db or MetroDB.from_seed()
-    candidates = metros_db.expand_scope(scope="state", target=state, depth="standard")
-    city_norm = city.strip().lower()
-    target = next(
-        (
-            m for m in candidates
-            if any(pc.strip().lower() == city_norm for pc in m.principal_cities)
-            or city_norm in m.cbsa_name.lower()
-        ),
-        None,
-    )
+    target = metros_db.find_by_city(city, state=state)
     if target is None:
         raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
+    resolved_state = target.state
 
     if dry_run:
         return await _dry_run_result(
             niche=niche,
             city=city,
-            state=state,
+            state=resolved_state,
             target=target,
             strategy_profile=strategy_profile,
             started=started,
@@ -138,7 +132,7 @@ async def score_niche_for_metro(
         "input": {
             "niche_keyword": niche,
             "geo_scope": "city",
-            "geo_target": f"{city}, {state}",
+            "geo_target": f"{city}, {resolved_state}",
             "report_depth": "standard",
             "strategy_profile": strategy_profile,
         },

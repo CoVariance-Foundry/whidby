@@ -130,6 +130,48 @@ def test_score_niche_raises_valueerror_on_unknown_city() -> None:
         )
 
 
+def test_score_niche_resolves_state_from_city_when_state_absent() -> None:
+    """Regression: callers (Next.js proxies, frontend) no longer supply
+    `state`. The orchestrator must search all seeded metros and resolve
+    the correct state from the city name alone — e.g. Denver -> CO,
+    Atlanta -> GA, Seattle -> WA — not assume AZ."""
+    with patch("src.pipeline.orchestrator.expand_keywords",
+               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
+         patch("src.pipeline.orchestrator.collect_data",
+               new=AsyncMock(return_value=RawCollectionResult(
+                   metros={"19820": MetroCollectionResult(metro_id="19820")},
+                   meta=RunMetadata(
+                       total_api_calls=1,
+                       total_cost_usd=0.01,
+                       collection_time_seconds=0.1,
+                   ),
+               ))), \
+         patch("src.pipeline.orchestrator.extract_signals",
+               return_value=_FAKE_SIGNALS), \
+         patch("src.pipeline.orchestrator.compute_scores",
+               return_value=_FAKE_SCORES), \
+         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
+         patch("src.pipeline.orchestrator.classify_serp_archetype",
+               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
+         patch("src.pipeline.orchestrator.compute_difficulty_tier",
+               return_value=_FAKE_DIFFICULTY_RESULT), \
+         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
+               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+        result = asyncio.run(
+            score_niche_for_metro(
+                niche="landscaping",
+                city="Denver",
+                # state deliberately omitted
+                llm_client=object(),
+                dataforseo_client=object(),
+            )
+        )
+
+    metro = result.report["metros"][0]
+    assert metro["cbsa_code"] == "19820"  # Denver-Aurora-Lakewood, CO
+    assert result.report["input"]["geo_target"] == "Denver, CO"
+
+
 def test_dry_run_returns_deterministic_report_without_clients() -> None:
     first = asyncio.run(
         score_niche_for_metro(

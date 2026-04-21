@@ -96,17 +96,25 @@ class ExplorationFollowupRequest(BaseModel):
 class NicheScoreRequest(BaseModel):
     niche: str
     city: str
-    state: str
+    state: str | None = None
     strategy_profile: str = "balanced"
     dry_run: bool = False
 
-    @field_validator("niche", "city", "state")
+    @field_validator("niche", "city")
     @classmethod
     def _non_empty(cls, v: str) -> str:
         v = v.strip()
         if not v:
             raise ValueError("must be non-empty")
         return v
+
+    @field_validator("state")
+    @classmethod
+    def _normalize_state(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        return trimmed or None
 
 
 # ---------------------------------------------------------------------------
