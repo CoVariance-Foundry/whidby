@@ -4,67 +4,99 @@ import Link from "next/link";
 import { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
-import StatusPill, { type ReportStatus } from "@/components/StatusPill";
-import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
 import { Icon, I } from "@/lib/icons";
+import type { ReportListRow } from "@/lib/niche-finder/reports-mapper";
 
-type ReportKind = "strategy" | "niche";
-
-interface ReportRow {
-  id: string;
-  title: string;
-  kind: ReportKind;
-  archetypeId: ArchetypeId;
-  metros: number;
-  top: number;
-  avg: number;
-  status: ReportStatus;
-  owner: string;
-  date: string;
+// Opportunity score thresholds → label + color token
+function ScorePill({ score }: { score: number | null }) {
+  if (score === null) {
+    return (
+      <span
+        style={{
+          display: "inline-block",
+          padding: "2px 8px",
+          borderRadius: 4,
+          fontSize: 11.5,
+          fontFamily: "var(--mono)",
+          background: "var(--paper-alt)",
+          color: "var(--ink-3)",
+          border: "1px solid var(--rule)",
+        }}
+      >
+        Unknown
+      </span>
+    );
+  }
+  const label = score >= 75 ? "High" : score >= 50 ? "Medium" : "Low";
+  const color =
+    score >= 75
+      ? { bg: "#e6f4ea", border: "#a8d5b5", text: "#1a6630" }
+      : score >= 50
+      ? { bg: "#fff8e1", border: "#ffe082", text: "#795500" }
+      : { bg: "#fce8e6", border: "#f5bcb6", text: "#a32b22" };
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "2px 8px",
+        borderRadius: 4,
+        fontSize: 11.5,
+        fontFamily: "var(--mono)",
+        background: color.bg,
+        color: color.text,
+        border: `1px solid ${color.border}`,
+      }}
+    >
+      <span
+        style={{
+          fontWeight: 700,
+          fontSize: 13,
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1,
+        }}
+      >
+        {score}
+      </span>
+      {label}
+    </span>
+  );
 }
 
-const REPORT_ROWS: ReportRow[] = [
-  { id: "R‑0148", title: "Mountain West roofing sweep",           kind: "strategy", archetypeId: "PACK_VULN", metros: 5,  top: 82, avg: 72.4, status: "complete", owner: "AR", date: "Jan 18" },
-  { id: "R‑0147", title: "roofing · Phoenix, AZ",                 kind: "niche",    archetypeId: "AGG",       metros: 1,  top: 42, avg: 42.0, status: "complete", owner: "AR", date: "Jan 18" },
-  { id: "R‑0146", title: "Florida inland flood niches",           kind: "strategy", archetypeId: "FRAG_WEAK", metros: 8,  top: 77, avg: 64.1, status: "complete", owner: "AR", date: "Jan 17" },
-  { id: "R‑0145", title: "water damage · Tampa, FL",              kind: "niche",    archetypeId: "PACK_EST",  metros: 1,  top: 61, avg: 61.0, status: "complete", owner: "AR", date: "Jan 16" },
-  { id: "R‑0144", title: "Fast‑path pack opportunities",          kind: "strategy", archetypeId: "PACK_VULN", metros: 12, top: 84, avg: 70.9, status: "running",  owner: "AR", date: "Jan 16" },
-  { id: "R‑0143", title: "garage door repair · Austin, TX",       kind: "niche",    archetypeId: "FRAG_COMP", metros: 1,  top: 54, avg: 54.0, status: "complete", owner: "AR", date: "Jan 14" },
-  { id: "R‑0142", title: "Mid‑tier aggregator plays",             kind: "strategy", archetypeId: "AGG",       metros: 6,  top: 68, avg: 59.3, status: "complete", owner: "AR", date: "Jan 12" },
-  { id: "R‑0141", title: "tree service · Southeast sweep",        kind: "strategy", archetypeId: "FRAG_WEAK", metros: 7,  top: 76, avg: 62.8, status: "complete", owner: "JP", date: "Jan 11" },
-  { id: "R‑0140", title: "barren niche probe — secondary cities", kind: "strategy", archetypeId: "BARREN",    metros: 9,  top: 71, avg: 58.2, status: "archived", owner: "AR", date: "Jan 08" },
-  { id: "R‑0139", title: "gutter installation · Boise, ID",       kind: "niche",    archetypeId: "PACK_VULN", metros: 1,  top: 79, avg: 79.0, status: "complete", owner: "AR", date: "Jan 07" },
-];
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
 
-const TABLE_GRID = "82px minmax(0,2.6fr) 1.2fr 80px 80px 90px 110px 60px";
+interface ReportsViewProps {
+  rows: ReportListRow[];
+}
 
-type KindFilter = "all" | ReportKind;
+const TABLE_GRID = "minmax(0,2.6fr) 1.4fr 120px 100px";
 
-export default function ReportsView() {
-  const [selectedArchs, setSelectedArchs] = useState<ArchetypeId[]>([]);
-  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+export default function ReportsView({ rows }: ReportsViewProps) {
   const [query, setQuery] = useState("");
 
   const trimmedQuery = query.trim().toLowerCase();
 
-  const rows = REPORT_ROWS.filter((r) => {
-    if (kindFilter !== "all" && r.kind !== kindFilter) return false;
-    if (selectedArchs.length > 0 && !selectedArchs.includes(r.archetypeId)) return false;
-    if (trimmedQuery && !r.title.toLowerCase().includes(trimmedQuery) && !r.id.toLowerCase().includes(trimmedQuery)) {
-      return false;
-    }
-    return true;
+  const filtered = rows.filter((r) => {
+    if (!trimmedQuery) return true;
+    return (
+      r.niche_keyword.toLowerCase().includes(trimmedQuery) ||
+      r.geo_target.toLowerCase().includes(trimmedQuery) ||
+      r.id.toLowerCase().includes(trimmedQuery)
+    );
   });
 
-  const toggleArch = (id: ArchetypeId) =>
-    setSelectedArchs((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-
-  const total = REPORT_ROWS.length;
-  const running = REPORT_ROWS.filter((r) => r.status === "running").length;
-  const metros = REPORT_ROWS.reduce((a, b) => a + b.metros, 0);
-  const avgTop = (REPORT_ROWS.reduce((a, b) => a + b.top, 0) / total).toFixed(1);
+  const total = rows.length;
 
   return (
     <div className="app density-roomy">
@@ -87,7 +119,7 @@ export default function ReportsView() {
                 Reports
               </div>
               <div className="page-sub">
-                Every search you&apos;ve run and saved. Open a report to re‑view the
+                Every search you&apos;ve run and saved. Open a report to re&#8209;view the
                 ranked metros, signals, and guidance at the time it was scored.
               </div>
             </div>
@@ -104,16 +136,14 @@ export default function ReportsView() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
+              gridTemplateColumns: "repeat(2, 1fr)",
               gap: 12,
               marginBottom: 22,
             }}
           >
             {[
               { label: "Total reports", value: String(total) },
-              { label: "Currently running", value: String(running) },
-              { label: "Metros scored", value: String(metros) },
-              { label: "Avg top score", value: avgTop },
+              { label: "Showing", value: String(filtered.length) },
             ].map((s) => (
               <div
                 key={s.label}
@@ -147,7 +177,7 @@ export default function ReportsView() {
           <div
             style={{
               display: "flex",
-              flexDirection: "column",
+              alignItems: "center",
               gap: 12,
               marginBottom: 14,
               background: "var(--card)",
@@ -156,166 +186,33 @@ export default function ReportsView() {
               padding: "12px 14px",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <Icon d={I.search} />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search reports by title, niche, metro…"
-                  style={{
-                    flex: 1,
-                    background: "transparent",
-                    border: "none",
-                    outline: "none",
-                    fontSize: 13,
-                    color: "var(--ink)",
-                    fontFamily: "inherit",
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 4,
-                  padding: 3,
-                  background: "var(--paper-alt)",
-                  border: "1px solid var(--rule)",
-                  borderRadius: 8,
-                }}
-              >
-                {(
-                  [
-                    { v: "all", label: "All" },
-                    { v: "strategy", label: "Strategy" },
-                    { v: "niche", label: "Niche & city" },
-                  ] as const
-                ).map((o) => {
-                  const on = kindFilter === o.v;
-                  return (
-                    <button
-                      key={o.v}
-                      onClick={() => setKindFilter(o.v)}
-                      style={{
-                        padding: "5px 10px",
-                        fontSize: 11.5,
-                        borderRadius: 5,
-                        fontFamily: "var(--serif)",
-                        fontStyle: on ? "normal" : "italic",
-                        fontWeight: on ? 600 : 400,
-                        background: on ? "var(--card)" : "transparent",
-                        boxShadow: on ? "0 0 0 1px var(--rule)" : "none",
-                        color: on ? "var(--ink)" : "var(--ink-2)",
-                      }}
-                    >
-                      {o.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <button className="btn-ghost">
-                <Icon d={I.save} /> Export
-              </button>
-            </div>
-
-            {/* Archetype chip filter */}
             <div
               style={{
+                flex: 1,
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
-                paddingTop: 10,
-                borderTop: "1px dashed var(--rule)",
+                gap: 8,
               }}
             >
-              <div
-                className="field-label"
-                style={{ margin: 0, flexShrink: 0 }}
-              >
-                Strategy
-              </div>
-              <div className="chip-row" style={{ flex: 1 }}>
-                <button
-                  className="chip"
-                  onClick={() => setSelectedArchs([])}
-                  style={
-                    selectedArchs.length === 0
-                      ? {
-                          background: "var(--accent-soft)",
-                          borderColor: "var(--accent)",
-                          color: "var(--accent-ink)",
-                        }
-                      : {}
-                  }
-                >
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      background:
-                        selectedArchs.length === 0
-                          ? "var(--accent)"
-                          : "var(--ink-3)",
-                    }}
-                  />
-                  All strategies
-                </button>
-                {ARCHETYPES.map((a) => {
-                  const on = selectedArchs.includes(a.id);
-                  return (
-                    <button
-                      key={a.id}
-                      className="chip"
-                      onClick={() => toggleArch(a.id)}
-                      style={
-                        on
-                          ? {
-                              background: "var(--accent-soft)",
-                              borderColor: "var(--accent)",
-                              color: "var(--accent-ink)",
-                            }
-                          : {}
-                      }
-                    >
-                      <span
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 3,
-                          background: on ? "var(--accent)" : "var(--ink-3)",
-                        }}
-                      />
-                      {a.short}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedArchs.length > 0 && (
-                <button
-                  onClick={() => setSelectedArchs([])}
-                  style={{
-                    fontSize: 11,
-                    color: "var(--ink-3)",
-                    fontFamily: "var(--serif)",
-                    fontStyle: "italic",
-                    flexShrink: 0,
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  Clear
-                </button>
-              )}
+              <Icon d={I.search} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by niche, metro, or ID…"
+                style={{
+                  flex: 1,
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  fontSize: 13,
+                  color: "var(--ink)",
+                  fontFamily: "inherit",
+                }}
+              />
             </div>
+            <button className="btn-ghost">
+              <Icon d={I.save} /> Export
+            </button>
           </div>
 
           {/* Table */}
@@ -324,17 +221,36 @@ export default function ReportsView() {
               className="res-row head"
               style={{ gridTemplateColumns: TABLE_GRID }}
             >
-              <div>ID</div>
-              <div>Report</div>
-              <div>Strategy</div>
-              <div>Metros</div>
-              <div>Top</div>
-              <div>Status</div>
-              <div>Updated</div>
-              <div></div>
+              <div>Niche</div>
+              <div>Market</div>
+              <div>Score</div>
+              <div>Date</div>
             </div>
 
-            {rows.length === 0 && (
+            {/* Empty state — no data at all */}
+            {total === 0 && (
+              <div
+                style={{
+                  padding: "48px 18px",
+                  textAlign: "center",
+                  color: "var(--ink-3)",
+                  fontFamily: "var(--serif)",
+                  fontStyle: "italic",
+                  fontSize: 14,
+                }}
+              >
+                No reports yet — run a niche finder to generate your first report.{" "}
+                <Link
+                  href="/niche-finder"
+                  style={{ color: "var(--accent)", textDecoration: "underline" }}
+                >
+                  Go to Niche Finder
+                </Link>
+              </div>
+            )}
+
+            {/* Search returned nothing but there are rows */}
+            {total > 0 && filtered.length === 0 && (
               <div
                 style={{
                   padding: "40px 18px",
@@ -345,71 +261,51 @@ export default function ReportsView() {
                   fontSize: 13,
                 }}
               >
-                No reports match the selected filters.
+                No reports match your search.
               </div>
             )}
 
-            {rows.map((r) => {
-              const arch = ARCHETYPES.find((a) => a.id === r.archetypeId);
-              return (
+            {filtered.map((r) => (
+              <Link
+                key={r.id}
+                href={`/reports/${r.id}`}
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
                 <div
-                  key={r.id}
                   className="res-row"
                   style={{
                     gridTemplateColumns: TABLE_GRID,
                     alignItems: "center",
                     paddingTop: 14,
                     paddingBottom: 14,
+                    cursor: "pointer",
                   }}
                 >
-                  <div
-                    style={{
-                      fontFamily: "var(--mono)",
-                      fontSize: 11.5,
-                      color: "var(--ink-3)",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {r.id}
-                  </div>
+                  {/* Niche keyword */}
                   <div style={{ minWidth: 0 }}>
                     <div
+                      className="res-metro"
+                      title={r.niche_keyword}
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
+                        lineHeight: 1.3,
                         minWidth: 0,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
-                      <Icon
-                        d={r.kind === "strategy" ? I.sparkle : I.search}
-                        size={12}
-                      />
-                      <div
-                        className="res-metro"
-                        title={r.title}
-                        style={{
-                          lineHeight: 1.3,
-                          minWidth: 0,
-                          flex: 1,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {r.title}
-                      </div>
+                      {r.niche_keyword}
                     </div>
                     <div
                       className="res-metro-sub"
-                      style={{ marginLeft: 20, marginTop: 4 }}
+                      style={{ marginTop: 3, fontFamily: "var(--mono)", fontSize: 10.5 }}
                     >
-                      by {r.owner} ·{" "}
-                      {r.metros === 1 ? "single metro" : r.metros + " metros"}
+                      {r.id.slice(0, 8)}
                     </div>
                   </div>
+
+                  {/* Geo target */}
                   <div
-                    title={arch?.title ?? ""}
                     style={{
                       fontSize: 12.5,
                       color: "var(--ink-2)",
@@ -418,31 +314,15 @@ export default function ReportsView() {
                       textOverflow: "ellipsis",
                     }}
                   >
-                    {arch ? arch.short : "—"}
+                    {r.geo_target}
                   </div>
-                  <div
-                    style={{
-                      fontFamily: "var(--serif)",
-                      fontSize: 15,
-                      fontWeight: 600,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {r.metros}
-                  </div>
+
+                  {/* Opportunity score pill */}
                   <div>
-                    <div className="score" style={{ fontSize: 17 }}>
-                      {r.top}
-                    </div>
-                    <div style={{ width: 48, marginTop: 4 }}>
-                      <div className="score-bar">
-                        <div style={{ width: r.top + "%" }} />
-                      </div>
-                    </div>
+                    <ScorePill score={r.opportunity_score} />
                   </div>
-                  <div>
-                    <StatusPill status={r.status} />
-                  </div>
+
+                  {/* Date */}
                   <div
                     style={{
                       fontSize: 12,
@@ -451,16 +331,11 @@ export default function ReportsView() {
                       fontStyle: "italic",
                     }}
                   >
-                    {r.date}
-                  </div>
-                  <div>
-                    <button className="res-open" aria-label={"Open " + r.id}>
-                      <Icon d={I.arrow} />
-                    </button>
+                    {formatDate(r.created_at)}
                   </div>
                 </div>
-              );
-            })}
+              </Link>
+            ))}
           </div>
 
           <div
@@ -470,22 +345,9 @@ export default function ReportsView() {
               color: "var(--ink-3)",
               fontFamily: "var(--serif)",
               fontStyle: "italic",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
             }}
           >
-            <span>
-              Showing {rows.length} of {total} reports
-            </span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn-ghost" style={{ padding: "6px 10px" }}>
-                Previous
-              </button>
-              <button className="btn-ghost" style={{ padding: "6px 10px" }}>
-                Next
-              </button>
-            </div>
+            Showing {filtered.length} of {total} reports
           </div>
         </div>
       </div>

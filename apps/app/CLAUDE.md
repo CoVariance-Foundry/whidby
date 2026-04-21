@@ -1,13 +1,12 @@
 # Consumer App — Widby Reports
 
-Light academic theme, port 3002. Deploys separately from the admin dashboard. Scaffolded in commit `8fef1ee` (2026-04-20) with **backend wiring deliberately deferred** — the current app is a presentation scaffold.
+Light academic theme, port 3002. Deploys separately from the admin dashboard. Scaffolded in commit `8fef1ee` (2026-04-20); backend wiring landed in PR #24 (`014-consumer-niche-finder-wiring`).
 
 ## Purpose
 
-The user-facing consumer product. Where operators will eventually:
-- Submit city + service for a niche score (current: this lives in admin; future: migrates here)
-- Review historical reports with filtering by archetype
-- Manage saved searches
+The user-facing consumer product where operators:
+- Score a niche by submitting city + service on `/niche-finder` (hits the Python orchestrator via the FastAPI bridge)
+- Review their history of scored reports on `/reports` (live Supabase read)
 
 ## Topology (current)
 
@@ -21,32 +20,42 @@ apps/app/
       (protected)/
         layout.tsx             Sidebar + Topbar shell
         page.tsx               Home; currently redirects to /reports
+        niche-finder/          City+service scoring page with CityAutocomplete
         reports/
-          page.tsx             Reports index wrapper
-          ReportsView.tsx      Reports table + stats (currently HARDCODED mock data)
+          page.tsx             Server component — SSR Supabase fetch from `reports`
+          ReportsView.tsx      Client table (props-driven, no mock data)
+        recommendations/       "Coming soon" stub so sidebar link stops 404-ing
+      api/
+        agent/
+          scoring/route.ts     POST → FastAPI /api/niches/score
+          metros/suggest/      GET → FastAPI /api/metros/suggest (autocomplete)
+          health/route.ts      GET → FastAPI /health
     components/
-      Sidebar.tsx              Nav: Home, Niche finder, Recommendations, Reports
-      Topbar.tsx               Breadcrumb + actions
-      StatusPill.tsx           Archetype status badge
+      niche-finder/
+        CityAutocomplete.tsx   Mirror of apps/admin/ component, light-themed
+      Sidebar.tsx / Topbar.tsx / StatusPill.tsx
     lib/
-      archetypes.ts            Catalog of 8 strategy archetypes
-      icons.tsx                Light-theme SVG icons
-      supabase/                SSR client factories (same shape as admin's)
-      utils.ts                 cn() helper (clsx + tailwind-merge)
-    middleware.ts              Auth guard (identical to admin's)
+      niche-finder/            Mirrors of apps/admin/src/lib/niche-finder/ (types,
+                               request-validation, metro-suggest, reports-mapper)
+      archetypes.ts / icons.tsx / utils.ts / supabase/
+    middleware.ts              Auth guard
 ```
 
-## Gaps (known work items — do NOT assume these are done)
+## Niche-finder flow on consumer
 
-As of 2026-04-21, the consumer app does not yet have:
+1. User visits `/niche-finder`, types a city → `CityAutocomplete` hits `/api/agent/metros/suggest` for suggestions.
+2. User selects a suggestion → form populates both `city` AND `state`.
+3. Submit sends `POST /api/agent/scoring` with `{city, service, state}`; state is optional (the orchestrator resolves via `MetroDB.find_by_city` if missing).
+4. FastAPI runs M4 → M9, persists to Supabase, returns `{report_id, opportunity_score, classification_label, evidence, report}`.
+5. Success card links to `/reports/{report_id}` (detail page is a future PR; for now the list view is the only Supabase read).
 
-- **Any `/api/` routes.** The Sidebar links `/niche-finder` → a page that doesn't exist. Clicking it 404s.
-- **A scoring proxy.** `NEXT_PUBLIC_API_URL` is declared in `.env.example` but unused here.
-- **Real reports data.** `ReportsView.tsx` lines ~26-37 hardcode 10 fake rows. Needs to read from Supabase `reports` table (populated by the admin's niche-finder via the FastAPI bridge).
-- **`/recommendations` page.** Sidebar links to it; page missing.
-- **Shared niche-finder lib.** Admin has `apps/admin/src/lib/niche-finder/` with types, validators, session context. Consumer has nothing equivalent. Either lift to `packages/niche-finder/` or duplicate with a Supabase-read-only variant.
+## RLS
 
-When wiring any of the above, follow the patterns in `apps/admin/` — same FastAPI bridge URL, same `NEXT_PUBLIC_NICHE_DRY_RUN` toggle, same snake_case wire format, same loading/error banners.
+Migration `supabase/migrations/005_authenticated_read_reports.sql` grants `authenticated` users SELECT on `reports`, `report_keywords`, `metro_signals`, `metro_scores`. Writes remain service_role only (via the Python scoring engine). If you add new tables the consumer reads, add matching SELECT-for-authenticated policies.
+
+## Mirror-lib convention
+
+`apps/app/src/lib/niche-finder/*` and `apps/app/src/components/niche-finder/CityAutocomplete.tsx` are verbatim mirrors of their `apps/admin/` counterparts with a `// Mirror of ...` header. Keep them in sync until extracted to `packages/niche-finder/` in a dedicated PR.
 
 ## Dev commands
 

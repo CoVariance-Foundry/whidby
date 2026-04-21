@@ -1,3 +1,5 @@
+// Mirror of apps/admin/src/lib/niche-finder/types.ts. Keep in sync until lifted to packages/.
+
 export interface NicheQueryInput {
   city: string;
   service: string;

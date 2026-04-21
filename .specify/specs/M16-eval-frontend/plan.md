@@ -6,7 +6,7 @@
 
 ## Summary
 
-Deliver the internal auth gate and navigation shell for the Widby eval frontend. Uses Supabase magic-link (OTP) authentication to restrict access to authenticated users only. The sidebar is scoped to only the agent/chat route for initial dev testing. Other M16 routes remain as placeholders gated behind auth.
+Deliver the internal auth gate and navigation shell for the Widby eval frontend. Uses Supabase email + password authentication (`signInWithPassword`) to restrict access to authenticated users only; the older magic-link/OTP flow was replaced in PR #22 (`012-auth-password-login`). The sidebar is scoped to only the agent/chat route for initial dev testing. Other M16 routes remain as placeholders gated behind auth.
 
 ## Technical Context
 
@@ -78,12 +78,12 @@ User visits any route
   → If authenticated and route is /login → redirect to /
 
 Login page (/login):
-  → User enters email (prefilled: antwoine@covariance.studio)
-  → signInWithOtp({ email, options: { emailRedirectTo: /auth/callback } })
-  → "Check your email" confirmation shown
+  → User enters email + password
+  → supabase.auth.signInWithPassword({ email, password })
+  → On success, redirect to / (or original destination)
 
 Auth callback (/auth/callback):
-  → Exchanges code for session via supabase.auth.exchangeCodeForSession
+  → Retained for OAuth providers that may be added later (still exchanges `code` via supabase.auth.exchangeCodeForSession when present)
   → Redirects to /
 
 Protected layout ((protected)/layout.tsx):
