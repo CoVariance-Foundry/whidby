@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Market Opportunity Analysis &mdash; {{ service }}{% endblock %}
+{% block eyebrow %}Covariance &middot; Niche Finder{% endblock %}
+{% block heading %}{{ service | title }} markets ranked by opportunity{% endblock %}
+{% block subtitle %}
+  {{ summary.total_markets }} markets scored using the composite opportunity model
+  (search volume, competitor DA, backlink strength, GMB saturation, CPC).
+{% endblock %}
+
+{% block content %}
+  {% if markets %}
+    <section aria-labelledby="summary-heading">
+      <h2 id="summary-heading">Summary</h2>
+      <div class="card-row">
+        <div class="card">
+          <div class="label">Total markets scored</div>
+          <div class="value">{{ summary.total_markets }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Top market</div>
+          <div class="value">{{ summary.top_market }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Median score</div>
+          <div class="value">{{ "%.2f" | format(summary.median_score) }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Total data cost</div>
+          <div class="value">${{ "%.2f" | format(summary.total_cost_usd) }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="ranked-heading">
+      <h2 id="ranked-heading">Ranked markets</h2>
+      <table>
+        <caption class="mono">Sorted by opportunity score, descending</caption>
+        <thead>
+          <tr>
+            <th scope="col">Rank</th>
+            <th scope="col">City</th>
+            <th scope="col">Opportunity score</th>
+            <th scope="col">Search volume</th>
+            <th scope="col">Avg competitor DA</th>
+            <th scope="col">Backlink strength</th>
+            <th scope="col">GMB saturation</th>
+            <th scope="col">CPC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for market in markets | sort(attribute="score", reverse=True) %}
+            <tr{% if loop.first %} class="top-row"{% endif %}>
+              <td>{{ loop.index }}</td>
+              <td>{{ market.city }}</td>
+              <td>{{ "%.3f" | format(market.score) }}</td>
+              <td>{{ market.search_volume }}</td>
+              <td>{{ "%.1f" | format(market.avg_competitor_da) }}</td>
+              <td>{{ "%.1f" | format(market.avg_backlink_strength) }}</td>
+              <td>{{ "%.0f" | format(market.gmb_saturation * 100) }}%</td>
+              <td>${{ "%.2f" | format(market.cpc_value) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="breakdown-heading">
+      <h2 id="breakdown-heading">Score breakdowns</h2>
+      <p>Each market's composite is a weighted sum of normalized components.</p>
+      {% for market in markets | sort(attribute="score", reverse=True) %}
+        <details>
+          <summary>
+            {{ market.city }} &mdash;
+            <span class="mono">{{ "%.3f" | format(market.score) }}</span>
+          </summary>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Component</th>
+                <th scope="col">Normalized value</th>
+                <th scope="col">Weight</th>
+                <th scope="col">Contribution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for field, weight in weights.items() %}
+                {% set component_name =
+                  'search_volume_norm' if field == 'search_volume'
+                  else ('cpc_value_norm' if field == 'cpc_value'
+                  else 'inverse_' ~ field) %}
+                {% set component_value = market.components.get(component_name, 0.0) %}
+                <tr>
+                  <td>{{ field }}</td>
+                  <td>{{ "%.3f" | format(component_value) }}</td>
+                  <td>{{ "%.2f" | format(weight) }}</td>
+                  <td>{{ "%.3f" | format(component_value * weight) }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+      {% endfor %}
+    </section>
+
+    <section aria-labelledby="formula-heading">
+      <h2 id="formula-heading">Scoring formula</h2>
+      <details>
+        <summary>Composite weight breakdown</summary>
+        <p>
+          The opportunity score is a weighted sum of normalized signals.
+          Search volume and CPC are direct (higher is better). Competitor
+          domain authority, backlink strength, and GMB saturation are
+          inverted (lower is better). Values are min-max normalized across
+          the batch of markets being compared.
+        </p>
+        <ul>
+          {% for field, weight in weights.items() %}
+            <li>
+              <span class="mono">{{ field }}</span>
+              &mdash; weight
+              <span class="mono">{{ "%.2f" | format(weight) }}</span>
+              ({{ "%.0f" | format(weight * 100) }}%)
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
+    </section>
+  {% else %}
+    <section>
+      <div class="card">
+        <div class="label">Result</div>
+        <div class="value">No markets scored</div>
+        <p>The recipe completed without any markets to compare. Broaden the service term or expand the metro set.</p>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}
+
+{% block footer_note %}
+  Generated {{ generated_at }} &middot; recipe <span class="mono">{{ recipe_id }}</span>
+{% endblock %}
