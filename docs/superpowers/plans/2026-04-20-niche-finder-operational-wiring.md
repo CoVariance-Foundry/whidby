@@ -1604,13 +1604,13 @@ Scoring now takes ~30–60s. The existing page assumes instant responses. Add a 
 - Modify: `apps/app/src/app/(protected)/exploration/page.tsx`
 - Modify: `apps/app/src/app/(protected)/page.tsx`
 
-- [ ] **Step 1: Identify the current fetch sites**
+- [x] **Step 1: Identify the current fetch sites**
 
 Run: `grep -n "fetch.*agent/scoring\|fetch.*agent/exploration" apps/app/src/app/(protected)/*.tsx apps/app/src/lib/niche-finder/*.ts`
 
 Note the files and line numbers. For each, you'll add a pending state.
 
-- [ ] **Step 2: Add pending + error states**
+- [x] **Step 2: Add pending + error states**
 
 In `apps/app/src/app/(protected)/exploration/page.tsx`, wherever the fetch happens (likely inside a `useEffect` or a form handler), introduce:
 
@@ -1670,17 +1670,18 @@ const res = await fetch("/api/agent/scoring", {
 
 and render `StandardSurfaceResponse`-shaped results (opportunity score + classification label only, no evidence list). Keep the same `role="status"` loading banner and `role="alert"` error banner as the exploration page so their behavior matches.
 
-- [ ] **Step 3: Run type-check + vitest**
+- [x] **Step 3: Run type-check + vitest**
 
 Run: `cd apps/app && npx tsc --noEmit && npx vitest run`
-Expected: PASS.
+Expected: PASS. (tsc: 6 pre-existing errors in middleware.test.ts only; vitest: 15 tests pass)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/app/src/app/(protected)
 git commit -m "feat(app): add loading + error UI for live niche scoring"
 ```
+Committed as c6aa489.
 
 ---
 
