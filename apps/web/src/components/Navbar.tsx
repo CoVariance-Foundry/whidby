@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { trackCTAClick } from '@/lib/analytics';
@@ -60,8 +61,14 @@ export function Navbar({ onOpenWaitlist, showPricing = true }: NavbarProps) {
             ))}
           </div>
 
-          {/* CTA */}
-          <div className="hidden md:block">
+          {/* CTAs */}
+          <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/login"
+              className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-dark transition-colors"
+            >
+              Log in
+            </Link>
             <button
               onClick={handleWaitlistClick}
               className="px-5 py-2.5 text-sm font-medium rounded-lg bg-dark text-white hover:bg-neutral-800 transition-colors"
@@ -98,6 +105,13 @@ export function Navbar({ onOpenWaitlist, showPricing = true }: NavbarProps) {
               {link.label}
             </a>
           ))}
+          <Link
+            href="/login"
+            className="block text-sm font-medium text-neutral-600 py-2"
+            onClick={() => setMobileOpen(false)}
+          >
+            Log in
+          </Link>
           <button
             onClick={handleWaitlistClick}
             className="w-full mt-2 px-5 py-2.5 text-sm font-medium rounded-lg bg-dark text-white"

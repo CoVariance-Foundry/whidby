@@ -14,7 +14,6 @@ from src.research_agent.agent import claude_experiment_runner
 from src.research_agent.evaluation.evaluator import evaluate_experiment
 from src.research_agent.hypothesis.generator import (
     generate_hypotheses,
-    generate_novel_hypothesis,
 )
 from src.research_agent.loop.ralph_loop import LoopConfig, RalphResearchLoop
 from src.research_agent.memory.graph_store import ResearchGraphStore

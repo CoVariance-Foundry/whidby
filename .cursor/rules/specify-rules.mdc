@@ -6,7 +6,7 @@ alwaysApply: true
 
 # speckit-m05-data-collection-xij Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-05
+Auto-generated from all feature plans. Last updated: 2026-04-06
 
 ## Active Technologies
 - Python 3.11+ + `pydantic>=2`, existing pipeline types/utilities, `src/config/constants.py` constants (`AIO_CTR_REDUCTION`, `INTENT_AIO_RATES`, `KNOWN_AGGREGATORS`) (002-m06-signal-extraction-rib)
@@ -15,6 +15,8 @@ Auto-generated from all feature plans. Last updated: 2026-04-05
 - N/A (in-memory derivation and text generation; persistence handled downstream by M9/reporting) (008-m08-classification-guidance-g3j)
 - Python 3.11+ + `pydantic>=2`, existing pipeline types/utilities, existing M2 Supabase client wrapper, stdlib `datetime`/`uuid`/`typing` (009-m09-report-generation)
 - Supabase PostgreSQL (feedback logging), in-memory Python objects for report assembly (009-m09-report-generation)
+- TypeScript (Next.js 16 frontend), Python 3.11+ (scoring and research-agent services) + Next.js app router stack (existing), internal API routes in `apps/app`, existing `src/scoring` engine, existing `src/research_agent` plugin registry + DataForSEO tooling (011-niche-exploration-ui)
+- Existing platform persistence and in-memory request/session state for UI interactions (011-niche-exploration-ui)
 
 - Python 3.11+ + `httpx`, `pydantic>=2`, existing `src/clients/dataforseo` client wrappers, `asyncio` (001-refresh-m5-data-collection)
 - Python 3.11+ + Existing `LLMClient` (M3), `DataForSEOClient` (M0), `pydantic>=2`, `httpx`, shared constants in `src/config/constants.py` (001-keyword-expansion)
@@ -35,9 +37,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 011-niche-exploration-ui: Added TypeScript (Next.js 16 frontend), Python 3.11+ (scoring and research-agent services) + Next.js app router stack (existing), internal API routes in `apps/app`, existing `src/scoring` engine, existing `src/research_agent` plugin registry + DataForSEO tooling
 - 009-m09-report-generation: Added Python 3.11+ + `pydantic>=2`, existing pipeline types/utilities, existing M2 Supabase client wrapper, stdlib `datetime`/`uuid`/`typing`
 - 009-m09-report-generation: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-- 008-m08-classification-guidance-g3j: Added Python 3.11+ + `pydantic>=2`, existing M3 `LLMClient`, M6/M7 typed outputs, shared constants/utilities in `src/config/constants.py`
 
 
 <!-- MANUAL ADDITIONS START -->

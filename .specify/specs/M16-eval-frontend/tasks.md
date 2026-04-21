@@ -33,14 +33,16 @@
 
 ## Phase 3: User Story 1 — Auth Gate (Priority: P1, maps to AS-1.2)
 
-**Goal**: Unauthenticated users are blocked from the app; magic-link sign-in works end-to-end
+**Goal**: Unauthenticated users are blocked from the app; email + password sign-in works end-to-end.
 
-**Independent Test**: Visit any protected route while logged out → redirected to /login. Enter email → receive magic link → click → land on /chat.
+> Originally specified with Supabase magic-link (OTP). Replaced by email/password in PR #22 (`012-auth-password-login`). Tasks below reflect the current implementation; file paths are as shipped in the admin rename (was `apps/app/` pre-reorg, now `apps/admin/`). A mirror login page also ships in the consumer `apps/app/` and shares the same Supabase users.
+
+**Independent Test**: Visit any protected route while logged out → redirected to /login. Enter email + password → redirected to `/` (or original destination).
 
 ### Implementation for User Story 1
 
-- [x] T006 [US1] Create login page with magic-link form at apps/app/src/app/login/page.tsx
-- [x] T007 [US1] Create auth callback route handler at apps/app/src/app/auth/callback/route.ts
+- [x] T006 [US1] Create login page with email/password form at apps/admin/src/app/login/page.tsx (+ mirror at apps/app/src/app/login/page.tsx)
+- [x] T007 [US1] Create auth callback route handler at apps/admin/src/app/auth/callback/route.ts (retained for future OAuth providers)
 
 **Checkpoint**: Auth flow functional — login, callback, session established
 

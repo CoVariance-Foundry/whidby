@@ -113,15 +113,24 @@ class TestPluginRegistry:
 
 
 class TestDataForSEOPlugin:
-    def test_tool_definitions_returns_eight_tools(self) -> None:
+    def test_tool_definitions_returns_expected_tools(self) -> None:
         from src.research_agent.plugins.dataforseo_plugin import DataForSEOPlugin
 
         plugin = DataForSEOPlugin()
         defs = plugin.tool_definitions()
-        assert len(defs) == 8
         names = {d["name"] for d in defs}
-        assert "fetch_serp_organic" in names
-        assert "fetch_lighthouse" in names
+        expected = {
+            "fetch_serp_organic",
+            "fetch_serp_maps",
+            "fetch_keyword_volume",
+            "fetch_keyword_suggestions",
+            "fetch_business_listings",
+            "fetch_google_reviews",
+            "fetch_backlinks_summary",
+            "fetch_lighthouse",
+            "explore_serp_snapshot",
+        }
+        assert names == expected
         for d in defs:
             assert "input_schema" in d
             assert d["input_schema"]["type"] == "object"

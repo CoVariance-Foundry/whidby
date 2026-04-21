@@ -184,6 +184,134 @@ class TestClaudeAgent:
         assert len(result["tool_calls"]) == 1
 
 
+class _MockExplorationPlugin(ToolPlugin):
+    """Plugin with both exploration tools for testing run_exploration_followup."""
+
+    @property
+    def name(self) -> str:
+        return "scoring"
+
+    def tool_definitions(self) -> list[dict]:
+        return [
+            {
+                "name": "explore_score_evidence",
+                "description": "test",
+                "input_schema": {"type": "object", "properties": {}},
+            },
+        ]
+
+    def execute(self, tool_name: str, arguments: dict) -> dict:
+        if tool_name == "explore_score_evidence":
+            return {
+                "score_result": {
+                    "opportunity_score": 72,
+                    "classification_label": "Medium",
+                },
+                "evidence": [
+                    {"category": "demand", "label": "Market Demand", "value": 65},
+                ],
+                "cost_usd": 0.0,
+            }
+        raise KeyError(f"Unknown tool: {tool_name}")
+
+
+class TestExplorationFollowup:
+    def test_returns_success_with_evidence(self) -> None:
+        from src.research_agent.agent.claude_agent import ClaudeAgent
+
+        registry = PluginRegistry()
+        registry.register(_MockExplorationPlugin())
+        agent = ClaudeAgent(registry=registry, api_key="test-key")
+        result = agent.run_exploration_followup(
+            city="Phoenix", service="roofing", question="What drives this score?"
+        )
+
+        assert result["status"] == "success"
+        assert "answer" in result
+        assert len(result["evidence_references"]) >= 1
+        assert result["evidence_references"][0]["category"] == "demand"
+
+    def test_returns_unsupported_on_tool_failure(self) -> None:
+        from src.research_agent.agent.claude_agent import ClaudeAgent
+
+        class _FailPlugin(ToolPlugin):
+            @property
+            def name(self) -> str:
+                return "scoring"
+
+            def tool_definitions(self) -> list[dict]:
+                return [
+                    {
+                        "name": "explore_score_evidence",
+                        "description": "test",
+                        "input_schema": {"type": "object", "properties": {}},
+                    },
+                ]
+
+            def execute(self, tool_name: str, arguments: dict) -> dict:
+                raise RuntimeError("Plugin down")
+
+        registry = PluginRegistry()
+        registry.register(_FailPlugin())
+        agent = ClaudeAgent(registry=registry, api_key="test-key")
+        result = agent.run_exploration_followup(
+            city="Phoenix", service="roofing", question="test"
+        )
+        assert result["status"] == "unsupported"
+        assert len(result["evidence_references"]) == 0
+
+
+    def test_returns_partial_on_serp_failure(self) -> None:
+        from src.research_agent.agent.claude_agent import ClaudeAgent
+
+        class _PartialPlugin(ToolPlugin):
+            @property
+            def name(self) -> str:
+                return "scoring"
+
+            def tool_definitions(self) -> list[dict]:
+                return [
+                    {
+                        "name": "explore_score_evidence",
+                        "description": "test",
+                        "input_schema": {"type": "object", "properties": {}},
+                    },
+                    {
+                        "name": "explore_serp_snapshot",
+                        "description": "test",
+                        "input_schema": {"type": "object", "properties": {}},
+                    },
+                ]
+
+            def execute(self, tool_name: str, arguments: dict) -> dict:
+                if tool_name == "explore_score_evidence":
+                    return {
+                        "score_result": {
+                            "opportunity_score": 72,
+                            "classification_label": "Medium",
+                        },
+                        "evidence": [
+                            {"category": "demand", "label": "Market Demand", "value": 65},
+                        ],
+                        "cost_usd": 0.0,
+                    }
+                if tool_name == "explore_serp_snapshot":
+                    raise RuntimeError("SERP API unavailable")
+                raise KeyError(f"Unknown tool: {tool_name}")
+
+        registry = PluginRegistry()
+        registry.register(_PartialPlugin())
+        agent = ClaudeAgent(registry=registry, api_key="test-key")
+        result = agent.run_exploration_followup(
+            city="Phoenix", service="roofing",
+            question="What do the serp results look like?"
+        )
+        assert result["status"] == "partial"
+        assert len(result["evidence_references"]) >= 1
+        assert result["evidence_references"][0]["category"] == "demand"
+        assert "unavailable" in result["answer"].lower()
+
+
 class TestSystemPrompt:
     def test_prompt_includes_proxy_dimensions(self) -> None:
         from src.research_agent.agent.prompts import RESEARCH_SYSTEM_PROMPT

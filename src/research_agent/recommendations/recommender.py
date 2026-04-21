@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from src.research_agent.evaluation.evaluator import compute_uplift_confidence
 from src.research_agent.memory.graph_store import ResearchGraphStore
 from src.research_agent.memory.models import (
     EdgeType,
@@ -109,7 +108,7 @@ def generate_improvement_report(
             f"**Confidence:** {rec['confidence']} | "
             f"**Priority:** {rec['priority_score']:.3f}",
             "",
-            f"**Evidence:**",
+            "**Evidence:**",
             f"- Baseline: {evidence.get('baseline_score', 0):.2f}",
             f"- Candidate: {evidence.get('candidate_score', 0):.2f}",
             f"- Delta: {evidence.get('delta', 0):+.3f}",

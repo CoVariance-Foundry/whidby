@@ -42,10 +42,10 @@ This project uses a hybrid documentation strategy:
 This project uses **DocGuard** for CDD compliance:
 
 ```bash
-npx docguard audit    # Check documentation status
-npx docguard guard    # Validate compliance
-npx docguard score    # CDD maturity score
-npx docguard fix      # Find and fix CDD issues
+npx docguard-cli diagnose # Run diagnostic summary + remediation prompts
+npx docguard-cli guard    # Validate compliance
+npx docguard-cli score    # CDD maturity score
+npx docguard-cli diff     # Show documentation/code drift details
 ```
 
 ## Workflow Rules
@@ -57,12 +57,13 @@ npx docguard fix      # Find and fix CDD issues
 5. **Match existing patterns** — Search codebase for similar implementations
 6. **Document drift** — If deviating from canonical docs, add `// DRIFT: reason`
 7. **Update canonical docs first** — When changing architecture/requirements/schemas, update `docs-canonical/` before code
-8. **Run DocGuard** — After documentation changes, run `npx docguard guard`
+8. **Run DocGuard** — After documentation changes, run `npx docguard-cli guard`
 
 ## Code Conventions
 
 - Python: PEP 8 via ruff, type annotations required, Google-style docstrings
 - TypeScript: ESLint with core-web-vitals + typescript
+- **API contract casing**: All JSON payloads at service boundaries use **snake_case** keys (Next.js route handlers, FastAPI endpoints, spec contracts). No camelCase in wire payloads.
 - Test file names mirror source: `src/pipeline/keyword_expansion.py` → `tests/unit/test_keyword_expansion.py`
 - Constants in `src/config/constants.py`, never hardcoded
 - Prompt templates in versioned files under `src/clients/llm/prompts/`
@@ -73,4 +74,4 @@ npx docguard fix      # Find and fix CDD issues
 - Schema/data model changes require `docs-canonical/DATA-MODEL.md` update
 - New dependencies require justification
 - Architecture changes require `docs-canonical/ARCHITECTURE.md` update
-- Documentation changes must pass `docguard guard` before commit
+- Documentation changes must pass `docguard-cli guard` before commit

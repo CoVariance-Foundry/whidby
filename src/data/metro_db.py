@@ -64,6 +64,10 @@ class MetroDB:
 
     # -- Public API ----------------------------------------------------------
 
+    def all_metros(self) -> list[Metro]:
+        """Return all seeded metros (unsorted)."""
+        return list(self._all)
+
     def expand_scope(
         self,
         scope: str,
@@ -91,6 +95,40 @@ class MetroDB:
             return self._by_codes(target)
         else:
             raise ValueError(f"Unknown scope '{scope}'. Use 'state', 'region', or 'custom'.")
+
+    def find_by_city(self, city: str, state: str | None = None) -> Metro | None:
+        """Resolve a city name to its CBSA, searching all seeded metros.
+
+        Matches (case-insensitively) against each metro's `principal_cities`
+        first, then falls back to substring match on `cbsa_name`. If multiple
+        metros match, the highest-population one wins. An optional `state`
+        code narrows the search (useful when a city name collides across
+        states, e.g. Springfield MO vs IL vs MA).
+
+        Args:
+            city: Principal city name (e.g. "Phoenix", "Atlanta").
+            state: Optional two-letter state code to disambiguate.
+
+        Returns:
+            The matching `Metro`, or `None` if no seeded CBSA matches.
+        """
+        city_norm = city.strip().lower()
+        if not city_norm:
+            return None
+        state_norm = state.strip().upper() if state else None
+
+        def _matches(m: Metro) -> bool:
+            if state_norm and m.state != state_norm:
+                return False
+            if any(pc.strip().lower() == city_norm for pc in m.principal_cities):
+                return True
+            return city_norm in m.cbsa_name.lower()
+
+        candidates = [m for m in self._all if _matches(m)]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda m: m.population, reverse=True)
+        return candidates[0]
 
     # -- Internal ------------------------------------------------------------
 

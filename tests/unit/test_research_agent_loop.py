@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import Any
 
-import pytest
 
 from src.research_agent.loop.ralph_loop import (
     IterationResult,
     LoopConfig,
-    LoopOutcome,
     RalphResearchLoop,
     StopReason,
 )

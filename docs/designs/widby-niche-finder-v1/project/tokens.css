@@ -1,0 +1,57 @@
+/* Widby — design tokens (mirrors apps/app/src/app/globals.css) */
+:root {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  --color-dark: #141414;
+  --color-dark-alt: #1c1c1c;
+  --color-dark-card: #1e1e1e;
+  --color-dark-border: #2a2a2a;
+  --color-dark-hover: #252525;
+
+  --color-accent: #10b981;
+  --color-accent-light: #34d399;
+  --color-accent-dark: #059669;
+  --color-accent-bg: rgba(16, 185, 129, 0.08);
+
+  --color-text-primary: #f5f5f5;
+  --color-text-secondary: #a3a3a3;
+  --color-text-muted: #737373;
+
+  --color-positive: #10b981;
+  --color-negative: #ef4444;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+
+  /* archetype tints */
+  --arch-aggregator: #f59e0b;
+  --arch-pack-fortified: #ef4444;
+  --arch-pack-established: #f97316;
+  --arch-pack-vulnerable: #10b981;
+  --arch-fragmented-weak: #22d3ee;
+  --arch-fragmented-comp: #6366f1;
+  --arch-barren: #a3a3a3;
+  --arch-mixed: #8b5cf6;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.app {
+  background: var(--color-dark);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.app button { font-family: inherit; cursor: pointer; }
+.app input, .app select { font-family: inherit; color: inherit; }
+
+/* thin scrollbars inside surfaces */
+.app ::-webkit-scrollbar { width: 6px; height: 6px; }
+.app ::-webkit-scrollbar-track { background: transparent; }
+.app ::-webkit-scrollbar-thumb { background: var(--color-dark-border); border-radius: 3px; }
+
+/* density modifiers */
+.app.density-compact { --pad-y: 10px; --pad-x: 12px; --row-h: 44px; --gap: 10px; --fs-body: 13px; --fs-label: 11px; }
+.app.density-roomy   { --pad-y: 14px; --pad-x: 16px; --row-h: 60px; --gap: 16px; --fs-body: 14px; --fs-label: 12px; }

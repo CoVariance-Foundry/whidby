@@ -98,8 +98,25 @@ Feedback rows (one per ranked metro): {
 }
      │
      ▼
-Supabase: reports table + feedback_log table
+SupabasePersistence.persist_report(report) in src/clients/supabase_persistence.py
+     │
+     ├──→ reports (one row)
+     ├──→ report_keywords (N rows, one per expanded keyword)
+     ├──→ metro_signals (N rows, one per scored metro)
+     ├──→ metro_scores (N rows, one per scored metro)
+     └──→ feedback_log (future — not yet wired; M9 returns a feedback_log_id placeholder)
+
+Consumer /reports read path (not shown above):
+     Supabase `reports` table (authenticated SELECT via migration 005)
+             │
+             ▼
+     mapReportRow (apps/app/src/lib/niche-finder/reports-mapper.ts)
+             │
+             ▼
+     ReportsView (apps/app/src/app/(protected)/reports/ReportsView.tsx)
 ```
+
+The write path above is triggered by the FastAPI `POST /api/niches/score` handler after `score_niche_for_metro` returns a report. The read path is a direct SSR Supabase fetch from the consumer app — no FastAPI round-trip for the list view. Per-report detail retrieval goes through FastAPI `GET /api/niches/{report_id}`.
 
 ## Experiment Pipeline (M10 → M15)
 

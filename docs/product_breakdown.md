@@ -239,6 +239,10 @@ src/
     test_metro_db.py
 ```
 
+**Added methods (post-013):**
+- `all_metros() -> list[Metro]` — returns a flat copy of all seeded metros (unsorted), used by the autocomplete endpoint.
+- `find_by_city(city, state=None) -> Metro | None` — resolves a city name to its highest-population CBSA.
+
 **Eval criteria:**
 | Test | Method | Pass Criteria |
 |------|--------|--------------|
@@ -861,6 +865,48 @@ tests/
 
 ---
 
+### Pipeline Orchestrator (operational wiring)
+
+**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Resolves the metro via `MetroDB.from_seed().expand_scope(...)`, threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
+
+**Files:**
+```
+src/pipeline/orchestrator.py            # score_niche_for_metro + ScoreNicheResult
+tests/unit/test_pipeline_orchestrator.py
+tests/integration/test_pipeline_orchestrator_live.py
+```
+
+**Public interface:**
+- `async def score_niche_for_metro(*, niche, city, state, strategy_profile="balanced", llm_client, dataforseo_client, metro_db=None, dry_run=False) -> ScoreNicheResult`
+- `ScoreNicheResult` frozen dataclass: `report: dict`, `opportunity_score: int`, `evidence: list[dict]`
+- `dry_run=True` loads from `tests.fixtures.m6_signal_extraction_fixtures` + `tests.fixtures.keyword_expansion_fixtures` and skips live APIs; still runs real M7 / M8 / M9
+
+### Supabase Persistence Adapter
+
+**What it does:** Writes an M9 report into the canonical schema at `supabase/migrations/001_core_schema.sql` (tables: `reports`, `report_keywords`, `metro_signals`, `metro_scores`). Pure row-builder helpers are pure functions (unit-testable without a live DB); `SupabasePersistence.persist_report(report)` executes the inserts in order and returns the report id.
+
+**Files:**
+```
+src/clients/supabase_persistence.py
+tests/unit/test_supabase_persistence.py
+```
+
+**Public interface:**
+- `build_report_row(report) / build_keyword_rows(report) / build_metro_signal_rows(report) / build_metro_score_rows(report)` — pure mappers
+- `class SupabasePersistence(*, client=None).persist_report(report) -> str` — live writer
+
+### FastAPI niche-scoring routes
+
+Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
+
+- `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run` in the request body.
+- `GET /api/niches/{report_id}` — reads the row back from Supabase.
+- `GET /api/metros/suggest?q=<prefix>&limit=<int>` — city autocomplete. Matches `q` (min 2 chars) against `principal_cities` (prefix) and `cbsa_name` (prefix fallback); emits one row per matching principal city. Returns highest-population matches first, capped at `limit` (default 10, max 20). Response shape: `[{cbsa_code, city, state, cbsa_name, population}]`. Module-level `MetroDB` singleton loaded once at import time.
+
+Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted). The `/api/metros/suggest` route is proxied by `apps/admin/src/app/api/agent/metros/suggest/route.ts`.
+
+---
+
 ### M10: Business Discovery + Qualification
 
 **Spec reference:** Experiment Framework, §4 (Phase E1), §5.3 (Qualification Gates)
@@ -1150,6 +1196,24 @@ src/
 ```
 
 **Build approach:** Scaffold the shell with navigation in Phase 1. Add page content as each module is built. Each module's eval section above describes the frontend surface for its corresponding page.
+
+#### Niche Finder Exploration Surfaces (M16 extension)
+
+The eval frontend now supports two coordinated surfaces for niche scoring validation:
+
+**Admin (`apps/admin`, dark theme, port 3001):**
+
+- **Standard Niche Finder** (`apps/admin/src/app/(protected)/page.tsx`): city + service input (city via `CityAutocomplete`), normalized query, score output for quick triage.
+- **Exploration Surface** (`apps/admin/src/app/(protected)/exploration/page.tsx`): same city/service pathway with signal-level evidence panels.
+- **Exploration Assistant** (`apps/admin/src/components/niche-finder/ExplorationAssistantPanel.tsx`): follow-up Q&A flow routed through approved plugin-backed tools, returns evidence references for human review.
+
+**Consumer (`apps/app`, light academic theme, port 3002):**
+
+- **Niche Finder** (`apps/app/src/app/(protected)/niche-finder/page.tsx`): city + service input via the same `CityAutocomplete`, single-call POST to `/api/agent/scoring`, renders a light-theme result card.
+- **Reports** (`apps/app/src/app/(protected)/reports/page.tsx` + `ReportsView.tsx`): SSR Supabase read from `reports` table via `mapReportRow` (`apps/app/src/lib/niche-finder/reports-mapper.ts`), ordered by `created_at DESC limit 50`. Authenticated users can read thanks to migration 005.
+- **Recommendations** (`apps/app/src/app/(protected)/recommendations/page.tsx`): stub page; full synthesis currently lives on admin.
+
+Design intent: keep scoring deterministic and shared (both apps hit the same FastAPI `POST /api/niches/score`) while differentiating UX — admin surfaces evidence for operator trust calibration; consumer surfaces a clean scoring flow and report history.
 
 ---
 
