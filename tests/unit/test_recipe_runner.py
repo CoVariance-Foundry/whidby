@@ -352,6 +352,42 @@ def test_extract_skips_tool_use_blocks_and_reads_text() -> None:
     assert payload == {"service": "a", "markets": []}
 
 
+def test_extract_prefers_last_text_block_when_multiple() -> None:
+    # Claude emits a narrative first, then the final JSON contract.  The
+    # narrative block might even contain a superficial {} that would
+    # otherwise be grabbed by the balanced-brace scan; the last text block
+    # must win.
+    response = _FakeResponse(
+        stop_reason="end_turn",
+        content=[
+            _FakeTextBlock(
+                text="I used an arg like {'keyword': 'plumber'} during the call."
+            ),
+            _FakeTextBlock(text='{"service": "final", "markets": []}'),
+        ],
+    )
+    payload = _extract_json_payload(response.content)
+    assert payload == {"service": "final", "markets": []}
+
+
+def test_extract_raises_on_empty_content() -> None:
+    response = _FakeResponse(stop_reason="end_turn", content=[])
+    with pytest.raises(RecipeRunnerError) as exc_info:
+        _extract_json_payload(response.content)
+    assert "empty" in str(exc_info.value).lower()
+
+
+def test_extract_raises_on_tool_use_only_content() -> None:
+    # stop_reason=end_turn but response has only tool_use blocks, no text.
+    response = _FakeResponse(
+        stop_reason="end_turn",
+        content=[_FakeToolUseBlock(id="x", name="foo", input={})],
+    )
+    with pytest.raises(RecipeRunnerError) as exc_info:
+        _extract_json_payload(response.content)
+    assert "no text blocks" in str(exc_info.value).lower()
+
+
 # ---------------------------------------------------------------------------
 # Runner-level JSON extraction failure
 # ---------------------------------------------------------------------------

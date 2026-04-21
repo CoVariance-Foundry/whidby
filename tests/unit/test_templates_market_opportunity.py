@@ -177,3 +177,73 @@ class TestMarketOpportunityTemplate:
         html = tmpl.render(**context)
         # Should render without raising and indicate emptiness
         assert "No markets" in html or "no markets" in html
+
+    def test_all_signals_missing_renders_placeholders(self, env):
+        """Regression: all signal fields absent must not raise TypeError."""
+        context = {
+            "service": "plumber",
+            "markets": [
+                {
+                    "city": "Portland, OR",
+                    "score": 0.0,
+                    "components": {},
+                },
+            ],
+            "weights": {
+                "search_volume": 0.30,
+                "avg_competitor_da": 0.25,
+                "avg_backlink_strength": 0.20,
+                "gmb_saturation": 0.15,
+                "cpc_value": 0.10,
+            },
+            "summary": {
+                "total_markets": 1,
+                "top_market": "Portland, OR",
+                "median_score": 0.0,
+                "total_cost_usd": 0.0,
+            },
+            "generated_at": "2026-04-21T00:00:00Z",
+            "recipe_id": "market_opportunity",
+        }
+        tmpl = env.get_template("market_opportunity.html")
+        html = tmpl.render(**context)
+        assert "Portland, OR" in html
+        assert html.count("&mdash;") >= 5 or html.count("\u2014") >= 5
+
+    def test_partial_signals_missing_renders_mix(self, env):
+        """Some signals present, others absent: values shown where available."""
+        context = {
+            "service": "electrician",
+            "markets": [
+                {
+                    "city": "Boise, ID",
+                    "score": 0.45,
+                    "components": {},
+                    "search_volume": 900,
+                    "cpc_value": 12.50,
+                },
+            ],
+            "weights": {
+                "search_volume": 0.30,
+                "avg_competitor_da": 0.25,
+                "avg_backlink_strength": 0.20,
+                "gmb_saturation": 0.15,
+                "cpc_value": 0.10,
+            },
+            "summary": {
+                "total_markets": 1,
+                "top_market": "Boise, ID",
+                "median_score": 0.45,
+                "total_cost_usd": 0.50,
+            },
+            "generated_at": "2026-04-21T00:00:00Z",
+            "recipe_id": "market_opportunity",
+        }
+        tmpl = env.get_template("market_opportunity.html")
+        html = tmpl.render(**context)
+        assert "900" in html
+        assert "12.50" in html
+        placeholder_count = html.count("&mdash;") + html.count("\u2014")
+        assert placeholder_count >= 3, (
+            f"Expected at least 3 placeholders for missing signals, got {placeholder_count}"
+        )

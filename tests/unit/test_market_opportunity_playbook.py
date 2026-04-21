@@ -252,6 +252,84 @@ def test_notes_absent_when_not_supplied() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Nullable signal handling (regression for TypeError on None render)
+# ---------------------------------------------------------------------------
+
+
+def _collected_with_all_none_signals() -> dict:
+    """All five signal fields are None --- mimics total API failure."""
+    return {
+        "service": "plumber",
+        "markets": [
+            {
+                "city": "Portland, OR",
+                "search_volume": None,
+                "avg_competitor_da": None,
+                "avg_backlink_strength": None,
+                "gmb_saturation": None,
+                "cpc_value": None,
+            },
+        ],
+        "total_cost_usd": 0.0,
+    }
+
+
+def _collected_with_partial_none_signals() -> dict:
+    """Some signals present, others None --- partial API failure."""
+    return {
+        "service": "electrician",
+        "markets": [
+            {
+                "city": "Boise, ID",
+                "search_volume": 900,
+                "avg_competitor_da": None,
+                "avg_backlink_strength": 340.0,
+                "gmb_saturation": None,
+                "cpc_value": 12.50,
+            },
+        ],
+        "total_cost_usd": 0.50,
+    }
+
+
+def test_all_none_signals_stripped_from_context() -> None:
+    ctx = compute_market_opportunity_context(_collected_with_all_none_signals())
+    market = ctx["markets"][0]
+    for field in (
+        "search_volume",
+        "avg_competitor_da",
+        "avg_backlink_strength",
+        "gmb_saturation",
+        "cpc_value",
+    ):
+        assert field not in market, f"{field} should be stripped when None"
+
+
+def test_partial_none_signals_stripped_present_kept() -> None:
+    ctx = compute_market_opportunity_context(_collected_with_partial_none_signals())
+    market = ctx["markets"][0]
+    assert market["search_volume"] == 900
+    assert market["avg_backlink_strength"] == 340.0
+    assert market["cpc_value"] == 12.50
+    assert "avg_competitor_da" not in market
+    assert "gmb_saturation" not in market
+
+
+def test_all_none_signals_still_produces_valid_score() -> None:
+    ctx = compute_market_opportunity_context(_collected_with_all_none_signals())
+    market = ctx["markets"][0]
+    assert isinstance(market["score"], float)
+    assert 0.0 <= market["score"] <= 1.0
+
+
+def test_partial_none_signals_still_produces_valid_score() -> None:
+    ctx = compute_market_opportunity_context(_collected_with_partial_none_signals())
+    market = ctx["markets"][0]
+    assert isinstance(market["score"], float)
+    assert 0.0 <= market["score"] <= 1.0
+
+
+# ---------------------------------------------------------------------------
 # _summarize helper
 # ---------------------------------------------------------------------------
 

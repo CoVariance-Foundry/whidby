@@ -52,28 +52,42 @@ class RecipeRunnerError(RuntimeError):
 def _extract_json_payload(response_content: list[Any]) -> dict[str, Any]:
     r"""Extract the recipe's JSON output contract from a Claude response.
 
-    Iterates ``response_content`` blocks in order; for each ``text`` block
-    tries, in sequence:
+    Iterates ``response_content`` blocks in REVERSE order (the contract JSON
+    is typically the last text block Claude emits, after any narrative
+    prose); for each ``text`` block tries, in sequence:
 
     1. ``json.loads`` on the stripped text (raw JSON object emitted by Claude).
     2. Fenced code block match (``\`\`\`json ... \`\`\``` or ``\`\`\` ... \`\`\``).
     3. First top-level ``{...}`` substring with balanced braces.
 
     Returns the first successfully parsed JSON object. Raises
-    :class:`RecipeRunnerError` with a truncated excerpt of the first text
-    block if nothing parses.
+    :class:`RecipeRunnerError` with a truncated excerpt of the last text
+    block if nothing parses, or an explicit "empty response content" message
+    if the response had no text blocks at all.
     """
-    first_text_excerpt = ""
+    text_blocks = [
+        b for b in response_content if getattr(b, "type", None) == "text"
+    ]
+    if not response_content:
+        raise RecipeRunnerError(
+            "could not extract final JSON from Claude response: "
+            "response content was empty"
+        )
+    if not text_blocks:
+        raise RecipeRunnerError(
+            "could not extract final JSON from Claude response: "
+            "response had no text blocks"
+        )
 
-    for block in response_content:
-        if getattr(block, "type", None) != "text":
-            continue
+    last_text_excerpt = ""
+
+    for block in reversed(text_blocks):
         text: str = getattr(block, "text", "") or ""
         stripped = text.strip()
         if not stripped:
             continue
-        if not first_text_excerpt:
-            first_text_excerpt = stripped[:_ERROR_EXCERPT_LENGTH]
+        if not last_text_excerpt:
+            last_text_excerpt = stripped[:_ERROR_EXCERPT_LENGTH]
 
         # 1. Whole block is raw JSON.
         try:
@@ -100,7 +114,7 @@ def _extract_json_payload(response_content: list[Any]) -> dict[str, Any]:
 
     raise RecipeRunnerError(
         "could not extract final JSON from Claude response; "
-        f"first text block excerpt: {first_text_excerpt!r}"
+        f"last text block excerpt: {last_text_excerpt!r}"
     )
 
 

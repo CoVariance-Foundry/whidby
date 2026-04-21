@@ -54,11 +54,11 @@
               <td>{{ loop.index }}</td>
               <td>{{ market.city }}</td>
               <td>{{ "%.3f" | format(market.score) }}</td>
-              <td>{{ market.search_volume }}</td>
-              <td>{{ "%.1f" | format(market.avg_competitor_da) }}</td>
-              <td>{{ "%.1f" | format(market.avg_backlink_strength) }}</td>
-              <td>{{ "%.0f" | format(market.gmb_saturation * 100) }}%</td>
-              <td>${{ "%.2f" | format(market.cpc_value) }}</td>
+              <td>{{ market.search_volume if market.search_volume is defined else "&mdash;" }}</td>
+              <td>{{ "%.1f" | format(market.avg_competitor_da) if market.avg_competitor_da is defined else "&mdash;" }}</td>
+              <td>{{ "%.1f" | format(market.avg_backlink_strength) if market.avg_backlink_strength is defined else "&mdash;" }}</td>
+              <td>{{ "%.0f" | format(market.gmb_saturation * 100) ~ "%" if market.gmb_saturation is defined else "&mdash;" }}</td>
+              <td>{{ "$" ~ "%.2f" | format(market.cpc_value) if market.cpc_value is defined else "&mdash;" }}</td>
             </tr>
           {% endfor %}
         </tbody>

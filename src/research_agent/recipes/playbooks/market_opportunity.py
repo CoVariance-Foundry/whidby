@@ -27,6 +27,14 @@ from src.research_agent.recipes.base import Recipe
 from src.research_agent.recipes.scoring import OPPORTUNITY_WEIGHTS, opportunity_score
 
 _RECIPE_ID = "market_opportunity"
+
+_NULLABLE_SIGNAL_FIELDS: tuple[str, ...] = (
+    "search_volume",
+    "avg_competitor_da",
+    "avg_backlink_strength",
+    "gmb_saturation",
+    "cpc_value",
+)
 _TEMPLATE_NAME = "market_opportunity.html"
 _EMPTY_TOP_MARKET = "\u2014"  # em dash, mirrors the template's empty-state glyph
 
@@ -168,14 +176,18 @@ def compute_market_opportunity_context(collected: dict[str, Any]) -> dict[str, A
 
     scored_markets: list[dict[str, Any]] = []
     for market in raw_markets:
-        # raw_markets is truthy here by virtue of being iterable non-empty;
-        # opportunity_score handles the single-element case (0.5 neutral).
         result = opportunity_score(market, batch=raw_markets)
         scored = {
             **market,
             "score": float(result["score"]),
             "components": dict(result["components"]),
         }
+        # Strip None signal values so the Jinja template never receives
+        # them for format()/arithmetic operations.  The template renders a
+        # placeholder for missing keys instead.
+        for field in _NULLABLE_SIGNAL_FIELDS:
+            if scored.get(field) is None:
+                scored.pop(field, None)
         scored_markets.append(scored)
 
     summary = _summarize(scored_markets)
