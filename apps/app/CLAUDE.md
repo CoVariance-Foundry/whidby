@@ -14,32 +14,42 @@ The user-facing consumer product where operators:
 apps/app/
   src/
     app/
-      layout.tsx               Light-theme root, Source Serif 4 + Inter + JetBrains Mono
-      login/                   Email/password sign-in (same Supabase project as admin)
-      auth/callback/           OAuth callback
       (protected)/
-        layout.tsx             Sidebar + Topbar shell
-        page.tsx               Home; currently redirects to /reports
-        niche-finder/          City+service scoring page with CityAutocomplete
+        page.tsx                 Home dashboard (SSR — loadDashboard)
+        niche-finder/
+          page.tsx               Variation B command center
         reports/
-          page.tsx             Server component — SSR Supabase fetch from `reports`
-          ReportsView.tsx      Client table (props-driven, no mock data)
-        recommendations/       "Coming soon" stub so sidebar link stops 404-ing
-      api/
-        agent/
-          scoring/route.ts     POST → FastAPI /api/niches/score
-          metros/suggest/      GET → FastAPI /api/metros/suggest (autocomplete)
-          health/route.ts      GET → FastAPI /health
+          page.tsx               SSR Supabase fetch + client shell
+          ReportsPageClient.tsx  Client filter/search/summary + table
+          ReportsView.tsx        Legacy 014 client table (unused by Foundation)
+        recommendations/         Coming-soon stub
+        layout.tsx               Sidebar + Topbar shell
+      api/agent/                 scoring + metros/suggest + health proxies
+      auth/                      Supabase auth callback
+      login/                     Sign-in flow
     components/
-      niche-finder/
-        CityAutocomplete.tsx   Mirror of apps/admin/ component, light-themed
+      home/                      StatCardRow, HeroQuickSearch, RecommendedMetros,
+                                  RecentActivityFeed, SavedSearchesBlock
+      niche-finder/              CityAutocomplete, NicheFinderTabs,
+                                  StrategyPresetRail, PinnedRecentRail
+      reports/                   ArchetypeChipFilter, ReportsTable
       Sidebar.tsx / Topbar.tsx / StatusPill.tsx
     lib/
-      niche-finder/            Mirrors of apps/admin/src/lib/niche-finder/ (types,
-                               request-validation, metro-suggest, reports-mapper)
-      archetypes.ts / icons.tsx / utils.ts / supabase/
-    middleware.ts              Auth guard
+      archetypes.ts              8-archetype registry (id/short/glyph/hint/strat)
+      home/load-dashboard.ts     Supabase → DashboardData loader
+      niche-finder/              types, request-validation, metro-suggest,
+                                  reports-mapper, history-storage, derive-archetype
+      supabase/                  Supabase server/client factories
 ```
+
+## Foundation flow (2026-04-21)
+
+All Foundation pages are deterministic — no Claude calls. Agentic
+features (exploration assistant, strategy search, shareable reports)
+arrive from Phase 2 onward on Managed Agents. See
+`docs/superpowers/specs/2026-04-21-widby-niche-finder-v1-design.md`
+for the phased roadmap and the separation-of-concerns rule that
+keeps the product lane deterministic.
 
 ## Niche-finder flow on consumer
 
