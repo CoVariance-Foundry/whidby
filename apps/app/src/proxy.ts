@@ -61,7 +61,7 @@ export async function proxy(request: NextRequest) {
 
     if (user && pathname === "/login") {
       const nextParam = request.nextUrl.searchParams.get("next");
-      const dest = isSafeNext(nextParam) ? nextParam : "/reports";
+      const dest = isSafeNext(nextParam) ? nextParam : "/";
       const url = request.nextUrl.clone();
       url.pathname = dest;
       url.search = "";
