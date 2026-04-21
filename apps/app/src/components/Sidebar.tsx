@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Icon, I } from "@/lib/icons";
+import { createClient } from "@/lib/supabase/server";
 import UserMenu from "./UserMenu";
 
 type NavId = "home" | "finder" | "recs" | "reports";
@@ -17,8 +18,24 @@ const SAVED = [
   "Fast‑path pack opportunities",
 ];
 
-export default function Sidebar({ active }: { active: NavId }) {
+function deriveInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+export default async function Sidebar({ active }: { active: NavId }) {
   const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3001";
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const fullName =
+    user?.user_metadata?.full_name ??
+    user?.user_metadata?.name ??
+    user?.email ??
+    "User";
+  const initials = deriveInitials(fullName);
 
   return (
     <aside className="sidebar">
@@ -53,9 +70,9 @@ export default function Sidebar({ active }: { active: NavId }) {
       ))}
 
       <UserMenu
-        name="Alex Rivera"
+        name={fullName}
         plan="Pro plan"
-        initials="AR"
+        initials={initials}
         adminUrl={adminUrl}
       />
     </aside>
