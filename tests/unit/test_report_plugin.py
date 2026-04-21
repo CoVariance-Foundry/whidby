@@ -6,9 +6,8 @@ import re
 from pathlib import Path
 
 import pytest
-from jinja2 import TemplateNotFound
 
-from src.research_agent.plugins.report_plugin import ReportPlugin
+from src.research_agent.plugins.report_plugin import ALLOWED_TEMPLATES, ReportPlugin
 
 
 @pytest.fixture
@@ -112,11 +111,11 @@ class TestReportPluginExecute:
             filename,
         ), f"Filename '{filename}' doesn't match expected pattern"
 
-    def test_missing_template_raises_template_not_found(
+    def test_disallowed_template_raises_value_error(
         self, tmp_path: Path, minimal_context: dict
     ):
         plugin = ReportPlugin()
-        with pytest.raises(TemplateNotFound):
+        with pytest.raises(ValueError, match="allow-list"):
             plugin.execute(
                 "compose_report",
                 {
@@ -126,6 +125,9 @@ class TestReportPluginExecute:
                     "output_dir": str(tmp_path),
                 },
             )
+
+    def test_allow_list_contains_market_opportunity(self):
+        assert "market_opportunity.html" in ALLOWED_TEMPLATES
 
     def test_output_dir_created_if_missing(
         self, tmp_path: Path, minimal_context: dict

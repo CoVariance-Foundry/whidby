@@ -115,14 +115,21 @@ class TestMarketOpportunityTemplate:
     def test_top_market_listed_first(self, env, three_market_context):
         tmpl = env.get_template("market_opportunity.html")
         html = tmpl.render(**three_market_context)
-        idx_austin = html.find("Austin, TX")
-        idx_denver = html.find("Denver, CO")
-        idx_boise = html.find("Boise, ID")
+
+        # Only inspect the first <tbody> to avoid matching cities that appear
+        # again inside the per-market <details> breakdown section.
+        tbody_open = html.find("<tbody>")
+        tbody_close = html.find("</tbody>", tbody_open)
+        assert tbody_open != -1 and tbody_close != -1
+        tbody = html[tbody_open:tbody_close]
+
+        idx_austin = tbody.find("Austin, TX")
+        idx_denver = tbody.find("Denver, CO")
+        idx_boise = tbody.find("Boise, ID")
         assert idx_austin != -1
         assert idx_denver != -1
         assert idx_boise != -1
-        # Table is sorted by score descending
-        # Find the table rows specifically - just check ordering
+        # Table is sorted by score descending: Austin > Denver > Boise.
         assert idx_austin < idx_denver < idx_boise
 
     def test_weights_disclosed(self, env, three_market_context):

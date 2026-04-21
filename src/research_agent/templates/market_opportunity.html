@@ -9,6 +9,7 @@
 
 {% block content %}
   {% if markets %}
+    {% set sorted_markets = markets | sort(attribute="score", reverse=True) %}
     <section aria-labelledby="summary-heading">
       <h2 id="summary-heading">Summary</h2>
       <div class="card-row">
@@ -48,7 +49,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for market in markets | sort(attribute="score", reverse=True) %}
+          {% for market in sorted_markets %}
             <tr{% if loop.first %} class="top-row"{% endif %}>
               <td>{{ loop.index }}</td>
               <td>{{ market.city }}</td>
@@ -67,7 +68,7 @@
     <section aria-labelledby="breakdown-heading">
       <h2 id="breakdown-heading">Score breakdowns</h2>
       <p>Each market's composite is a weighted sum of normalized components.</p>
-      {% for market in markets | sort(attribute="score", reverse=True) %}
+      {% for market in sorted_markets %}
         <details>
           <summary>
             {{ market.city }} &mdash;

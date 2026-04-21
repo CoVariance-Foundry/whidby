@@ -7,6 +7,12 @@ Anthropic-schema tool definitions, and an ``execute`` dispatcher that raises
 Pure filesystem writer -- no network, no DB, single-threaded. The plugin
 resolves templates from :mod:`src.research_agent.templates` using a Jinja
 ``FileSystemLoader`` with autoescape enabled for ``.html`` files.
+
+Trust model: ``template_name`` is restricted to :data:`ALLOWED_TEMPLATES` so
+agent-generated arguments cannot load arbitrary files from the templates
+directory. ``output_dir`` is trusted to be a safe path chosen by the caller;
+the FastAPI endpoint that invokes this plugin is responsible for constraining
+it under the per-run reports root (``research_runs/{run_id}/reports/``).
 """
 
 from __future__ import annotations
@@ -20,6 +26,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from src.research_agent.plugins.base import ToolPlugin
 
 TEMPLATE_DIR: Path = Path(__file__).resolve().parent.parent / "templates"
+
+ALLOWED_TEMPLATES: frozenset[str] = frozenset({"market_opportunity.html"})
 
 
 class ReportPlugin(ToolPlugin):
@@ -91,6 +99,12 @@ class ReportPlugin(ToolPlugin):
         template_name: str = arguments["template_name"]
         context: dict[str, Any] = arguments["context"]
         output_dir = Path(arguments["output_dir"])
+
+        if template_name not in ALLOWED_TEMPLATES:
+            raise ValueError(
+                f"template '{template_name}' is not in the allow-list "
+                f"(allowed: {sorted(ALLOWED_TEMPLATES)})"
+            )
 
         template = self._env.get_template(template_name)
         rendered = template.render(**context)
