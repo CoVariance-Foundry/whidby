@@ -17,7 +17,7 @@ def parse_json_response(text: str) -> tuple[dict[str, Any] | None, str | None]:
     # Strip markdown code fences if present
     if cleaned.startswith("```"):
         lines = cleaned.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
+        lines = [line for line in lines if not line.strip().startswith("```")]
         cleaned = "\n".join(lines).strip()
 
     try:

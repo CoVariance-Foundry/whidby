@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 
 from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
