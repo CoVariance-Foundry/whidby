@@ -72,6 +72,22 @@ The dashboard deploys to Vercel as project `whidby-agent`. The middleware requir
 | `NEXT_PUBLIC_API_URL` | Yes (production) | Render API URL, e.g. `https://whidby-1.onrender.com` |
 | `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (production) | App frontend origin for auth redirects, e.g. `https://app.thewidby.com` |
 
+### E2E test accounts (Supabase `whidby` project)
+
+Login uses email + password (`signInWithPassword`). These accounts are seeded directly in `auth.users`.
+
+| Account | Email | Password | Purpose |
+|---------|-------|----------|---------|
+| Personal | `antwoine@covariance.studio` | `WidbyDev2026!` | Dev/admin login |
+| E2E Test | `e2e-test@widby.dev` | `WidbyTest2026!` | Playwright automation |
+
+For Vercel preview E2E, set these env vars in the project's **Preview** environment:
+
+| Variable | Value |
+|----------|-------|
+| `E2E_AUTH_EMAIL` | `e2e-test@widby.dev` |
+| `E2E_AUTH_PASSWORD` | `WidbyTest2026!` |
+
 ## Setup Steps
 
 1. Clone the repository

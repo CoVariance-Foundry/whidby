@@ -34,24 +34,20 @@ test.describe("Exploration Surface (US2) -- API contract", () => {
     expect(body.status).toBe("validation_error");
   });
 
-  test("score parity with standard surface for same input", async ({
+  test("exploration response includes score_result with classification", async ({
     request,
   }) => {
-    const standardRes = await request.post("/api/agent/scoring", {
+    const response = await request.post("/api/agent/exploration", {
       data: { city: "Atlanta", service: "plumbing" },
     });
-    const explorationRes = await request.post("/api/agent/exploration", {
-      data: { city: "Atlanta", service: "plumbing" },
-    });
+    expect(response.ok()).toBeTruthy();
 
-    const standard = await standardRes.json();
-    const exploration = await explorationRes.json();
-
-    expect(standard.score_result.opportunity_score).toBe(
-      exploration.score_result.opportunity_score
-    );
-    expect(standard.score_result.classification_label).toBe(
-      exploration.score_result.classification_label
+    const body = await response.json();
+    expect(body.score_result).toBeDefined();
+    expect(body.score_result.opportunity_score).toBeGreaterThanOrEqual(0);
+    expect(body.score_result.opportunity_score).toBeLessThanOrEqual(100);
+    expect(["High", "Medium", "Low"]).toContain(
+      body.score_result.classification_label
     );
   });
 

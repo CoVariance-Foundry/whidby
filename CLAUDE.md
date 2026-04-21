@@ -132,6 +132,17 @@ Required (see `.env.example`):
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)
 
+## Auth & Test Accounts
+
+Login uses email + password via `signInWithPassword` (no magic link). The auth callback route is kept as a legacy fallback for OAuth/in-flight links.
+
+| Account | Email | Password | Purpose |
+|---------|-------|----------|---------|
+| Personal | `antwoine@covariance.studio` | `WidbyDev2026!` | Dev/admin login |
+| E2E Test | `e2e-test@widby.dev` | `WidbyTest2026!` | Playwright automation |
+
+For CI/preview E2E runs, set `E2E_AUTH_EMAIL` and `E2E_AUTH_PASSWORD` in Vercel project env vars (Preview environment). The Playwright helper at `apps/app/e2e/helpers/auth.ts` reads these automatically.
+
 ## TDD Workflow
 
 Tests are written **before** implementation. For each module:

@@ -7,10 +7,8 @@ import ExplorationQueryForm from "@/components/niche-finder/ExplorationQueryForm
 import ExplorationScoreSummary from "@/components/niche-finder/ExplorationScoreSummary";
 import StandardSurfaceState from "@/components/niche-finder/StandardSurfaceState";
 import type { ExplorationSurfaceResponse } from "@/lib/niche-finder/exploration-types";
-import { compareScoreParity } from "@/lib/niche-finder/parity-guard";
 import { loadQueryContext, saveQueryContext } from "@/lib/niche-finder/session-context";
-import { fetchStandardScore } from "@/lib/niche-finder/standard-surface-service";
-import type { NicheQueryInput, StandardSurfaceResponse } from "@/lib/niche-finder/types";
+import type { NicheQueryInput } from "@/lib/niche-finder/types";
 
 const DEFAULT_QUERY: NicheQueryInput = {
   city: "Phoenix",
@@ -31,7 +29,6 @@ export default function ExplorationPage() {
   const [query, setQuery] = useState<NicheQueryInput>(() => {
     return loadQueryContext() ?? DEFAULT_QUERY;
   });
-  const [standard, setStandard] = useState<StandardSurfaceResponse | null>(null);
   const [exploration, setExploration] = useState<ExplorationSurfaceResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,29 +39,18 @@ export default function ExplorationPage() {
     setQuery(nextQuery);
     saveQueryContext(nextQuery);
 
-    const [standardResponse, explorationResponse] = await Promise.all([
-      fetchStandardScore(nextQuery),
-      fetchExploration(nextQuery),
-    ]);
+    const explorationResponse = await fetchExploration(nextQuery);
 
-    if (standardResponse.status !== "success" || explorationResponse.status === "validation_error") {
-      setStandard(null);
+    if (explorationResponse.status === "validation_error" || explorationResponse.status === "unavailable") {
       setExploration(null);
-      setError(
-        standardResponse.message ??
-          explorationResponse.message ??
-          "Unable to load exploration data."
-      );
+      setError(explorationResponse.message ?? "Unable to load exploration data.");
       setLoading(false);
       return;
     }
 
-    setStandard(standardResponse);
     setExploration(explorationResponse);
     setLoading(false);
   }
-
-  const parity = compareScoreParity(standard, exploration);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-6 py-6">
@@ -82,12 +68,6 @@ export default function ExplorationPage() {
       ) : (
         <>
           <ExplorationScoreSummary result={exploration} />
-          <div className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] p-3 text-sm">
-            Score parity with standard surface:{" "}
-            <span data-testid="parity-status" className={parity.isParity ? "text-green-400" : "text-yellow-400"}>
-              {parity.isParity ? "Matched" : `Delta ${parity.delta}`}
-            </span>
-          </div>
           <EvidencePanel evidence={exploration.evidence} />
           <ExplorationAssistantPanel queryContext={query} />
         </>
