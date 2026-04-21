@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isSafeNext } from "@/lib/auth/safe-next";
 
 type Status = "idle" | "loading" | "error";
 
@@ -30,7 +31,7 @@ function LoginForm() {
       setStatus("error");
     } else {
       const nextParam = searchParams.get("next");
-      const dest = nextParam && nextParam.startsWith("/") ? nextParam : "/reports";
+      const dest = isSafeNext(nextParam) ? nextParam : "/reports";
       router.replace(dest);
       router.refresh();
     }

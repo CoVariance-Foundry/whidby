@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isSafeNext } from "@/lib/auth/safe-next";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const nextParam = searchParams.get("next");
-  const next = nextParam?.startsWith("/") ? nextParam : "/reports";
+  const next = isSafeNext(nextParam) ? nextParam : "/reports";
   const frontendOrigin =
     process.env.NEXT_PUBLIC_APP_FRONTEND_URL?.replace(/\/$/, "") ?? origin;
 

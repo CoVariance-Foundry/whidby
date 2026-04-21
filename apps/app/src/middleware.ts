@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isSafeNext } from "@/lib/auth/safe-next";
 
 const PUBLIC_ROUTES = ["/login", "/auth/callback", "/api/"];
 
@@ -55,7 +56,7 @@ export async function middleware(request: NextRequest) {
 
     if (user && pathname === "/login") {
       const nextParam = request.nextUrl.searchParams.get("next");
-      const dest = nextParam && nextParam.startsWith("/") ? nextParam : "/reports";
+      const dest = isSafeNext(nextParam) ? nextParam : "/reports";
       const url = new URL(dest, request.nextUrl.origin);
       return redirectWithCookies(url, supabaseResponse);
     }
