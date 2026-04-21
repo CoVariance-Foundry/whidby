@@ -32,6 +32,7 @@ export default function CityAutocomplete({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
 
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,9 +57,10 @@ export default function CityAutocomplete({
     (q: string) => {
       cancel();
 
-      if (q.trim().length < 1) {
+      if (q.trim().length < 2) {
         setSuggestions([]);
         setOpen(false);
+        setHasFetched(false);
         return;
       }
 
@@ -70,13 +72,15 @@ export default function CityAutocomplete({
         try {
           const results = await fetchMetroSuggestions(q, 8, controller.signal);
           setSuggestions(results);
-          setOpen(results.length > 0);
+          setOpen(true);
+          setHasFetched(true);
           setActiveIndex(-1);
         } catch (err) {
           // AbortError is expected when the user keeps typing — swallow it.
           if (err instanceof DOMException && err.name === "AbortError") return;
           setSuggestions([]);
           setOpen(false);
+          setHasFetched(false);
         } finally {
           setLoading(false);
         }
@@ -101,7 +105,16 @@ export default function CityAutocomplete({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open || suggestions.length === 0) return;
+    if (!open) return;
+
+    // When the only row is the disabled empty-state, only Escape is handled.
+    if (suggestions.length === 0) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        setActiveIndex(-1);
+      }
+      return;
+    }
 
     switch (e.key) {
       case "ArrowDown":
@@ -136,7 +149,7 @@ export default function CityAutocomplete({
   };
 
   return (
-    <div className="relative w-full" role="combobox" aria-expanded={open} aria-haspopup="listbox">
+    <div className="relative w-full">
       <input
         ref={inputRef}
         data-testid={testId}
@@ -148,6 +161,9 @@ export default function CityAutocomplete({
         disabled={disabled}
         placeholder={placeholder}
         autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         aria-autocomplete="list"
         aria-controls={listboxId}
         aria-activedescendant={
@@ -166,34 +182,45 @@ export default function CityAutocomplete({
         </span>
       )}
 
-      {open && suggestions.length > 0 && (
+      {open && (
         <ul
           id={listboxId}
           role="listbox"
           aria-label="City suggestions"
           className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] text-sm shadow-lg"
         >
-          {suggestions.map((s, i) => (
+          {hasFetched && suggestions.length === 0 ? (
             <li
-              key={s.cbsa_code}
-              id={`${listboxId}-option-${i}`}
               role="option"
-              aria-selected={i === activeIndex}
-              onMouseDown={() => selectSuggestion(s)}
-              className={[
-                "cursor-pointer px-3 py-2",
-                i === activeIndex
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "hover:bg-[var(--color-dark-hover)]",
-              ].join(" ")}
+              aria-disabled="true"
+              aria-selected={false}
+              className="cursor-default px-3 py-2 text-[var(--color-muted)]"
             >
-              <span className="font-medium">{s.city}</span>
-              <span className="ml-1 text-[var(--color-muted)]">{s.state}</span>
-              <span className="ml-auto block text-xs text-[var(--color-muted)]">
-                {s.cbsa_name}
-              </span>
+              No metros match &ldquo;{value}&rdquo;
             </li>
-          ))}
+          ) : (
+            suggestions.map((s, i) => (
+              <li
+                key={s.cbsa_code}
+                id={`${listboxId}-option-${i}`}
+                role="option"
+                aria-selected={i === activeIndex}
+                onMouseDown={() => selectSuggestion(s)}
+                className={[
+                  "cursor-pointer px-3 py-2",
+                  i === activeIndex
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "hover:bg-[var(--color-dark-hover)]",
+                ].join(" ")}
+              >
+                <span className="font-medium">{s.city}</span>
+                <span className="ml-1 text-[var(--color-muted)]">{s.state}</span>
+                <span className="ml-auto block text-xs text-[var(--color-muted)]">
+                  {s.cbsa_name}
+                </span>
+              </li>
+            ))
+          )}
         </ul>
       )}
     </div>

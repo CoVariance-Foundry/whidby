@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, fireEvent, act } from "@testing-library/react";
 import CityAutocomplete from "./CityAutocomplete";
@@ -77,6 +78,9 @@ describe("CityAutocomplete", () => {
     const input = screen.getByTestId("city-input");
     expect(input).toBeInTheDocument();
     expect(input).toHaveValue("Dallas");
+    // ARIA 1.2: role="combobox" must be on the <input>, not a wrapper <div>
+    const combobox = screen.getByRole("combobox");
+    expect(combobox.tagName.toLowerCase()).toBe("input");
   });
 
   it("shows suggestions after debounce fires", async () => {
@@ -202,5 +206,52 @@ describe("CityAutocomplete", () => {
     // Only one fetch call (timer A was cancelled before it fired)
     expect(global.fetch as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("empty result renders 'No metros match' row that is not selectable", async () => {
+    mockFetch([]);
+
+    // Use a stateful wrapper so the controlled value prop tracks the input.
+    function Wrapper() {
+      const [val, setVal] = React.useState("");
+      return (
+        <CityAutocomplete
+          value={val}
+          onChange={(city) => setVal(city)}
+          debounceMs={0}
+        />
+      );
+    }
+
+    render(<Wrapper />);
+
+    const input = screen.getByTestId("city-input");
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "zz" } });
+    });
+
+    // Listbox must appear with the disabled empty-state option
+    await waitFor(() => {
+      expect(screen.getByRole("listbox")).toBeInTheDocument();
+    });
+
+    const emptyOption = screen.getByRole("option");
+    expect(emptyOption).toHaveAttribute("aria-disabled", "true");
+    expect(emptyOption).toHaveTextContent(/No metros match/);
+    expect(emptyOption).toHaveTextContent("zz");
+
+    // Clicking the disabled row must not call onSelect (onChange called only with string+suggestion pair)
+    await act(async () => {
+      fireEvent.mouseDown(emptyOption);
+    });
+    // After clicking disabled row, no suggestion object is passed to onChange
+    // (only plain city string updates from typing are expected)
+    expect(screen.queryByRole("listbox")).toBeInTheDocument(); // listbox stays open
+
+    // Arrow keys must not crash and Enter must not select anything
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // Listbox still open (no selection happened)
+    expect(screen.queryByRole("listbox")).toBeInTheDocument();
   });
 });
