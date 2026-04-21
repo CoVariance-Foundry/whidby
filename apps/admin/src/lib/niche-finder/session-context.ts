@@ -16,7 +16,12 @@ export function loadQueryContext(): NicheQueryInput | null {
   try {
     const parsed = JSON.parse(raw) as Partial<NicheQueryInput>;
     if (!parsed.city || !parsed.service) return null;
-    return { city: parsed.city, service: parsed.service };
+    // state is optional — previously-stored entries without it are valid.
+    return {
+      city: parsed.city,
+      service: parsed.service,
+      ...(typeof parsed.state === "string" && parsed.state ? { state: parsed.state } : {}),
+    };
   } catch {
     return null;
   }

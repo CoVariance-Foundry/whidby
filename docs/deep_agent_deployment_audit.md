@@ -83,26 +83,50 @@ All endpoints served by `src/research_agent/api.py`:
 
 **Liveness / health:** **`GET /health`** returns `{"status": "ok"}` (200). Use this for Render health checks and external monitoring.
 
-**CORS allowlist:** `http://localhost:3001`, `https://app.thewidby.com`, `https://whidby-1.onrender.com`.
+**Niche scoring (operational wiring):**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/niches/score` | Runs orchestrator (M4 → M9), persists via `SupabasePersistence`, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run: true` for fixture-backed execution. |
+| GET | `/api/niches/{report_id}` | Reads a persisted report back from Supabase |
+| GET | `/api/metros/suggest?q=&limit=` | City autocomplete powered by the `MetroDB` seed |
+
+**CORS allowlist:** `http://localhost:3001` (admin dev), `http://localhost:3002` (consumer dev), `https://app.thewidby.com` (admin prod), `https://whidby-1.onrender.com` (self-health). Consumer prod origin is added here once the second Vercel project is deployed.
 
 ---
 
-### 1.5 Next.js Dashboard (Frontend Proxy)
+### 1.5 Next.js Proxies (Frontend)
 
-**Command:**
+**Commands:**
 ```bash
-npm run dev:app    # turbo dev --filter=nichefinder-app (port 3001)
+npm run dev:admin   # turbo dev --filter=widby-admin  (apps/admin, port 3001)
+npm run dev:app     # turbo dev --filter=widby-app    (apps/app, port 3002)
 ```
 
-**Proxy routes** in `apps/app/src/app/api/agent/`:
+**Admin proxy routes** in `apps/admin/src/app/api/agent/`:
 
 | Route File | Proxies To |
 |------------|------------|
+| `scoring/route.ts` (POST) | `{API_BASE}/api/niches/score` |
+| `exploration/route.ts` (POST) | `{API_BASE}/api/niches/score` (returns evidence) |
+| `exploration-chat/route.ts` (POST) | `{API_BASE}/api/exploration/followup` |
+| `metros/suggest/route.ts` (GET) | `{API_BASE}/api/metros/suggest` |
+| `health/route.ts` (GET) | `{API_BASE}/health` |
 | `sessions/route.ts` (GET, POST) | `{API_BASE}/api/sessions` |
 | `sessions/[runId]/route.ts` (GET) | `{API_BASE}/api/sessions/{runId}` |
 | `chat/route.ts` (POST) | `{API_BASE}/api/chat` |
 | `graph/route.ts` (GET) | `{API_BASE}/api/graph` |
 | `experiments/[runId]/route.ts` (GET) | `{API_BASE}/api/experiments/{runId}` |
+
+**Consumer proxy routes** in `apps/app/src/app/api/agent/` (mirror subset for the scoring surface):
+
+| Route File | Proxies To |
+|------------|------------|
+| `scoring/route.ts` (POST) | `{API_BASE}/api/niches/score` |
+| `metros/suggest/route.ts` (GET) | `{API_BASE}/api/metros/suggest` |
+| `health/route.ts` (GET) | `{API_BASE}/health` |
+
+The consumer does NOT host the research-agent surfaces (sessions/chat/graph/experiments) — those are admin-only. Both apps honor `NEXT_PUBLIC_NICHE_DRY_RUN=1` by forwarding `dry_run: true` so Playwright/E2E runs skip live DataForSEO + Anthropic calls.
 
 ---
 
