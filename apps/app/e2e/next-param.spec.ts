@@ -16,7 +16,7 @@ import { signIn, hasE2ECredentials } from "./helpers/auth";
 test.describe("next= round-trip — unauthenticated flow", () => {
   test("unauth /reports -> /login?next=/reports", async ({ page }) => {
     await page.goto("/reports");
-    await page.waitForURL(/\/login\?next=%2Freports$/, { timeout: 10_000 });
+    await page.waitForURL("**/login?next=*", { timeout: 10_000 });
     const url = new URL(page.url());
     expect(url.pathname).toBe("/login");
     expect(url.searchParams.get("next")).toBe("/reports");
@@ -26,7 +26,7 @@ test.describe("next= round-trip — unauthenticated flow", () => {
     page,
   }) => {
     await page.goto("/reports/any-id-123");
-    await page.waitForURL(/\/login\?next=/, { timeout: 10_000 });
+    await page.waitForURL("**/login?next=*", { timeout: 10_000 });
     const url = new URL(page.url());
     expect(url.pathname).toBe("/login");
     expect(url.searchParams.get("next")).toBe("/reports/any-id-123");
