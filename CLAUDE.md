@@ -15,7 +15,8 @@ This is a Turborepo monorepo. The git root is this directory.
 ```
 apps/
   web/              — Marketing landing page (Next.js 16, deployed as "whidby" on Vercel)
-  app/              — Research Agent Dashboard (Next.js 16, port 3001, deploys to app.thewidby.com)
+  app/              — Consumer product (Next.js 16, port 3002, light academic theme)
+  admin/            — Research Agent Dashboard / admin surface (Next.js 16, port 3001, deploys to app.thewidby.com)
 src/                — Python scoring engine (modules M0–M15)
   research_agent/   — Autonomous research agent (Anthropic SDK tool-use + Ralph loop)
 tests/              — pytest: unit/, integration/, fixtures/
@@ -32,7 +33,8 @@ packages/           — (none yet)
 npm run dev          # Dev all apps
 npm run build        # Build all apps
 npm run dev:web      # Marketing site only (port 3000)
-npm run dev:app      # Research agent dashboard (port 3001)
+npm run dev:admin    # Admin / research agent dashboard (port 3001)
+npm run dev:app      # Consumer product (port 3002)
 ```
 
 ### Python (Scoring Engine)
@@ -65,6 +67,15 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 - **Phase 1 — Foundation:** M0 (DataForSEO client) → M1 (Metro DB) → M2 (Supabase schema) → M3 (LLM client)
 - **Phase 2 — Scoring Pipeline:** M4 (keyword expansion) → M5 (data collection) → M6 (signal extraction) → M7 (scoring) → M8 (classification) → M9 (report assembly)
 - **Phase 3 — Experiment Framework:** M10–M15 (outreach validation, can start after Phase 1)
+
+### End-to-end scoring (operational wiring)
+
+- `src/pipeline/orchestrator.py::score_niche_for_metro` — composes M4 → M9 for a single `(niche, city, state)` tuple. Supports `dry_run=True` for fixture-backed runs with zero external-API cost (used by Playwright).
+- `src/clients/supabase_persistence.py::SupabasePersistence.persist_report` — writes the M9 report into `reports`, `report_keywords`, `metro_signals`, `metro_scores` per `supabase/migrations/001_core_schema.sql`.
+- FastAPI bridge exposes the flow to the admin UI:
+  - `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`
+  - `GET /api/niches/{report_id}` — reads the stored report back from Supabase
+- Admin Next.js proxies `/api/agent/scoring` and `/api/agent/exploration` both call the FastAPI `POST /api/niches/score`; UI state derives from the single response.
 
 ### Key design rules
 
@@ -125,7 +136,7 @@ The research agent uses **Claude-native tool-use** (Anthropic SDK `messages.crea
 Required (see `.env.example`):
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase
-- `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/app` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
+- `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/admin` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
 - `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` — DataForSEO API
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)
@@ -144,11 +155,12 @@ Before every `git commit && git push` on module code (`src/`), you **must** run 
 
 1. **Lint**: `ruff check src/ tests/` — must pass with zero errors
 2. **Unit tests**: `pytest tests/unit/ -v` — all tests must pass
-3. **Docs sync**: If any files under `src/pipeline/`, `src/scoring/`, `src/classification/`, `src/experiment/`, `src/clients/`, or `src/data/` are changed, at least one of these docs must also be updated in the same commit:
+3. **Docs sync**: If any files under `src/pipeline/`, `src/scoring/`, `src/classification/`, `src/experiment/`, `src/clients/`, or `src/data/` are changed, at least one of these docs must also be updated in the same PR:
    - `docs/product_breakdown.md` (I/O contracts, file trees)
    - `docs/module_dependency.md` (dependency changes)
    - `docs/data_flow.md` (data shape changes)
-   - If no doc changes are needed, add `[docs-sync-skip]` to the commit message to bypass
+
+   **Never use `[docs-sync-skip]`** to bypass the gate on this project. The skip tag hides module-interface drift from reviewers. Update the real doc instead — a few lines describing what changed is enough.
 4. **Spec artifacts**: If the branch name matches a feature pattern (`NNN-*`), a corresponding `specs/` directory must exist
 
 Skipping these gates results in CI failure on push. Run them locally first.
@@ -169,4 +181,6 @@ See `docs/spec_workflow_guide.md` for the full workflow, naming conventions, and
 
 ## App-Specific Guidance
 
-See `apps/web/CLAUDE.md` for marketing site details.
+- `apps/web/CLAUDE.md` — marketing site (pre-launch waitlist, ActiveCampaign)
+- `apps/admin/CLAUDE.md` — research-agent dashboard, niche-finder scoring UI, port 3001 (dark theme)
+- `apps/app/CLAUDE.md` — consumer product scaffold, port 3002 (light academic theme)

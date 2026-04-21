@@ -9,8 +9,6 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
 
-  // Let the auth callback route handle PKCE exchange without a preceding
-  // middleware auth call that can mutate auth cookies.
   if (pathname.startsWith("/auth/callback")) {
     return NextResponse.next({ request });
   }
@@ -61,7 +59,7 @@ export async function middleware(request: NextRequest) {
 
     if (user && pathname === "/login") {
       const url = request.nextUrl.clone();
-      url.pathname = "/";
+      url.pathname = "/reports";
       return NextResponse.redirect(url);
     }
   } catch (error) {

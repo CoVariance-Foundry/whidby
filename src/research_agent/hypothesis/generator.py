@@ -10,7 +10,6 @@ import uuid
 from typing import Any
 
 from src.research_agent.memory.graph_store import ResearchGraphStore
-from src.research_agent.memory.models import NodeStatus, NodeType
 
 # Proxy metric definitions from Algo Spec V1.1
 PROXY_METRICS = {
