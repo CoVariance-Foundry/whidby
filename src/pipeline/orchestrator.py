@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
+from uuid import uuid4
 
 from src.classification.ai_exposure import classify_ai_exposure
 from src.classification.difficulty_tier import compute_difficulty_tier
@@ -56,14 +57,17 @@ async def score_niche_for_metro(
     if target is None:
         raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
 
-    target_dict: dict[str, Any] = {
-        "cbsa_code": target.cbsa_code,
-        "cbsa_name": target.cbsa_name,
-        "state": target.state,
-        "population": target.population,
-        "principal_cities": list(target.principal_cities),
-        "dataforseo_location_codes": list(target.dataforseo_location_codes),
+    if not target.dataforseo_location_codes:
+        raise ValueError(
+            f"metro {target.cbsa_code} has no DataForSEO location codes"
+        )
+    m5_metro_input: dict[str, Any] = {
+        "metro_id": target.cbsa_code,
+        "location_code": target.dataforseo_location_codes[0],
+        "principal_city": city,
     }
+
+    run_id = f"score-{uuid4()}"
 
     expansion = await expand_keywords(
         niche,
@@ -73,12 +77,14 @@ async def score_niche_for_metro(
 
     raw = await collect_data(
         keywords=expansion["keywords"],
-        metros=[target_dict],
+        metros=[m5_metro_input],
         strategy_profile=strategy_profile,
         client=dataforseo_client,
     )
 
-    metro_bundle = raw["metros"][target.cbsa_code]
+    metro_result = raw.metros[target.cbsa_code]
+    metro_bundle = asdict(metro_result)
+    metro_bundle.pop("metro_id", None)
     signals = extract_signals(
         raw_metro_bundle=metro_bundle,
         keyword_expansion=expansion["keywords"],
@@ -116,7 +122,7 @@ async def score_niche_for_metro(
     )
 
     run_input = {
-        "run_id": raw["run_id"],
+        "run_id": run_id,
         "input": {
             "niche_keyword": niche,
             "geo_scope": "city",
@@ -140,8 +146,8 @@ async def score_niche_for_metro(
             }
         ],
         "meta": {
-            "total_api_calls": raw.get("total_api_calls", 0),
-            "total_cost_usd": raw.get("total_cost_usd", 0.0),
+            "total_api_calls": raw.meta.total_api_calls,
+            "total_cost_usd": raw.meta.total_cost_usd,
             "processing_time_seconds": time.monotonic() - started,
         },
     }

@@ -10,6 +10,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from src.pipeline.orchestrator import ScoreNicheResult, score_niche_for_metro
+from src.pipeline.types import MetroCollectionResult, RawCollectionResult, RunMetadata
 
 
 _FAKE_KEYWORD_EXPANSION = {
@@ -20,18 +21,19 @@ _FAKE_KEYWORD_EXPANSION = {
     ],
 }
 
-_FAKE_RAW_COLLECTION = {
-    "run_id": "run-abc",
-    "metros": {
-        "38060": {  # Phoenix CBSA code
-            "serp_organic": [], "serp_maps": [], "keyword_volume": [],
-            "backlinks": [], "lighthouse": [], "google_reviews": [],
-            "gbp_info": [], "business_listings": [],
-        }
+_FAKE_RAW_COLLECTION = RawCollectionResult(
+    metros={
+        "38060": MetroCollectionResult(
+            metro_id="38060",
+            serp_organic=[], serp_maps=[], keyword_volume=[],
+            backlinks=[], lighthouse=[], google_reviews=[],
+            gbp_info=[], business_listings=[],
+        )
     },
-    "total_api_calls": 8,
-    "total_cost_usd": 0.12,
-}
+    meta=RunMetadata(
+        total_api_calls=8, total_cost_usd=0.12, collection_time_seconds=3.1,
+    ),
+)
 
 _FAKE_SIGNALS = {
     "demand": {"tier_1_volume_effective": 4200},
