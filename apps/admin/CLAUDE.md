@@ -90,7 +90,7 @@ Two layers of protection on the login form:
 
 1. **Server-side (Supabase baseline).** Supabase Auth enforces 30 auth requests/hour/IP by default, configurable in the Supabase dashboard. This is the primary defense against credential stuffing. Docs: https://supabase.com/docs/guides/auth/auth-rate-limits
 
-2. **Client-side backoff (UX friction).** The login form applies a progressive lockout after each failed attempt: 1s, 2s, 4s, 8s, 15s (capped). Implemented inline in `src/app/login/page.tsx` via `failCount` + `lockedUntil` state with a `setInterval` countdown. Resets on successful sign-in or full page refresh (no localStorage persistence). This blocks rapid-fire UI submissions but does NOT protect against attackers bypassing the form.
+2. **Client-side backoff (UX friction).** The login form applies a progressive lockout after each failed attempt: 1s, 2s, 4s, 8s, 15s (capped). Implemented inline in `src/app/login/page.tsx` via a `failCountRef` (useRef, not state — the counter doesn't need to drive rerenders) and `lockedUntil` state with a 1s `setInterval` countdown. Resets on successful sign-in or full page refresh (no localStorage persistence). This blocks rapid-fire UI submissions but does NOT protect against attackers bypassing the form.
 
 **Future work:** Proper IP-based rate-limiting (e.g., via `@upstash/ratelimit` + Upstash Redis) belongs in middleware or a `/api/auth/login` route handler once we provision Redis. The hook point is marked with a TODO comment above `computeLockMs` in the login page.
 

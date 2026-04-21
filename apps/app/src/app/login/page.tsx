@@ -30,6 +30,8 @@ function LoginForm() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Drive the countdown UI while a lock is active; tear down on unmount.
+  // Tick once per visible second — display uses Math.ceil(remainingMs/1000),
+  // so sub-second ticks would just burn renders and repeat identical AT text.
   useEffect(() => {
     if (lockedUntil === null) return;
     tickRef.current = setInterval(() => {
@@ -42,7 +44,7 @@ function LoginForm() {
           tickRef.current = null;
         }
       }
-    }, 250);
+    }, 1000);
     return () => {
       if (tickRef.current) {
         clearInterval(tickRef.current);
@@ -206,7 +208,6 @@ function LoginForm() {
             type="submit"
             disabled={isBusy}
             className="btn-primary"
-            aria-live="polite"
             style={{
               justifyContent: "center",
               marginTop: 4,
@@ -216,6 +217,23 @@ function LoginForm() {
           >
             {buttonLabel}
           </button>
+
+          {isLocked && (
+            <p
+              role="status"
+              aria-live="polite"
+              style={{
+                marginTop: 0,
+                fontSize: 12,
+                fontFamily: "var(--serif)",
+                fontStyle: "italic",
+                color: "var(--ink-3)",
+                textAlign: "center",
+              }}
+            >
+              Try again in {remainingSec}s
+            </p>
+          )}
         </form>
       </div>
     </div>
