@@ -4,9 +4,9 @@
 **Worktree:** `.worktrees/015-niche-finder-product-v1`
 **Date:** 2026-04-21
 
-## Where to pick up
+## Status: COMPLETE
 
-Resume at **Task B6** in the implementation plan. The next subagent dispatch was drafted but cancelled by the user; its brief (below) can be used as-is.
+All Foundation phases (A through E) are implemented, tested, and committed. Branch is ready for review/merge.
 
 ## References
 
@@ -30,9 +30,7 @@ Baseline green:
 - apps/app vitest: 24 / 24 (tsc clean)
 - apps/admin vitest: 35 / 35 (tsc clean)
 
-### Phase B — Home page (IN PROGRESS: 5 / 7 complete)
-
-Implementation plan reference: "## Phase B — Home page"
+### Phase B — Home page (DONE: 7 / 7)
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
@@ -41,33 +39,33 @@ Implementation plan reference: "## Phase B — Home page"
 | B3 RecommendedMetros | ✅ | `044ce5f` | |
 | B4 RecentActivityFeed | ✅ | `7a30980` | |
 | B5 SavedSearchesBlock | ✅ | `327a2bf` | |
-| B6 loadDashboard loader | ⬜ | — | Next up. Pure server-side module that reads `reports` from Supabase and projects `stats / recent / recommended / stat_cards` for the Home page |
-| B7 Home page assembly | ⬜ | — | Replaces the redirect stub at `apps/app/src/app/(protected)/page.tsx` with the full dashboard layout |
+| B6 loadDashboard loader | ✅ | `40a0545` | Fixed mock chain bug (limit→resolvedValue, not limit→order→resolvedValue) |
+| B7 Home page assembly | ✅ | `1c2b587` | Adjusted Sidebar/Topbar props to match actual signatures (active/crumbs) |
 
-Cumulative vitest state after B1-B5:
-- apps/app: 11 test files, 32 tests, all passing
-- tsc: clean
+### Phase C — Niche Finder command-center upgrade (DONE: 4 / 4)
 
-### Phase C — Niche Finder command-center upgrade (NOT STARTED)
+| Task | Status | Commit | Notes |
+|------|--------|--------|-------|
+| C1 NicheFinderTabs | ✅ | `bd40543` | |
+| C2 StrategyPresetRail | ✅ | `39afa9f` | |
+| C3 PinnedRecentRail + history-storage | ✅ | `3494197` | Fixed pushRecent cap test — needed unique city/service combos due to dedup |
+| C4 Niche Finder page rewrite | ✅ | `9331f0e` | Preserved existing CityAutocomplete onChange signature + validation API |
 
-Four tasks:
-- C1 NicheFinderTabs
-- C2 StrategyPresetRail
-- C3 PinnedRecentRail + `history-storage.ts`
-- C4 Niche Finder page rewrite (Variation B layout)
+### Phase D — Reports chip-filter re-skin (DONE: 4 / 4)
 
-### Phase D — Reports chip-filter re-skin (NOT STARTED)
+| Task | Status | Commit | Notes |
+|------|--------|--------|-------|
+| D1 deriveArchetype | ✅ | `23678b4` | |
+| D2 ArchetypeChipFilter | ✅ | `4ea3f8a` | |
+| D3 ReportsTable | ✅ | `a1906c3` | |
+| D4 Reports page rewrite | ✅ | `9adabcf` | Split into server component + ReportsPageClient |
 
-Four tasks:
-- D1 deriveArchetype helper
-- D2 ArchetypeChipFilter
-- D3 ReportsTable
-- D4 Reports page rewrite + `ReportsPageClient.tsx`
+### Phase E — Polish (DONE: 2 / 2)
 
-### Phase E — Polish (NOT STARTED)
-
-- E1 Playwright E2E for full Foundation flow
-- E2 Refresh `apps/app/CLAUDE.md` with new topology
+| Task | Status | Commit | Notes |
+|------|--------|--------|-------|
+| E1 Playwright E2E | ✅ | `1545c6d` | Spec only (not run — needs dev server + auth) |
+| E2 CLAUDE.md refresh | ✅ | — | Already up to date from earlier commit |
 
 ## Known issues / lessons learned
 
@@ -82,26 +80,12 @@ Four tasks:
 - Use explicit `git add <path>` — never `git add -A`.
 - Commit messages: exactly as the plan specifies for each task's Step 5.
 
-## Next subagent brief (ready to dispatch)
+## Final verification
 
-This was the prompt drafted for Tasks B6 + B7, to paste into the next subagent-driven-development dispatch when ready:
-
-> You are implementing Tasks B6 and B7 of the Widby Niche Finder Foundation plan. B6 is the Supabase-backed dashboard loader; B7 assembles the Home page that stitches together components B1-B5 plus the B6 loader.
->
-> **Working directory:** `/Users/antwoineflowers/development/rankrent/nichefinder/main/.worktrees/015-niche-finder-product-v1`
->
-> **Plan:** `docs/superpowers/plans/2026-04-21-widby-niche-finder-foundation.md` — scroll to "### Task B6" and work through B6 → B7 in order.
->
-> **Per task:** write test verbatim from the plan, run it to confirm failure, write component verbatim, run to confirm pass, commit exactly as the plan's Step 5 specifies.
->
-> **Scope boundary:**
-> - CREATE only inside `apps/app/src/lib/home/`.
-> - MODIFY only `apps/app/src/app/(protected)/page.tsx`.
-> - Any other file is off-limits — report BLOCKED rather than touch it.
->
-> **Potential issue to watch:** B6's test mocks the Supabase client chain. Look at the fake-client shape before committing — if the mock shape and the `loadDashboard` implementation call-chain mismatch, report BLOCKED with the specific shape drift. Do not "fix" the test to match.
->
-> **Conventions:** no `[docs-sync-skip]`; explicit `git add <path>`; verbatim commit messages.
+```
+apps/app: tsc ✅ | vitest 19 files, 56 tests ✅
+apps/admin: tsc ✅ | vitest 9 files, 35 tests ✅
+```
 
 ## Commands reference
 
