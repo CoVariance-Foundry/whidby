@@ -15,7 +15,8 @@ This is a Turborepo monorepo. The git root is this directory.
 ```
 apps/
   web/              — Marketing landing page (Next.js 16, deployed as "whidby" on Vercel)
-  app/              — Research Agent Dashboard (Next.js 16, port 3001, deploys to app.thewidby.com)
+  app/              — Consumer product (Next.js 16, port 3002, light academic theme)
+  admin/            — Research Agent Dashboard / admin surface (Next.js 16, port 3001, deploys to app.thewidby.com)
 src/                — Python scoring engine (modules M0–M15)
   research_agent/   — Autonomous research agent (Anthropic SDK tool-use + Ralph loop)
 tests/              — pytest: unit/, integration/, fixtures/
@@ -32,7 +33,8 @@ packages/           — (none yet)
 npm run dev          # Dev all apps
 npm run build        # Build all apps
 npm run dev:web      # Marketing site only (port 3000)
-npm run dev:app      # Research agent dashboard (port 3001)
+npm run dev:admin    # Admin / research agent dashboard (port 3001)
+npm run dev:app      # Consumer product (port 3002)
 ```
 
 ### Python (Scoring Engine)
@@ -125,7 +127,7 @@ The research agent uses **Claude-native tool-use** (Anthropic SDK `messages.crea
 Required (see `.env.example`):
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase
-- `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/app` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
+- `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/admin` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
 - `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` — DataForSEO API
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)

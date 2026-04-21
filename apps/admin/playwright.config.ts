@@ -21,7 +21,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev --workspace=nichefinder-app`,
+    command: `npm run dev --workspace=widby-admin`,
     url: "http://localhost:3001/login",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

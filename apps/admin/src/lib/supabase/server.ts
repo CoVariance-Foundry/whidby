@@ -23,6 +23,7 @@ export async function createClient() {
           );
         } catch {
           // setAll is called from Server Component where cookies are read-only.
+          // This is expected when refreshing tokens from middleware.
         }
       },
     },

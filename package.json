@@ -10,7 +10,8 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "dev:web": "turbo dev --filter=whidby",
-    "dev:app": "turbo dev --filter=nichefinder-app",
+    "dev:app": "turbo dev --filter=widby-app",
+    "dev:admin": "turbo dev --filter=widby-admin",
     "dev:api": "docker compose up api --build",
     "dev:api:local": "uvicorn src.research_agent.api:app --reload --port 8000"
   },
