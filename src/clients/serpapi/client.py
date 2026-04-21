@@ -12,16 +12,14 @@ varies by plan — we track it, we don't bill on it).
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from src.config.constants import SERPAPI_SEARCH_COST_USD
 
 SERPAPI_BASE_URL = "https://serpapi.com/search.json"
-SEARCH_COST_USD = 0.01
 _TIMEOUT_SECONDS = 30.0
 
 
@@ -134,4 +132,4 @@ class SerpAPIClient:
         except ValueError as exc:
             raise SerpAPIError(f"invalid JSON body: {exc}") from exc
 
-        return SerpAPIResponse(status="ok", data=body, cost=SEARCH_COST_USD)
+        return SerpAPIResponse(status="ok", data=body, cost=SERPAPI_SEARCH_COST_USD)

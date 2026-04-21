@@ -1,3 +1,3 @@
-from .client import SEARCH_COST_USD, SerpAPIClient, SerpAPIError, SerpAPIResponse
+from .client import SerpAPIClient, SerpAPIError, SerpAPIResponse
 
-__all__ = ["SEARCH_COST_USD", "SerpAPIClient", "SerpAPIError", "SerpAPIResponse"]
+__all__ = ["SerpAPIClient", "SerpAPIError", "SerpAPIResponse"]

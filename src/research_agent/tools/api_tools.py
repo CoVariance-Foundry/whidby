@@ -329,8 +329,6 @@ ALL_TOOLS = [
     fetch_google_reviews,
     fetch_backlinks_summary,
     fetch_lighthouse,
-    fetch_serpapi_google,
-    fetch_serpapi_maps,
     expand_geo_scope,
     expand_keywords,
     classify_search_intent,

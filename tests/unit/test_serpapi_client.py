@@ -11,11 +11,11 @@ import httpx
 import pytest
 
 from src.clients.serpapi.client import (
-    SEARCH_COST_USD,
     SerpAPIClient,
     SerpAPIError,
     SerpAPIResponse,
 )
+from src.config.constants import SERPAPI_SEARCH_COST_USD
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ class TestSerpGoogle:
 
         assert isinstance(resp, SerpAPIResponse)
         assert resp.status == "ok"
-        assert resp.cost == SEARCH_COST_USD
+        assert resp.cost == SERPAPI_SEARCH_COST_USD
         assert resp.data["organic_results"] == [{"title": "x"}]
 
         captured = _FakeAsyncClient._captured[0]
@@ -157,7 +157,7 @@ class TestSerpMaps:
         resp = await client.serp_maps(q="plumber", ll="@40.7128,-74.0060,14z")
 
         assert resp.status == "ok"
-        assert resp.cost == SEARCH_COST_USD
+        assert resp.cost == SERPAPI_SEARCH_COST_USD
 
         params = _FakeAsyncClient._captured[0]["params"]
         assert params["engine"] == "google_maps"
@@ -218,3 +218,18 @@ class TestErrorHandling:
 
     def test_serpapi_error_is_runtime_error(self):
         assert issubclass(SerpAPIError, RuntimeError)
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_body_raises_serpapi_error(self, mocker):
+        mocker.patch("src.clients.serpapi.client.httpx.AsyncClient", _FakeAsyncClient)
+
+        class _BrokenJSONResponse(_FakeResponse):
+            def json(self):
+                raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+        _FakeAsyncClient._response = _BrokenJSONResponse(200, text="<html>not json</html>")
+
+        client = SerpAPIClient(api_key="k")
+        with pytest.raises(SerpAPIError) as excinfo:
+            await client.serp_google(q="x", location="y")
+        assert "invalid JSON body" in str(excinfo.value)
