@@ -8,7 +8,6 @@ Tests are mocked — no network calls. Covers:
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -17,11 +16,9 @@ from src.clients.dataforseo.types import APIResponse
 from tests.fixtures.dataforseo_fixtures import (
     BUSINESS_LISTINGS_RESPONSE,
     ERROR_RESPONSE,
-    LOCATIONS_RESPONSE,
     SERP_TASK_GET_RESPONSE,
     SERP_TASK_PENDING_RESPONSE,
     SERP_TASK_POST_RESPONSE,
-    SERVER_ERROR_BODY,
 )
 
 
@@ -58,7 +55,7 @@ class TestStandardQueue:
     @pytest.mark.asyncio
     async def test_serp_organic_returns_results(self, mocker):
         client = _make_client()
-        post_mock = mocker.patch.object(
+        mocker.patch.object(
             client, "_post", side_effect=[SERP_TASK_POST_RESPONSE, SERP_TASK_GET_RESPONSE]
         )
         result = await client.serp_organic(keyword="plumber", location_code=1012873)

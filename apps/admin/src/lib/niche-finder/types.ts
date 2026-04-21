@@ -26,4 +26,5 @@ export interface StandardSurfaceResponse {
   score_result: ScoreResult;
   status: StandardResponseStatus;
   message?: string;
+  report_id?: string;
 }

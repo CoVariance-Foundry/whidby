@@ -861,6 +861,47 @@ tests/
 
 ---
 
+### Pipeline Orchestrator (operational wiring)
+
+**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Resolves the metro via `MetroDB.from_seed().expand_scope(...)`, threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
+
+**Files:**
+```
+src/pipeline/orchestrator.py            # score_niche_for_metro + ScoreNicheResult
+tests/unit/test_pipeline_orchestrator.py
+tests/integration/test_pipeline_orchestrator_live.py
+```
+
+**Public interface:**
+- `async def score_niche_for_metro(*, niche, city, state, strategy_profile="balanced", llm_client, dataforseo_client, metro_db=None, dry_run=False) -> ScoreNicheResult`
+- `ScoreNicheResult` frozen dataclass: `report: dict`, `opportunity_score: int`, `evidence: list[dict]`
+- `dry_run=True` loads from `tests.fixtures.m6_signal_extraction_fixtures` + `tests.fixtures.keyword_expansion_fixtures` and skips live APIs; still runs real M7 / M8 / M9
+
+### Supabase Persistence Adapter
+
+**What it does:** Writes an M9 report into the canonical schema at `supabase/migrations/001_core_schema.sql` (tables: `reports`, `report_keywords`, `metro_signals`, `metro_scores`). Pure row-builder helpers are pure functions (unit-testable without a live DB); `SupabasePersistence.persist_report(report)` executes the inserts in order and returns the report id.
+
+**Files:**
+```
+src/clients/supabase_persistence.py
+tests/unit/test_supabase_persistence.py
+```
+
+**Public interface:**
+- `build_report_row(report) / build_keyword_rows(report) / build_metro_signal_rows(report) / build_metro_score_rows(report)` — pure mappers
+- `class SupabasePersistence(*, client=None).persist_report(report) -> str` — live writer
+
+### FastAPI niche-scoring routes
+
+Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
+
+- `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run` in the request body.
+- `GET /api/niches/{report_id}` — reads the row back from Supabase.
+
+Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted).
+
+---
+
 ### M10: Business Discovery + Qualification
 
 **Spec reference:** Experiment Framework, §4 (Phase E1), §5.3 (Qualification Gates)

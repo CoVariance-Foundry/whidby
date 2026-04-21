@@ -36,20 +36,29 @@ export default function ExplorationPage() {
   async function handleSubmit(nextQuery: NicheQueryInput) {
     setLoading(true);
     setError(null);
+    setExploration(null);
     setQuery(nextQuery);
     saveQueryContext(nextQuery);
 
-    const explorationResponse = await fetchExploration(nextQuery);
+    try {
+      const explorationResponse = await fetchExploration(nextQuery);
 
-    if (explorationResponse.status === "validation_error" || explorationResponse.status === "unavailable") {
-      setExploration(null);
-      setError(explorationResponse.message ?? "Unable to load exploration data.");
+      if (
+        explorationResponse.status === "validation_error" ||
+        explorationResponse.status === "unavailable"
+      ) {
+        setError(
+          explorationResponse.message ?? "Unable to load exploration data."
+        );
+        return;
+      }
+
+      setExploration(explorationResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error — please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setExploration(explorationResponse);
-    setLoading(false);
   }
 
   return (

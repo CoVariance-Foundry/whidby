@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pytest
 
 from src.research_agent.evaluation.evaluator import (
     compute_uplift_confidence,
@@ -136,7 +135,7 @@ class TestSynthesizeRecommendations:
     def test_promotes_to_graph(self, tmp_path: Path):
         graph = ResearchGraphStore(persist_path=str(tmp_path / "g.json"))
         results = _make_iteration_results(validated=True)
-        recs = synthesize_recommendations(results, graph=graph)
+        synthesize_recommendations(results, graph=graph)
         summary = graph.export_summary()
         assert summary["total_nodes"] >= 1
 

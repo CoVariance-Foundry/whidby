@@ -20,6 +20,7 @@ export interface ExplorationSurfaceResponse {
   evidence: EvidenceRecord[];
   status: ExplorationResponseStatus;
   message?: string;
+  report_id?: string;
 }
 
 export interface ExplorationAssistantRequest {

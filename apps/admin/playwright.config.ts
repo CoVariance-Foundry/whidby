@@ -25,5 +25,8 @@ export default defineConfig({
     url: "http://localhost:3001/login",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: {
+      NEXT_PUBLIC_NICHE_DRY_RUN: "1",
+    },
   },
 });
