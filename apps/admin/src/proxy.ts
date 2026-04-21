@@ -9,7 +9,7 @@ const PUBLIC_ROUTES = ["/login", "/auth/callback"];
 const isPublicRoute = (pathname: string) =>
   PUBLIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
   const { pathname, search } = request.nextUrl;
@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error("[middleware] Missing Supabase env vars");
+    console.error("[proxy] Missing Supabase env vars");
     if (!isPublic) {
       return redirectToLogin(request, null);
     }
@@ -47,7 +47,7 @@ export async function middleware(request: NextRequest) {
               supabaseResponse.cookies.set(name, value, options)
             );
           } catch (error) {
-            console.warn("[middleware] Cookie setAll failed", error);
+            console.warn("[proxy] Cookie setAll failed", error);
           }
         },
       },
@@ -70,7 +70,7 @@ export async function middleware(request: NextRequest) {
       return redirectWithCookies(url, supabaseResponse);
     }
   } catch (error) {
-    console.error("[middleware] Auth check failed", error);
+    console.error("[proxy] Auth check failed", error);
     if (!isPublic) {
       return redirectToLogin(request, supabaseResponse);
     }
@@ -110,6 +110,6 @@ function redirectToLogin(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|otf|map)$).*)",
   ],
 };
