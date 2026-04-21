@@ -6,11 +6,17 @@ const PUBLIC_ROUTES = ["/login", "/auth/callback", "/api/"];
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+  const { pathname } = request.nextUrl;
+  const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+
+  // Let the auth callback route handle PKCE exchange without a preceding
+  // middleware auth call that can mutate auth cookies.
+  if (pathname.startsWith("/auth/callback")) {
+    return NextResponse.next({ request });
+  }
 
   if (!supabaseUrl || !supabaseKey) {
     console.error("[middleware] Missing Supabase env vars");
-    const { pathname } = request.nextUrl;
-    const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
     if (!isPublic) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
@@ -47,9 +53,6 @@ export async function middleware(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { pathname } = request.nextUrl;
-    const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
-
     if (!user && !isPublic) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
@@ -63,8 +66,6 @@ export async function middleware(request: NextRequest) {
     }
   } catch (error) {
     console.error("[middleware] Auth check failed", error);
-    const { pathname } = request.nextUrl;
-    const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
     if (!isPublic) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";

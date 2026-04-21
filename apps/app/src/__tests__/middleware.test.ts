@@ -82,23 +82,25 @@ describe("middleware", () => {
     process.env = { ...originalEnv };
   });
 
-  it("passes through when NEXT_PUBLIC_SUPABASE_URL is missing", async () => {
+  it("redirects protected route to /login when NEXT_PUBLIC_SUPABASE_URL is missing", async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     const { middleware } = await import("../middleware");
     const req = await makeRequest("/dashboard");
     const res = await middleware(req);
 
-    expect(res.type).toBe("next");
+    expect(res.type).toBe("redirect");
+    expect(res.url.pathname).toBe("/login");
     expect(mockCreateServerClient).not.toHaveBeenCalled();
   });
 
-  it("passes through when NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY is missing", async () => {
+  it("redirects protected route to /login when publishable key is missing", async () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
     const { middleware } = await import("../middleware");
     const req = await makeRequest("/");
     const res = await middleware(req);
 
-    expect(res.type).toBe("next");
+    expect(res.type).toBe("redirect");
+    expect(res.url.pathname).toBe("/login");
     expect(mockCreateServerClient).not.toHaveBeenCalled();
   });
 
@@ -138,6 +140,7 @@ describe("middleware", () => {
     const res = await middleware(req);
 
     expect(res.type).toBe("next");
+    expect(mockCreateServerClient).not.toHaveBeenCalled();
   });
 
   it("allows authenticated user to access protected route", async () => {
@@ -149,7 +152,7 @@ describe("middleware", () => {
     expect(res.type).toBe("next");
   });
 
-  it("passes through when getUser throws", async () => {
+  it("redirects protected route to /login when getUser throws", async () => {
     mockCreateServerClient.mockReturnValue({
       auth: {
         getUser: vi.fn().mockRejectedValue(new Error("Network failure")),
@@ -159,10 +162,11 @@ describe("middleware", () => {
     const req = await makeRequest("/dashboard");
     const res = await middleware(req);
 
-    expect(res.type).toBe("next");
+    expect(res.type).toBe("redirect");
+    expect(res.url.pathname).toBe("/login");
   });
 
-  it("passes through when createServerClient throws", async () => {
+  it("redirects protected route to /login when createServerClient throws", async () => {
     mockCreateServerClient.mockImplementation(() => {
       throw new Error("Invalid URL");
     });
@@ -170,6 +174,7 @@ describe("middleware", () => {
     const req = await makeRequest("/");
     const res = await middleware(req);
 
-    expect(res.type).toBe("next");
+    expect(res.type).toBe("redirect");
+    expect(res.url.pathname).toBe("/login");
   });
 });
