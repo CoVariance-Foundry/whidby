@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!res.ok) {
+      const upstreamBody = await res.text();
       return NextResponse.json(
         {
           response_id: crypto.randomUUID(),
@@ -39,6 +40,8 @@ export async function POST(req: NextRequest) {
             "The exploration assistant could not complete this request. Try narrowing the question.",
           evidence_references: [],
           status: "unsupported",
+          upstream_status: res.status,
+          upstream_body: upstreamBody.slice(0, 2000),
         },
         { status: 502 }
       );
