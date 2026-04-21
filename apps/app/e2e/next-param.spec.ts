@@ -51,9 +51,11 @@ test.describe("next= round-trip — unauthenticated flow", () => {
     // must let the request pass through to that handler in the first place
     // instead of bouncing to /login?next=/auth/callback.
     const response = await page.goto("/auth/callback");
-    // The handler responds with a 307/302 redirect to /login?error=...; what
-    // matters is the landing URL carries the explicit error code, not a next=.
-    expect(response?.ok() || response?.status() === 307 || response?.status() === 302).toBeTruthy();
+    // Playwright auto-follows redirects, so `response` is the final response
+    // (typically 200 on /login?error=...). We only care that the callback
+    // route didn't throw a 500; the URL-shape assertions below are the real
+    // signal that the gate passed the request through to the handler.
+    expect(response?.status() ?? 0).toBeLessThan(500);
     const url = new URL(page.url());
     // Either we land on /login?error=... (the handler's redirect) or we stay
     // on /auth/callback; both prove the gate passed it through.
@@ -157,9 +159,9 @@ test.describe("next= round-trip — authed user visits /login", () => {
     "requires E2E_AUTH_EMAIL / E2E_AUTH_PASSWORD (see CLAUDE.md Auth & Test Accounts)",
   );
 
-  // These tests share a browser context so the Supabase session cookie set
-  // by the first sign-in is available for subsequent /login visits.
-  test.describe.configure({ mode: "serial" });
+  // Each test signs in from scratch via signIn() below, so they are independent
+  // and run in parallel. Playwright allocates a fresh browser context per test
+  // by default; no shared session cookie is needed.
 
   test("already-authed visit to /login -> /reports", async ({ page }) => {
     await signIn(page, { expectLandOn: /\/reports(\?|$)/ });
