@@ -139,6 +139,11 @@ KNOWN_AGGREGATORS: set[str] = {
     "fixr.com",
 }
 
+# --- SerpAPI (recipe reports feature, 012) ---
+# Flat per-search audit cost. Real cost varies by plan; this is a tracking
+# placeholder, not a billing figure.
+SERPAPI_SEARCH_COST_USD = 0.01
+
 # --- Region Definitions (M1) ---
 REGIONS: dict[str, list[str]] = {
     "Southwest": ["AZ", "NM", "NV", "UT", "CO"],

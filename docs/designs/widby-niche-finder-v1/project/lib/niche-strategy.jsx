@@ -2,7 +2,7 @@
 // Three styles: presets (cards), chips, matrix. Tweakable at runtime.
 
 function StrategyPresets({ selected = "PACK_VULN", onSelect, compact = false }) {
-  const show = ARCHETYPES.slice(0, compact ? 4 : 6); // show fewer in compact mode
+  const show = ARCHETYPES.slice(0, compact ? 6 : 6); // show 6 of 8 at a time
   return (
     <div className="preset-grid">
       {show.map((a) => (

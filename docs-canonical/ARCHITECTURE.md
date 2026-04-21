@@ -21,24 +21,30 @@
 
 **Widby** is a niche discovery and scoring platform for rank-and-rent SEO practitioners. The system collects SERP, keyword, business, and review data via DataForSEO, runs it through a multi-signal scoring algorithm, and outputs ranked niche + metro opportunities with actionable guidance.
 
-Three subsystems compose the platform:
+Five subsystems compose the platform:
 
 1. **Niche Scoring Engine** (`src/`) — Python 3.11+ deterministic pipeline (M0–M9)
 2. **Outreach Experiment Framework** (`src/`) — Validation pipeline (M10–M15)
-3. **Marketing Site** (`apps/web/`) — Next.js 16 pre-launch landing page
-4. **Research Agent Dashboard** (`apps/app/`) — Next.js 16 eval UI
+3. **Research Agent** (`src/research_agent/`) — Claude-native tool-use agent + Ralph loop wrapping the scoring engine
+4. **Marketing Site** (`apps/web/`) — Next.js 16 pre-launch landing page
+5. **Admin Dashboard** (`apps/admin/`) — Next.js 16 internal dashboard (research agent sessions, niche finder + exploration, knowledge graph, experiments, recommendations). Port 3001 local, deploys to `app.thewidby.com` as Vercel project `whidby-agent`.
+6. **Consumer Product** (`apps/app/`) — Next.js 16 light-theme consumer surface (niche finder, saved reports). Port 3002 local, separate Vercel project.
 
-**Production split:** The dashboard is hosted on **Vercel** (`app.thewidby.com`). The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/app/src/app/api/agent/` proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Auth magic-link callbacks redirect to the dashboard frontend via **`NEXT_PUBLIC_APP_FRONTEND_URL`** (the Vercel origin, not the API). Supabase backs auth and product data for the app. Details: `docs/research_agent_design.md` §12.
+**Production split:** The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/admin/src/app/api/agent/` and `apps/app/src/app/api/agent/` both proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Email/password sign-in callbacks redirect to each frontend via **`NEXT_PUBLIC_APP_FRONTEND_URL`** (the Vercel origin, not the API). Supabase backs auth and product data for both apps. Details: `docs/research_agent_design.md` §12.
 
-### Niche Finder Dual-Surface Interface
+### Niche Finder (both apps)
 
-The Research Agent Dashboard includes a dual-surface niche finder flow:
+Admin (`apps/admin`) hosts a **dual-surface niche finder**:
 
-- **Standard surface**: city + service input returns an opportunity score for quick triage.
-- **Exploration surface**: same input and score pathway, plus evidence categories that explain score rationale.
-- **Exploration assistant**: follow-up query panel that uses approved scoring/search plugin capabilities to retrieve deeper evidence while preserving active city/service context.
+- **Standard surface (`/`)**: city + service input returns an opportunity score for quick triage.
+- **Exploration surface (`/exploration`)**: same input and score pathway, plus evidence categories that explain score rationale and a follow-up chat assistant that pulls deeper signals via approved scoring/search tools while preserving active city/service context.
 
-Both surfaces are contractually bound to shared query normalization and score parity so operators can trust that exploration explains the same score seen on the standard surface.
+Consumer (`apps/app`) hosts a **single scoring surface**:
+
+- **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by the FastAPI `/api/metros/suggest` endpoint → autocompletes to `{city, state, cbsa_code}`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label.
+- **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read thanks to migration 005; writes remain service-role only via the Python scoring engine.
+
+Both apps share request validation, score shape, and the `CityAutocomplete` component (currently mirrored; extraction to `packages/niche-finder/` is a future PR). Admin's dual surface and consumer's single surface are contractually bound to the same FastAPI `POST /api/niches/score` endpoint — scores are always from the same backend pipeline.
 
 ## Component Map
 
@@ -60,7 +66,11 @@ Both surfaces are contractually bound to shared query normalization and score pa
 | Outreach Delivery (M13) | Email sequencing + compliance | `src/experiment/` | `tests/unit/test_outreach_delivery.py` |
 | Response Tracking (M14) | Event collection + reply classification | `src/experiment/` | `tests/unit/test_response_tracking.py` |
 | Experiment Analysis (M15) | A/B analysis + rentability signal | `src/experiment/` | `tests/unit/test_experiment_analysis.py` |
-| Eval Frontend (M16) | Dashboard pages per module | `apps/app/` | — |
+| Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments | `apps/admin/` | Admin vitest + Playwright |
+| Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
+| Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
+| Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores` | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
+| FastAPI niche bridge | `POST /api/niches/score`, `GET /api/niches/{id}`, `GET /api/metros/suggest` | `src/research_agent/api.py` | `tests/unit/test_api_niches.py`, `test_api_metros_suggest.py` |
 | Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |
 | Marketing Site | Waitlist signup + analytics | `apps/web/` | — |
 
@@ -113,7 +123,8 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | `src/experiment/` (M10-M15) | `src/clients/`, `src/config/`, `src/data/` | `src/pipeline/`, `src/scoring/` |
 | `src/research_agent/` | `src/clients/`, `src/config/`, `src/scoring/`, `src/pipeline/`, `src/data/` | `src/experiment/` |
 | `apps/web/` | Own `src/` only | `src/` (Python engine) |
-| `apps/app/` | Own `src/`, FastAPI bridge | `src/` (Python engine) directly |
+| `apps/admin/` | Own `src/`, FastAPI bridge (`NEXT_PUBLIC_API_URL`) | `src/` (Python engine) directly |
+| `apps/app/` | Own `src/`, FastAPI bridge (`NEXT_PUBLIC_API_URL`), Supabase SSR read for reports list | `src/` (Python engine) directly |
 
 ## Tech Stack
 
@@ -126,7 +137,7 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | Database | Supabase | — | PostgreSQL + RLS + Edge Functions |
 | Frontend Framework | Next.js | 16 | Tailwind CSS v4 |
 | Monorepo | Turborepo | latest | `npm` workspaces |
-| Hosting | Vercel | — | Marketing site + eval dashboard |
+| Hosting | Vercel | — | Marketing site, admin dashboard, consumer product (three separate projects) |
 | Research Agent | Anthropic SDK tool-use + NetworkX + Plugin Registry | — | Same SDK as pipeline; no framework exception |
 | Linting (Python) | ruff | — | line-length 100, target py311 |
 | Linting (JS/TS) | ESLint | — | core-web-vitals + typescript |

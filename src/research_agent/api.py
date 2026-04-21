@@ -8,16 +8,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+import anthropic
+from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.data.metro_db import Metro, MetroDB
 from src.clients.llm.client import LLMClient
 from src.clients.supabase_persistence import SupabasePersistence
 from src.pipeline.orchestrator import score_niche_for_metro
@@ -25,6 +30,10 @@ from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
 from src.research_agent.memory.filesystem_store import FilesystemStore
 from src.research_agent.memory.graph_store import ResearchGraphStore
+from src.research_agent.plugins.registry_builder import build_plugin_registry
+from src.research_agent.plugins.report_plugin import REPORT_TIMESTAMP_FORMAT
+from src.research_agent.recipes.registry_builder import build_recipe_registry
+from src.research_agent.recipes.runner import RecipeRunner, RecipeRunnerError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -52,18 +61,66 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",
-        "https://app.thewidby.com",
-        "https://whidby-1.onrender.com",
+        "http://localhost:3001",  # apps/admin dev
+        "http://localhost:3002",  # apps/app (consumer) dev
+        "https://app.thewidby.com",  # admin prod
+        "https://whidby-1.onrender.com",  # FastAPI self-host origin for health checks
     ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+_METRO_DB: MetroDB | None = None
+
+
+def _metro_db() -> MetroDB:
+    global _METRO_DB
+    if _METRO_DB is None:
+        _METRO_DB = MetroDB.from_seed()
+    return _METRO_DB
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Liveness probe for Render and monitoring."""
     return {"status": "ok"}
+
+
+@app.get("/api/metros/suggest")
+def metros_suggest(q: str, limit: int = 10) -> list[dict[str, Any]]:
+    """Autocomplete metros by city prefix; returns highest-population matches first."""
+    q_norm = q.strip().lower()
+    if len(q_norm) < 2:
+        return []
+    clamped = max(1, min(limit, 20))
+
+    rows: list[tuple[Metro, str]] = []
+    for metro in _metro_db().all_metros():
+        principal_match = next(
+            (pc for pc in metro.principal_cities if pc.strip().lower().startswith(q_norm)),
+            None,
+        )
+        if principal_match is not None:
+            rows.append((metro, principal_match))
+            continue
+        if metro.cbsa_name.lower().startswith(q_norm):
+            # Fall back to the CBSA's first principal city for the "city" label.
+            display = metro.principal_cities[0] if metro.principal_cities else metro.cbsa_name
+            rows.append((metro, display))
+
+    rows.sort(key=lambda pair: pair[0].population, reverse=True)
+    rows = rows[:clamped]
+
+    return [
+        {
+            "cbsa_code": m.cbsa_code,
+            "city": city,
+            "state": m.state,
+            "cbsa_name": m.cbsa_name,
+            "population": m.population,
+        }
+        for m, city in rows
+    ]
 
 
 RUNS_DIR = Path(os.environ.get("RESEARCH_RUNS_DIR", "research_runs"))
@@ -418,6 +475,255 @@ def get_experiments(run_id: str) -> list[dict[str, Any]]:
             data["experiment_id"] = exp_id
             results.append(data)
     return results
+
+
+# ---------------------------------------------------------------------------
+# Reports
+# ---------------------------------------------------------------------------
+
+
+# Path-safe identifier: letters, digits, underscore, hyphen. Rejects "..",
+# "/", and anything that could escape the reports root.
+_SAFE_ID_PATTERN: str = r"^[A-Za-z0-9_-]+$"
+_SAFE_ID_RE = re.compile(_SAFE_ID_PATTERN)
+
+
+class ReportRequest(BaseModel):
+    recipe_id: str
+    inputs: dict[str, Any]
+    run_id: str | None = None
+
+    @field_validator("recipe_id")
+    @classmethod
+    def _recipe_id_safe(cls, v: str) -> str:
+        if not _SAFE_ID_RE.match(v):
+            raise ValueError(
+                "recipe_id must contain only letters, digits, '-', or '_'"
+            )
+        return v
+
+    @field_validator("run_id")
+    @classmethod
+    def _run_id_safe(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _SAFE_ID_RE.match(v):
+            raise ValueError(
+                "run_id must contain only letters, digits, '-', or '_'"
+            )
+        return v
+
+
+class ReportResponse(BaseModel):
+    report_id: str
+    recipe_id: str
+    report_path: str
+    bytes: int
+    cost_usd: float
+    rounds_used: int
+    status: str
+    run_id: str
+
+
+class ReportListItem(BaseModel):
+    report_id: str
+    recipe_id: str
+    run_id: str
+    created_at: str
+    bytes: int
+
+
+class ReportListResponse(BaseModel):
+    reports: list[ReportListItem]
+
+
+def _ensure_path_under(child: Path, parent: Path) -> None:
+    """Raise HTTPException(400) if *child* is not a subpath of *parent*.
+
+    Both paths are resolved first. Prevents ``../`` escapes and absolute-path
+    arguments from writing outside the reports root.
+    """
+    try:
+        child_resolved = child.resolve()
+        parent_resolved = parent.resolve()
+    except OSError as exc:
+        raise HTTPException(400, f"Invalid report path: {exc}") from exc
+
+    try:
+        child_resolved.relative_to(parent_resolved)
+    except ValueError as exc:
+        raise HTTPException(
+            400,
+            f"Report output path {child_resolved} is not under {parent_resolved}",
+        ) from exc
+
+
+def _parse_report_filename(stem: str) -> tuple[str, str]:
+    """Split ``{recipe_id}_{timestamp}`` into ``(recipe_id, created_at_iso)``.
+
+    Mirrors the filename convention produced by :class:`ReportPlugin` via
+    :data:`REPORT_TIMESTAMP_FORMAT`. Returns the timestamp in ISO-8601
+    (``%Y-%m-%dT%H:%M:%SZ``). Unrecognised formats fall back to
+    ``(stem, "")``.
+    """
+    if "_" not in stem:
+        return stem, ""
+    recipe_id, timestamp = stem.rsplit("_", 1)
+    try:
+        parsed = datetime.strptime(timestamp, REPORT_TIMESTAMP_FORMAT).replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        return recipe_id, ""
+    return recipe_id, parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@app.post("/api/reports", response_model=ReportResponse)
+def create_report(req: ReportRequest) -> ReportResponse:
+    """Run a recipe end-to-end and return the rendered report metadata."""
+    recipe_registry = build_recipe_registry()
+    plugin_registry, report_plugin = build_plugin_registry()
+
+    try:
+        recipe = recipe_registry.get(req.recipe_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"Unknown recipe: '{req.recipe_id}'") from exc
+
+    run_id = req.run_id or str(uuid.uuid4())[:8]
+    output_dir = RUNS_DIR / run_id / "reports"
+
+    # Validate path containment BEFORE creating any directories so a crafted
+    # run_id can't pre-create a directory outside the reports root even if
+    # _ensure_path_under later rejects the write.
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_path_under(output_dir, RUNS_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        anthropic_client = anthropic.Anthropic(
+            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+    except ValueError as exc:
+        logger.warning("Anthropic client construction failed: %s", exc)
+        raise HTTPException(400, f"Anthropic client error: {exc}") from exc
+
+    runner = RecipeRunner(
+        plugin_registry,
+        report_plugin=report_plugin,
+        anthropic_client=anthropic_client,
+    )
+
+    try:
+        result = runner.run(recipe, req.inputs, output_dir)
+    except RecipeRunnerError as exc:
+        logger.warning("Recipe runner error for '%s': %s", req.recipe_id, exc)
+        raise HTTPException(422, str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("Invalid recipe input for '%s': %s", req.recipe_id, exc)
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.exception("Unexpected error running recipe '%s'", req.recipe_id)
+        raise HTTPException(500, f"Unexpected recipe failure: {exc}") from exc
+
+    report_path = Path(result["report_path"])
+    report_id = report_path.stem
+
+    return ReportResponse(
+        report_id=report_id,
+        recipe_id=recipe.recipe_id,
+        report_path=str(report_path),
+        bytes=int(result["bytes"]),
+        cost_usd=float(result["cost_usd"]),
+        rounds_used=int(result["rounds_used"]),
+        status=str(result["status"]),
+        run_id=run_id,
+    )
+
+
+@app.get("/api/reports", response_model=ReportListResponse)
+def list_reports() -> ReportListResponse:
+    """List all reports across every run in ``RUNS_DIR``."""
+    if not RUNS_DIR.exists():
+        return ReportListResponse(reports=[])
+
+    items: list[ReportListItem] = []
+    for run_dir in RUNS_DIR.iterdir():
+        if not run_dir.is_dir():
+            continue
+        reports_dir = run_dir / "reports"
+        if not reports_dir.is_dir():
+            continue
+        for report_path in reports_dir.glob("*.html"):
+            if not report_path.is_file():
+                continue
+            stem = report_path.stem
+            recipe_id, created_at = _parse_report_filename(stem)
+            try:
+                byte_size = report_path.stat().st_size
+            except OSError:
+                continue
+            items.append(
+                ReportListItem(
+                    report_id=stem,
+                    recipe_id=recipe_id,
+                    run_id=run_dir.name,
+                    created_at=created_at,
+                    bytes=byte_size,
+                )
+            )
+
+    items.sort(key=lambda it: it.created_at, reverse=True)
+    return ReportListResponse(reports=items)
+
+
+@app.get("/api/reports/{run_id}/{report_id}")
+def get_report(
+    run_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+    report_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+) -> dict[str, Any]:
+    """Return a single report's metadata plus its HTML contents."""
+    report_path = RUNS_DIR / run_id / "reports" / f"{report_id}.html"
+
+    # Containment is checked BEFORE any filesystem access so a crafted
+    # identifier can't cause is_file() on a path outside the reports root.
+    _ensure_path_under(report_path, RUNS_DIR)
+
+    if not report_path.is_file():
+        raise HTTPException(
+            404, f"Report '{report_id}' not found for run '{run_id}'"
+        )
+
+    recipe_id, created_at = _parse_report_filename(report_id)
+    html = report_path.read_text(encoding="utf-8")
+    return {
+        "report_id": report_id,
+        "run_id": run_id,
+        "recipe_id": recipe_id,
+        "created_at": created_at,
+        "bytes": report_path.stat().st_size,
+        "html": html,
+    }
+
+
+@app.get("/api/reports/{run_id}/{report_id}/download")
+def download_report(
+    run_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+    report_id: str = FastAPIPath(..., pattern=_SAFE_ID_PATTERN),
+) -> FileResponse:
+    """Return the raw HTML file for a report."""
+    report_path = RUNS_DIR / run_id / "reports" / f"{report_id}.html"
+
+    _ensure_path_under(report_path, RUNS_DIR)
+
+    if not report_path.is_file():
+        raise HTTPException(
+            404, f"Report '{report_id}' not found for run '{run_id}'"
+        )
+    return FileResponse(
+        path=str(report_path),
+        media_type="text/html",
+        filename=f"{report_id}.html",
+    )
 
 
 # ---------------------------------------------------------------------------

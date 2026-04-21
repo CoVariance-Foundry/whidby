@@ -390,13 +390,18 @@ Docker Compose mounts `./src` and `./research_runs` so code changes are reflecte
 
 ## 12. Production Deployment (Render)
 
-The FastAPI research agent API deploys as a Docker web service on Render. The Next.js dashboard stays on Vercel.
+The FastAPI research agent API deploys as a Docker web service on Render. Two Next.js apps consume it on Vercel: **`apps/admin`** (research-agent dashboard at `app.thewidby.com`, Vercel project `whidby-agent`) and **`apps/app`** (consumer product, separate Vercel project). Both apps proxy the same FastAPI bridge via `NEXT_PUBLIC_API_URL`.
 
 **Verified production (Render API, Whidby workspace):** Web service **`whidby-1`**, public URL **`https://whidby-1.onrender.com`**, Docker **`./Dockerfile.api`**, context **`.`**, region **Oregon**, branch **`main`**, repo **`CoVariance-Foundry/whidby`**, latest deploy **live**. Dashboard: `https://dashboard.render.com/web/srv-d78t9ruuk2gs73e177u0`.
 
 ```
-Browser → Vercel (app.thewidby.com) → /api/agent/* proxy → Render (whidby-1.onrender.com) → FastAPI
+Browser → Vercel (apps/admin or apps/app) → /api/agent/* proxy → Render (whidby-1.onrender.com) → FastAPI
+                                                                       │
+                                                                       ├──→ MetroDB seed (autocomplete)
+                                                                       └──→ M4-M9 orchestrator → SupabasePersistence → Supabase
 ```
+
+The FastAPI `/api/niches/score` endpoint runs the end-to-end orchestrator (`src/pipeline/orchestrator.py::score_niche_for_metro`) and writes the M9 report to Supabase via `src/clients/supabase_persistence.py`. Consumer `/reports` reads the same `reports` table via SSR Supabase client (RLS policy from migration 005 grants authenticated SELECT).
 
 Optional later: custom domain **`api.thewidby.com`** (DNS + Render custom domain) — then set `NEXT_PUBLIC_API_URL` to that URL instead.
 
@@ -420,15 +425,15 @@ Optional later: custom domain **`api.thewidby.com`** (DNS + Render custom domain
 
 ### Connect Frontend to API
 
-On Vercel, set the environment variable for the **`nichefinder-app`** project (Production and Preview as needed):
+On Vercel, set the environment variable on **both** the admin project (`whidby-agent` serving `app.thewidby.com`) and the consumer project (separate Vercel project, apps/app). Apply to Production and Preview as needed:
 
 ```
 NEXT_PUBLIC_API_URL=https://whidby-1.onrender.com
 ```
 
-If this is **unset**, Route Handlers fall back to `http://localhost:8000`, which fails on Vercel — the dashboard will return **502** for `/api/agent/*` even when Render is healthy.
+If this is **unset**, Route Handlers fall back to `http://localhost:8000`, which fails on Vercel — either UI will return **502** for `/api/agent/*` even when Render is healthy.
 
-The Next.js proxy routes in `apps/app/src/app/api/agent/` forward requests to this URL.
+The Next.js proxy routes in both `apps/admin/src/app/api/agent/` and `apps/app/src/app/api/agent/` forward requests to this URL. Admin carries the full set (sessions/chat/graph/experiments/scoring/exploration/exploration-chat/metros-suggest/health); consumer carries the scoring subset (scoring, metros/suggest, health).
 
 ### Example `render.yaml` (Blueprint)
 

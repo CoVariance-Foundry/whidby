@@ -13,6 +13,7 @@ from typing import Any
 
 from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.llm.client import LLMClient
+from src.clients.serpapi.client import SerpAPIClient
 from src.data.metro_db import MetroDB
 
 
@@ -21,6 +22,10 @@ def _get_dfs_client() -> DataForSEOClient:
         login=os.environ.get("DATAFORSEO_LOGIN", ""),
         password=os.environ.get("DATAFORSEO_PASSWORD", ""),
     )
+
+
+def _get_serpapi_client() -> SerpAPIClient:
+    return SerpAPIClient(api_key=os.environ.get("SERPAPI_KEY", ""))
 
 
 def _get_llm_client() -> LLMClient:
@@ -179,6 +184,71 @@ def fetch_lighthouse(url: str) -> str:
     """
     client = _get_dfs_client()
     resp = _run_async(client.lighthouse(url))
+    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+
+
+# ---------------------------------------------------------------------------
+# SerpAPI tools
+# ---------------------------------------------------------------------------
+
+
+def _missing_serpapi_key_payload(field: str) -> str:
+    """Return a tool-result payload for an unset SERPAPI_KEY env var."""
+    return json.dumps(
+        {
+            "status": "error",
+            "data": {
+                "error": (
+                    "SERPAPI_KEY is not configured in this environment; "
+                    f"cannot fetch {field}."
+                )
+            },
+            "cost": 0.0,
+        }
+    )
+
+
+def fetch_serpapi_google(
+    keyword: str, location: str, gl: str = "us", hl: str = "en"
+) -> str:
+    """Fetch SerpAPI Google results (organic + ads + local_pack + ai_overview).
+
+    Args:
+        keyword: Search query.
+        location: SerpAPI location string (e.g. "Austin, Texas, United States").
+        gl: Country code (default "us").
+        hl: UI language (default "en").
+
+    Returns:
+        JSON string of the API response. When ``SERPAPI_KEY`` is not set,
+        returns a structured error payload instead of raising, so the
+        Claude tool-use loop can surface the misconfiguration as a tool
+        result rather than crash the runner.
+    """
+    try:
+        client = _get_serpapi_client()
+    except ValueError:
+        return _missing_serpapi_key_payload("serpapi_google")
+    resp = _run_async(client.serp_google(q=keyword, location=location, gl=gl, hl=hl))
+    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+
+
+def fetch_serpapi_maps(keyword: str, ll: str) -> str:
+    """Fetch Google Maps results via SerpAPI.
+
+    Args:
+        keyword: Search query.
+        ll: Lat/lng/zoom string (e.g. "@40.7128,-74.0060,14z").
+
+    Returns:
+        JSON string of the API response. When ``SERPAPI_KEY`` is not set,
+        returns a structured error payload instead of raising.
+    """
+    try:
+        client = _get_serpapi_client()
+    except ValueError:
+        return _missing_serpapi_key_payload("serpapi_maps")
+    resp = _run_async(client.serp_maps(q=keyword, ll=ll))
     return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
 
 
