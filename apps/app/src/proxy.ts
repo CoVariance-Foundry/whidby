@@ -9,7 +9,7 @@ const PUBLIC_ROUTES = ["/login", "/auth/callback"];
 const isPublicRoute = (pathname: string) =>
   PUBLIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
   const { pathname, search } = request.nextUrl;
@@ -108,6 +108,6 @@ function redirectToLogin(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|otf|map)$).*)",
   ],
 };
