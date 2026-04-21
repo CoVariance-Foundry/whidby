@@ -14,6 +14,8 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // isSafeNext guarantees `next` starts with a single "/", so the
+      // concatenation with frontendOrigin is safe from origin smuggling.
       return NextResponse.redirect(`${frontendOrigin}${next}`);
     }
     console.error("[auth/callback] exchangeCodeForSession failed", {

@@ -57,7 +57,9 @@ export async function middleware(request: NextRequest) {
     if (user && pathname === "/login") {
       const nextParam = request.nextUrl.searchParams.get("next");
       const dest = isSafeNext(nextParam) ? nextParam : "/reports";
-      const url = new URL(dest, request.nextUrl.origin);
+      const url = request.nextUrl.clone();
+      url.pathname = dest;
+      url.search = "";
       return redirectWithCookies(url, supabaseResponse);
     }
   } catch (error) {
