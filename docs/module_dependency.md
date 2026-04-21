@@ -70,6 +70,24 @@ M3 (LLM Client) ─────────────────→ │  RA-4
 
 See `docs/research_agent_design.md` for full architecture, loop semantics, and tool contracts.
 
+## Recipe / Report Subsystem
+
+```
+src/clients/serpapi/client.py ──────────────→ SerpAPIPlugin ──→ RecipeRunner
+src/research_agent/plugins/report_plugin.py ─────────────────→ RecipeRunner
+src/research_agent/recipes/base.py (Recipe model) ───────────→ RecipeRunner
+src/research_agent/recipes/playbooks/*.py (playbooks) ───────→ RecipeRunner
+src/research_agent/recipes/runner.py (RecipeRunner) ─────────→ /api/reports endpoints
+```
+
+| Module | Depends On | Depended On By |
+|--------|-----------|----------------|
+| SerpAPI Client (`src/clients/serpapi/`) | — | SerpAPIPlugin, RecipeRunner |
+| ReportPlugin (`plugins/report_plugin.py`) | Jinja2, templates | RecipeRunner |
+| Recipe model (`recipes/base.py`) | — | Playbooks, RecipeRunner |
+| RecipeRunner (`recipes/runner.py`) | Anthropic SDK, SerpAPIPlugin, ReportPlugin, Recipe | `/api/reports` |
+| Playbooks (`recipes/playbooks/`) | Recipe model, scoring | RecipeRunner |
+
 ## Parallel Build Opportunities
 
 These modules have no dependencies on each other and can be built simultaneously:
