@@ -239,6 +239,10 @@ src/
     test_metro_db.py
 ```
 
+**Added methods (post-013):**
+- `all_metros() -> list[Metro]` — returns a flat copy of all seeded metros (unsorted), used by the autocomplete endpoint.
+- `find_by_city(city, state=None) -> Metro | None` — resolves a city name to its highest-population CBSA.
+
 **Eval criteria:**
 | Test | Method | Pass Criteria |
 |------|--------|--------------|
@@ -897,8 +901,9 @@ Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
 
 - `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run` in the request body.
 - `GET /api/niches/{report_id}` — reads the row back from Supabase.
+- `GET /api/metros/suggest?q=<prefix>&limit=<int>` — city autocomplete. Matches `q` (min 2 chars) against `principal_cities` (prefix) and `cbsa_name` (prefix fallback); emits one row per matching principal city. Returns highest-population matches first, capped at `limit` (default 10, max 20). Response shape: `[{cbsa_code, city, state, cbsa_name, population}]`. Module-level `MetroDB` singleton loaded once at import time.
 
-Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted).
+Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted). The `/api/metros/suggest` route is proxied by `apps/admin/src/app/api/agent/metros/suggest/route.ts`.
 
 ---
 
@@ -1196,11 +1201,19 @@ src/
 
 The eval frontend now supports two coordinated surfaces for niche scoring validation:
 
-- **Standard Niche Finder** (`apps/app/src/app/(protected)/page.tsx`): city + service input, normalized query submission, and score output for routine screening.
-- **Exploration Surface** (`apps/app/src/app/(protected)/exploration/page.tsx`): same query and score pathway with score-driving evidence display and parity checks.
-- **Exploration Assistant** (`apps/app/src/components/niche-finder/ExplorationAssistantPanel.tsx`): follow-up Q&A flow that routes through approved plugin-backed assistant tooling and returns evidence references for human review.
+**Admin (`apps/admin`, dark theme, port 3001):**
 
-Design intent: keep scoring deterministic and shared while making evidence inspectable for operator trust calibration.
+- **Standard Niche Finder** (`apps/admin/src/app/(protected)/page.tsx`): city + service input (city via `CityAutocomplete`), normalized query, score output for quick triage.
+- **Exploration Surface** (`apps/admin/src/app/(protected)/exploration/page.tsx`): same city/service pathway with signal-level evidence panels.
+- **Exploration Assistant** (`apps/admin/src/components/niche-finder/ExplorationAssistantPanel.tsx`): follow-up Q&A flow routed through approved plugin-backed tools, returns evidence references for human review.
+
+**Consumer (`apps/app`, light academic theme, port 3002):**
+
+- **Niche Finder** (`apps/app/src/app/(protected)/niche-finder/page.tsx`): city + service input via the same `CityAutocomplete`, single-call POST to `/api/agent/scoring`, renders a light-theme result card.
+- **Reports** (`apps/app/src/app/(protected)/reports/page.tsx` + `ReportsView.tsx`): SSR Supabase read from `reports` table via `mapReportRow` (`apps/app/src/lib/niche-finder/reports-mapper.ts`), ordered by `created_at DESC limit 50`. Authenticated users can read thanks to migration 005.
+- **Recommendations** (`apps/app/src/app/(protected)/recommendations/page.tsx`): stub page; full synthesis currently lives on admin.
+
+Design intent: keep scoring deterministic and shared (both apps hit the same FastAPI `POST /api/niches/score`) while differentiating UX — admin surfaces evidence for operator trust calibration; consumer surfaces a clean scoring flow and report history.
 
 ---
 

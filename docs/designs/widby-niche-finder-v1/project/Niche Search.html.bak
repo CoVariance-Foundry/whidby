@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Widby — Niche search exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lib/niche-academic.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #0d0d0d; }
+  body { font-family: "Inter", system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="lib/design-canvas.jsx"></script>
+<script type="text/babel" src="lib/niche-shared.jsx"></script>
+<script type="text/babel" src="lib/niche-strategy.jsx"></script>
+<script type="text/babel" src="lib/niche-v-a.jsx"></script>
+<script type="text/babel" src="lib/niche-v-b.jsx"></script>
+<script type="text/babel" src="lib/niche-v-c.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const TWEAK_DEFAULS = /*EDITMODE-BEGIN*/{
+  "density": "roomy",
+  "strategyStyle": "presets"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweaks] = React.useState(TWEAK_DEFAULS);
+  const [tweaksOpen, setTweaksOpen] = React.useState(false);
+
+  // Tweaks plumbing
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const d = e.data || {};
+      if (d.type === "__activate_edit_mode")   setTweaksOpen(true);
+      if (d.type === "__deactivate_edit_mode") setTweaksOpen(false);
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({type: "__edit_mode_available"}, "*");
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  React.useEffect(() => {
+    window.parent.postMessage({type:"__edit_mode_set_keys", edits: tweaks}, "*");
+  }, [tweaks]);
+
+  return (
+    <>
+      <DesignCanvas>
+        <DCSection id="niche-search" title="Niche search — three directions"
+                   subtitle="Same data model, different spatial metaphors. Tabs on each so both modes coexist. Use the 'Tweaks' toggle (top bar) to swap strategy picker style or density.">
+          <DCArtboard id="a" label="A · Classic page — tabs + full-width results" width={1320} height={900}>
+            <VariationA tweaks={tweaks} />
+          </DCArtboard>
+          <DCArtboard id="b" label="B · Command center — hero search + pinned rail" width={1320} height={900}>
+            <VariationB tweaks={tweaks} />
+          </DCArtboard>
+          <DCArtboard id="c" label="C · Split workspace — sticky builder, live results" width={1320} height={900}>
+            <VariationC tweaks={tweaks} />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+      <TweaksPanel open={tweaksOpen} tweaks={tweaks} setTweaks={setTweaks} />
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
