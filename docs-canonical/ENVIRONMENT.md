@@ -34,7 +34,8 @@
 | `ACTIVECAMPAIGN_API_KEY` | Yes (web app) | — | ActiveCampaign API key | ActiveCampaign → Settings → Developer |
 | `VERCEL_PROJECT_ID` | No | — | Vercel project ID for deployments | Vercel Dashboard |
 | `VERCEL_ORG_ID` | No | — | Vercel organization ID | Vercel Dashboard |
-| `NEXT_PUBLIC_API_URL` | Yes (dashboard in production) | `http://localhost:8000` | Base URL of the FastAPI research agent API used by `apps/app` Route Handlers (`/api/agent/*`) | Render web service URL, e.g. `https://whidby-1.onrender.com` |
+| `NEXT_PUBLIC_API_URL` | Yes (dashboard in production) | `http://localhost:8000` | Base URL of the FastAPI research agent API used by `apps/app` Route Handlers (`/api/agent/*`). **Not** used for auth redirects. | Render web service URL, e.g. `https://whidby-1.onrender.com` |
+| `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (dashboard in production) | `http://localhost:3001` | Frontend origin for `apps/app` used for Supabase magic-link callback redirects. Must point to the Vercel-hosted app, **not** the API. | Vercel project URL, e.g. `https://app.thewidby.com` |
 
 ### Research agent API (Render)
 
@@ -69,6 +70,7 @@ The dashboard deploys to Vercel as project `whidby-agent`. The middleware requir
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Must be a valid `https://<project>.supabase.co` URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Yes | Publishable (anon) key from Supabase Dashboard |
 | `NEXT_PUBLIC_API_URL` | Yes (production) | Render API URL, e.g. `https://whidby-1.onrender.com` |
+| `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (production) | App frontend origin for auth redirects, e.g. `https://app.thewidby.com` |
 
 ## Setup Steps
 

@@ -1,5 +1,5 @@
 ---
-description: Run DocGuard guard validation — check project documentation against CDD standards with 19 validators
+description: Run DocGuard guard validation — check project documentation against CDD standards with 17 validators
 handoffs:
   - label: Fix All Issues
     agent: docguard.fix
@@ -23,7 +23,7 @@ Run the DocGuard CLI to validate all documentation against Canonical-Driven Deve
 npx docguard-cli guard
 ```
 
-2. **Parse the output**. Each of the 19 validators reports ✅ (pass), ⚠️ (warning), or ❌ (fail):
+2. **Parse the output**. Each of the 17 validators reports ✅ (pass), ⚠️ (warning), or ❌ (fail):
 
    | Validator | What It Checks |
    |-----------|---------------|

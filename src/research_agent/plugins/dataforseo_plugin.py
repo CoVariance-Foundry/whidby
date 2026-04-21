@@ -126,6 +126,21 @@ class DataForSEOPlugin(ToolPlugin):
                     "required": ["url"],
                 },
             },
+            {
+                "name": "explore_serp_snapshot",
+                "description": (
+                    "Fetch a concise organic SERP snapshot for exploration follow-up."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "keyword": {"type": "string"},
+                        "location_code": {"type": "integer"},
+                        "depth": {"type": "integer"},
+                    },
+                    "required": ["keyword", "location_code"],
+                },
+            },
         ]
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -150,6 +165,9 @@ class DataForSEOPlugin(ToolPlugin):
             ),
             "fetch_backlinks_summary": lambda a: fetch_backlinks_summary(a["target"]),
             "fetch_lighthouse": lambda a: fetch_lighthouse(a["url"]),
+            "explore_serp_snapshot": lambda a: fetch_serp_organic(
+                a["keyword"], a["location_code"], a.get("depth", 5)
+            ),
         }
         if tool_name not in dispatch:
             raise KeyError(f"Unknown tool: '{tool_name}'")

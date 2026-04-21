@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Status = "idle" | "loading" | "sent" | "error";
+type Status = "idle" | "loading" | "error";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("antwoine@covariance.studio");
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -16,78 +19,141 @@ export default function LoginPage() {
     setErrorMsg("");
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      password,
     });
 
     if (error) {
       setErrorMsg(error.message);
       setStatus("error");
     } else {
-      setStatus("sent");
+      router.replace("/reports");
+      router.refresh();
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-dark)]">
-      <div className="w-full max-w-sm space-y-6 rounded-xl border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] p-8">
-        <div className="space-y-2 text-center">
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">
-            Widby Dev Suite
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        background: "var(--paper)",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 380,
+          background: "var(--card)",
+          border: "1px solid var(--rule)",
+          borderRadius: 12,
+          padding: 28,
+          boxShadow: "0 1px 0 rgba(47,38,20,0.03)",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div
+            style={{
+              display: "inline-grid",
+              placeItems: "center",
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "var(--ink)",
+              color: "var(--paper)",
+              fontFamily: "var(--serif)",
+              fontStyle: "italic",
+              fontWeight: 700,
+              fontSize: 18,
+              marginBottom: 12,
+            }}
+          >
+            W
+          </div>
+          <h1
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 22,
+              fontWeight: 600,
+              letterSpacing: "-0.3px",
+              color: "var(--ink)",
+            }}
+          >
+            Widby
           </h1>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            Sign in with a magic link
+          <p
+            style={{
+              marginTop: 4,
+              fontFamily: "var(--serif)",
+              fontStyle: "italic",
+              fontSize: 13,
+              color: "var(--ink-3)",
+            }}
+          >
+            Sign in to continue
           </p>
         </div>
 
-        {status === "sent" ? (
-          <div className="rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-bg)] p-4 text-center">
-            <p className="text-sm text-[var(--color-accent-light)]">
-              Check your email for a sign-in link.
-            </p>
-            <button
-              onClick={() => setStatus("idle")}
-              className="mt-3 text-xs text-[var(--color-text-muted)] underline hover:text-[var(--color-text-secondary)]"
-            >
-              Try a different email
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5"
-              >
-                Email address
-              </label>
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 14 }}
+        >
+          <div>
+            <div className="field-label">Email</div>
+            <div className="input-wrap">
               <input
-                id="email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-lg border border-[var(--color-dark-border)] bg-[var(--color-dark)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
               />
             </div>
+          </div>
 
-            {status === "error" && (
-              <p className="text-xs text-[var(--color-negative)]">{errorMsg}</p>
-            )}
+          <div>
+            <div className="field-label">Password</div>
+            <div className="input-wrap">
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={status === "loading"}
-              className="w-full rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-dark)] disabled:opacity-50 disabled:cursor-not-allowed"
+          {status === "error" && (
+            <p
+              style={{
+                fontSize: 12,
+                color: "var(--danger)",
+                fontFamily: "var(--serif)",
+                fontStyle: "italic",
+              }}
             >
-              {status === "loading" ? "Sending..." : "Send magic link"}
-            </button>
-          </form>
-        )}
+              {errorMsg}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={status === "loading"}
+            className="btn-primary"
+            style={{
+              justifyContent: "center",
+              marginTop: 4,
+              opacity: status === "loading" ? 0.6 : 1,
+              cursor: status === "loading" ? "not-allowed" : "pointer",
+            }}
+          >
+            {status === "loading" ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
       </div>
     </div>
   );

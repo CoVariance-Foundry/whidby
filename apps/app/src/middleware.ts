@@ -1,16 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/auth/callback"];
+const PUBLIC_ROUTES = ["/login", "/auth/callback", "/api/"];
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+  const { pathname } = request.nextUrl;
+  const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+
+  if (pathname.startsWith("/auth/callback")) {
+    return NextResponse.next({ request });
+  }
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error(
-      "[middleware] Missing Supabase env vars — passing request through"
-    );
+    console.error("[middleware] Missing Supabase env vars");
+    if (!isPublic) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next({ request });
   }
 
@@ -42,9 +51,6 @@ export async function middleware(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { pathname } = request.nextUrl;
-    const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
-
     if (!user && !isPublic) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
@@ -53,11 +59,16 @@ export async function middleware(request: NextRequest) {
 
     if (user && pathname === "/login") {
       const url = request.nextUrl.clone();
-      url.pathname = "/";
+      url.pathname = "/reports";
       return NextResponse.redirect(url);
     }
   } catch (error) {
-    console.error("[middleware] Auth check failed — passing request through", error);
+    console.error("[middleware] Auth check failed", error);
+    if (!isPublic) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

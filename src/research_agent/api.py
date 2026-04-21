@@ -11,10 +11,16 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, field_validator
 
+from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.llm.client import LLMClient
+from src.clients.supabase_persistence import SupabasePersistence
+from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
 from src.research_agent.memory.filesystem_store import FilesystemStore
@@ -24,6 +30,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Widby Research Agent API", version="0.1.0")
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Return 400 instead of 422 for Pydantic validation errors."""
+    # Pydantic v2 ctx values may be non-JSON-serializable exceptions — flatten them.
+    def _safe(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {k: _safe(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_safe(i) for i in obj]
+        if isinstance(obj, (str, int, float, bool, type(None))):
+            return obj
+        return str(obj)
+
+    errors = _safe(exc.errors())
+    return JSONResponse(status_code=400, content={"detail": errors})
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +85,58 @@ class SessionRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     run_id: str | None = None
+
+
+class ExplorationFollowupRequest(BaseModel):
+    city: str
+    service: str
+    question: str
+
+
+class NicheScoreRequest(BaseModel):
+    niche: str
+    city: str
+    state: str | None = None
+    strategy_profile: str = "balanced"
+    dry_run: bool = False
+
+    @field_validator("niche", "city")
+    @classmethod
+    def _non_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must be non-empty")
+        return v
+
+    @field_validator("state")
+    @classmethod
+    def _normalize_state(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        return trimmed or None
+
+
+# ---------------------------------------------------------------------------
+# Niche scoring helpers (patched in tests)
+# ---------------------------------------------------------------------------
+
+
+def _persist_report(report: dict[str, Any]) -> str:
+    return SupabasePersistence().persist_report(report)
+
+
+def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
+    import os
+
+    from supabase import create_client
+
+    client = create_client(
+        os.environ["NEXT_PUBLIC_SUPABASE_URL"],
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+    )
+    res = client.table("reports").select("*").eq("id", report_id).limit(1).execute()
+    return res.data[0] if res.data else None
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +247,106 @@ def chat(req: ChatRequest) -> dict[str, Any]:
                 "output": hypothesis,
             }
         ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Exploration follow-up endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/exploration/followup")
+def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
+    """Run a plugin-backed exploration follow-up query.
+
+    Uses ClaudeAgent.run_exploration_followup to invoke approved scoring/search
+    plugin tools while preserving the active city/service context.
+    """
+    from src.research_agent.agent import _build_registry
+    from src.research_agent.agent.claude_agent import ClaudeAgent
+
+    try:
+        registry = _build_registry()
+        agent = ClaudeAgent(registry=registry)
+        result = agent.run_exploration_followup(
+            city=req.city.strip(),
+            service=req.service.strip(),
+            question=req.question.strip(),
+        )
+        return result
+    except Exception:
+        logger.error("Exploration follow-up failed", exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Exploration follow-up failed. Try a simpler question.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Niche scoring endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/niches/score")
+async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
+    """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
+    try:
+        if req.dry_run:
+            result = await score_niche_for_metro(
+                niche=req.niche, city=req.city, state=req.state,
+                strategy_profile=req.strategy_profile,
+                llm_client=None, dataforseo_client=None, dry_run=True,
+            )
+        else:
+            import os
+
+            dfs = DataForSEOClient(
+                login=os.environ["DATAFORSEO_LOGIN"],
+                password=os.environ["DATAFORSEO_PASSWORD"],
+            )
+            llm = LLMClient()
+            result = await score_niche_for_metro(
+                niche=req.niche, city=req.city, state=req.state,
+                strategy_profile=req.strategy_profile,
+                llm_client=llm, dataforseo_client=dfs,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    report_id = _persist_report(result.report)
+    return {
+        "report_id": report_id,
+        "opportunity_score": result.opportunity_score,
+        "classification_label": (
+            "High" if result.opportunity_score >= 75
+            else "Medium" if result.opportunity_score >= 50
+            else "Low"
+        ),
+        "evidence": result.evidence,
+        "report": result.report,
+    }
+
+
+@app.get("/api/niches/{report_id}")
+def niches_read(report_id: str) -> dict[str, Any]:
+    """Read a persisted niche report from Supabase by ID."""
+    row = _read_report_by_id(report_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    return {
+        "report_id": row["id"],
+        "generated_at": row["created_at"],
+        "spec_version": row["spec_version"],
+        "input": {
+            "niche_keyword": row["niche_keyword"],
+            "geo_scope": row["geo_scope"],
+            "geo_target": row["geo_target"],
+            "report_depth": row["report_depth"],
+            "strategy_profile": row["strategy_profile"],
+        },
+        "keyword_expansion": row["keyword_expansion"],
+        "metros": row["metros"],
+        "meta": row["meta"],
     }
 
 

@@ -101,3 +101,22 @@ class TestScoringPlugin:
         plugin = self._make_plugin()
         with pytest.raises(KeyError, match="nonexistent"):
             plugin.execute("nonexistent", {})
+
+    def test_explore_score_evidence_returns_evidence(self) -> None:
+        plugin = self._make_plugin()
+        result = plugin.execute(
+            "explore_score_evidence",
+            {"city": "Phoenix", "service": "roofing"},
+        )
+        assert "score_result" in result
+        assert "evidence" in result
+        assert result["cost_usd"] == 0.0
+        assert result["score_result"]["opportunity_score"] >= 30
+        assert result["score_result"]["classification_label"] in ("High", "Medium", "Low")
+        assert len(result["evidence"]) >= 1
+
+    def test_tool_definitions_includes_explore_score_evidence(self) -> None:
+        plugin = self._make_plugin()
+        names = {d["name"] for d in plugin.tool_definitions()}
+        assert "rescore_with_modifications" in names
+        assert "explore_score_evidence" in names

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
-export default function Home() {
-  redirect("/chat");
+// Home page stub — the academic Home design is in a later ticket.
+// For now, route authenticated users to Reports (the only built page).
+export default function RootRedirect() {
+  redirect("/reports");
 }
