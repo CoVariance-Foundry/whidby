@@ -13,6 +13,7 @@ from typing import Any
 
 from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.llm.client import LLMClient
+from src.clients.serpapi.client import SerpAPIClient
 from src.data.metro_db import MetroDB
 
 
@@ -21,6 +22,10 @@ def _get_dfs_client() -> DataForSEOClient:
         login=os.environ.get("DATAFORSEO_LOGIN", ""),
         password=os.environ.get("DATAFORSEO_PASSWORD", ""),
     )
+
+
+def _get_serpapi_client() -> SerpAPIClient:
+    return SerpAPIClient(api_key=os.environ.get("SERPAPI_KEY", ""))
 
 
 def _get_llm_client() -> LLMClient:
@@ -183,6 +188,45 @@ def fetch_lighthouse(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# SerpAPI tools
+# ---------------------------------------------------------------------------
+
+
+def fetch_serpapi_google(
+    keyword: str, location: str, gl: str = "us", hl: str = "en"
+) -> str:
+    """Fetch SerpAPI Google results (organic + ads + local_pack + ai_overview).
+
+    Args:
+        keyword: Search query.
+        location: SerpAPI location string (e.g. "Austin, Texas, United States").
+        gl: Country code (default "us").
+        hl: UI language (default "en").
+
+    Returns:
+        JSON string of the API response.
+    """
+    client = _get_serpapi_client()
+    resp = _run_async(client.serp_google(q=keyword, location=location, gl=gl, hl=hl))
+    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+
+
+def fetch_serpapi_maps(keyword: str, ll: str) -> str:
+    """Fetch Google Maps results via SerpAPI.
+
+    Args:
+        keyword: Search query.
+        ll: Lat/lng/zoom string (e.g. "@40.7128,-74.0060,14z").
+
+    Returns:
+        JSON string of the API response.
+    """
+    client = _get_serpapi_client()
+    resp = _run_async(client.serp_maps(q=keyword, ll=ll))
+    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+
+
+# ---------------------------------------------------------------------------
 # Metro DB tools
 # ---------------------------------------------------------------------------
 
@@ -285,6 +329,8 @@ ALL_TOOLS = [
     fetch_google_reviews,
     fetch_backlinks_summary,
     fetch_lighthouse,
+    fetch_serpapi_google,
+    fetch_serpapi_maps,
     expand_geo_scope,
     expand_keywords,
     classify_search_intent,

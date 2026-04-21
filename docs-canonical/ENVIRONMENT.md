@@ -29,6 +29,7 @@
 | `DATAFORSEO_LOGIN` | Yes | — | DataForSEO API login | app.dataforseo.com |
 | `DATAFORSEO_PASSWORD` | Yes | — | DataForSEO API password | app.dataforseo.com |
 | `DATAFORSEO_BASE_URL` | No | `https://api.dataforseo.com` | DataForSEO API base URL | — |
+| `SERPAPI_KEY` | Yes (recipe reports) | — | SerpAPI API key for Google + Google Maps engines | serpapi.com → Dashboard |
 | `ANTHROPIC_API_KEY` | Yes | — | Claude API key | console.anthropic.com |
 | `ACTIVECAMPAIGN_API_URL` | Yes (web app) | — | ActiveCampaign API base URL | ActiveCampaign → Settings → Developer |
 | `ACTIVECAMPAIGN_API_KEY` | Yes (web app) | — | ActiveCampaign API key | ActiveCampaign → Settings → Developer |
