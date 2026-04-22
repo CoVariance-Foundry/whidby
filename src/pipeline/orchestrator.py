@@ -213,8 +213,7 @@ async def _dry_run_result(
     and M8 classification so the returned report has the same shape as a live run.
     The LLM guidance step falls back to rule-based templates (llm_client=None is safe).
     """
-    # Lazy import so the test-fixture dependency is only loaded in dry_run=True path.
-    from tests.fixtures.m6_signal_extraction_fixtures import (  # noqa: PLC0415
+    from src.pipeline.dry_run_fixtures import (  # noqa: PLC0415
         fixture_keyword_expansion,
         fixture_metro_signals,
     )
