@@ -1,6 +1,7 @@
 """End-to-end niche-scoring orchestrator (M4 -> M9) for a single metro."""
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -16,6 +17,8 @@ from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
 from src.pipeline.signal_extraction import extract_signals
 from src.scoring.engine import compute_scores
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -46,11 +49,14 @@ async def score_niche_for_metro(
     across states). Raises ValueError if no metro in the seed matches.
     """
     started = time.monotonic()
+    logger.info("score_niche_for_metro START niche=%r city=%r state=%r dry_run=%s",
+                niche, city, state, dry_run)
     metros_db = metro_db or MetroDB.from_seed()
     target = metros_db.find_by_city(city, state=state)
     if target is None:
         raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
     resolved_state = target.state
+    logger.info("Metro resolved: cbsa=%s name=%r state=%s", target.cbsa_code, target.cbsa_name, resolved_state)
 
     if dry_run:
         return await _dry_run_result(
@@ -75,34 +81,47 @@ async def score_niche_for_metro(
 
     run_id = f"score-{uuid4()}"
 
+    logger.info("[%s] M4 keyword expansion START", run_id)
     expansion = await expand_keywords(
         niche,
         llm_client=llm_client,
         dataforseo_client=dataforseo_client,
     )
+    logger.info("[%s] M4 keyword expansion DONE — %d keywords, confidence=%s",
+                run_id, len(expansion.get("expanded_keywords", [])),
+                expansion.get("expansion_confidence"))
 
+    logger.info("[%s] M5 data collection START", run_id)
     raw = await collect_data(
-        keywords=expansion["keywords"],
+        keywords=expansion["expanded_keywords"],
         metros=[m5_metro_input],
         strategy_profile=strategy_profile,
         client=dataforseo_client,
     )
 
+    logger.info("[%s] M5 data collection DONE — api_calls=%d cost=$%.4f",
+                run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd)
+
+    logger.info("[%s] M6 signal extraction START", run_id)
     metro_result = raw.metros[target.cbsa_code]
     metro_bundle = asdict(metro_result)
     metro_bundle.pop("metro_id", None)
     signals = extract_signals(
         raw_metro_bundle=metro_bundle,
-        keyword_expansion=expansion["keywords"],
+        keyword_expansion=expansion["expanded_keywords"],
         cross_metro_domain_stats=None,
         total_metros=1,
     )
 
+    logger.info("[%s] M6 signal extraction DONE", run_id)
+
+    logger.info("[%s] M7 scoring START", run_id)
     scores = compute_scores(
         metro_signals=signals,
         all_metro_signals=[signals],
         strategy_profile=strategy_profile,
     )
+    logger.info("[%s] M7 scoring DONE — opportunity=%s", run_id, scores.get("opportunity"))
 
     # M8 classification — unpack tuple returns from classify_serp_archetype and
     # compute_difficulty_tier; classify_and_generate_guidance is async and takes
@@ -115,6 +134,9 @@ async def score_niche_for_metro(
         signals=signals,
     )
 
+    logger.info("[%s] M8 classification: ai_exposure=%s serp_archetype=%s difficulty=%s",
+                run_id, ai_exposure, serp_archetype, difficulty)
+
     classification_input: dict[str, Any] = {
         "niche": niche,
         "metro_name": target.cbsa_name,
@@ -126,7 +148,9 @@ async def score_niche_for_metro(
         classification_input,
         llm_client,
     )
+    logger.info("[%s] M8 guidance generation DONE", run_id)
 
+    logger.info("[%s] M9 report assembly START", run_id)
     run_input = {
         "run_id": run_id,
         "input": {
@@ -159,6 +183,11 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
+    logger.info("[%s] M9 report assembly DONE — report_id=%s", run_id, report.get("report_id"))
+
+    elapsed = time.monotonic() - started
+    logger.info("score_niche_for_metro DONE in %.2fs — opportunity=%s",
+                elapsed, scores.get("opportunity"))
 
     evidence = _build_evidence_from_signals(signals)
     return ScoreNicheResult(

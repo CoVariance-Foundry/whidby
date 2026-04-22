@@ -15,10 +15,14 @@ from src.pipeline.types import MetroCollectionResult, RawCollectionResult, RunMe
 
 _FAKE_KEYWORD_EXPANSION = {
     "niche": "roofing",
-    "keywords": [
+    "expanded_keywords": [
         {"keyword": "roofing near me", "tier": 1, "intent": "transactional",
          "source": "llm", "aio_risk": "low", "search_volume": 2000, "cpc": 12.5},
     ],
+    "total_keywords": 1,
+    "actionable_keywords": 1,
+    "informational_keywords_excluded": 0,
+    "expansion_confidence": "high",
 }
 
 _FAKE_RAW_COLLECTION = RawCollectionResult(
@@ -46,7 +50,8 @@ _FAKE_SIGNALS = {
 _FAKE_SCORES = {
     "demand": 70, "organic_competition": 40, "local_competition": 55,
     "monetization": 65, "ai_resilience": 80, "opportunity": 72,
-    "confidence": 0.82, "resolved_weights": {"organic": 0.6, "local": 0.4},
+    "confidence": {"score": 82, "flags": []},
+    "resolved_weights": {"organic": 0.6, "local": 0.4},
 }
 
 # classify_serp_archetype returns (archetype, rule_id) — match the real signature
@@ -170,6 +175,53 @@ def test_score_niche_resolves_state_from_city_when_state_absent() -> None:
     metro = result.report["metros"][0]
     assert metro["cbsa_code"] == "19820"  # Denver-Aurora-Lakewood, CO
     assert result.report["input"]["geo_target"] == "Denver, CO"
+
+
+def test_expansion_key_contract_matches_m4_output() -> None:
+    """Guard against key-name drift between expand_keywords output and orchestrator access.
+
+    The orchestrator must read expansion["expanded_keywords"] — not "keywords".
+    This test uses the real _FAKE_KEYWORD_EXPANSION shape (which mirrors M4 output)
+    and verifies that collect_data and extract_signals receive a list, not a KeyError.
+    """
+    expansion = _FAKE_KEYWORD_EXPANSION
+    assert "expanded_keywords" in expansion, (
+        "M4 output must use 'expanded_keywords'; orchestrator depends on this key"
+    )
+    kw_list = expansion["expanded_keywords"]
+    assert isinstance(kw_list, list)
+    assert len(kw_list) > 0
+    assert all(isinstance(kw, dict) and "keyword" in kw for kw in kw_list)
+
+
+def test_confidence_dict_shape_matches_m7_output() -> None:
+    """Guard against confidence shape drift between M7 engine and persistence layer.
+
+    compute_confidence returns {"score": <0-100>, "flags": [...]}, not a bare float.
+    The orchestrator passes this through as scores["confidence"], and the persistence
+    layer must be able to unpack it.
+    """
+    from src.clients.supabase_persistence import build_metro_score_rows
+
+    report = {
+        "report_id": "contract-test",
+        "metros": [{
+            "cbsa_code": "00000",
+            "scores": {
+                "demand": 50, "organic_competition": 50, "local_competition": 50,
+                "monetization": 50, "ai_resilience": 50, "opportunity": 50,
+                "confidence": {"score": 75, "flags": [{"code": "test", "penalty": -10}]},
+            },
+            "serp_archetype": "local_first",
+            "ai_exposure": "low",
+            "difficulty_tier": "T2",
+            "guidance": {},
+        }],
+    }
+    rows = build_metro_score_rows(report)
+    assert len(rows) == 1
+    assert rows[0]["confidence_score"] == 75
+    assert rows[0]["confidence_flags"] == [{"code": "test", "penalty": -10}]
 
 
 def test_dry_run_returns_deterministic_report_without_clients() -> None:

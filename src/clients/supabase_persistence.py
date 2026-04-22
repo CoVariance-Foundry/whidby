@@ -1,8 +1,11 @@
 """Persist M9 reports to the Supabase schema defined in 001_core_schema.sql."""
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class _SupabaseLike(Protocol):
@@ -32,7 +35,7 @@ def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
 
 def build_keyword_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     report_id = report["report_id"]
-    keywords = report["keyword_expansion"].get("keywords", [])
+    keywords = report["keyword_expansion"].get("expanded_keywords", [])
     rows: list[dict[str, Any]] = []
     for kw in keywords:
         rows.append(
@@ -82,9 +85,13 @@ def build_metro_score_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for metro in report["metros"]:
         scores = metro["scores"]
-        # confidence in M9 is a 0-1 float; schema stores it as INT (0-100)
-        raw_confidence = scores.get("confidence", 0.0)
-        confidence_score = int(round(float(raw_confidence) * 100))
+        raw_confidence = scores.get("confidence", {})
+        if isinstance(raw_confidence, dict):
+            confidence_score = int(round(float(raw_confidence.get("score", 0))))
+            confidence_flags = raw_confidence.get("flags")
+        else:
+            confidence_score = int(round(float(raw_confidence) * 100))
+            confidence_flags = scores.get("confidence_flags")
         rows.append(
             {
                 "report_id": report_id,
@@ -96,7 +103,7 @@ def build_metro_score_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "ai_resilience_score": int(round(scores["ai_resilience"])),
                 "opportunity_score": int(round(scores["opportunity"])),
                 "confidence_score": confidence_score,
-                "confidence_flags": scores.get("confidence_flags"),
+                "confidence_flags": confidence_flags,
                 "serp_archetype": metro["serp_archetype"],
                 "ai_exposure": metro["ai_exposure"],
                 "difficulty_tier": metro["difficulty_tier"],
@@ -119,14 +126,26 @@ class SupabasePersistence:
         self._client = client
 
     def persist_report(self, report: dict[str, Any]) -> str:
+        report_id = report["report_id"]
+        logger.info("persist_report START report_id=%s", report_id)
+
         self._client.table("reports").insert(build_report_row(report)).execute()
+        logger.info("persist_report inserted reports row for %s", report_id)
+
         keyword_rows = build_keyword_rows(report)
         if keyword_rows:
             self._client.table("report_keywords").insert(keyword_rows).execute()
+            logger.info("persist_report inserted %d report_keywords rows", len(keyword_rows))
+
         signal_rows = build_metro_signal_rows(report)
         if signal_rows:
             self._client.table("metro_signals").insert(signal_rows).execute()
+            logger.info("persist_report inserted %d metro_signals rows", len(signal_rows))
+
         score_rows = build_metro_score_rows(report)
         if score_rows:
             self._client.table("metro_scores").insert(score_rows).execute()
-        return report["report_id"]
+            logger.info("persist_report inserted %d metro_scores rows", len(score_rows))
+
+        logger.info("persist_report DONE report_id=%s", report_id)
+        return report_id

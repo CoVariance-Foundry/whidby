@@ -26,7 +26,7 @@ def _sample_report() -> dict[str, Any]:
         },
         "keyword_expansion": {
             "niche": "roofing",
-            "keywords": [
+            "expanded_keywords": [
                 {"keyword": "roofing near me", "tier": 1, "intent": "transactional",
                  "source": "llm", "aio_risk": "low", "search_volume": 2000, "cpc": 12.5},
             ],
@@ -39,9 +39,10 @@ def _sample_report() -> dict[str, Any]:
                 "scores": {
                     "demand": 70, "organic_competition": 40, "local_competition": 55,
                     "monetization": 65, "ai_resilience": 80, "opportunity": 72,
-                    "confidence": 0.82, "resolved_weights": {"organic": 0.6, "local": 0.4},
+                    "confidence": {"score": 82, "flags": []},
+                    "resolved_weights": {"organic": 0.6, "local": 0.4},
                 },
-                "confidence": 0.82,
+                "confidence": {"score": 82, "flags": []},
                 "serp_archetype": "local_first",
                 "ai_exposure": "low",
                 "difficulty_tier": "T2",

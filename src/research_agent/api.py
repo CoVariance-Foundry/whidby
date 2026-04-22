@@ -347,6 +347,8 @@ def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
 @app.post("/api/niches/score")
 async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
+    logger.info("niches_score called: niche=%r city=%r state=%r dry_run=%s",
+                req.niche, req.city, req.state, req.dry_run)
     try:
         if req.dry_run:
             result = await score_niche_for_metro(
@@ -368,10 +370,23 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
                 llm_client=llm, dataforseo_client=dfs,
             )
     except ValueError as exc:
+        logger.warning("niches_score ValueError: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        logger.exception("niches_score pipeline failed for niche=%r city=%r", req.niche, req.city)
+        raise HTTPException(status_code=500, detail="Scoring pipeline failed unexpectedly")
 
-    report_id = _persist_report(result.report)
-    return {
+    report_id: str | None = None
+    persist_failed = False
+    try:
+        report_id = _persist_report(result.report)
+    except Exception:
+        logger.exception("niches_score persistence failed for report_id=%s",
+                         result.report.get("report_id"))
+        report_id = result.report.get("report_id")
+        persist_failed = True
+
+    response: dict[str, Any] = {
         "report_id": report_id,
         "opportunity_score": result.opportunity_score,
         "classification_label": (
@@ -382,6 +397,11 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
         "evidence": result.evidence,
         "report": result.report,
     }
+    if persist_failed:
+        response["persist_warning"] = "Report scored successfully but failed to save to database"
+    logger.info("niches_score returning report_id=%s opportunity=%s persist_ok=%s",
+                report_id, result.opportunity_score, not persist_failed)
+    return response
 
 
 @app.get("/api/niches/{report_id}")
