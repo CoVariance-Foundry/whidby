@@ -22,6 +22,7 @@ describe("POST /api/agent/scoring", () => {
     expect(body.score_result.opportunity_score).toBe(72);
     expect(body.score_result.classification_label).toBe("Medium");
     expect(body.report_id).toBe("r1");
+    expect(body.query).toEqual({ city: "Phoenix", service: "roofing", state: "AZ" });
   });
 
   it("passes dry_run=true when NEXT_PUBLIC_NICHE_DRY_RUN=1", async () => {
