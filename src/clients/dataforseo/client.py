@@ -243,9 +243,11 @@ class DataForSEOClient:
         # Poll for results
         get_path = endpoint.get_path.format(task_id=task_id)
         elapsed = 0.0
+        poll_count = 0
         while elapsed < DFS_QUEUE_MAX_WAIT:
             await asyncio.sleep(DFS_QUEUE_POLL_INTERVAL)
             elapsed = time.monotonic() - start
+            poll_count += 1
 
             get_body = await self._post(get_path, None, method="GET")
             if get_body is None:
@@ -263,10 +265,19 @@ class DataForSEOClient:
             result_cost = result_task.get("cost", cost)
             self._cache.put(endpoint.post_path, params, data)
             self._tracker.record(endpoint.post_path, task_id, result_cost, False, ms, params)
+            if ms > 10_000:
+                logger.info(
+                    "DFS slow queued call endpoint=%s latency_ms=%d polls=%d",
+                    endpoint.post_path, ms, poll_count,
+                )
             return APIResponse(
                 status="ok", data=data, cost=result_cost, latency_ms=ms, task_id=task_id
             )
 
+        logger.warning(
+            "DFS queue timeout endpoint=%s max_wait=%ds polls=%d",
+            endpoint.post_path, DFS_QUEUE_MAX_WAIT, poll_count,
+        )
         return self._error_response(f"Queue timeout after {DFS_QUEUE_MAX_WAIT}s", start)
 
     async def _live_request(
@@ -308,6 +319,11 @@ class DataForSEOClient:
         ms = self._elapsed_ms(start)
         self._cache.put(endpoint.post_path, cp, data)
         self._tracker.record(endpoint.post_path, task_id, cost, False, ms, cp)
+        if ms > 5_000:
+            logger.info(
+                "DFS slow live call endpoint=%s latency_ms=%d",
+                endpoint.post_path, ms,
+            )
         return APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
 
     # -- Internal: HTTP layer ------------------------------------------------

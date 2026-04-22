@@ -1,9 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import ArchetypeChipFilter from "@/components/reports/ArchetypeChipFilter";
 import ReportsTable, { type TableRow } from "@/components/reports/ReportsTable";
+import ReportDetailModal from "@/components/reports/ReportDetailModal";
+import { createClient } from "@/lib/supabase/client";
 import type { ArchetypeId } from "@/lib/archetypes";
+import type { FullReportData } from "@/lib/niche-finder/types";
+
+type ModalState =
+  | { kind: "closed" }
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "open"; report: FullReportData };
 
 interface Props {
   rows: TableRow[];
@@ -12,6 +21,42 @@ interface Props {
 export default function ReportsPageClient({ rows }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ArchetypeId[]>([]);
+  const [modal, setModal] = useState<ModalState>({ kind: "closed" });
+
+  const handleRowClick = useCallback(async (reportId: string) => {
+    setModal({ kind: "loading" });
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("reports")
+        .select(
+          "id, created_at, spec_version, niche_keyword, geo_scope, geo_target, report_depth, strategy_profile, resolved_weights, keyword_expansion, metros, meta",
+        )
+        .eq("id", reportId)
+        .single();
+
+      if (error || !data) {
+        setModal({ kind: "error", message: error?.message ?? "Report not found." });
+        return;
+      }
+
+      setModal({
+        kind: "open",
+        report: {
+          ...data,
+          metros: Array.isArray(data.metros) ? data.metros : [],
+          keyword_expansion: data.keyword_expansion as FullReportData["keyword_expansion"],
+          resolved_weights: data.resolved_weights as Record<string, number> | null,
+          meta: data.meta as Record<string, unknown> | null,
+        },
+      });
+    } catch (err) {
+      setModal({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Failed to load report.",
+      });
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -134,7 +179,7 @@ export default function ReportsPageClient({ rows }: Props) {
       />
 
       <ArchetypeChipFilter selected={selected} onChange={setSelected} />
-      <ReportsTable rows={filtered} />
+      <ReportsTable rows={filtered} onRowClick={handleRowClick} />
 
       <div
         aria-live="polite"
@@ -146,6 +191,85 @@ export default function ReportsPageClient({ rows }: Props) {
       >
         Showing {filtered.length} of {rows.length}
       </div>
+
+      {modal.kind === "loading" && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(31,27,22,0.35)",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--card)",
+              borderRadius: 12,
+              padding: "32px 40px",
+              textAlign: "center",
+              fontFamily: "var(--serif)",
+              fontStyle: "italic",
+              color: "var(--ink-2)",
+              fontSize: 15,
+              boxShadow: "0 20px 60px rgba(31,27,22,0.22)",
+            }}
+          >
+            Loading report…
+          </div>
+        </div>
+      )}
+
+      {modal.kind === "error" && (
+        <div
+          onClick={() => setModal({ kind: "closed" })}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(31,27,22,0.35)",
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--card)",
+              borderRadius: 12,
+              padding: "28px 36px",
+              textAlign: "center",
+              maxWidth: 400,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 15,
+                color: "var(--danger)",
+                marginBottom: 14,
+              }}
+            >
+              {modal.message}
+            </div>
+            <button
+              className="btn-ghost"
+              onClick={() => setModal({ kind: "closed" })}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modal.kind === "open" && (
+        <ReportDetailModal
+          report={modal.report}
+          onClose={() => setModal({ kind: "closed" })}
+        />
+      )}
     </div>
   );
 }

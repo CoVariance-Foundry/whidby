@@ -40,6 +40,7 @@ async def score_niche_for_metro(
     dataforseo_client: Any,
     metro_db: MetroDB | None = None,
     dry_run: bool = False,
+    request_id: str | None = None,
 ) -> ScoreNicheResult:
     """Score a (niche, city, state?) tuple end-to-end.
 
@@ -49,8 +50,10 @@ async def score_niche_for_metro(
     across states). Raises ValueError if no metro in the seed matches.
     """
     started = time.monotonic()
-    logger.info("score_niche_for_metro START niche=%r city=%r state=%r dry_run=%s",
-                niche, city, state, dry_run)
+    logger.info(
+        "score_niche_for_metro START request_id=%s niche=%r city=%r state=%r dry_run=%s",
+        request_id, niche, city, state, dry_run,
+    )
     metros_db = metro_db or MetroDB.from_seed()
     target = metros_db.find_by_city(city, state=state)
     if target is None:
@@ -80,17 +83,25 @@ async def score_niche_for_metro(
     }
 
     run_id = f"score-{uuid4()}"
+    rid = request_id or run_id
 
-    logger.info("[%s] M4 keyword expansion START", run_id)
+    # --- M4 keyword expansion ---
+    m4_start = time.monotonic()
+    logger.info("[%s] M4 keyword expansion START request_id=%s", run_id, rid)
     expansion = await expand_keywords(
         niche,
         llm_client=llm_client,
         dataforseo_client=dataforseo_client,
     )
-    logger.info("[%s] M4 keyword expansion DONE — %d keywords, confidence=%s",
-                run_id, len(expansion.get("expanded_keywords", [])),
-                expansion.get("expansion_confidence"))
+    m4_ms = int((time.monotonic() - m4_start) * 1000)
+    logger.info(
+        "[%s] M4 keyword expansion DONE — %d keywords, confidence=%s, duration_ms=%d",
+        run_id, len(expansion.get("expanded_keywords", [])),
+        expansion.get("expansion_confidence"), m4_ms,
+    )
 
+    # --- M5 data collection ---
+    m5_start = time.monotonic()
     logger.info("[%s] M5 data collection START", run_id)
     raw = await collect_data(
         keywords=expansion["expanded_keywords"],
@@ -98,10 +109,14 @@ async def score_niche_for_metro(
         strategy_profile=strategy_profile,
         client=dataforseo_client,
     )
+    m5_ms = int((time.monotonic() - m5_start) * 1000)
+    logger.info(
+        "[%s] M5 data collection DONE — api_calls=%d cost=$%.4f duration_ms=%d",
+        run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd, m5_ms,
+    )
 
-    logger.info("[%s] M5 data collection DONE — api_calls=%d cost=$%.4f",
-                run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd)
-
+    # --- M6 signal extraction ---
+    m6_start = time.monotonic()
     logger.info("[%s] M6 signal extraction START", run_id)
     metro_result = raw.metros[target.cbsa_code]
     metro_bundle = asdict(metro_result)
@@ -112,20 +127,23 @@ async def score_niche_for_metro(
         cross_metro_domain_stats=None,
         total_metros=1,
     )
+    m6_ms = int((time.monotonic() - m6_start) * 1000)
+    logger.info("[%s] M6 signal extraction DONE duration_ms=%d", run_id, m6_ms)
 
-    logger.info("[%s] M6 signal extraction DONE", run_id)
-
+    # --- M7 scoring ---
+    m7_start = time.monotonic()
     logger.info("[%s] M7 scoring START", run_id)
     scores = compute_scores(
         metro_signals=signals,
         all_metro_signals=[signals],
         strategy_profile=strategy_profile,
     )
-    logger.info("[%s] M7 scoring DONE — opportunity=%s", run_id, scores.get("opportunity"))
+    m7_ms = int((time.monotonic() - m7_start) * 1000)
+    logger.info("[%s] M7 scoring DONE — opportunity=%s duration_ms=%d",
+                run_id, scores.get("opportunity"), m7_ms)
 
-    # M8 classification — unpack tuple returns from classify_serp_archetype and
-    # compute_difficulty_tier; classify_and_generate_guidance is async and takes
-    # a ClassificationInput envelope.
+    # --- M8 classification + guidance ---
+    m8_start = time.monotonic()
     ai_exposure = classify_ai_exposure(signals)
     serp_archetype, _rule_id = classify_serp_archetype(signals)
     difficulty, _combined_comp, _resolved = compute_difficulty_tier(
@@ -148,8 +166,11 @@ async def score_niche_for_metro(
         classification_input,
         llm_client,
     )
-    logger.info("[%s] M8 guidance generation DONE", run_id)
+    m8_ms = int((time.monotonic() - m8_start) * 1000)
+    logger.info("[%s] M8 guidance generation DONE duration_ms=%d", run_id, m8_ms)
 
+    # --- M9 report assembly ---
+    m9_start = time.monotonic()
     logger.info("[%s] M9 report assembly START", run_id)
 
     dfs_total_cost = getattr(dataforseo_client, "total_cost", raw.meta.total_cost_usd)
@@ -193,12 +214,18 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
-    logger.info("[%s] M9 report assembly DONE — report_id=%s", run_id, report.get("report_id"))
+    m9_ms = int((time.monotonic() - m9_start) * 1000)
+    logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
+                run_id, report.get("report_id"), m9_ms)
 
     elapsed = time.monotonic() - started
     _log_dfs_cost_summary(run_id, dfs_total_calls, dfs_total_cost, dfs_cached, dfs_breakdown, elapsed)
-    logger.info("score_niche_for_metro DONE in %.2fs — opportunity=%s",
-                elapsed, scores.get("opportunity"))
+    logger.info(
+        "score_niche_for_metro DONE in %.2fs — opportunity=%s request_id=%s "
+        "stage_ms={m4=%d, m5=%d, m6=%d, m7=%d, m8=%d, m9=%d}",
+        elapsed, scores.get("opportunity"), rid,
+        m4_ms, m5_ms, m6_ms, m7_ms, m8_ms, m9_ms,
+    )
 
     evidence = _build_evidence_from_signals(signals)
     return ScoreNicheResult(

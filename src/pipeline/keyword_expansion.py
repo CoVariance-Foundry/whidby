@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import TypedDict
 
 from src.clients.dataforseo.types import APIResponse
@@ -19,6 +21,8 @@ from src.config.constants import (
 
 from .intent_classifier import aio_risk_for_intent, classify_keyword_intent, is_actionable_intent
 from .keyword_deduplication import CandidateKeyword, dedupe_candidate_keywords, normalize_keyword
+
+logger = logging.getLogger(__name__)
 
 
 class ExpandedKeyword(TypedDict):
@@ -119,6 +123,7 @@ async def expand_keywords(
     llm_success = False
     dfs_success = False
 
+    llm_start = time.monotonic()
     if llm_client is not None and hasattr(llm_client, "keyword_expansion"):
         try:
             llm_result = await llm_client.keyword_expansion(niche_norm)
@@ -145,7 +150,9 @@ async def expand_keywords(
                 llm_success = True
         except Exception:
             llm_success = False
+    llm_ms = int((time.monotonic() - llm_start) * 1000)
 
+    dfs_start = time.monotonic()
     if dataforseo_client is not None and hasattr(dataforseo_client, "keyword_suggestions"):
         try:
             dfs_response = await dataforseo_client.keyword_suggestions(
@@ -157,6 +164,7 @@ async def expand_keywords(
             dfs_success = dfs_response.status == "ok"
         except Exception:
             dfs_success = False
+    dfs_ms = int((time.monotonic() - dfs_start) * 1000)
 
     dfs_candidates: list[CandidateKeyword] = [
         {"keyword": keyword, "source": "dataforseo_suggestions"} for keyword in dfs_keywords
@@ -164,6 +172,7 @@ async def expand_keywords(
     seed_candidate: CandidateKeyword = {"keyword": niche_norm, "source": "input", "tier": 1}
     deduped = dedupe_candidate_keywords([seed_candidate, *llm_candidates, *dfs_candidates])
 
+    intent_start = time.monotonic()
     expanded_keywords: list[ExpandedKeyword] = []
     for candidate in deduped:
         keyword = normalize_keyword(candidate.get("keyword", ""))
@@ -200,6 +209,7 @@ async def expand_keywords(
                 "actionable": is_actionable_intent(intent),
             }
         )
+    intent_ms = int((time.monotonic() - intent_start) * 1000)
 
     expanded_keywords.sort(
         key=lambda kw: (
@@ -226,6 +236,13 @@ async def expand_keywords(
     )
     if confidence not in M4_ALLOWED_CONFIDENCE:
         confidence = "low"
+
+    logger.info(
+        "M4 expand_keywords DONE niche=%r total=%d deduped=%d "
+        "llm_ok=%s dfs_ok=%s llm_ms=%d dfs_ms=%d intent_ms=%d",
+        niche_norm, total_keywords, len(deduped),
+        llm_success, dfs_success, llm_ms, dfs_ms, intent_ms,
+    )
 
     return {
         "niche": niche_norm,

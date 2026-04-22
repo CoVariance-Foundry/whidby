@@ -32,3 +32,56 @@ export interface StandardSurfaceResponse {
   message?: string;
   report_id?: string;
 }
+
+export interface MetroScores {
+  demand: number;
+  organic_competition: number;
+  local_competition: number;
+  monetization: number;
+  ai_resilience: number;
+  opportunity: number;
+  confidence?: { score: number; flags?: string[] };
+}
+
+export interface MetroGuidance {
+  summary?: string;
+  action_items?: string[];
+  [key: string]: unknown;
+}
+
+export interface ReportMetro {
+  cbsa_code: string;
+  cbsa_name: string;
+  population?: number;
+  scores: MetroScores;
+  serp_archetype?: string;
+  ai_exposure?: string;
+  difficulty_tier?: string;
+  signals?: Record<string, unknown>;
+  guidance?: MetroGuidance;
+}
+
+export interface KeywordExpansionItem {
+  keyword: string;
+  tier?: number;
+  intent?: string;
+  source?: string;
+  aio_risk?: string;
+  search_volume?: number;
+  cpc?: number;
+}
+
+export interface FullReportData {
+  id: string;
+  created_at: string;
+  spec_version: string;
+  niche_keyword: string;
+  geo_scope: string;
+  geo_target: string;
+  report_depth: string;
+  strategy_profile: string;
+  resolved_weights: Record<string, number> | null;
+  keyword_expansion: { expanded_keywords?: KeywordExpansionItem[] } | null;
+  metros: ReportMetro[];
+  meta: Record<string, unknown> | null;
+}

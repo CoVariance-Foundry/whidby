@@ -347,8 +347,14 @@ def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
 @app.post("/api/niches/score")
 async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
-    logger.info("niches_score called: niche=%r city=%r state=%r dry_run=%s",
-                req.niche, req.city, req.state, req.dry_run)
+    import time as _time
+
+    request_id = str(uuid.uuid4())
+    handler_start = _time.monotonic()
+    logger.info(
+        "niches_score START request_id=%s niche=%r city=%r state=%r dry_run=%s",
+        request_id, req.niche, req.city, req.state, req.dry_run,
+    )
     dfs: DataForSEOClient | None = None
     try:
         if req.dry_run:
@@ -356,6 +362,7 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
                 niche=req.niche, city=req.city, state=req.state,
                 strategy_profile=req.strategy_profile,
                 llm_client=None, dataforseo_client=None, dry_run=True,
+                request_id=request_id,
             )
         else:
             import os
@@ -369,16 +376,26 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
                 niche=req.niche, city=req.city, state=req.state,
                 strategy_profile=req.strategy_profile,
                 llm_client=llm, dataforseo_client=dfs,
+                request_id=request_id,
             )
     except ValueError as exc:
-        logger.warning("niches_score ValueError: %s", exc)
+        elapsed_ms = int((_time.monotonic() - handler_start) * 1000)
+        logger.warning("niches_score ValueError request_id=%s elapsed_ms=%d: %s",
+                       request_id, elapsed_ms, exc)
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
-        logger.exception("niches_score pipeline failed for niche=%r city=%r", req.niche, req.city)
+        elapsed_ms = int((_time.monotonic() - handler_start) * 1000)
+        logger.exception(
+            "niches_score pipeline failed request_id=%s elapsed_ms=%d niche=%r city=%r",
+            request_id, elapsed_ms, req.niche, req.city,
+        )
         raise HTTPException(status_code=500, detail="Scoring pipeline failed unexpectedly")
+
+    pipeline_ms = int((_time.monotonic() - handler_start) * 1000)
 
     report_id: str | None = None
     persist_failed = False
+    persist_start = _time.monotonic()
     try:
         report_id = _persist_report(result.report)
     except Exception:
@@ -386,12 +403,18 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
                          result.report.get("report_id"))
         report_id = result.report.get("report_id")
         persist_failed = True
+    persist_ms = int((_time.monotonic() - persist_start) * 1000)
 
+    flush_ms = 0
     if dfs is not None and report_id:
+        flush_start = _time.monotonic()
         try:
             dfs.cost_tracker.flush_to_supabase(report_id)
         except Exception:
             logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
+        flush_ms = int((_time.monotonic() - flush_start) * 1000)
+
+    total_ms = int((_time.monotonic() - handler_start) * 1000)
 
     response: dict[str, Any] = {
         "report_id": report_id,
@@ -406,8 +429,12 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
     }
     if persist_failed:
         response["persist_warning"] = "Report scored successfully but failed to save to database"
-    logger.info("niches_score returning report_id=%s opportunity=%s persist_ok=%s",
-                report_id, result.opportunity_score, not persist_failed)
+    logger.info(
+        "niches_score DONE request_id=%s report_id=%s opportunity=%s persist_ok=%s "
+        "pipeline_ms=%d persist_ms=%d flush_ms=%d total_ms=%d",
+        request_id, report_id, result.opportunity_score, not persist_failed,
+        pipeline_ms, persist_ms, flush_ms, total_ms,
+    )
     return response
 
 

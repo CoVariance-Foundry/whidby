@@ -354,3 +354,9 @@ button { font-family: inherit; }
   color: var(--accent-ink);
   letter-spacing: 0.02em;
 }
+
+/* ── Report table row hover ─────────────────────── */
+.report-row-clickable:hover {
+  background: var(--hover);
+}
+

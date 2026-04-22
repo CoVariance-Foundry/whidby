@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
@@ -133,25 +134,39 @@ class SupabasePersistence:
 
     def persist_report(self, report: dict[str, Any]) -> str:
         report_id = report["report_id"]
+        persist_start = time.monotonic()
         logger.info("persist_report START report_id=%s", report_id)
 
+        t0 = time.monotonic()
         self._client.table("reports").insert(build_report_row(report)).execute()
-        logger.info("persist_report inserted reports row for %s", report_id)
+        reports_ms = int((time.monotonic() - t0) * 1000)
+        logger.info("persist_report inserted reports row for %s duration_ms=%d",
+                     report_id, reports_ms)
 
         keyword_rows = build_keyword_rows(report)
         if keyword_rows:
+            t0 = time.monotonic()
             self._client.table("report_keywords").insert(keyword_rows).execute()
-            logger.info("persist_report inserted %d report_keywords rows", len(keyword_rows))
+            kw_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("persist_report inserted %d report_keywords rows duration_ms=%d",
+                        len(keyword_rows), kw_ms)
 
         signal_rows = build_metro_signal_rows(report)
         if signal_rows:
+            t0 = time.monotonic()
             self._client.table("metro_signals").insert(signal_rows).execute()
-            logger.info("persist_report inserted %d metro_signals rows", len(signal_rows))
+            sig_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("persist_report inserted %d metro_signals rows duration_ms=%d",
+                        len(signal_rows), sig_ms)
 
         score_rows = build_metro_score_rows(report)
         if score_rows:
+            t0 = time.monotonic()
             self._client.table("metro_scores").insert(score_rows).execute()
-            logger.info("persist_report inserted %d metro_scores rows", len(score_rows))
+            score_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("persist_report inserted %d metro_scores rows duration_ms=%d",
+                        len(score_rows), score_ms)
 
-        logger.info("persist_report DONE report_id=%s", report_id)
+        total_ms = int((time.monotonic() - persist_start) * 1000)
+        logger.info("persist_report DONE report_id=%s total_ms=%d", report_id, total_ms)
         return report_id

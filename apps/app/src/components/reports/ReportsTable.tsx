@@ -27,7 +27,12 @@ function archetypeGlyphClass(id: ArchetypeId): string {
   return ARCHETYPES.find((a) => a.id === id)?.glyph ?? "arch-mixed";
 }
 
-export default function ReportsTable({ rows }: { rows: TableRow[] }) {
+interface Props {
+  rows: TableRow[];
+  onRowClick?: (id: string) => void;
+}
+
+export default function ReportsTable({ rows, onRowClick }: Props) {
   if (rows.length === 0) {
     return (
       <div
@@ -89,6 +94,19 @@ export default function ReportsTable({ rows }: { rows: TableRow[] }) {
         <div
           key={r.id}
           role="row"
+          className={onRowClick ? "report-row-clickable" : undefined}
+          tabIndex={onRowClick ? 0 : undefined}
+          onClick={onRowClick ? () => onRowClick(r.id) : undefined}
+          onKeyDown={
+            onRowClick
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onRowClick(r.id);
+                  }
+                }
+              : undefined
+          }
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0,3fr) 1fr 1fr 1fr",
@@ -99,6 +117,8 @@ export default function ReportsTable({ rows }: { rows: TableRow[] }) {
             color: "var(--ink)",
             alignItems: "flex-start",
             gap: 12,
+            cursor: onRowClick ? "pointer" : undefined,
+            transition: "background 0.1s",
           }}
         >
           <span

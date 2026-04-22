@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -12,6 +14,8 @@ from .collection_plan import CollectionPlan
 from .errors import failure_from_exception, failure_from_response
 from .task_graph import dependency_levels, validate_task_graph
 from .types import CollectionRequest, CollectionTask, FailureRecord
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,9 +47,19 @@ async def execute_collection_plan(
         Execution state with task outcomes.
     """
     state = ExecutionState()
+
+    base_start = time.monotonic()
     await _execute_tasks(plan.base_tasks, client, state)
+    base_ms = int((time.monotonic() - base_start) * 1000)
+    logger.info("M5 base phase DONE tasks=%d duration_ms=%d", len(plan.base_tasks), base_ms)
+
     dependent_tasks = _materialize_dependent_tasks(plan, request, state)
+
+    dep_start = time.monotonic()
     await _execute_tasks(dependent_tasks, client, state)
+    dep_ms = int((time.monotonic() - dep_start) * 1000)
+    logger.info("M5 dependent phase DONE tasks=%d duration_ms=%d", len(dependent_tasks), dep_ms)
+
     return state
 
 
@@ -103,8 +117,17 @@ async def _execute_tasks(
     if not tasks:
         return
     validate_task_graph(tasks)
-    for level in dependency_levels(tasks):
+    for level_idx, level in enumerate(dependency_levels(tasks)):
+        level_start = time.monotonic()
+        task_types = {}
+        for t in level:
+            task_types[t.task_type] = task_types.get(t.task_type, 0) + 1
         await asyncio.gather(*[_run_task(task, client, state) for task in level])
+        level_ms = int((time.monotonic() - level_start) * 1000)
+        logger.info(
+            "M5 exec level=%d tasks=%d types=%s duration_ms=%d",
+            level_idx, len(level), task_types, level_ms,
+        )
 
 
 async def _run_task(task: CollectionTask, client: Any, state: ExecutionState) -> None:
