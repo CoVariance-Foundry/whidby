@@ -6,6 +6,7 @@ import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
+import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
 
 interface Props {
@@ -232,6 +233,11 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
           <Pill>Confidence: {metro.scores.confidence.score ?? "—"}</Pill>
         )}
       </div>
+
+      {/* Score breakdown tabs */}
+      {metro.signals && Object.keys(metro.signals).length > 0 && (
+        <ScoreBreakdownTabs signals={metro.signals} scores={metro.scores} />
+      )}
 
       {/* Guidance */}
       {metro.guidance && (metro.guidance.summary || metro.guidance.action_items) && (

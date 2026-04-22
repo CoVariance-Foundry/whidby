@@ -23,6 +23,9 @@ export const I = {
   target:
     "M12 12m-9 0a9 9 0 1118 0 9 9 0 11-18 0M12 12m-5 0a5 5 0 1110 0 5 5 0 11-10 0M12 12m-1 0a1 1 0 112 0 1 1 0 11-2 0",
   info: "M12 22a10 10 0 110-20 10 10 0 010 20zM12 16v-4M12 8h.01",
+  arrowUp: "M12 19V5M5 12l7-7 7 7",
+  arrowDown: "M12 5v14M19 12l-7 7-7-7",
+  chevronDown: "M6 9l6 6 6-6",
 } as const;
 
 export function Icon({
