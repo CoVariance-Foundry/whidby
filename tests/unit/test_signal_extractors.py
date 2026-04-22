@@ -78,6 +78,32 @@ def test_extract_local_competition_handles_missing_local_pack_defaults() -> None
     assert local["local_pack_review_count_avg"] == 0.0
 
 
+def test_extract_demand_signals_handles_nested_dfs_keyword_volume() -> None:
+    """DFS keyword_volume returns items nested under a wrapper dict."""
+    dfs_volume_rows = [
+        {
+            "se_type": "google",
+            "items_count": 3,
+            "items": [
+                {"keyword": "roofing", "search_volume": 301000, "cpc": 5.47},
+                {"keyword": "roof repair", "search_volume": 74000, "cpc": 6.21},
+                {"keyword": "roof replacement", "search_volume": 27100, "cpc": 8.50},
+            ],
+        }
+    ]
+    keywords = [
+        {"keyword": "roofing", "tier": 1, "intent": "transactional"},
+        {"keyword": "roof repair", "tier": 2, "intent": "commercial"},
+        {"keyword": "roof replacement", "tier": 2, "intent": "commercial"},
+    ]
+    demand = extract_demand_signals(keywords, dfs_volume_rows, {})
+
+    assert demand["total_search_volume"] > 0
+    assert demand["avg_cpc"] > 0
+    assert demand["head_term_volume"] == 301000
+    assert demand["volume_breadth"] == 1.0
+
+
 def test_extract_ai_and_monetization_blocks_contract_shape() -> None:
     bundle = build_sample_bundle()
     keywords = build_keyword_expansion()

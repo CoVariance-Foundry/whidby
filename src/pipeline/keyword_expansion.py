@@ -17,6 +17,7 @@ from src.config.constants import (
     M4_CONFIDENCE_HIGH_THRESHOLD,
     M4_CONFIDENCE_LOW_THRESHOLD,
     M4_INTENT_PRIORITY,
+    M4_MAX_KEYWORDS,
 )
 
 from .intent_classifier import aio_risk_for_intent, classify_keyword_intent, is_actionable_intent
@@ -218,6 +219,7 @@ async def expand_keywords(
             kw["keyword"],
         )
     )
+    expanded_keywords = expanded_keywords[:M4_MAX_KEYWORDS]
 
     actionable_keywords = sum(1 for kw in expanded_keywords if kw["actionable"])
     informational_keywords_excluded = sum(

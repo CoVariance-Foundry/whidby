@@ -24,6 +24,8 @@ M4_ALLOWED_CONFIDENCE: tuple[str, ...] = ("high", "medium", "low")
 M4_ALLOWED_AIO_RISK: tuple[str, ...] = ("low", "moderate", "high")
 M4_ALLOWED_SOURCES: tuple[str, ...] = ("input", "llm", "dataforseo_suggestions", "merged")
 
+M4_MAX_KEYWORDS = 50
+
 # Confidence mapping from LLM-vs-DFS overlap ratio.
 M4_CONFIDENCE_LOW_THRESHOLD = 0.30
 M4_CONFIDENCE_HIGH_THRESHOLD = 0.60

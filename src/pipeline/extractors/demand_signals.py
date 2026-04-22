@@ -8,6 +8,15 @@ from src.pipeline.effective_volume import compute_effective_volume
 def _normalize_keyword_rows(keyword_volume_rows: list[dict]) -> dict[str, dict]:
     by_keyword: dict[str, dict] = {}
     for row in keyword_volume_rows:
+        items = row.get("items")
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                kw = str(item.get("keyword", "")).strip().lower()
+                if kw:
+                    by_keyword[kw] = item
+            continue
         keyword = str(row.get("keyword", "")).strip().lower()
         if not keyword:
             continue

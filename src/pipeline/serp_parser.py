@@ -13,21 +13,87 @@ def _as_list(value: object) -> list[object]:
     return [value]
 
 
+_EMPTY_SERP_CONTEXT: dict[str, object] = {
+    "aio_trigger_rate": 0.0,
+    "featured_snippet_rate": 0.0,
+    "paa_density": 0.0,
+    "local_pack_present": False,
+    "local_pack_position": 10,
+    "lsa_present": False,
+    "ads_present": False,
+    "organic_domains": [],
+    "organic_titles": [],
+}
+
+
+def _parse_dfs_items_row(row: dict) -> dict[str, object]:
+    """Normalize a raw DFS SERP result block into the expected signal dict.
+
+    DFS live/advanced returns each keyword result as::
+
+        {"keyword": "...", "items": [{"type": "organic", ...}, {"type": "local_pack", ...}]}
+
+    This converts the ``items`` array into flat flags and lists the rest of
+    the pipeline expects.
+    """
+    items = row.get("items")
+    if not isinstance(items, list):
+        return row
+
+    organic_results: list[dict] = []
+    aio_present = False
+    snippet_present = False
+    lsa_present = False
+    ads_present = False
+    local_pack_present = False
+    local_pack_position = 10
+    paa_items: list[dict] = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_type = str(item.get("type", "")).lower()
+
+        if item_type == "organic":
+            organic_results.append(item)
+        elif item_type in {"ai_overview", "ai_overview_element"}:
+            aio_present = True
+        elif item_type == "featured_snippet":
+            snippet_present = True
+            organic_results.append(item)
+        elif item_type == "local_pack":
+            local_pack_present = True
+            pos = item.get("rank_group") or item.get("rank_absolute") or 10
+            local_pack_position = min(local_pack_position, int(pos) if int(pos) > 0 else 10)
+        elif item_type == "people_also_ask":
+            sub_items = item.get("items")
+            if isinstance(sub_items, list):
+                paa_items.extend(sub_items)
+            else:
+                paa_items.append(item)
+        elif item_type == "local_services_ads":
+            lsa_present = True
+        elif item_type in {"paid", "ads_top", "shopping"}:
+            ads_present = True
+
+    return {
+        "organic_results": organic_results,
+        "aio_present": aio_present,
+        "snippet_present": snippet_present,
+        "lsa_present": lsa_present,
+        "ads_top_present": ads_present,
+        "local_pack_present": local_pack_present,
+        "local_pack_position": local_pack_position if local_pack_present else 10,
+        "people_also_ask": paa_items,
+        "paa_count": len(paa_items),
+    }
+
+
 def parse_serp_features(raw_serp_rows: list[dict]) -> dict[str, object]:
     """Parse and aggregate SERP features from M5 organic SERP rows."""
     total = len(raw_serp_rows)
     if total == 0:
-        return {
-            "aio_trigger_rate": 0.0,
-            "featured_snippet_rate": 0.0,
-            "paa_density": 0.0,
-            "local_pack_present": False,
-            "local_pack_position": 10,
-            "lsa_present": False,
-            "ads_present": False,
-            "organic_domains": [],
-            "organic_titles": [],
-        }
+        return dict(_EMPTY_SERP_CONTEXT)
 
     aio_count = 0
     snippet_count = 0
@@ -39,7 +105,9 @@ def parse_serp_features(raw_serp_rows: list[dict]) -> dict[str, object]:
     organic_domains: list[str] = []
     organic_titles: list[str] = []
 
-    for row in raw_serp_rows:
+    for raw_row in raw_serp_rows:
+        row = _parse_dfs_items_row(raw_row) if "items" in raw_row else raw_row
+
         features = {str(item).lower() for item in _as_list(row.get("serp_features"))}
         aio = bool(row.get("aio_present")) or "ai_overview" in features or "aio" in features
         snippet = bool(row.get("snippet_present")) or "featured_snippet" in features
