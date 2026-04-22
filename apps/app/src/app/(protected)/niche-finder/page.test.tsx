@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import React from "react";
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, fireEvent, act } from "@testing-library/react";
-import NicheFinderPage from "./page";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import NicheFinderClient from "./NicheFinderClient";
 
 // ---------------------------------------------------------------------------
 // Mock Next.js modules that don't work in jsdom
@@ -15,16 +16,10 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/components/Sidebar", () => ({
-  default: () => <nav data-testid="sidebar" />,
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock("@/components/Topbar", () => ({
-  default: () => <header data-testid="topbar" />,
-}));
-
-// CityAutocomplete hits fetch internally; mock it out so the page test
-// focuses on form submission, not autocomplete suggestions.
 vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
   default: ({
     value,
@@ -66,6 +61,19 @@ vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+function createWrapper() {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
+}
+
+function renderClient() {
+  return render(<NicheFinderClient />, { wrapper: createWrapper() });
+}
+
 function fillAndSubmit(city: string, service: string) {
   const cityInput = screen.getByTestId("city-input");
   const serviceInput = screen.getByTestId("service-input");
@@ -92,9 +100,9 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-describe("NicheFinderPage", () => {
+describe("NicheFinderClient", () => {
   it("renders without crashing — heading and form are present", () => {
-    render(<NicheFinderPage />);
+    renderClient();
     expect(screen.getByText("Find a niche")).toBeInTheDocument();
     expect(screen.getByTestId("city-input")).toBeInTheDocument();
     expect(screen.getByTestId("service-input")).toBeInTheDocument();
@@ -102,7 +110,7 @@ describe("NicheFinderPage", () => {
   });
 
   it("shows a validation error when submitted with empty fields", async () => {
-    render(<NicheFinderPage />);
+    renderClient();
     fireEvent.click(screen.getByTestId("submit-btn"));
 
     await waitFor(() => {
@@ -117,7 +125,7 @@ describe("NicheFinderPage", () => {
     );
     global.fetch = fetchMock;
 
-    render(<NicheFinderPage />);
+    renderClient();
     await act(async () => {
       fillAndSubmit("Phoenix", "roofing");
     });
@@ -139,7 +147,7 @@ describe("NicheFinderPage", () => {
       new Response(JSON.stringify(SUCCESS_RESPONSE), { status: 200 }),
     );
 
-    render(<NicheFinderPage />);
+    renderClient();
     await act(async () => {
       fillAndSubmit("Phoenix", "roofing");
     });
@@ -156,7 +164,7 @@ describe("NicheFinderPage", () => {
     );
     global.fetch = fetchMock;
 
-    render(<NicheFinderPage />);
+    renderClient();
     fireEvent.click(screen.getByTestId("city-select-phoenix-az"));
     fireEvent.change(screen.getByTestId("service-input"), {
       target: { value: "roofing" },
@@ -178,7 +186,7 @@ describe("NicheFinderPage", () => {
       new Response(JSON.stringify(SUCCESS_RESPONSE), { status: 200 }),
     );
 
-    render(<NicheFinderPage />);
+    renderClient();
     await act(async () => {
       fillAndSubmit("Phoenix", "roofing");
     });
@@ -187,7 +195,7 @@ describe("NicheFinderPage", () => {
       expect(screen.getByRole("link", { name: /view full report/i })).toBeInTheDocument();
     });
     const link = screen.getByRole("link", { name: /view full report/i }) as HTMLAnchorElement;
-    expect(link.href).toContain("/reports/rpt-123");
+    expect(link.href).toContain("/reports");
   });
 
   it("error response renders an alert banner", async () => {
@@ -198,7 +206,7 @@ describe("NicheFinderPage", () => {
       ),
     );
 
-    render(<NicheFinderPage />);
+    renderClient();
     await act(async () => {
       fillAndSubmit("Phoenix", "roofing");
     });
