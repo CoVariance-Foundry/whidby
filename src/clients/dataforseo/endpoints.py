@@ -99,6 +99,13 @@ BACKLINKS_SUMMARY = Endpoint(
 )
 
 LIGHTHOUSE = Endpoint(
+    post_path="on_page/lighthouse/live",
+    get_path=None,
+    mode=QueueMode.LIVE,
+    cost_per_call=0.006,
+)
+
+LIGHTHOUSE_QUEUED = Endpoint(
     post_path="on_page/lighthouse/task_post",
     get_path="on_page/lighthouse/task_get/{task_id}",
     mode=QueueMode.STANDARD,

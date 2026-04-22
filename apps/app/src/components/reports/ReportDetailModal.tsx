@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
@@ -9,6 +9,7 @@ import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 interface Props {
   report: FullReportData;
   onClose: () => void;
+  onDelete?: (reportId: string) => Promise<void>;
 }
 
 function formatDate(iso: string): string {
@@ -372,8 +373,10 @@ function KeywordTable({
   );
 }
 
-export default function ReportDetailModal({ report, onClose }: Props) {
+export default function ReportDetailModal({ report, onClose, onDelete }: Props) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     closeBtnRef.current?.focus();
@@ -499,10 +502,101 @@ export default function ReportDetailModal({ report, onClose }: Props) {
           >
             {report.geo_target} &middot; {formatDate(report.created_at)}
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
             <Pill>v{report.spec_version}</Pill>
             <Pill>{report.strategy_profile}</Pill>
             <Pill>{report.report_depth}</Pill>
+
+            {onDelete && (
+              <div style={{ marginLeft: "auto" }}>
+                {!confirmDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={deleting}
+                    style={{
+                      fontFamily: "var(--sans)",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "var(--ink-3)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      transition: "color 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--ink-3)")}
+                  >
+                    Delete report
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--danger-soft)",
+                      border: "1px solid var(--danger)",
+                      borderRadius: 8,
+                      padding: "6px 12px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "var(--serif)",
+                        fontStyle: "italic",
+                        fontSize: 12,
+                        color: "var(--danger)",
+                      }}
+                    >
+                      This can&apos;t be undone
+                    </span>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={async () => {
+                        setDeleting(true);
+                        await onDelete(report.id);
+                      }}
+                      style={{
+                        fontFamily: "var(--sans)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#fff",
+                        background: "var(--danger)",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "4px 12px",
+                        cursor: deleting ? "wait" : "pointer",
+                        opacity: deleting ? 0.6 : 1,
+                      }}
+                    >
+                      {deleting ? "Deleting…" : "Delete"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={() => setConfirmDelete(false)}
+                      style={{
+                        fontFamily: "var(--sans)",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: "var(--ink-2)",
+                        background: "none",
+                        border: "1px solid var(--rule)",
+                        borderRadius: 6,
+                        padding: "4px 10px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

@@ -18,7 +18,8 @@ interface Props {
   rows: TableRow[];
 }
 
-export default function ReportsPageClient({ rows }: Props) {
+export default function ReportsPageClient({ rows: initialRows }: Props) {
+  const [rows, setRows] = useState(initialRows);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ArchetypeId[]>([]);
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
@@ -56,6 +57,14 @@ export default function ReportsPageClient({ rows }: Props) {
         message: err instanceof Error ? err.message : "Failed to load report.",
       });
     }
+  }, []);
+
+  const handleDelete = useCallback(async (reportId: string) => {
+    const supabase = createClient();
+    const { error } = await supabase.from("reports").delete().eq("id", reportId);
+    if (error) throw new Error(error.message);
+    setRows((prev) => prev.filter((r) => r.id !== reportId));
+    setModal({ kind: "closed" });
   }, []);
 
   const filtered = useMemo(() => {
@@ -268,6 +277,7 @@ export default function ReportsPageClient({ rows }: Props) {
         <ReportDetailModal
           report={modal.report}
           onClose={() => setModal({ kind: "closed" })}
+          onDelete={handleDelete}
         />
       )}
     </div>

@@ -198,8 +198,8 @@ class DataForSEOClient:
         return await self._live_request(ep.BACKLINKS_SUMMARY, payload)
 
     async def lighthouse(self, url: str) -> APIResponse:
-        params = {"url": url}
-        return await self._queued_request(ep.LIGHTHOUSE, params)
+        payload = [{"url": url}]
+        return await self._live_request(ep.LIGHTHOUSE, payload)
 
     # -- Batch queued flow ----------------------------------------------------
 
