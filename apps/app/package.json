@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3002",
+    "dev:webpack": "next dev --port 3002 --turbopack=false",
     "build": "next build",
     "start": "next start --port 3002",
     "lint": "eslint",

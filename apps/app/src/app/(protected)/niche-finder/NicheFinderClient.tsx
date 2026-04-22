@@ -126,12 +126,18 @@ export default function NicheFinderClient() {
         body: JSON.stringify(body),
       });
 
-      const json: StandardSurfaceResponse = await res.json();
+      let json: StandardSurfaceResponse | null = null;
+      try {
+        json = (await res.json()) as StandardSurfaceResponse;
+      } catch {
+        /* response body was not valid JSON (e.g. HTML error page) */
+      }
 
-      if (!res.ok || json.status !== "success") {
+      if (!res.ok || !json || json.status !== "success") {
         setPageState({
           kind: "error",
-          message: json.message ?? `Scoring failed (HTTP ${res.status}).`,
+          message:
+            json?.message ?? `Scoring unavailable (HTTP ${res.status}). Try again shortly.`,
         });
         return;
       }

@@ -1,5 +1,13 @@
 import type { NicheQueryInput, StandardSurfaceResponse } from "@/lib/niche-finder/types";
 
+async function safeJson(response: Response): Promise<StandardSurfaceResponse | null> {
+  try {
+    return (await response.json()) as StandardSurfaceResponse;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchStandardScore(
   input: NicheQueryInput
 ): Promise<StandardSurfaceResponse> {
@@ -9,12 +17,14 @@ export async function fetchStandardScore(
     body: JSON.stringify(input),
   });
 
-  const data = (await response.json()) as StandardSurfaceResponse;
-  if (!response.ok) {
+  const data = await safeJson(response);
+
+  if (!response.ok || !data) {
     return {
-      ...data,
-      status: data.status ?? "unavailable",
-      message: data.message ?? "Unable to fetch score.",
+      query: input,
+      score_result: { opportunity_score: 0, classification_label: "Low" },
+      status: data?.status ?? "unavailable",
+      message: data?.message ?? `Scoring unavailable (HTTP ${response.status}).`,
     };
   }
 

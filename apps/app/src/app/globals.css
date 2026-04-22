@@ -216,7 +216,7 @@ button { font-family: inherit; }
 .input-wrap input::placeholder { color: var(--ink-3); }
 
 /* buttons */
-.btn-primary {
+.app .btn-primary {
   padding: 10px 16px;
   background: var(--ink);
   color: var(--paper);
@@ -228,10 +228,10 @@ button { font-family: inherit; }
   transition: background 0.15s;
   cursor: pointer;
 }
-.btn-primary:hover { background: var(--accent-ink); }
-.btn-primary svg { width: 13px; height: 13px; }
+.app .btn-primary:hover { background: var(--accent-ink); }
+.app .btn-primary svg { width: 13px; height: 13px; }
 
-.btn-ghost {
+.app .btn-ghost {
   padding: 8px 12px;
   font-size: 12px;
   color: var(--ink-2);
@@ -241,8 +241,8 @@ button { font-family: inherit; }
   display: inline-flex; align-items: center; gap: 6px;
   cursor: pointer;
 }
-.btn-ghost:hover { background: var(--hover); color: var(--ink); }
-.btn-ghost svg { width: 12px; height: 12px; }
+.app .btn-ghost:hover { background: var(--hover); color: var(--ink); }
+.app .btn-ghost svg { width: 12px; height: 12px; }
 
 /* archetype color families — muted, academic */
 .arch-agg       { color: #8a3a2e; background: #f3e3de; }

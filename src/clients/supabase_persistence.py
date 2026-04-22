@@ -120,8 +120,14 @@ class SupabasePersistence:
         if client is None:
             from supabase import create_client
 
-            url = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
-            key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+            url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+            key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            if not url or not key:
+                missing = [v for v in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+                           if not os.environ.get(v)]
+                raise RuntimeError(
+                    f"Cannot persist report — missing env var(s): {', '.join(missing)}"
+                )
             client = create_client(url, key)
         self._client = client
 
