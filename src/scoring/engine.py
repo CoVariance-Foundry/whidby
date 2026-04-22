@@ -15,6 +15,22 @@ from .organic_competition_score import compute_organic_competition_score
 from .strategy_profiles import resolve_strategy_weights
 
 
+def _flatten_signal_shape(signals: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize M6 nested signal blocks into M7 flat keys."""
+    flattened: dict[str, Any] = dict(signals)
+    for category in (
+        "demand",
+        "organic_competition",
+        "local_competition",
+        "monetization",
+        "ai_resilience",
+    ):
+        block = signals.get(category)
+        if isinstance(block, Mapping):
+            flattened.update(block)
+    return flattened
+
+
 def compute_scores(
     *,
     metro_signals: Mapping[str, Any],
@@ -22,12 +38,15 @@ def compute_scores(
     strategy_profile: str,
 ) -> dict[str, Any]:
     """Compute all M7 scores for a single metro."""
-    demand = compute_demand_score(metro_signals, all_metro_signals)
-    organic_competition = compute_organic_competition_score(metro_signals)
-    local_competition = compute_local_competition_score(metro_signals)
-    monetization = compute_monetization_score(metro_signals)
-    ai_resilience = compute_ai_resilience_score(metro_signals)
-    resolved_weights = resolve_strategy_weights(strategy_profile, metro_signals)
+    metro = _flatten_signal_shape(metro_signals)
+    cohort = [_flatten_signal_shape(item) for item in all_metro_signals]
+
+    demand = compute_demand_score(metro, cohort)
+    organic_competition = compute_organic_competition_score(metro)
+    local_competition = compute_local_competition_score(metro)
+    monetization = compute_monetization_score(metro)
+    ai_resilience = compute_ai_resilience_score(metro)
+    resolved_weights = resolve_strategy_weights(strategy_profile, metro)
     opportunity = compute_opportunity_score(
         demand=demand,
         organic_competition=organic_competition,
@@ -37,7 +56,7 @@ def compute_scores(
         organic_weight=resolved_weights["organic"],
         local_weight=resolved_weights["local"],
     )
-    confidence = compute_confidence(metro_signals)
+    confidence = compute_confidence(metro)
     return {
         "demand": demand,
         "organic_competition": organic_competition,
