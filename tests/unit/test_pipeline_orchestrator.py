@@ -7,8 +7,9 @@ module's own tests and by the live integration smoke in Task 6.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from src.clients.dataforseo.cost_tracker import CostTracker
 from src.pipeline.orchestrator import ScoreNicheResult, score_niche_for_metro
 from src.pipeline.types import MetroCollectionResult, RawCollectionResult, RunMetadata
 
@@ -78,7 +79,22 @@ _FAKE_GUIDANCE_BUNDLE = {
 }
 
 
+def _make_fake_dfs_client() -> MagicMock:
+    """Build a mock DataForSEOClient with a real CostTracker pre-loaded with sample records."""
+    tracker = CostTracker()
+    tracker.record("serp/google/organic/task_post", "t1", 0.0006, False, 120)
+    tracker.record("serp/google/organic/task_post", "cached", 0, True, 0)
+    tracker.record("keywords_data/google/search_volume/task_post", "t2", 0.05, False, 300)
+
+    client = MagicMock()
+    client.total_cost = tracker.total_cost
+    client.cost_log = tracker.records
+    client.cost_tracker = tracker
+    return client
+
+
 def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
+    fake_dfs = _make_fake_dfs_client()
     with patch("src.pipeline.orchestrator.expand_keywords",
                new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
          patch("src.pipeline.orchestrator.collect_data",
@@ -101,7 +117,7 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
                 state="AZ",
                 strategy_profile="balanced",
                 llm_client=object(),
-                dataforseo_client=object(),
+                dataforseo_client=fake_dfs,
             )
         )
 
@@ -119,6 +135,16 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert len(result.evidence) == 4
     categories = {e["category"] for e in result.evidence}
     assert categories == {"demand", "competition", "monetization", "ai_resilience"}
+
+    meta = result.report["meta"]
+    assert meta["total_api_calls"] == 3
+    assert meta["total_cost_usd"] == round(0.0006 + 0.05, 6)
+    assert meta["dfs_cached_calls"] == 1
+    assert "dfs_cost_breakdown" in meta
+    breakdown = meta["dfs_cost_breakdown"]
+    assert "serp/google/organic/task_post" in breakdown
+    assert breakdown["serp/google/organic/task_post"]["calls"] == 2
+    assert breakdown["serp/google/organic/task_post"]["cached"] == 1
 
 
 def test_score_niche_raises_valueerror_on_unknown_city() -> None:
@@ -168,13 +194,38 @@ def test_score_niche_resolves_state_from_city_when_state_absent() -> None:
                 city="Denver",
                 # state deliberately omitted
                 llm_client=object(),
-                dataforseo_client=object(),
+                dataforseo_client=_make_fake_dfs_client(),
             )
         )
 
     metro = result.report["metros"][0]
     assert metro["cbsa_code"] == "19820"  # Denver-Aurora-Lakewood, CO
     assert result.report["input"]["geo_target"] == "Denver, CO"
+
+
+def test_cost_tracker_aggregates_by_endpoint() -> None:
+    """Verify cost_by_endpoint groups calls correctly and cached calls are counted."""
+    tracker = CostTracker()
+    tracker.record("serp/google/organic/task_post", "t1", 0.0006, False, 100)
+    tracker.record("serp/google/organic/task_post", "cached", 0, True, 0)
+    tracker.record("backlinks/summary/live", "t2", 0.002, False, 200)
+
+    breakdown = tracker.cost_by_endpoint()
+    assert len(breakdown) == 2
+
+    serp = breakdown["serp/google/organic/task_post"]
+    assert serp["calls"] == 2
+    assert serp["cached"] == 1
+    assert abs(serp["cost"] - 0.0006) < 1e-9
+
+    bl = breakdown["backlinks/summary/live"]
+    assert bl["calls"] == 1
+    assert bl["cached"] == 0
+    assert abs(bl["cost"] - 0.002) < 1e-9
+
+    assert tracker.total_calls == 3
+    assert tracker.cached_calls == 1
+    assert abs(tracker.total_cost - 0.0026) < 1e-9
 
 
 def test_expansion_key_contract_matches_m4_output() -> None:

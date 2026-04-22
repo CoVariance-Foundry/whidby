@@ -349,6 +349,7 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
     logger.info("niches_score called: niche=%r city=%r state=%r dry_run=%s",
                 req.niche, req.city, req.state, req.dry_run)
+    dfs: DataForSEOClient | None = None
     try:
         if req.dry_run:
             result = await score_niche_for_metro(
@@ -385,6 +386,12 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
                          result.report.get("report_id"))
         report_id = result.report.get("report_id")
         persist_failed = True
+
+    if dfs is not None and report_id:
+        try:
+            dfs.cost_tracker.flush_to_supabase(report_id)
+        except Exception:
+            logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
 
     response: dict[str, Any] = {
         "report_id": report_id,

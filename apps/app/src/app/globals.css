@@ -228,7 +228,8 @@ button { font-family: inherit; }
   transition: background 0.15s;
   cursor: pointer;
 }
-.app .btn-primary:hover { background: var(--accent-ink); }
+.app .btn-primary:hover:not(:disabled) { background: var(--accent-ink); }
+.app .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 .app .btn-primary svg { width: 13px; height: 13px; }
 
 .app .btn-ghost {

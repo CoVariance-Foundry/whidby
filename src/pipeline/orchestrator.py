@@ -151,6 +151,14 @@ async def score_niche_for_metro(
     logger.info("[%s] M8 guidance generation DONE", run_id)
 
     logger.info("[%s] M9 report assembly START", run_id)
+
+    dfs_total_cost = getattr(dataforseo_client, "total_cost", raw.meta.total_cost_usd)
+    dfs_cost_log = getattr(dataforseo_client, "cost_log", [])
+    dfs_total_calls = len(dfs_cost_log) if dfs_cost_log else raw.meta.total_api_calls
+    dfs_cached = sum(1 for r in dfs_cost_log if getattr(r, "cached", False))
+    dfs_tracker = getattr(dataforseo_client, "cost_tracker", None)
+    dfs_breakdown = dfs_tracker.cost_by_endpoint() if dfs_tracker else {}
+
     run_input = {
         "run_id": run_id,
         "input": {
@@ -176,8 +184,10 @@ async def score_niche_for_metro(
             }
         ],
         "meta": {
-            "total_api_calls": raw.meta.total_api_calls,
-            "total_cost_usd": raw.meta.total_cost_usd,
+            "total_api_calls": dfs_total_calls,
+            "total_cost_usd": round(dfs_total_cost, 6),
+            "dfs_cached_calls": dfs_cached,
+            "dfs_cost_breakdown": dfs_breakdown,
             "processing_time_seconds": time.monotonic() - started,
         },
     }
@@ -186,6 +196,7 @@ async def score_niche_for_metro(
     logger.info("[%s] M9 report assembly DONE — report_id=%s", run_id, report.get("report_id"))
 
     elapsed = time.monotonic() - started
+    _log_dfs_cost_summary(run_id, dfs_total_calls, dfs_total_cost, dfs_cached, dfs_breakdown, elapsed)
     logger.info("score_niche_for_metro DONE in %.2fs — opportunity=%s",
                 elapsed, scores.get("opportunity"))
 
@@ -282,6 +293,26 @@ async def _dry_run_result(
         opportunity_score=int(round(scores["opportunity"])),
         evidence=_build_evidence_from_signals(signals),
     )
+
+
+def _log_dfs_cost_summary(
+    run_id: str,
+    total_calls: int,
+    total_cost: float,
+    cached: int,
+    breakdown: dict[str, dict[str, Any]],
+    elapsed: float,
+) -> None:
+    parts = [
+        f"[{run_id}] DFS COST: {total_calls} calls, ${total_cost:.4f}, {cached} cached"
+    ]
+    if breakdown:
+        ep_parts = []
+        for ep, info in sorted(breakdown.items(), key=lambda x: -x[1]["cost"]):
+            short = ep.rsplit("/", 1)[-1] if "/" in ep else ep
+            ep_parts.append(f"{short}={info['calls']}/${info['cost']:.4f}")
+        parts.append("breakdown: " + ", ".join(ep_parts))
+    logger.info(" — ".join(parts))
 
 
 def _build_evidence_from_signals(signals: dict[str, dict]) -> list[dict[str, Any]]:

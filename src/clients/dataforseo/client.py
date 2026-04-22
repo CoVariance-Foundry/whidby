@@ -88,6 +88,10 @@ class DataForSEOClient:
     def total_cost(self) -> float:
         return self._tracker.total_cost
 
+    @property
+    def cost_tracker(self) -> CostTracker:
+        return self._tracker
+
     # -- High-level API methods ----------------------------------------------
 
     async def locations(self) -> APIResponse:
