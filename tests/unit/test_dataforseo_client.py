@@ -16,6 +16,7 @@ from src.clients.dataforseo.types import APIResponse
 from tests.fixtures.dataforseo_fixtures import (
     BUSINESS_LISTINGS_RESPONSE,
     ERROR_RESPONSE,
+    SERP_LIVE_RESPONSE,
     SERP_TASK_GET_RESPONSE,
     SERP_TASK_PENDING_RESPONSE,
     SERP_TASK_POST_RESPONSE,
@@ -51,19 +52,40 @@ class TestAuthentication:
 # Standard queue flow (POST → poll → GET)
 # ---------------------------------------------------------------------------
 
-class TestStandardQueue:
+class TestLiveSERP:
     @pytest.mark.asyncio
     async def test_serp_organic_returns_results(self, mocker):
         client = _make_client()
-        mocker.patch.object(
-            client, "_post", side_effect=[SERP_TASK_POST_RESPONSE, SERP_TASK_GET_RESPONSE]
-        )
+        mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
         result = await client.serp_organic(keyword="plumber", location_code=1012873)
 
         assert isinstance(result, APIResponse)
         assert result.status == "ok"
         assert result.data is not None
         assert result.cost > 0
+
+    @pytest.mark.asyncio
+    async def test_serp_maps_returns_results(self, mocker):
+        client = _make_client()
+        mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
+        result = await client.serp_maps(keyword="plumber", location_code=1012873)
+
+        assert isinstance(result, APIResponse)
+        assert result.status == "ok"
+        assert result.data is not None
+
+
+class TestStandardQueue:
+    @pytest.mark.asyncio
+    async def test_keyword_volume_returns_results(self, mocker):
+        client = _make_client()
+        mocker.patch.object(
+            client, "_post", side_effect=[SERP_TASK_POST_RESPONSE, SERP_TASK_GET_RESPONSE]
+        )
+        mocker.patch("asyncio.sleep", return_value=None)
+        result = await client.keyword_volume(keywords=["plumber"], location_code=1012873)
+
+        assert isinstance(result, APIResponse)
 
     @pytest.mark.asyncio
     async def test_queue_polls_until_ready(self, mocker):
@@ -80,7 +102,7 @@ class TestStandardQueue:
         )
         mocker.patch("asyncio.sleep", return_value=None)
 
-        result = await client.serp_organic(keyword="plumber", location_code=1012873)
+        result = await client.keyword_volume(keywords=["plumber"], location_code=1012873)
         assert result.status == "ok"
 
 
@@ -110,9 +132,7 @@ class TestCaching:
     @pytest.mark.asyncio
     async def test_second_call_returns_cached(self, mocker):
         client = _make_client(cache_ttl=300)
-        mocker.patch.object(
-            client, "_post", side_effect=[SERP_TASK_POST_RESPONSE, SERP_TASK_GET_RESPONSE]
-        )
+        mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
 
         r1 = await client.serp_organic(keyword="plumber", location_code=1012873)
         r2 = await client.serp_organic(keyword="plumber", location_code=1012873)
@@ -128,12 +148,7 @@ class TestCaching:
         mocker.patch.object(
             client,
             "_post",
-            side_effect=[
-                SERP_TASK_POST_RESPONSE,
-                SERP_TASK_GET_RESPONSE,
-                SERP_TASK_POST_RESPONSE,
-                SERP_TASK_GET_RESPONSE,
-            ],
+            side_effect=[SERP_LIVE_RESPONSE, SERP_LIVE_RESPONSE],
         )
 
         r1 = await client.serp_organic(keyword="plumber", location_code=1012873)
@@ -154,11 +169,7 @@ class TestCostTracking:
         mocker.patch.object(
             client,
             "_post",
-            side_effect=[
-                SERP_TASK_POST_RESPONSE,
-                SERP_TASK_GET_RESPONSE,
-                BUSINESS_LISTINGS_RESPONSE,
-            ],
+            side_effect=[SERP_LIVE_RESPONSE, BUSINESS_LISTINGS_RESPONSE],
         )
 
         await client.serp_organic(keyword="plumber", location_code=1012873)
@@ -192,6 +203,17 @@ class TestErrorHandling:
         mocker.patch("asyncio.sleep", return_value=None)
 
         result = await client.serp_organic(keyword="plumber", location_code=1012873)
+        assert result.status == "error"
+
+    @pytest.mark.asyncio
+    async def test_queued_endpoint_retries_then_fails(self, mocker):
+        client = _make_client()
+        mocker.patch.object(
+            client, "_raw_post", side_effect=Exception("Connection refused")
+        )
+        mocker.patch("asyncio.sleep", return_value=None)
+
+        result = await client.keyword_volume(keywords=["plumber"], location_code=1012873)
         assert result.status == "error"
 
 

@@ -83,8 +83,8 @@ DFS_DEFAULT_LOCATION_NAME = "United States"
 DFS_RATE_LIMIT = 2000  # calls per minute
 DFS_CACHE_TTL = 86400  # 24 hours in seconds
 DFS_MAX_RETRIES = 3
-DFS_QUEUE_POLL_INTERVAL = 5  # seconds between queue polls
-DFS_QUEUE_MAX_WAIT = 300  # 5 minutes max for standard queue
+DFS_QUEUE_POLL_INTERVAL = 2  # seconds between queue polls
+DFS_QUEUE_MAX_WAIT = 120  # 2 minutes max for standard queue
 
 # Per-endpoint approximate costs (USD)
 DFS_COSTS: dict[str, float] = {

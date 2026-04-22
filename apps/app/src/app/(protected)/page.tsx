@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
+import { Icon, I } from "@/lib/icons";
 import StatCardRow from "@/components/home/StatCardRow";
 import HeroQuickSearch from "@/components/home/HeroQuickSearch";
 import RecommendedMetros from "@/components/home/RecommendedMetros";
@@ -16,7 +18,14 @@ export default async function HomePage() {
     <div className="app density-roomy">
       <Sidebar active="home" />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Topbar crumbs={["Home"]} />
+        <Topbar
+          crumbs={["Home"]}
+          actions={
+            <Link href="/niche-finder" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex" }}>
+              <Icon d={I.plus} /> New report
+            </Link>
+          }
+        />
         <main
           style={{
             padding: "24px 32px",

@@ -12,12 +12,6 @@ const NAV: { id: NavId; label: string; d: string; href: string }[] = [
   { id: "reports", label: "Reports", d: I.list, href: "/reports" },
 ];
 
-const SAVED = [
-  "Mid‑tier aggregator plays",
-  "Roofing sweep — Mountain West",
-  "Fast‑path pack opportunities",
-];
-
 function deriveInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -52,22 +46,6 @@ export default async function Sidebar({ active }: { active: NavId }) {
           </Link>
         );
       })}
-
-      <div className="sidebar-section">Saved</div>
-      {SAVED.map((label) => (
-        <div key={label} className="sidebar-item">
-          <Icon d={I.star} />{" "}
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {label}
-          </span>
-        </div>
-      ))}
 
       <UserMenu
         name={fullName}

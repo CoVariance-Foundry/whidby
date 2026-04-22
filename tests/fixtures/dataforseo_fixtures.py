@@ -131,6 +131,50 @@ BUSINESS_LISTINGS_RESPONSE = {
     "tasks_error": 0,
 }
 
+SERP_LIVE_RESPONSE = {
+    "version": "0.1",
+    "status_code": 20000,
+    "status_message": "Ok.",
+    "tasks": [
+        {
+            "id": "task-serp-live-001",
+            "status_code": 20000,
+            "status_message": "Ok.",
+            "cost": 0.002,
+            "result": [
+                {
+                    "keyword": "plumber",
+                    "type": "organic",
+                    "se_domain": "google.com",
+                    "location_code": 1012873,
+                    "check_url": "https://www.google.com/search?q=plumber&...",
+                    "items_count": 10,
+                    "items": [
+                        {
+                            "type": "organic",
+                            "rank_group": 1,
+                            "rank_absolute": 1,
+                            "domain": "yelp.com",
+                            "title": "Top 10 Best Plumbers in Phoenix, AZ",
+                            "url": "https://www.yelp.com/search?cflt=plumbing&find_loc=Phoenix",
+                        },
+                        {
+                            "type": "organic",
+                            "rank_group": 2,
+                            "rank_absolute": 2,
+                            "domain": "joesplumbing.com",
+                            "title": "Joe's Plumbing - Phoenix AZ",
+                            "url": "https://joesplumbing.com",
+                        },
+                    ],
+                }
+            ],
+        }
+    ],
+    "tasks_count": 1,
+    "tasks_error": 0,
+}
+
 ERROR_RESPONSE = {
     "version": "0.1",
     "status_code": 20000,

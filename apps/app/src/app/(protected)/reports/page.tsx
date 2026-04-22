@@ -1,5 +1,7 @@
+import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
+import { Icon, I } from "@/lib/icons";
 import { createClient } from "@/lib/supabase/server";
 import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
 import { mapReportRow } from "@/lib/niche-finder/reports-mapper";
@@ -46,7 +48,14 @@ export default async function ReportsPage() {
     <div className="app density-roomy">
       <Sidebar active="reports" />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Topbar crumbs={["Reports"]} />
+        <Topbar
+          crumbs={["Reports"]}
+          actions={
+            <Link href="/niche-finder" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex" }}>
+              <Icon d={I.plus} /> New report
+            </Link>
+          }
+        />
         <main
           style={{
             padding: "24px 32px",

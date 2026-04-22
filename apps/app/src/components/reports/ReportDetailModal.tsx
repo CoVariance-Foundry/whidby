@@ -34,13 +34,39 @@ function scoreBarBg(score: number): string {
 }
 
 function archetypeLabel(id?: string): { label: string; glyph: string } {
+  if (!id) return { label: "Unknown", glyph: "arch-mixed" };
+  const normalized = id.toUpperCase().replace(/[\s-]+/g, "_");
   const found = ARCHETYPES.find(
-    (a) => a.id === id || a.title.toLowerCase().replace(/\s+/g, "_") === id,
+    (a) =>
+      a.id === id ||
+      a.id === normalized ||
+      a.title.toUpperCase().replace(/[\s-]+/g, "_") === normalized,
   );
   return found
     ? { label: found.short, glyph: found.glyph }
-    : { label: id ?? "Unknown", glyph: "arch-mixed" };
+    : { label: humanizeEnum(id), glyph: "arch-mixed" };
 }
+
+function humanizeEnum(raw: string): string {
+  return raw
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  EASY: "Easy",
+  MODERATE: "Moderate",
+  HARD: "Hard",
+  VERY_HARD: "Very hard",
+};
+
+const EXPOSURE_LABELS: Record<string, string> = {
+  AI_SHIELDED: "Shielded",
+  AI_MINIMAL: "Minimal",
+  AI_MODERATE: "Moderate",
+  AI_EXPOSED: "Exposed",
+};
 
 function Pill({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -190,8 +216,12 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
 
       {/* Badges row */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-        {metro.difficulty_tier && <Pill>Difficulty: {metro.difficulty_tier}</Pill>}
-        {metro.ai_exposure && <Pill>AI exposure: {metro.ai_exposure}</Pill>}
+        {metro.difficulty_tier && (
+          <Pill>Difficulty: {DIFFICULTY_LABELS[metro.difficulty_tier] ?? humanizeEnum(metro.difficulty_tier)}</Pill>
+        )}
+        {metro.ai_exposure && (
+          <Pill>AI exposure: {EXPOSURE_LABELS[metro.ai_exposure] ?? humanizeEnum(metro.ai_exposure)}</Pill>
+        )}
         {metro.scores.confidence && (
           <Pill>Confidence: {metro.scores.confidence.score ?? "—"}</Pill>
         )}

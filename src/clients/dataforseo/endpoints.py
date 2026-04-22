@@ -29,13 +29,27 @@ class Endpoint:
 # --- Core endpoints used by V1.1 ---
 
 SERP_ORGANIC = Endpoint(
+    post_path="serp/google/organic/live/advanced",
+    get_path=None,
+    mode=QueueMode.LIVE,
+    cost_per_call=0.002,
+)
+
+SERP_MAPS = Endpoint(
+    post_path="serp/google/maps/live/advanced",
+    get_path=None,
+    mode=QueueMode.LIVE,
+    cost_per_call=0.002,
+)
+
+SERP_ORGANIC_QUEUED = Endpoint(
     post_path="serp/google/organic/task_post",
     get_path="serp/google/organic/task_get/advanced/{task_id}",
     mode=QueueMode.STANDARD,
     cost_per_call=0.0006,
 )
 
-SERP_MAPS = Endpoint(
+SERP_MAPS_QUEUED = Endpoint(
     post_path="serp/google/maps/task_post",
     get_path="serp/google/maps/task_get/advanced/{task_id}",
     mode=QueueMode.STANDARD,

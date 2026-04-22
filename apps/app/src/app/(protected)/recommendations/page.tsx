@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Sidebar from "@/components/Sidebar";
+import Topbar from "@/components/Topbar";
 
 export const metadata = {
   title: "Recommendations — Widby",
@@ -6,50 +8,89 @@ export const metadata = {
 
 export default function RecommendationsPage() {
   return (
-    <section
-      style={{
-        padding: "3rem 1.5rem",
-        maxWidth: "640px",
-        margin: "0 auto",
-        textAlign: "center",
-      }}
-    >
-      <h1
-        style={{
-          fontFamily: "var(--serif)",
-          fontSize: "1.75rem",
-          fontWeight: 500,
-          marginBottom: "0.75rem",
-        }}
-      >
-        Recommendations
-      </h1>
-      <p
-        style={{
-          color: "var(--muted)",
-          lineHeight: 1.6,
-          marginBottom: "2rem",
-        }}
-      >
-        Synthesized opportunity recommendations from the research agent will
-        surface here. Until then, the admin dashboard holds the current
-        validated hypotheses and experiment rollups.
-      </p>
-      <Link
-        href="/niche-finder"
-        style={{
-          display: "inline-block",
-          padding: "0.55rem 1.1rem",
-          borderRadius: "6px",
-          border: "1px solid var(--rule)",
-          fontFamily: "var(--mono)",
-          fontSize: "0.8rem",
-          textDecoration: "none",
-          color: "inherit",
-        }}
-      >
-        Score a niche instead
-      </Link>
-    </section>
+    <div className="app density-roomy">
+      <Sidebar active="recs" />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <Topbar crumbs={["Recommendations"]} />
+        <main
+          style={{
+            padding: "24px 32px",
+            maxWidth: 1280,
+            margin: "0 auto",
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+          }}
+        >
+          <header>
+            <h1
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 28,
+                fontWeight: 600,
+                color: "var(--ink)",
+                margin: 0,
+              }}
+            >
+              Recommendations
+            </h1>
+            <p
+              style={{
+                fontFamily: "var(--sans)",
+                fontSize: 14,
+                color: "var(--ink-2)",
+                margin: "4px 0 0",
+              }}
+            >
+              Synthesized opportunity recommendations from the research agent.
+            </p>
+          </header>
+
+          <div
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--rule)",
+              borderRadius: 12,
+              padding: "40px 32px",
+              textAlign: "center",
+              maxWidth: 540,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 16,
+                fontWeight: 600,
+                color: "var(--ink)",
+                marginBottom: 8,
+              }}
+            >
+              Coming soon
+            </div>
+            <p
+              style={{
+                fontFamily: "var(--serif)",
+                fontStyle: "italic",
+                fontSize: 14,
+                color: "var(--ink-2)",
+                margin: "0 0 18px",
+                lineHeight: 1.6,
+              }}
+            >
+              Synthesized opportunity recommendations from the research agent
+              will surface here. Until then, score niches directly.
+            </p>
+            <Link
+              href="/niche-finder"
+              className="btn-primary"
+              style={{ textDecoration: "none", display: "inline-flex" }}
+            >
+              Open niche finder
+            </Link>
+          </div>
+        </main>
+      </div>
+    </div>
   );
 }

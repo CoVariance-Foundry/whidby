@@ -105,13 +105,15 @@ class DataForSEOClient:
         depth: int = 10,
         language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
     ) -> APIResponse:
-        params = {
-            "keyword": keyword,
-            "location_code": location_code,
-            "language_code": language_code,
-            "depth": depth,
-        }
-        return await self._queued_request(ep.SERP_ORGANIC, params)
+        payload = [
+            {
+                "keyword": keyword,
+                "location_code": location_code,
+                "language_code": language_code,
+                "depth": depth,
+            }
+        ]
+        return await self._live_request(ep.SERP_ORGANIC, payload)
 
     async def serp_maps(
         self,
@@ -120,13 +122,15 @@ class DataForSEOClient:
         depth: int = 10,
         language_code: str = DFS_DEFAULT_LANGUAGE_CODE,
     ) -> APIResponse:
-        params = {
-            "keyword": keyword,
-            "location_code": location_code,
-            "language_code": language_code,
-            "depth": depth,
-        }
-        return await self._queued_request(ep.SERP_MAPS, params)
+        payload = [
+            {
+                "keyword": keyword,
+                "location_code": location_code,
+                "language_code": language_code,
+                "depth": depth,
+            }
+        ]
+        return await self._live_request(ep.SERP_MAPS, payload)
 
     async def keyword_volume(
         self,
@@ -196,6 +200,111 @@ class DataForSEOClient:
     async def lighthouse(self, url: str) -> APIResponse:
         params = {"url": url}
         return await self._queued_request(ep.LIGHTHOUSE, params)
+
+    # -- Batch queued flow ----------------------------------------------------
+
+    async def batched_queued_request(
+        self,
+        endpoint: ep.Endpoint,
+        params_list: list[dict[str, Any]],
+    ) -> list[APIResponse]:
+        """Submit up to 100 tasks in one POST, then poll each for results.
+
+        Useful for queued endpoints (keyword_volume, reviews, lighthouse)
+        where many tasks share the same endpoint.
+        """
+        if not params_list:
+            return []
+
+        results: list[APIResponse] = []
+        uncached: list[tuple[int, dict[str, Any]]] = []
+
+        for idx, params in enumerate(params_list):
+            cached = self._cache.get(endpoint.post_path, params)
+            if cached is not None:
+                self._tracker.record(
+                    endpoint=endpoint.post_path, task_id="cached",
+                    cost=0, cached=True, latency_ms=0, parameters=params,
+                )
+                results.append(APIResponse(status="ok", data=cached, cost=0, cached=True))
+            else:
+                results.append(APIResponse(status="pending"))
+                uncached.append((idx, params))
+
+        if not uncached:
+            return results
+
+        start = time.monotonic()
+        post_body = await self._post(endpoint.post_path, [p for _, p in uncached])
+        if post_body is None:
+            err = self._error_response("Batch POST failed after retries", start)
+            for idx, _ in uncached:
+                results[idx] = err
+            return results
+
+        tasks = post_body.get("tasks", [])
+        task_map: list[tuple[int, str, dict[str, Any], float]] = []
+        for i, (idx, params) in enumerate(uncached):
+            task = tasks[i] if i < len(tasks) and isinstance(tasks[i], dict) else None
+            if task is None or task.get("status_code", 0) >= 40000:
+                results[idx] = self._task_error(task, start) if task else self._error_response("No task in batch response", start)
+                continue
+            task_id = task.get("id", "")
+            cost = task.get("cost", endpoint.cost_per_call)
+
+            if endpoint.get_path is None:
+                data = task.get("result")
+                ms = self._elapsed_ms(start)
+                self._cache.put(endpoint.post_path, params, data)
+                self._tracker.record(endpoint.post_path, task_id, cost, False, ms, params)
+                results[idx] = APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
+            else:
+                task_map.append((idx, task_id, params, cost))
+
+        if not task_map:
+            return results
+
+        elapsed = 0.0
+        pending = set(range(len(task_map)))
+        poll_count = 0
+        while pending and elapsed < DFS_QUEUE_MAX_WAIT:
+            await asyncio.sleep(DFS_QUEUE_POLL_INTERVAL)
+            elapsed = time.monotonic() - start
+            poll_count += 1
+
+            for pos in list(pending):
+                idx, task_id, params, cost = task_map[pos]
+                get_path = endpoint.get_path.format(task_id=task_id)
+                get_body = await self._post(get_path, None, method="GET")
+                if get_body is None:
+                    continue
+                result_task = self._extract_task(get_body)
+                if result_task is None:
+                    continue
+                if result_task.get("status_code", 0) == 20100:
+                    continue
+                if result_task.get("status_code", 0) >= 40000:
+                    results[idx] = self._task_error(result_task, start)
+                    pending.discard(pos)
+                    continue
+
+                data = result_task.get("result")
+                ms = self._elapsed_ms(start)
+                result_cost = result_task.get("cost", cost)
+                self._cache.put(endpoint.post_path, params, data)
+                self._tracker.record(endpoint.post_path, task_id, result_cost, False, ms, params)
+                results[idx] = APIResponse(status="ok", data=data, cost=result_cost, latency_ms=ms, task_id=task_id)
+                pending.discard(pos)
+
+        for pos in pending:
+            idx = task_map[pos][0]
+            results[idx] = self._error_response(f"Queue timeout after {DFS_QUEUE_MAX_WAIT}s", start)
+
+        logger.info(
+            "DFS batch complete endpoint=%s submitted=%d polls=%d elapsed_ms=%d",
+            endpoint.post_path, len(task_map), poll_count, self._elapsed_ms(start),
+        )
+        return results
 
     # -- Internal: queue and live flows --------------------------------------
 
@@ -355,7 +464,7 @@ class DataForSEOClient:
         await self._rate_limiter.acquire()
         url = self._base_url + path
         headers = {"Authorization": self._auth_header, "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=30) as http:
+        async with httpx.AsyncClient(timeout=60) as http:
             if method == "GET":
                 resp = await http.get(url, headers=headers)
             else:

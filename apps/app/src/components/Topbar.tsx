@@ -1,6 +1,11 @@
 import { Icon, I } from "@/lib/icons";
 
-export default function Topbar({ crumbs }: { crumbs: string[] }) {
+interface Props {
+  crumbs: string[];
+  actions?: React.ReactNode;
+}
+
+export default function Topbar({ crumbs, actions }: Props) {
   return (
     <div className="topbar">
       <div className="crumb">
@@ -15,12 +20,7 @@ export default function Topbar({ crumbs }: { crumbs: string[] }) {
         <button className="icon-btn" title="Notifications" aria-label="Notifications">
           <Icon d={I.bell} />
         </button>
-        <button className="btn-ghost">
-          <Icon d={I.save} /> Save search
-        </button>
-        <button className="btn-primary">
-          <Icon d={I.plus} /> New report
-        </button>
+        {actions}
       </div>
     </div>
   );

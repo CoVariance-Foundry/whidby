@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export interface RecommendedItem {
   id: string;
   niche: string;
@@ -47,58 +49,66 @@ export default function RecommendedMetros({ items }: { items: RecommendedItem[] 
           }}
         >
           {items.slice(0, 6).map((item) => (
-            <article
+            <Link
               key={item.id}
-              style={{
-                background: "var(--paper)",
-                border: "1px solid var(--rule)",
-                borderRadius: 10,
-                padding: "12px 14px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                minWidth: 0,
-              }}
+              href={`/niche-finder?city=${encodeURIComponent(item.city)}&service=${encodeURIComponent(item.niche)}`}
+              style={{ textDecoration: "none", color: "inherit" }}
             >
-              <div
+              <article
+                className="report-row-clickable"
                 style={{
-                  fontFamily: "var(--sans)",
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  color: "var(--ink)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  background: "var(--paper)",
+                  border: "1px solid var(--rule)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  minWidth: 0,
+                  cursor: "pointer",
+                  transition: "background 0.1s",
                 }}
               >
-                {item.city}
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--sans)",
-                  fontSize: 12.5,
-                  color: "var(--ink-2)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {item.niche}
-              </div>
-              {item.score !== null ? (
                 <div
                   style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 18,
+                    fontFamily: "var(--sans)",
+                    fontSize: 13.5,
                     fontWeight: 600,
-                    color: "var(--accent-ink)",
-                    marginTop: 4,
+                    color: "var(--ink)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {item.score}
+                  {item.city}
                 </div>
-              ) : null}
-            </article>
+                <div
+                  style={{
+                    fontFamily: "var(--sans)",
+                    fontSize: 12.5,
+                    color: "var(--ink-2)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {item.niche}
+                </div>
+                {item.score !== null ? (
+                  <div
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 18,
+                      fontWeight: 600,
+                      color: "var(--accent-ink)",
+                      marginTop: 4,
+                    }}
+                  >
+                    {item.score}
+                  </div>
+                ) : null}
+              </article>
+            </Link>
           ))}
         </div>
       )}
