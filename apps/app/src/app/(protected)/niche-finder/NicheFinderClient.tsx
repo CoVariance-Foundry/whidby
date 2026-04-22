@@ -346,7 +346,7 @@ export default function NicheFinderClient() {
 
                 {pageState.data.report_id ? (
                   <Link
-                    href={`/reports/${pageState.data.report_id}`}
+                    href={`/reports?open=${pageState.data.report_id}`}
                     className="btn-ghost"
                     style={{ textDecoration: "none", display: "inline-flex" }}
                   >

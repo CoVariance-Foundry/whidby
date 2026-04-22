@@ -1,6 +1,7 @@
 "use client";
 
 import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
+import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 
 export interface TableRow {
   id: string;
@@ -82,8 +83,9 @@ export default function ReportsTable({ rows, onRowClick }: Props) {
       >
         <span role="columnheader">Report</span>
         <span role="columnheader">Strategy</span>
-        <span role="columnheader" style={{ textAlign: "right" }}>
+        <span role="columnheader" style={{ textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
           Top score
+          <ScoreInfoHover scoreKey="opportunity" />
         </span>
         <span role="columnheader" style={{ textAlign: "right" }}>
           Date

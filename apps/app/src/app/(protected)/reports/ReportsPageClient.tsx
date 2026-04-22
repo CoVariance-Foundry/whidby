@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import ArchetypeChipFilter from "@/components/reports/ArchetypeChipFilter";
 import ReportsTable, { type TableRow } from "@/components/reports/ReportsTable";
 import ReportDetailModal from "@/components/reports/ReportDetailModal";
@@ -19,12 +20,14 @@ interface Props {
 }
 
 export default function ReportsPageClient({ rows: initialRows }: Props) {
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState(initialRows);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ArchetypeId[]>([]);
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
+  const autoOpened = useRef(false);
 
-  const handleRowClick = useCallback(async (reportId: string) => {
+  const openReport = useCallback(async (reportId: string) => {
     setModal({ kind: "loading" });
     try {
       const supabase = createClient();
@@ -58,6 +61,14 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
       });
     }
   }, []);
+
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (openId && !autoOpened.current) {
+      autoOpened.current = true;
+      openReport(openId);
+    }
+  }, [searchParams, openReport]);
 
   const handleDelete = useCallback(async (reportId: string) => {
     const supabase = createClient();
@@ -188,7 +199,7 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
       />
 
       <ArchetypeChipFilter selected={selected} onChange={setSelected} />
-      <ReportsTable rows={filtered} onRowClick={handleRowClick} />
+      <ReportsTable rows={filtered} onRowClick={openReport} />
 
       <div
         aria-live="polite"

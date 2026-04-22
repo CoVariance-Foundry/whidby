@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
+import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
+import type { ScoreKey } from "@/lib/reports/score-explainers";
 
 interface Props {
   report: FullReportData;
@@ -92,7 +94,7 @@ function Pill({ children, style }: { children: React.ReactNode; style?: React.CS
   );
 }
 
-function ScoreCell({ label, value }: { label: string; value: number | undefined }) {
+function ScoreCell({ label, value, scoreKey }: { label: string; value: number | undefined; scoreKey?: ScoreKey }) {
   const v = value ?? 0;
   return (
     <div style={{ minWidth: 0 }}>
@@ -103,9 +105,12 @@ function ScoreCell({ label, value }: { label: string; value: number | undefined 
           fontSize: 11,
           color: "var(--ink-3)",
           marginBottom: 4,
+          display: "flex",
+          alignItems: "center",
         }}
       >
         {label}
+        {scoreKey && <ScoreInfoHover scoreKey={scoreKey} />}
       </div>
       <div
         style={{
@@ -207,12 +212,12 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
           marginBottom: 16,
         }}
       >
-        <ScoreCell label="Demand" value={metro.scores.demand} />
-        <ScoreCell label="Organic comp." value={metro.scores.organic_competition} />
-        <ScoreCell label="Local comp." value={metro.scores.local_competition} />
-        <ScoreCell label="Monetization" value={metro.scores.monetization} />
-        <ScoreCell label="AI resilience" value={metro.scores.ai_resilience} />
-        <ScoreCell label="Opportunity" value={metro.scores.opportunity} />
+        <ScoreCell label="Demand" value={metro.scores.demand} scoreKey="demand" />
+        <ScoreCell label="Organic comp." value={metro.scores.organic_competition} scoreKey="organic_competition" />
+        <ScoreCell label="Local comp." value={metro.scores.local_competition} scoreKey="local_competition" />
+        <ScoreCell label="Monetization" value={metro.scores.monetization} scoreKey="monetization" />
+        <ScoreCell label="AI resilience" value={metro.scores.ai_resilience} scoreKey="ai_resilience" />
+        <ScoreCell label="Opportunity" value={metro.scores.opportunity} scoreKey="opportunity" />
       </div>
 
       {/* Badges row */}
@@ -612,9 +617,12 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
                   fontSize: 11,
                   color: "var(--ink-3)",
                   marginBottom: 4,
+                  display: "flex",
+                  alignItems: "center",
                 }}
               >
                 Top opportunity score
+                <ScoreInfoHover scoreKey="opportunity" />
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
                 <span
