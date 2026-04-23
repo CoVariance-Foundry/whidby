@@ -70,12 +70,12 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 
 ### End-to-end scoring (operational wiring)
 
-- `src/pipeline/orchestrator.py::score_niche_for_metro` — composes M4 → M9 for a single `(niche, city, state)` tuple. Supports `dry_run=True` for fixture-backed runs with zero external-API cost (used by Playwright). Also accepts optional `place_id` and `dataforseo_location_code` for canonical place targeting (bypasses MetroDB seed lookup when a bridged DFS code is available).
+- `src/pipeline/orchestrator.py::score_niche_for_metro` — composes M4 → M9 for a single `(niche, city, state)` tuple. Supports `dry_run=True` for fixture-backed runs with zero external-API cost (used by Playwright). Also accepts optional `place_id` and `dataforseo_location_code` for canonical place targeting (bypasses MetroDB seed lookup when a bridged DFS code is available). When a city is not in the CBSA seed and has no DFS code, falls back to borrowing a state-level DFS location code from the highest-population seeded metro in the same state.
 - `src/clients/supabase_persistence.py::SupabasePersistence.persist_report` — writes the M9 report into `reports`, `report_keywords`, `metro_signals`, `metro_scores` per `supabase/migrations/001_core_schema.sql`.
 - FastAPI bridge exposes the flow to the admin UI:
   - `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts optional `place_id` and `dataforseo_location_code` fields.
   - `GET /api/niches/{report_id}` — reads the stored report back from Supabase
-  - `GET /api/places/suggest` — Mapbox-backed global city autocomplete with best-effort DataForSEO location code bridging (requires `MAPBOX_ACCESS_TOKEN`). Falls back gracefully when DFS credentials are absent.
+  - `GET /api/places/suggest` — Mapbox-backed global city autocomplete with best-effort DataForSEO location code bridging (requires `MAPBOX_ACCESS_TOKEN`). The DFS bridge fetches the full ~95k location list via `GET /serp/google/locations` and matches by city name with state-aware disambiguation. Falls back gracefully when DFS credentials are absent.
   - `GET /api/metros/suggest` — Legacy CBSA seed autocomplete (still available for backward compatibility)
 - Admin and consumer Next.js proxies `/api/agent/scoring` and `/api/agent/exploration` both call the FastAPI `POST /api/niches/score`; UI state derives from the single response. Both apps also proxy `/api/agent/places/suggest` for autocomplete.
 
@@ -154,6 +154,38 @@ Login uses email + password via `signInWithPassword` (no magic link). The auth c
 | E2E Test | `e2e-test@widby.dev` | `WidbyTest2026!` | Playwright automation |
 
 For CI/preview E2E runs, set `E2E_AUTH_EMAIL` and `E2E_AUTH_PASSWORD` in Vercel project env vars (Preview environment). The Playwright helper at `apps/app/e2e/helpers/auth.ts` reads these automatically.
+
+## E2E Scoring Test Suite (Playwright)
+
+The consumer app (`apps/app/`) has a comprehensive Playwright E2E suite for scoring validation:
+
+```bash
+# Regression tests (Huntsville, city normalization, validation, UI)
+npx playwright test scoring-regression --config=apps/app/playwright.config.ts
+
+# Autocomplete → select → submit flow diagnosis
+npx playwright test autocomplete-scoring-flow --config=apps/app/playwright.config.ts
+
+# 50-run scoring matrix (10 combos x 5 repeats, requires FastAPI running)
+npx playwright test scoring-matrix --project=scoring-matrix --repeat-each=5 --config=apps/app/playwright.config.ts
+
+# Quality gates (run AFTER matrix completes)
+npx playwright test scoring-quality-gates --project=scoring-matrix --config=apps/app/playwright.config.ts
+
+# Cost report from matrix metrics
+npx tsx apps/app/e2e/helpers/cost-report.ts
+```
+
+Key files:
+- `apps/app/e2e/helpers/scoring-combos.ts` — 10 city/service test combos (Tier 1 baseline + Tier 2 edge cases)
+- `apps/app/e2e/helpers/cost-report.ts` — post-run cost analysis from JSONL metrics
+- `apps/app/e2e/autocomplete-scoring-flow.spec.ts` — traces autocomplete metadata propagation
+- `apps/app/e2e/scoring-regression.spec.ts` — Huntsville, city normalization, input validation, duplicate submit
+- `apps/app/e2e/scoring-matrix.spec.ts` — parameterized 10-combo matrix with per-run JSONL output
+- `apps/app/e2e/scoring-lifecycle.spec.ts` — full UI: submit → result → report list → recent searches
+- `apps/app/e2e/scoring-quality-gates.spec.ts` — pass rate, flake rate, latency, and cost gates
+
+Consumer API routes require auth — scoring E2E tests use `signIn()` + `page.evaluate(fetch())` for authenticated API calls.
 
 ## TDD Workflow
 
