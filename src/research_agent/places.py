@@ -141,7 +141,12 @@ def resolve_dataforseo_location(
     suggestion: PlaceSuggestion,
     location_rows: list[dict[str, Any]],
 ) -> tuple[int | None, str | None]:
-    """Resolve the best DataForSEO location code for a suggestion."""
+    """Resolve the best DataForSEO location code for a suggestion.
+
+    When multiple DFS rows share the same city name (e.g. Huntsville in AL and
+    TX), the state/region part of the DFS ``location_name`` is compared against
+    the suggestion's ``full_name`` to pick the correct one.
+    """
     city_norm = _normalized_text(suggestion.city)
     full_name_norm = _normalized_text(suggestion.full_name)
     country_norm = suggestion.country_iso_code.upper()
@@ -167,6 +172,14 @@ def resolve_dataforseo_location(
         score = 0
         if city_norm and primary_name_norm == city_norm:
             score = 100
+            # Tiebreaker: if the DFS row has a state/region part (e.g.
+            # "Alabama" in "Huntsville,Alabama,United States"), boost score
+            # when it appears in the suggestion's full_name so the correct
+            # state wins over same-name cities in other states.
+            if len(parts) > 1:
+                state_part_norm = _normalized_text(parts[1])
+                if state_part_norm and state_part_norm in full_name_norm:
+                    score = 110
         elif city_norm and city_norm in location_name_norm:
             score = 75
         elif primary_name_norm and primary_name_norm in full_name_norm:
@@ -265,6 +278,12 @@ class DataForSEOLocationBridge:
                 return self._cached_rows
 
             rows = _extract_candidate_rows(response.data)
+            if rows:
+                logger.info("DFS location bridge loaded %d location rows", len(rows))
+            else:
+                logger.warning(
+                    "DFS location bridge loaded 0 rows — autocomplete codes will be null"
+                )
             self._cached_rows = rows
             self._cache_loaded_at = time.monotonic()
             return self._cached_rows
@@ -282,10 +301,27 @@ class DataForSEOLocationBridge:
             return suggestions
 
         if not rows:
+            logger.warning(
+                "DFS location bridge has 0 cached rows — skipping enrichment for %d suggestions",
+                len(suggestions),
+            )
             return suggestions
 
+        matched = 0
         for suggestion in suggestions:
             code, confidence = resolve_dataforseo_location(suggestion, rows)
             suggestion.dataforseo_location_code = code
             suggestion.dataforseo_match_confidence = confidence
+            if code is not None:
+                matched += 1
+
+        if matched == 0 and suggestions:
+            logger.warning(
+                "DFS bridge matched 0 of %d suggestions (rows=%d)",
+                len(suggestions), len(rows),
+            )
+        else:
+            logger.info(
+                "DFS bridge matched %d of %d suggestions", matched, len(suggestions),
+            )
         return suggestions

@@ -101,7 +101,7 @@ class DataForSEOClient:
 
     async def locations(self) -> APIResponse:
         """GET /serp/google/locations — no payload, free endpoint."""
-        return await self._live_request(ep.LOCATIONS, payload=[])
+        return await self._live_request(ep.LOCATIONS, payload=[], method="GET")
 
     async def serp_organic(
         self,
@@ -400,8 +400,9 @@ class DataForSEOClient:
         payload: list[dict[str, Any]],
         *,
         cache_params: dict[str, Any] | None = None,
+        method: str = "POST",
     ) -> APIResponse:
-        """Live-mode flow: single POST → immediate response."""
+        """Live-mode flow: single POST (or GET) → immediate response."""
         cp = cache_params or (payload[0] if payload else {})
         cached = self._cache.get(endpoint.post_path, cp)
         if cached is not None:
@@ -409,9 +410,9 @@ class DataForSEOClient:
             return APIResponse(status="ok", data=cached, cost=0, cached=True)
 
         start = time.monotonic()
-        body = await self._post(endpoint.post_path, payload)
+        body = await self._post(endpoint.post_path, payload, method=method)
         if body is None:
-            return self._error_response("POST failed after retries", start)
+            return self._error_response(f"{method} failed after retries", start)
 
         task = self._extract_task(body)
         if task is None:

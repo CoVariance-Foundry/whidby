@@ -69,4 +69,22 @@ test.describe("Niche scoring (dry run via FastAPI)", () => {
       expect(body.status).toBe("validation_error");
     }
   });
+
+  test("Huntsville regression: unseeded city returns structured error or score, not opaque failure", async ({
+    request,
+  }) => {
+    const res = await request.post("/api/agent/scoring", {
+      data: { city: "Huntsville", service: "tree removal", state: "AL" },
+    });
+    const body = await res.json();
+
+    if (res.ok()) {
+      expect(body.status).toBe("success");
+      expect(body.score_result.opportunity_score).toBeGreaterThanOrEqual(0);
+    } else {
+      // Proxy returned error — assert it carries diagnostic detail.
+      expect(body.upstream_status).toBeDefined();
+      expect(body.message).toBeDefined();
+    }
+  });
 });

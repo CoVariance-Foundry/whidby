@@ -18,6 +18,13 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: ["**/scoring-matrix*"],
+    },
+    {
+      name: "scoring-matrix",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: "**/scoring-matrix*",
+      timeout: 180_000,
     },
   ],
   webServer: {

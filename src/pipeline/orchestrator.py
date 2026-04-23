@@ -75,9 +75,35 @@ async def score_niche_for_metro(
         )
     else:
         target = metros_db.find_by_city(city, state=state)
+        if target is None and resolved_state:
+            # Fallback: city not in CBSA seed but we know the state.
+            # Use any seeded metro in that state for its DFS location code.
+            state_metros = [
+                m for m in metros_db.all_metros()
+                if m.state == resolved_state and m.dataforseo_location_codes
+            ]
+            if state_metros:
+                state_metros.sort(key=lambda m: m.population, reverse=True)
+                donor = state_metros[0]
+                logger.warning(
+                    "City %r not in CBSA seed; falling back to state-level DFS code "
+                    "from %s (code=%d) for state=%s",
+                    city, donor.cbsa_name,
+                    donor.dataforseo_location_codes[0], resolved_state,
+                )
+                synthetic_code = f"mapbox:{place_id}" if place_id else f"fallback:{city.lower().replace(' ', '-')}"
+                target = Metro(
+                    cbsa_code=synthetic_code,
+                    cbsa_name=f"{city}, {resolved_state}",
+                    state=resolved_state,
+                    population=0,
+                    principal_cities=[city],
+                    dataforseo_location_codes=donor.dataforseo_location_codes[:1],
+                )
         if target is None:
             raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
-        resolved_state = target.state
+        if not resolved_state:
+            resolved_state = target.state
 
     logger.info("Metro resolved: cbsa=%s name=%r state=%s", target.cbsa_code, target.cbsa_name, resolved_state)
 

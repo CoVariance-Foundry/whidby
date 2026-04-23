@@ -64,6 +64,21 @@ class _FakeDataForSEOClientNoMatch:
         )
 
 
+class _FakeDataForSEOClientWithPhoenix:
+    async def locations(self) -> APIResponse:
+        return APIResponse(
+            status="ok",
+            data=[
+                {
+                    "location_code": 1013211,
+                    "location_name": "Phoenix,Arizona,United States",
+                    "country_iso_code": "US",
+                    "location_type": "City",
+                }
+            ],
+        )
+
+
 class _FakeDataForSEOClientEmpty:
     def __init__(self) -> None:
         self.calls = 0
@@ -203,6 +218,26 @@ def test_places_suggest_region_prefers_trailing_region_code_segment(
     assert response.status_code == 200
     row = response.json()[0]
     assert row["region"] == "AZ"
+
+
+def test_places_suggest_bridge_returns_code_when_dfs_has_match(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
+    monkeypatch.setattr(
+        "src.research_agent.places.httpx.AsyncClient",
+        _FakeMapboxAsyncClient,
+    )
+    _FakeMapboxAsyncClient.payload = _mapbox_feature_payload()
+    bridge = DataForSEOLocationBridge(_FakeDataForSEOClientWithPhoenix())
+    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: bridge)
+
+    response = client.get("/api/places/suggest", params={"q": "phoe"})
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["dataforseo_location_code"] == 1013211
+    assert row["dataforseo_match_confidence"] == "high"
 
 
 @pytest.mark.asyncio
