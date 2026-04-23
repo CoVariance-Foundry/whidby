@@ -24,7 +24,7 @@ apps/app/
           ReportsView.tsx        Legacy 014 client table (unused by Foundation)
         recommendations/         Coming-soon stub
         layout.tsx               Sidebar + Topbar shell
-      api/agent/                 scoring + metros/suggest + health proxies
+      api/agent/                 scoring + places/suggest + metros/suggest + health proxies
       auth/                      Supabase auth callback
       login/                     Sign-in flow
     components/
@@ -53,11 +53,12 @@ keeps the product lane deterministic.
 
 ## Niche-finder flow on consumer
 
-1. User visits `/niche-finder`, types a city → `CityAutocomplete` hits `/api/agent/metros/suggest` for suggestions.
-2. User selects a suggestion → form populates both `city` AND `state`.
-3. Submit sends `POST /api/agent/scoring` with `{city, service, state}`; state is optional (the orchestrator resolves via `MetroDB.find_by_city` if missing).
-4. FastAPI runs M4 → M9, persists to Supabase, returns `{report_id, opportunity_score, classification_label, evidence, report}`.
-5. Success card links to `/reports/{report_id}` (detail page is a future PR; for now the list view is the only Supabase read).
+1. User visits `/niche-finder`, types a city → `CityAutocomplete` hits `/api/agent/places/suggest` (Mapbox Geocoding, global coverage). Falls back to legacy `/api/agent/metros/suggest` (CBSA seed, US-only) if Mapbox is unavailable.
+2. User selects a suggestion → form populates `city`, `state` (if region is a 2-letter code), `place_id`, and `dataforseo_location_code` (if bridge resolved one).
+3. Submit sends `POST /api/agent/scoring` with `{city, service, state?, place_id?, dataforseo_location_code?}`. When `dataforseo_location_code` is present, the orchestrator uses it directly for DataForSEO targeting (bypasses MetroDB seed lookup); otherwise falls back to `MetroDB.find_by_city`.
+4. FastAPI runs M4 → M9, persists to Supabase (report metadata includes `place_id` and `dataforseo_location_code` when provided), returns `{report_id, opportunity_score, classification_label, evidence, report}`.
+5. Success card links to `/reports/{report_id}`. On success, the entry is pushed to `localStorage` recent history with `place_id` + `dataforseo_location_code` so reruns reuse canonical targeting without re-resolution.
+6. Clicking a recent history row restores stored `place_id` / `dataforseo_location_code` / `state` into the form.
 
 ## RLS
 
@@ -65,7 +66,7 @@ Migration `supabase/migrations/005_authenticated_read_reports.sql` grants `authe
 
 ## Mirror-lib convention
 
-`apps/app/src/lib/niche-finder/*` and `apps/app/src/components/niche-finder/CityAutocomplete.tsx` are verbatim mirrors of their `apps/admin/` counterparts with a `// Mirror of ...` header. Keep them in sync until extracted to `packages/niche-finder/` in a dedicated PR.
+`apps/app/src/lib/niche-finder/*` and `apps/app/src/components/niche-finder/CityAutocomplete.tsx` are verbatim mirrors of their `apps/admin/` counterparts with a `// Mirror of ...` header. Keep them in sync until extracted to `packages/niche-finder/` in a dedicated PR. Key mirrored files include `place-suggest.ts` (Mapbox client + fallback), `metro-suggest.ts` (legacy), and `types.ts` (includes `place_id` and `dataforseo_location_code` on `NicheQueryInput`).
 
 ## Dev commands
 
@@ -81,11 +82,10 @@ Currently uses:
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — auth
 - `NEXT_PUBLIC_APP_FRONTEND_URL` — auth redirect origin
-
-Will also need (once scoring wires in):
-
-- `NEXT_PUBLIC_API_URL` — FastAPI bridge base
+- `NEXT_PUBLIC_API_URL` — FastAPI bridge base (required for scoring + places autocomplete)
 - `NEXT_PUBLIC_NICHE_DRY_RUN` — dev/E2E override
+
+Note: `MAPBOX_ACCESS_TOKEN` is set on the FastAPI side (Render env), not the frontend. The frontend proxies through `/api/agent/places/suggest`.
 
 ## Auth rate limits
 

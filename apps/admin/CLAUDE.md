@@ -27,8 +27,9 @@ apps/admin/
         dashboard/page.tsx        Session history + aggregate metrics
       api/
         agent/
-          scoring/route.ts        POST → FastAPI /api/niches/score
+          scoring/route.ts        POST → FastAPI /api/niches/score (forwards place_id + dataforseo_location_code)
           exploration/route.ts    POST → FastAPI /api/niches/score (returns evidence)
+          places/suggest/route.ts GET → FastAPI /api/places/suggest (Mapbox autocomplete)
           exploration-chat/route.ts POST → FastAPI /api/exploration/followup
           sessions/route.ts       Research-session proxy
           sessions/[runId]/route.ts
@@ -48,11 +49,14 @@ apps/admin/
 
 ## Niche-finder flow (operational)
 
-1. User submits `{city, service}` via `StandardNicheForm` (home) or `ExplorationQueryForm` (exploration).
-2. Client calls `/api/agent/scoring` or `/api/agent/exploration`.
-3. Proxy route POSTs to `${NEXT_PUBLIC_API_URL}/api/niches/score` (dry_run flag honored via `NEXT_PUBLIC_NICHE_DRY_RUN=1`).
-4. FastAPI runs the Python orchestrator M4 → M9, persists the report to Supabase, returns `{report_id, opportunity_score, classification_label, evidence, report}`.
-5. UI renders score + evidence; exploration page additionally mounts `ExplorationAssistantPanel` for follow-up Q&A via `/api/agent/exploration-chat`.
+1. User types a city → `CityAutocomplete` hits `/api/agent/places/suggest` (Mapbox Geocoding, global coverage); falls back to legacy `/api/agent/metros/suggest` if Mapbox is unavailable.
+2. User selects a suggestion → form populates `city`, `state` (if region is a 2-letter code), `place_id`, and `dataforseo_location_code` (if bridge resolved one).
+3. User submits `{city, service, state?, place_id?, dataforseo_location_code?}` via `StandardNicheForm` (home) or `ExplorationQueryForm` (exploration).
+4. Client calls `/api/agent/scoring` or `/api/agent/exploration`.
+5. Proxy route POSTs to `${NEXT_PUBLIC_API_URL}/api/niches/score` with all fields including `place_id` and `dataforseo_location_code` when available (dry_run flag honored via `NEXT_PUBLIC_NICHE_DRY_RUN=1`).
+6. When `dataforseo_location_code` is present, the orchestrator uses it directly for DataForSEO targeting (bypasses MetroDB seed lookup). Otherwise falls back to `MetroDB.find_by_city`.
+7. FastAPI runs the Python orchestrator M4 → M9, persists the report to Supabase (report metadata includes `place_id` and `dataforseo_location_code`), returns `{report_id, opportunity_score, classification_label, evidence, report}`.
+8. UI renders score + evidence; exploration page additionally mounts `ExplorationAssistantPanel` for follow-up Q&A via `/api/agent/exploration-chat`.
 
 **Important:** Both the scoring and exploration proxies hit the same FastAPI endpoint. Do NOT add a double `Promise.all([scoring, exploration])` pattern — that would run M4 → M9 twice and write duplicate Supabase rows. Use one fetch, derive both surfaces from its response.
 

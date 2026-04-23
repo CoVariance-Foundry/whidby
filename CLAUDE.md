@@ -70,12 +70,14 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 
 ### End-to-end scoring (operational wiring)
 
-- `src/pipeline/orchestrator.py::score_niche_for_metro` — composes M4 → M9 for a single `(niche, city, state)` tuple. Supports `dry_run=True` for fixture-backed runs with zero external-API cost (used by Playwright).
+- `src/pipeline/orchestrator.py::score_niche_for_metro` — composes M4 → M9 for a single `(niche, city, state)` tuple. Supports `dry_run=True` for fixture-backed runs with zero external-API cost (used by Playwright). Also accepts optional `place_id` and `dataforseo_location_code` for canonical place targeting (bypasses MetroDB seed lookup when a bridged DFS code is available).
 - `src/clients/supabase_persistence.py::SupabasePersistence.persist_report` — writes the M9 report into `reports`, `report_keywords`, `metro_signals`, `metro_scores` per `supabase/migrations/001_core_schema.sql`.
 - FastAPI bridge exposes the flow to the admin UI:
-  - `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`
+  - `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts optional `place_id` and `dataforseo_location_code` fields.
   - `GET /api/niches/{report_id}` — reads the stored report back from Supabase
-- Admin Next.js proxies `/api/agent/scoring` and `/api/agent/exploration` both call the FastAPI `POST /api/niches/score`; UI state derives from the single response.
+  - `GET /api/places/suggest` — Mapbox-backed global city autocomplete with best-effort DataForSEO location code bridging (requires `MAPBOX_ACCESS_TOKEN`). Falls back gracefully when DFS credentials are absent.
+  - `GET /api/metros/suggest` — Legacy CBSA seed autocomplete (still available for backward compatibility)
+- Admin and consumer Next.js proxies `/api/agent/scoring` and `/api/agent/exploration` both call the FastAPI `POST /api/niches/score`; UI state derives from the single response. Both apps also proxy `/api/agent/places/suggest` for autocomplete.
 
 ### Key design rules
 
@@ -139,6 +141,8 @@ Required (see `.env.example`):
 - `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/admin` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
 - `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` — DataForSEO API
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
+- `MAPBOX_ACCESS_TOKEN` — Mapbox Geocoding API (required for `/api/places/suggest` global autocomplete; endpoint returns 503 if missing)
+- `MAPBOX_ACCESS_TOKEN` — Mapbox Geocoding V6 for city autocomplete (places/suggest endpoint)
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)
 
 ## Auth & Test Accounts

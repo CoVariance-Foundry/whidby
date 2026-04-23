@@ -29,6 +29,7 @@
 | `DATAFORSEO_LOGIN` | Yes | — | DataForSEO API login | app.dataforseo.com |
 | `DATAFORSEO_PASSWORD` | Yes | — | DataForSEO API password | app.dataforseo.com |
 | `DATAFORSEO_BASE_URL` | No | `https://api.dataforseo.com` | DataForSEO API base URL | — |
+| `MAPBOX_ACCESS_TOKEN` | Yes (places autocomplete) | — | Mapbox Geocoding API token for global city autocomplete (`/api/places/suggest`). Endpoint returns 503 if missing. Uses permanent geocoding mode. | account.mapbox.com → Tokens |
 | `SERPAPI_KEY` | Yes (recipe reports) | — | SerpAPI API key for Google + Google Maps engines | serpapi.com → Dashboard |
 | `ANTHROPIC_API_KEY` | Yes | — | Claude API key | console.anthropic.com |
 | `ACTIVECAMPAIGN_API_URL` | Yes (web app) | — | ActiveCampaign API base URL | ActiveCampaign → Settings → Developer |
@@ -48,6 +49,7 @@
 | `RESEARCH_GRAPH_PATH` | Recommended | Path to knowledge graph JSON; e.g. `/data/research_graph.json` with same disk. |
 | `ANTHROPIC_API_KEY` | Yes | Claude / agent tool-use. |
 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Yes | DataForSEO when plugins call live SEO APIs. |
+| `MAPBOX_ACCESS_TOKEN` | Yes | Mapbox Geocoding for `/api/places/suggest` global autocomplete. |
 
 See `docs/research_agent_design.md` §12 for production architecture, verified service name/URL, and an example `render.yaml`.
 
@@ -162,3 +164,4 @@ Run in order from `supabase/migrations/`:
 | 1.0.1 | 2026-04-05 | Render alignment | `NEXT_PUBLIC_API_URL`, Render research API env table, pointer to research_agent_design §12 |
 | 1.0.2 | 2026-04-06 | Middleware fix | Added Vercel deployment checklist, `apps/app` config files, `NEXT_PUBLIC_API_URL` to root `.env.example` |
 | 1.1.0 | 2026-04-21 | Apps reorg + operational wiring | Distinguish `apps/admin` (3001) vs `apps/app` (3002), drop magic-link language for email/password, add `NEXT_PUBLIC_NICHE_DRY_RUN`, document migration 005 |
+| 1.2.0 | 2026-04-22 | Mapbox autocomplete | Added `MAPBOX_ACCESS_TOKEN` to both root and Render env tables |

@@ -1,6 +1,6 @@
 # Architecture
 
-<!-- docguard:version 1.0.2 -->
+<!-- docguard:version 1.1.0 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-04-07 -->
 <!-- docguard:owner @widby-team -->
@@ -11,7 +11,7 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.0.2` |
+| **Version** | `1.1.0` |
 | **Last Updated** | 2026-04-07 |
 | **Owner** | @widby-team |
 
@@ -41,7 +41,7 @@ Admin (`apps/admin`) hosts a **dual-surface niche finder**:
 
 Consumer (`apps/app`) hosts a **single scoring surface**:
 
-- **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by the FastAPI `/api/metros/suggest` endpoint → autocompletes to `{city, state, cbsa_code}`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label.
+- **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by Mapbox Geocoding `/api/places/suggest` endpoint → autocompletes to `{city, region, country, place_id, dataforseo_location_code}` with global coverage; falls back to legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label. When a canonical `place_id` + `dataforseo_location_code` are available from autocomplete, scoring bypasses MetroDB seed lookup and targets DataForSEO directly.
 - **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read thanks to migration 005; writes remain service-role only via the Python scoring engine.
 
 Both apps share request validation, score shape, and the `CityAutocomplete` component (currently mirrored; extraction to `packages/niche-finder/` is a future PR). Admin's dual surface and consumer's single surface are contractually bound to the same FastAPI `POST /api/niches/score` endpoint — scores are always from the same backend pipeline.
@@ -71,6 +71,7 @@ Both apps share request validation, score shape, and the `CityAutocomplete` comp
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
 | Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores` | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
 | FastAPI niche bridge | `POST /api/niches/score`, `GET /api/niches/{id}`, `GET /api/metros/suggest` | `src/research_agent/api.py` | `tests/unit/test_api_niches.py`, `test_api_metros_suggest.py` |
+| Mapbox places autocomplete | `GET /api/places/suggest` — Mapbox v6 forward geocoding + DataForSEO location bridge | `src/research_agent/api.py`, `src/research_agent/places.py` | `tests/unit/test_api_places_suggest.py` |
 | Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |
 | Marketing Site | Waitlist signup + analytics | `apps/web/` | — |
 
@@ -239,3 +240,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/product_breakdown.md`, `docs/module_dependency.md`, `docs/algo_spec_v1_1.md` |
 | 1.0.1 | 2026-04-05 | Render alignment | Production split Vercel / Render / Supabase in system overview |
 | 1.0.2 | 2026-04-07 | Doc alignment pass | Added repository config surfaces and tightened active voice in build sequencing |
+| 1.1.0 | 2026-04-22 | Mapbox autocomplete migration | Added Mapbox places autocomplete + DataForSEO bridge component, updated niche finder flow to support global city coverage with canonical place targeting |

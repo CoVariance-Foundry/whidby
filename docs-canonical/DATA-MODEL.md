@@ -28,6 +28,36 @@
 | FeedbackLog         | Supabase `feedback_log` table | log_id (UUID)    | Input context + scores for future optimization         |
 
 
+### PlaceSuggestion (autocomplete output — in-memory)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `place_id` | string | Yes | Mapbox canonical place identifier |
+| `city` | string | Yes | Display city name (from `name_preferred`) |
+| `region` | string | No | State/province/admin1 name |
+| `country` | string | Yes | Country display name |
+| `country_iso_code` | string | Yes | ISO 3166-1 alpha-2 code |
+| `full_name` | string | Yes | Full formatted address string |
+| `latitude` | float | No | WGS84 latitude |
+| `longitude` | float | No | WGS84 longitude |
+| `dataforseo_location_code` | integer | No | Best-effort bridged DataForSEO location code (null when no confident match) |
+| `dataforseo_match_confidence` | string | No | `high`, `medium`, `low`, or null |
+
+Source: `src/research_agent/places.py::PlaceSuggestion`. Returned by `GET /api/places/suggest`.
+
+### HistoryEntry (client localStorage)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `city` | string | Yes | Display city name |
+| `service` | string | Yes | Niche service keyword |
+| `at` | number | Yes | Unix epoch timestamp |
+| `state` | string | No | Two-letter state code (US entries) |
+| `place_id` | string | No | Canonical Mapbox place id for rerun targeting |
+| `dataforseo_location_code` | number | No | Bridged DFS code for rerun targeting |
+
+Source: `apps/app/src/lib/niche-finder/history-storage.ts`. Dedupe key prefers `place_id` when present.
+
 ## Schema Definitions
 
 ### KeywordExpansion (M4 Output)
@@ -182,5 +212,6 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | ------- | ---------- | ------------- | ------------------------------------------------------------ |
 | 0.1.0   | 2026-04-05 | DocGuard Init | Initial template                                             |
 | 1.0.0   | 2026-04-05 | Migration     | Populated from `docs/algo_spec_v1_1.md`, `docs/data_flow.md` |
+| 1.1.0   | 2026-04-22 | Mapbox autocomplete | Added PlaceSuggestion and HistoryEntry schemas for global autocomplete + canonical place targeting |
 
 
