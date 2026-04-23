@@ -32,12 +32,20 @@ export interface DashboardData {
 }
 
 export async function loadDashboard(client: SupabaseClient): Promise<DashboardData> {
-  const { data, error } = await client
+  let { data, error } = await client
     .from("reports")
     .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
     .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(10);
+
+  if (error?.message?.includes("archived_at")) {
+    ({ data, error } = await client
+      .from("reports")
+      .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
+      .order("created_at", { ascending: false })
+      .limit(10));
+  }
 
   if (error) {
     throw new Error(`loadDashboard: ${error.message}`);

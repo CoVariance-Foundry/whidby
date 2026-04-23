@@ -76,7 +76,11 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
       .from("reports")
       .update({ archived_at: new Date().toISOString() })
       .eq("id", reportId);
-    if (error) throw new Error(error.message);
+    if (error?.message?.includes("archived_at")) {
+      console.warn("archived_at column not available — archive skipped");
+    } else if (error) {
+      throw new Error(error.message);
+    }
     setRows((prev) => prev.filter((r) => r.id !== reportId));
     setModal({ kind: "closed" });
   }, []);

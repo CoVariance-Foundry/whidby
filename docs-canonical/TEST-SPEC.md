@@ -63,6 +63,18 @@ tests/
 | `src/pipeline/intent_classifier.py` | `tests/unit/test_intent_classifier.py` | — | ✅ |
 | `src/pipeline/keyword_deduplication.py` | `tests/unit/test_keyword_deduplication.py` | — | ✅ |
 | `src/research_agent/` | `tests/unit/test_research_agent_loop.py` | — | ✅ |
+| `src/research_agent/places.py` | `tests/unit/test_places_bridge.py`, `tests/unit/test_api_places_suggest.py` | — | ✅ |
+| `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` | — | ✅ |
+
+## E2E Scoring Tests (Playwright)
+
+| Spec File | Scope | Requires Backend? |
+|-----------|-------|-------------------|
+| `apps/app/e2e/scoring-regression.spec.ts` | Huntsville regression, city normalization, input validation, duplicate submit, UI error display | Yes (FastAPI) |
+| `apps/app/e2e/autocomplete-scoring-flow.spec.ts` | Autocomplete → select → submit metadata propagation, DFS bridge diagnosis | Yes (FastAPI + Mapbox) |
+| `apps/app/e2e/scoring-matrix.spec.ts` | 10-combo parameterized matrix (5 Tier 1 + 5 Tier 2), JSONL metrics output | Yes (FastAPI + DFS) |
+| `apps/app/e2e/scoring-lifecycle.spec.ts` | Full UI lifecycle: submit → result → reports list → recent searches | Yes (FastAPI) |
+| `apps/app/e2e/scoring-quality-gates.spec.ts` | Pass rate, flake rate, latency, cost gates (reads matrix JSONL) | No (post-run analysis) |
 
 ## Unit Test Obligations (Algo Spec §12.1)
 
@@ -125,3 +137,4 @@ npm run lint
 |---------|------|--------|---------|
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md` §12, `docs/product_breakdown.md`, `.specify/memory/constitution.md` |
+| 1.1.0 | 2026-04-23 | E2E scoring suite | Added places bridge + orchestrator to service-test map, added E2E scoring tests section (regression, autocomplete flow, matrix, lifecycle, quality gates) |

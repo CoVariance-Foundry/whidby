@@ -17,12 +17,20 @@ function archetypeShort(id: ArchetypeId): string {
 
 export default async function ReportsPage() {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("reports")
     .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
     .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
+
+  if (error?.message?.includes("archived_at")) {
+    ({ data, error } = await supabase
+      .from("reports")
+      .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
+      .order("created_at", { ascending: false })
+      .limit(50));
+  }
 
   if (error) {
     throw new Error(`reports list: ${error.message}`);
