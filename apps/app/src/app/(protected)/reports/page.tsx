@@ -20,6 +20,7 @@ export default async function ReportsPage() {
   const { data, error } = await supabase
     .from("reports")
     .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
+    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
 

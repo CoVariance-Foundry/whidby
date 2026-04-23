@@ -91,6 +91,9 @@ export async function POST(req: NextRequest) {
         classification_label: data.classification_label,
       },
       report_id: data.report_id,
+      entity_id: data.entity_id ?? null,
+      snapshot_id: data.snapshot_id ?? null,
+      persist_warning: data.persist_warning ?? null,
       status: "success",
     });
   } catch (err) {

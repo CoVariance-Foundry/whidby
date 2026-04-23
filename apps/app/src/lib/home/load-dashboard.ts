@@ -35,6 +35,7 @@ export async function loadDashboard(client: SupabaseClient): Promise<DashboardDa
   const { data, error } = await client
     .from("reports")
     .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
+    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(10);
 

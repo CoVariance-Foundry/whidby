@@ -17,15 +17,20 @@
 ## Entities
 
 
-| Entity              | Storage                       | Primary Key      | Description                                            |
-| ------------------- | ----------------------------- | ---------------- | ------------------------------------------------------ |
-| KeywordExpansion    | In-memory (M4 output)         | niche (string)   | Expanded keyword set with intent/tier/AIO labels       |
-| RawCollectionResult | In-memory (M5 output)         | niche + geo      | Raw API responses organized per metro                  |
-| MetroSignals        | In-memory (M6 output)         | cbsa_code        | Derived demand/competition/AI/monetization signals     |
-| MetroScores         | In-memory (M7 output)         | cbsa_code        | Computed scores (0-100) per signal domain              |
-| MetroClassification | In-memory (M8 output)         | cbsa_code        | SERP archetype, AI exposure, difficulty tier, guidance |
-| Report              | Supabase `reports` table      | report_id (UUID) | Complete report with all metro results                 |
-| FeedbackLog         | Supabase `feedback_log` table | log_id (UUID)    | Input context + scores for future optimization         |
+| Entity              | Storage                              | Primary Key      | Description                                                        |
+| ------------------- | ------------------------------------ | ---------------- | ------------------------------------------------------------------ |
+| KeywordExpansion    | In-memory (M4 output)                | niche (string)   | Expanded keyword set with intent/tier/AIO labels                   |
+| RawCollectionResult | In-memory (M5 output)                | niche + geo      | Raw API responses organized per metro                              |
+| MetroSignals        | In-memory (M6 output)                | cbsa_code        | Derived demand/competition/AI/monetization signals                 |
+| MetroScores         | In-memory (M7 output)                | cbsa_code        | Computed scores (0-100) per signal domain                          |
+| MetroClassification | In-memory (M8 output)                | cbsa_code        | SERP archetype, AI exposure, difficulty tier, guidance             |
+| Report              | Supabase `reports` table             | report_id (UUID) | Complete report with all metro results                             |
+| FeedbackLog         | Supabase `feedback_log` table        | log_id (UUID)    | Input context + scores for future optimization (legacy)            |
+| KBEntity            | Supabase `kb_entities` table         | entity_id (UUID) | Canonical niche+geo identity for knowledge base lineage            |
+| KBSnapshot          | Supabase `kb_snapshots` table        | snapshot_id (UUID) | Versioned derived-state snapshot with supersedence chain         |
+| KBEvidenceArtifact  | Supabase `kb_evidence_artifacts`     | artifact_id (UUID) | Raw M5 collection payloads linked to snapshots                  |
+| ApiResponseCache    | Supabase `api_response_cache` table  | cache_id (UUID)  | Persistent cross-run DataForSEO response cache                     |
+| FeedbackEvent       | Supabase `feedback_events` table     | event_id (UUID)  | Runtime feedback linked to snapshots, reports, and entities        |
 
 
 ### PlaceSuggestion (autocomplete output — in-memory)

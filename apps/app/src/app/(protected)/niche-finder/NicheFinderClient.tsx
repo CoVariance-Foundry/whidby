@@ -372,6 +372,25 @@ export default function NicheFinderClient() {
                   </div>
                 </div>
 
+                {pageState.data.persist_warning && (
+                  <div
+                    role="alert"
+                    style={{
+                      marginBottom: 12,
+                      background: "var(--warning-soft, #fff8e1)",
+                      border: "1px solid var(--warning, #ffe082)",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      fontFamily: "var(--serif)",
+                      fontStyle: "italic",
+                      fontSize: 12.5,
+                      color: "var(--warning-ink, #795500)",
+                    }}
+                  >
+                    {pageState.data.persist_warning}
+                  </div>
+                )}
+
                 {pageState.data.report_id ? (
                   <Link
                     href={`/reports?open=${pageState.data.report_id}`}

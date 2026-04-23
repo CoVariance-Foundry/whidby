@@ -72,7 +72,10 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
 
   const handleDelete = useCallback(async (reportId: string) => {
     const supabase = createClient();
-    const { error } = await supabase.from("reports").delete().eq("id", reportId);
+    const { error } = await supabase
+      .from("reports")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("id", reportId);
     if (error) throw new Error(error.message);
     setRows((prev) => prev.filter((r) => r.id !== reportId));
     setModal({ kind: "closed" });

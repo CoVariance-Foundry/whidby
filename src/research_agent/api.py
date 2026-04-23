@@ -22,9 +22,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.kb_persistence import KBPersistence
 from src.data.metro_db import Metro, MetroDB
 from src.clients.llm.client import LLMClient
 from src.clients.supabase_persistence import SupabasePersistence
+from src.pipeline.canonical_key import resolve_canonical_key
+from src.pipeline.feedback_logger import log_feedback
 from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
@@ -77,6 +80,7 @@ app.add_middleware(
 
 _METRO_DB: MetroDB | None = None
 _PLACES_DATAFORSEO_BRIDGE: DataForSEOLocationBridge | None = None
+_SHARED_DFS_CLIENT: DataForSEOClient | None = None
 
 
 def _metro_db() -> MetroDB:
@@ -86,20 +90,32 @@ def _metro_db() -> MetroDB:
     return _METRO_DB
 
 
-def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
-    """Build a cached DataForSEO bridge if credentials are configured."""
-    global _PLACES_DATAFORSEO_BRIDGE
-    if _PLACES_DATAFORSEO_BRIDGE is not None:
-        return _PLACES_DATAFORSEO_BRIDGE
+def _shared_dfs_client() -> DataForSEOClient | None:
+    """Return the app-lifetime DataForSEO client (shared persistent cache)."""
+    global _SHARED_DFS_CLIENT
+    if _SHARED_DFS_CLIENT is not None:
+        return _SHARED_DFS_CLIENT
 
     login = os.environ.get("DATAFORSEO_LOGIN")
     password = os.environ.get("DATAFORSEO_PASSWORD")
     if not login or not password:
         return None
 
-    _PLACES_DATAFORSEO_BRIDGE = DataForSEOLocationBridge(
-        DataForSEOClient(login=login, password=password)
-    )
+    _SHARED_DFS_CLIENT = DataForSEOClient(login=login, password=password)
+    return _SHARED_DFS_CLIENT
+
+
+def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
+    """Build a cached DataForSEO bridge if credentials are configured."""
+    global _PLACES_DATAFORSEO_BRIDGE
+    if _PLACES_DATAFORSEO_BRIDGE is not None:
+        return _PLACES_DATAFORSEO_BRIDGE
+
+    dfs = _shared_dfs_client()
+    if dfs is None:
+        return None
+
+    _PLACES_DATAFORSEO_BRIDGE = DataForSEOLocationBridge(dfs)
     return _PLACES_DATAFORSEO_BRIDGE
 
 
@@ -441,6 +457,16 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
         "niches_score START request_id=%s niche=%r city=%r state=%r dry_run=%s",
         request_id, req.niche, req.city, req.state, req.dry_run,
     )
+
+    canonical = resolve_canonical_key(
+        niche=req.niche,
+        city=req.city,
+        state=req.state,
+        place_id=req.place_id,
+        dataforseo_location_code=req.dataforseo_location_code,
+    )
+    input_hash = canonical.input_hash(req.strategy_profile)
+
     dfs: DataForSEOClient | None = None
     try:
         if req.dry_run:
@@ -453,12 +479,13 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
                 request_id=request_id,
             )
         else:
-            import os
-
-            dfs = DataForSEOClient(
-                login=os.environ["DATAFORSEO_LOGIN"],
-                password=os.environ["DATAFORSEO_PASSWORD"],
-            )
+            dfs = _shared_dfs_client()
+            if dfs is None:
+                import os
+                dfs = DataForSEOClient(
+                    login=os.environ["DATAFORSEO_LOGIN"],
+                    password=os.environ["DATAFORSEO_PASSWORD"],
+                )
             llm = LLMClient()
             result = await score_niche_for_metro(
                 niche=req.niche, city=req.city, state=req.state,
@@ -504,6 +531,42 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
             logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
         flush_ms = int((_time.monotonic() - flush_start) * 1000)
 
+    entity_id: str | None = None
+    snapshot_id: str | None = None
+    try:
+        kb = KBPersistence()
+        entity_id = kb.upsert_entity(canonical)
+        snapshot_id = kb.create_snapshot(
+            entity_id=entity_id,
+            input_hash=input_hash,
+            strategy_profile=req.strategy_profile,
+            report=result.report,
+            report_id=report_id,
+        )
+        if report_id:
+            kb.link_report(report_id=report_id, entity_id=entity_id, snapshot_id=snapshot_id)
+
+        kb.store_evidence(
+            snapshot_id=snapshot_id,
+            artifact_type="score_bundle",
+            payload=result.report.get("metros", []),
+        )
+        if result.report.get("keyword_expansion"):
+            kb.store_evidence(
+                snapshot_id=snapshot_id,
+                artifact_type="keyword_expansion",
+                payload=result.report["keyword_expansion"],
+            )
+    except Exception:
+        logger.exception("KB persistence failed for report_id=%s", report_id)
+
+    try:
+        if report_id and not persist_failed:
+            kb_client = KBPersistence()
+            log_feedback(result.report, kb_client)
+    except Exception:
+        logger.exception("Feedback logging failed for report_id=%s", report_id)
+
     total_ms = int((_time.monotonic() - handler_start) * 1000)
 
     response: dict[str, Any] = {
@@ -516,13 +579,16 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
         ),
         "evidence": result.evidence,
         "report": result.report,
+        "entity_id": entity_id,
+        "snapshot_id": snapshot_id,
     }
     if persist_failed:
         response["persist_warning"] = "Report scored successfully but failed to save to database"
     logger.info(
-        "niches_score DONE request_id=%s report_id=%s opportunity=%s persist_ok=%s "
-        "pipeline_ms=%d persist_ms=%d flush_ms=%d total_ms=%d",
-        request_id, report_id, result.opportunity_score, not persist_failed,
+        "niches_score DONE request_id=%s report_id=%s entity_id=%s snapshot_id=%s "
+        "opportunity=%s persist_ok=%s pipeline_ms=%d persist_ms=%d flush_ms=%d total_ms=%d",
+        request_id, report_id, entity_id, snapshot_id,
+        result.opportunity_score, not persist_failed,
         pipeline_ms, persist_ms, flush_ms, total_ms,
     )
     return response

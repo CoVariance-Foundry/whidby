@@ -158,6 +158,8 @@ Run in order from `supabase/migrations/`:
 | 003 | `003_shared_tables.sql` | `metro_location_cache`, `api_usage_log`, `suppression_list` |
 | 004 | `004_rls_policies.sql` | RLS enabled on all tables; `service_role` FOR ALL policies |
 | 005 | `005_authenticated_read_reports.sql` | Grants `authenticated` users SELECT on the four report-facing tables so the consumer `/reports` page can read via the publishable key. Writes remain `service_role`. Added in PR #25. |
+| 007 | `007_kb_schema.sql` | Knowledge base tables: `kb_entities`, `kb_snapshots`, `kb_evidence_artifacts`, `api_response_cache`, `feedback_events` — canonical geo+industry entities, versioned snapshots with supersedence, raw evidence persistence, persistent API cache, and runtime feedback |
+| 008 | `008_kb_rls_and_lifecycle.sql` | RLS on KB tables, authenticated SELECT on entities/snapshots/feedback, soft-delete governance (`archived_at` + `entity_id` + `snapshot_id` columns on `reports`) |
 
 ## Revision History
 

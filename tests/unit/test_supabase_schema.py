@@ -20,6 +20,8 @@ class TestMigrationFiles:
             "002_experiment_schema.sql",
             "003_shared_tables.sql",
             "004_rls_policies.sql",
+            "007_kb_schema.sql",
+            "008_kb_rls_and_lifecycle.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -109,3 +111,64 @@ class TestRLSPolicies:
     def test_service_role_policies_exist(self, sql: str):
         assert "CREATE POLICY" in sql
         assert "service_role" in sql
+
+
+class TestKBSchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "007_kb_schema.sql").read_text()
+
+    def test_kb_entities_table(self, sql: str):
+        assert "kb_entities" in sql
+        assert "niche_keyword_normalized" in sql
+        assert "geo_target_normalized" in sql
+
+    def test_kb_snapshots_table(self, sql: str):
+        assert "kb_snapshots" in sql
+        assert "is_current" in sql
+        assert "superseded_by" in sql
+        assert "input_hash" in sql
+
+    def test_kb_evidence_artifacts_table(self, sql: str):
+        assert "kb_evidence_artifacts" in sql
+        assert "artifact_type" in sql
+        assert "payload_hash" in sql
+
+    def test_api_response_cache_table(self, sql: str):
+        assert "api_response_cache" in sql
+        assert "params_hash" in sql
+        assert "expires_at" in sql
+
+    def test_feedback_events_table(self, sql: str):
+        assert "feedback_events" in sql
+        assert "snapshot_id" in sql
+        assert "entity_id" in sql
+
+    def test_current_snapshot_unique_constraint(self, sql: str):
+        assert "idx_kb_snapshots_current" in sql
+        assert "WHERE is_current = true" in sql
+
+
+class TestKBRLSAndLifecycle:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "008_kb_rls_and_lifecycle.sql").read_text()
+
+    def test_rls_enabled_on_kb_tables(self, sql: str):
+        for table in ["kb_entities", "kb_snapshots", "kb_evidence_artifacts",
+                       "api_response_cache", "feedback_events"]:
+            assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+                f"RLS not enabled for {table}"
+            )
+
+    def test_service_role_policies_for_kb(self, sql: str):
+        for table in ["kb_entities", "kb_snapshots", "kb_evidence_artifacts",
+                       "api_response_cache", "feedback_events"]:
+            assert f"Service role full access on {table}" in sql
+
+    def test_reports_soft_delete_column(self, sql: str):
+        assert "archived_at" in sql
+
+    def test_reports_entity_and_snapshot_fk(self, sql: str):
+        assert "entity_id" in sql
+        assert "snapshot_id" in sql

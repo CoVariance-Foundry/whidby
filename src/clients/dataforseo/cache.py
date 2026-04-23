@@ -30,7 +30,7 @@ class ResponseCache:
             return None
         return data
 
-    def put(self, endpoint: str, params: dict[str, Any], data: Any) -> None:
+    def put(self, endpoint: str, params: dict[str, Any], data: Any, **_kwargs: Any) -> None:
         key = self._key(endpoint, params)
         self._store[key] = (time.monotonic(), data)
 

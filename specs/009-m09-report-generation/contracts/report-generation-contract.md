@@ -108,7 +108,22 @@ Define the M9 input/output and persistence contract used by downstream consumers
 - `log_feedback` validates the full report-document contract before persisting; arbitrary/partial dicts raise `ReportValidationError`.
 - If feedback persistence fails after report generation, the report object remains valid and unchanged; failure is surfaced via explicit error/status for retry policy handling.
 
-## 5) Verification Obligations
+## 5) Knowledge Base Lineage
+
+After a report is persisted to the `reports` table, the scoring handler additionally:
+
+- Resolves a canonical key via `src/pipeline/canonical_key.py` (deterministic `niche_normalized + geo_normalized + geo_scope`).
+- Upserts a `kb_entities` row (one per unique niche+geo pair).
+- Creates a `kb_snapshots` row (versioned, with `is_current=true`; prior snapshot is superseded atomically).
+- Stores evidence artifacts in `kb_evidence_artifacts` (score bundles and keyword expansion payloads).
+- Links the report row back to the KB via `entity_id` and `snapshot_id` columns (migration 008).
+- Writes feedback events to `feedback_events` via the existing `log_feedback` function (now wired at runtime).
+
+Persistent DataForSEO response caching (`api_response_cache` table) is used by the shared app-lifetime `DataForSEOClient` to avoid redundant API spend across scoring runs.
+
+Reports use soft-archive (`archived_at` timestamp) instead of hard-delete to preserve KB lineage integrity.
+
+## 6) Verification Obligations
 
 - Contract tests must verify:
   - required top-level and nested fields in report output including `meta.feedback_log_id`
@@ -119,4 +134,8 @@ Define the M9 input/output and persistence contract used by downstream consumers
   - invalid meta numeric types raise `ReportValidationError` with path
   - arbitrary/minimal dicts are rejected by `log_feedback` (full contract enforcement)
   - feedback row context includes `feedback_log_id` from report meta
+  - canonical key determinism (same niche+geo → same entity, same input_hash)
+  - snapshot supersedence transitions (new snapshot marks old as `is_current=false`)
+  - persistent cache TTL behavior (expired entries are not returned)
+  - feedback events are written to `feedback_events` table after successful report persistence
 

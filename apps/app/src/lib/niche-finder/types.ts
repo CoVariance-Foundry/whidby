@@ -35,6 +35,9 @@ export interface StandardSurfaceResponse {
   status: StandardResponseStatus;
   message?: string;
   report_id?: string;
+  entity_id?: string | null;
+  snapshot_id?: string | null;
+  persist_warning?: string | null;
 }
 
 export interface MetroScores {

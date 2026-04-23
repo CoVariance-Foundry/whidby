@@ -28,6 +28,7 @@ from src.config.constants import (
 from . import endpoints as ep
 from .cache import ResponseCache
 from .cost_tracker import CostTracker
+from .persistent_cache import PersistentResponseCache
 from .types import APIResponse, CostRecord
 
 logger = logging.getLogger(__name__)
@@ -70,11 +71,15 @@ class DataForSEOClient:
         base_url: str = DFS_BASE_URL,
         cache_ttl: int = DFS_CACHE_TTL,
         rate_limit: int = DFS_RATE_LIMIT,
+        persistent_cache: bool = True,
     ) -> None:
         creds = base64.b64encode(f"{login}:{password}".encode()).decode()
         self._auth_header = f"Basic {creds}"
         self._base_url = base_url.rstrip("/") + "/"
-        self._cache = ResponseCache(ttl=cache_ttl)
+        if persistent_cache:
+            self._cache: ResponseCache | PersistentResponseCache = PersistentResponseCache(ttl=cache_ttl)
+        else:
+            self._cache = ResponseCache(ttl=cache_ttl)
         self._tracker = CostTracker()
         self._rate_limiter = _RateLimiter(rate_limit)
 

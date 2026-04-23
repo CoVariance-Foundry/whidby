@@ -70,6 +70,9 @@ Both apps share request validation, score shape, and the `CityAutocomplete` comp
 | Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
 | Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores` | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
+| KB persistence | Canonical entity, versioned snapshot, evidence artifact, and feedback event CRUD for the knowledge base | `src/clients/kb_persistence.py` | `tests/unit/test_kb_persistence.py` |
+| Canonical key resolver | Deterministic niche+geo identity normalization for KB entity dedup | `src/pipeline/canonical_key.py` | `tests/unit/test_canonical_key.py` |
+| Persistent API cache | Two-tier (in-memory L1 + Supabase L2) DataForSEO response cache shared across runs | `src/clients/dataforseo/persistent_cache.py` | `tests/unit/test_persistent_cache.py` |
 | FastAPI niche bridge | `POST /api/niches/score`, `GET /api/niches/{id}`, `GET /api/metros/suggest` | `src/research_agent/api.py` | `tests/unit/test_api_niches.py`, `test_api_metros_suggest.py` |
 | Mapbox places autocomplete | `GET /api/places/suggest` — Mapbox v6 forward geocoding + DataForSEO location bridge | `src/research_agent/api.py`, `src/research_agent/places.py` | `tests/unit/test_api_places_suggest.py` |
 | Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |
