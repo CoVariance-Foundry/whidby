@@ -8,25 +8,19 @@ import CityAutocomplete from "./CityAutocomplete";
 // Fixtures
 // ---------------------------------------------------------------------------
 const FIXTURE: Array<{
-  cbsa_code: string;
   city: string;
-  state: string;
-  cbsa_name: string;
-  population: number;
+  region?: string | null;
+  country: string;
 }> = [
   {
-    cbsa_code: "38060",
     city: "Phoenix",
-    state: "AZ",
-    cbsa_name: "Phoenix-Mesa-Chandler, AZ",
-    population: 4946145,
+    region: "AZ",
+    country: "US",
   },
   {
-    cbsa_code: "37980",
     city: "Philadelphia",
-    state: "PA",
-    cbsa_name: "Philadelphia-Camden-Wilmington, PA-NJ-DE-MD",
-    population: 6245051,
+    region: "PA",
+    country: "US",
   },
 ];
 
@@ -113,6 +107,28 @@ describe("CityAutocomplete (consumer)", () => {
 
     expect(onChange).toHaveBeenCalledWith("Phoenix, AZ", FIXTURE[0]);
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("formats selection as city+country when region is missing", async () => {
+    mockFetch([{ city: "Paris", country: "FR" }]);
+    const onChange = vi.fn();
+    render(<CityAutocomplete value="" onChange={onChange} debounceMs={0} />);
+
+    const input = screen.getByTestId("city-input");
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "par" } });
+    });
+    await waitFor(() => screen.getByRole("listbox"));
+
+    const option = screen.getByText("Paris").closest("li")!;
+    await act(async () => {
+      fireEvent.mouseDown(option);
+    });
+
+    expect(onChange).toHaveBeenCalledWith("Paris, FR", {
+      city: "Paris",
+      country: "FR",
+    });
   });
 
   it("navigates suggestions with keyboard ArrowDown / ArrowUp / Enter", async () => {

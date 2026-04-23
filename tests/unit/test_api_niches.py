@@ -40,13 +40,20 @@ class _FakeScoreResult:
 def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: Any) -> None:
     async def _fake_orchestrator(**kwargs: Any) -> _FakeScoreResult:
         assert kwargs["dry_run"] is True
+        assert kwargs["place_id"] == "place.123"
+        assert kwargs["dataforseo_location_code"] == 12345
         return _FakeScoreResult()
 
     with patch("src.research_agent.api.score_niche_for_metro", new=_fake_orchestrator), \
          patch("src.research_agent.api._persist_report", return_value="abc"):
         client = TestClient(app)
         res = client.post("/api/niches/score", json={
-            "niche": "roofing", "city": "Phoenix", "state": "AZ", "dry_run": True,
+            "niche": "roofing",
+            "city": "Phoenix",
+            "state": "AZ",
+            "place_id": "place.123",
+            "dataforseo_location_code": 12345,
+            "dry_run": True,
         })
     assert res.status_code == 200
     body = res.json()
@@ -58,6 +65,15 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
 def test_post_niches_score_validation_error_on_empty_city() -> None:
     client = TestClient(app)
     res = client.post("/api/niches/score", json={"niche": "roofing", "city": "", "state": "AZ"})
+    assert res.status_code == 400
+
+
+def test_post_niches_score_validation_error_on_nonpositive_dfs_location_code() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/api/niches/score",
+        json={"niche": "roofing", "city": "Phoenix", "dataforseo_location_code": 0},
+    )
     assert res.status_code == 400
 
 

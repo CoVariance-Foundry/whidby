@@ -11,7 +11,7 @@ from src.classification.ai_exposure import classify_ai_exposure
 from src.classification.difficulty_tier import compute_difficulty_tier
 from src.classification.guidance_generator import classify_and_generate_guidance
 from src.classification.serp_archetype import classify_serp_archetype
-from src.data.metro_db import MetroDB
+from src.data.metro_db import Metro, MetroDB
 from src.pipeline.data_collection import collect_data
 from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
@@ -35,6 +35,8 @@ async def score_niche_for_metro(
     niche: str,
     city: str,
     state: str | None = None,
+    place_id: str | None = None,
+    dataforseo_location_code: int | None = None,
     strategy_profile: str = "balanced",
     llm_client: Any,
     dataforseo_client: Any,
@@ -47,7 +49,10 @@ async def score_niche_for_metro(
     Runs M4 -> M5 -> M6 -> M7 -> M8 -> M9 against the single metro whose
     `principal_cities` (or fallback `cbsa_name`) matches `city`. If `state`
     is provided it narrows the search (useful when a city name collides
-    across states). Raises ValueError if no metro in the seed matches.
+    across states). If `dataforseo_location_code` is provided, it is used
+    directly for DFS targeting (with a synthetic metro id) to support
+    canonical place selections outside the static seed.
+    Raises ValueError if no target can be resolved.
     """
     started = time.monotonic()
     logger.info(
@@ -55,10 +60,25 @@ async def score_niche_for_metro(
         request_id, niche, city, state, dry_run,
     )
     metros_db = metro_db or MetroDB.from_seed()
-    target = metros_db.find_by_city(city, state=state)
-    if target is None:
-        raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
-    resolved_state = target.state
+    target: Metro | None = None
+    resolved_state = state.strip().upper() if isinstance(state, str) and state.strip() else None
+
+    if isinstance(dataforseo_location_code, int) and dataforseo_location_code > 0:
+        synthetic_code = f"mapbox:{place_id}" if place_id else f"manual:{city.lower().replace(' ', '-')}"
+        target = Metro(
+            cbsa_code=synthetic_code,
+            cbsa_name=city if not resolved_state else f"{city}, {resolved_state}",
+            state=resolved_state or "",
+            population=0,
+            principal_cities=[city],
+            dataforseo_location_codes=[dataforseo_location_code],
+        )
+    else:
+        target = metros_db.find_by_city(city, state=state)
+        if target is None:
+            raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
+        resolved_state = target.state
+
     logger.info("Metro resolved: cbsa=%s name=%r state=%s", target.cbsa_code, target.cbsa_name, resolved_state)
 
     if dry_run:
@@ -67,6 +87,8 @@ async def score_niche_for_metro(
             city=city,
             state=resolved_state,
             target=target,
+            place_id=place_id,
+            dataforseo_location_code=dataforseo_location_code,
             strategy_profile=strategy_profile,
             started=started,
             run_id=f"score-dry-{uuid4()}",
@@ -185,7 +207,13 @@ async def score_niche_for_metro(
         "input": {
             "niche_keyword": niche,
             "geo_scope": "city",
-            "geo_target": f"{city}, {resolved_state}",
+            "geo_target": _format_geo_target(city, resolved_state),
+            **({"place_id": place_id} if place_id else {}),
+            **(
+                {"dataforseo_location_code": dataforseo_location_code}
+                if isinstance(dataforseo_location_code, int) and dataforseo_location_code > 0
+                else {}
+            ),
             "report_depth": "standard",
             "strategy_profile": strategy_profile,
         },
@@ -239,8 +267,10 @@ async def _dry_run_result(
     *,
     niche: str,
     city: str,
-    state: str,
+    state: str | None,
     target: Any,
+    place_id: str | None,
+    dataforseo_location_code: int | None,
     strategy_profile: str,
     started: float,
     run_id: str,
@@ -288,7 +318,13 @@ async def _dry_run_result(
         "input": {
             "niche_keyword": niche,
             "geo_scope": "city",
-            "geo_target": f"{city}, {state}",
+            "geo_target": _format_geo_target(city, state),
+            **({"place_id": place_id} if place_id else {}),
+            **(
+                {"dataforseo_location_code": dataforseo_location_code}
+                if isinstance(dataforseo_location_code, int) and dataforseo_location_code > 0
+                else {}
+            ),
             "report_depth": "standard",
             "strategy_profile": strategy_profile,
         },
@@ -381,3 +417,11 @@ def _build_evidence_from_signals(signals: dict[str, dict]) -> list[dict[str, Any
             "is_available": True,
         },
     ]
+
+
+def _format_geo_target(city: str, state: str | None) -> str:
+    cleaned_city = city.strip()
+    cleaned_state = (state or "").strip()
+    if cleaned_city and cleaned_state:
+        return f"{cleaned_city}, {cleaned_state}"
+    return cleaned_city or cleaned_state

@@ -28,7 +28,16 @@ vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
     "data-testid": testId = "city-input",
   }: {
     value: string;
-    onChange: (city: string, suggestion?: { city: string; state: string }) => void;
+    onChange: (
+      city: string,
+      suggestion?: {
+        city: string;
+        region?: string | null;
+        country: string;
+        place_id?: string;
+        dataforseo_location_code?: number | null;
+      },
+    ) => void;
     disabled?: boolean;
     "data-testid"?: string;
   }) => (
@@ -48,7 +57,10 @@ vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
         onClick={() =>
           onChange("Phoenix, AZ", {
             city: "Phoenix",
-            state: "AZ",
+            region: "AZ",
+            country: "US",
+            place_id: "place.phoenix",
+            dataforseo_location_code: 1012873,
           })
         }
       >
@@ -95,6 +107,7 @@ const SUCCESS_RESPONSE = {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 // ---------------------------------------------------------------------------
@@ -178,6 +191,8 @@ describe("NicheFinderClient", () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.city).toBe("Phoenix");
     expect(body.state).toBe("AZ");
+    expect(body.place_id).toBe("place.phoenix");
+    expect(body.dataforseo_location_code).toBe(1012873);
     expect(body.city).not.toBe("Phoenix, AZ");
   });
 
@@ -215,5 +230,39 @@ describe("NicheFinderClient", () => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
     });
     expect(screen.getByRole("alert")).toHaveTextContent("Pipeline down.");
+  });
+
+  it("rerun from recent preserves place_id and dataforseo_location_code", async () => {
+    localStorage.setItem(
+      "widby.niche.recent",
+      JSON.stringify([
+        {
+          city: "Paris, FR",
+          service: "roofing",
+          at: 1,
+          place_id: "place.paris-fr",
+          dataforseo_location_code: 98765,
+        },
+      ]),
+    );
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(SUCCESS_RESPONSE), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    renderClient();
+    fireEvent.click(screen.getByText("Paris, FR"));
+    fireEvent.click(screen.getByTestId("submit-btn"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.city).toBe("Paris, FR");
+    expect(body.service).toBe("roofing");
+    expect(body.place_id).toBe("place.paris-fr");
+    expect(body.dataforseo_location_code).toBe(98765);
   });
 });

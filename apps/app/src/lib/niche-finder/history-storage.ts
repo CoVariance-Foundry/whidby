@@ -2,6 +2,9 @@ export interface HistoryEntry {
   city: string;
   service: string;
   at: number;
+  state?: string;
+  place_id?: string;
+  dataforseo_location_code?: number;
 }
 
 const RECENT_KEY = "widby.niche.recent";
@@ -18,13 +21,30 @@ function safeParse(raw: string | null): HistoryEntry[] {
         typeof x === "object" && x !== null &&
         typeof (x as HistoryEntry).city === "string" &&
         typeof (x as HistoryEntry).service === "string" &&
-        typeof (x as HistoryEntry).at === "number",
+        typeof (x as HistoryEntry).at === "number" &&
+        ((x as HistoryEntry).state === undefined || typeof (x as HistoryEntry).state === "string") &&
+        ((x as HistoryEntry).place_id === undefined || typeof (x as HistoryEntry).place_id === "string") &&
+        (
+          (x as HistoryEntry).dataforseo_location_code === undefined ||
+          typeof (x as HistoryEntry).dataforseo_location_code === "number"
+        ),
     );
   } catch { return []; }
 }
 
 function key(entry: HistoryEntry): string {
-  return `${entry.city.toLowerCase()}|${entry.service.toLowerCase()}`;
+  const service = entry.service.trim().toLowerCase();
+  const placeId = entry.place_id?.trim().toLowerCase();
+  if (placeId) {
+    return `place:${placeId}|service:${service}`;
+  }
+  const city = entry.city.trim().toLowerCase();
+  const state = entry.state?.trim().toLowerCase() ?? "";
+  const dfsCode =
+    typeof entry.dataforseo_location_code === "number"
+      ? String(entry.dataforseo_location_code)
+      : "";
+  return `city:${city}|state:${state}|dfs:${dfsCode}|service:${service}`;
 }
 
 export function loadRecent(): HistoryEntry[] {

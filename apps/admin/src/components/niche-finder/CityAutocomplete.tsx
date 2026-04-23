@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { fetchMetroSuggestions, type MetroSuggestion } from "@/lib/niche-finder/metro-suggest";
+import {
+  fetchPlaceSuggestions,
+  formatPlaceSuggestion,
+  type PlaceSuggestion,
+} from "@/lib/niche-finder/place-suggest";
 
 const DEFAULT_DEBOUNCE_MS = 250;
 
 interface CityAutocompleteProps {
   value: string;
-  onChange: (city: string, suggestion?: MetroSuggestion) => void;
+  onChange: (city: string, suggestion?: PlaceSuggestion) => void;
   disabled?: boolean;
   placeholder?: string;
   /** data-testid forwarded to the underlying <input> */
@@ -28,7 +32,7 @@ export default function CityAutocomplete({
   "data-testid": testId = "city-input",
   debounceMs = DEFAULT_DEBOUNCE_MS,
 }: CityAutocompleteProps) {
-  const [suggestions, setSuggestions] = useState<MetroSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
@@ -70,7 +74,7 @@ export default function CityAutocomplete({
         setLoading(true);
 
         try {
-          const results = await fetchMetroSuggestions(q, 8, controller.signal);
+          const results = await fetchPlaceSuggestions(q, 8, controller.signal);
           setSuggestions(results);
           setOpen(true);
           setHasFetched(true);
@@ -95,9 +99,9 @@ export default function CityAutocomplete({
     fetchSuggestions(q);
   };
 
-  const selectSuggestion = (suggestion: MetroSuggestion) => {
+  const selectSuggestion = (suggestion: PlaceSuggestion) => {
     cancel();
-    onChange(`${suggestion.city}, ${suggestion.state}`, suggestion);
+    onChange(formatPlaceSuggestion(suggestion), suggestion);
     setSuggestions([]);
     setOpen(false);
     setActiveIndex(-1);
@@ -201,7 +205,7 @@ export default function CityAutocomplete({
           ) : (
             suggestions.map((s, i) => (
               <li
-                key={s.cbsa_code}
+                key={`${s.city}-${s.region ?? "na"}-${s.country}-${i}`}
                 id={`${listboxId}-option-${i}`}
                 role="option"
                 aria-selected={i === activeIndex}
@@ -214,10 +218,14 @@ export default function CityAutocomplete({
                 ].join(" ")}
               >
                 <span className="font-medium">{s.city}</span>
-                <span className="ml-1 text-[var(--color-muted)]">{s.state}</span>
-                <span className="ml-auto block text-xs text-[var(--color-muted)]">
-                  {s.cbsa_name}
+                <span className="ml-1 text-[var(--color-muted)]">
+                  {s.region ?? s.country}
                 </span>
+                {s.region && (
+                  <span className="ml-auto block text-xs text-[var(--color-muted)]">
+                    {s.country}
+                  </span>
+                )}
               </li>
             ))
           )}

@@ -29,6 +29,12 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         niche: body.service.trim(),
         city: body.city.trim(),
+        ...(typeof body.place_id === "string" && body.place_id.trim()
+          ? { place_id: body.place_id.trim() }
+          : {}),
+        ...(typeof body.dataforseo_location_code === "number"
+          ? { dataforseo_location_code: body.dataforseo_location_code }
+          : {}),
         ...(typeof body.state === "string" && body.state.trim()
           ? { state: body.state.trim() }
           : {}),
@@ -67,7 +73,19 @@ export async function POST(req: NextRequest) {
       totalMs,
     );
     return NextResponse.json({
-      query: { city: body.city.trim(), service: body.service.trim() },
+      query: {
+        city: body.city.trim(),
+        service: body.service.trim(),
+        ...(typeof body.place_id === "string" && body.place_id.trim()
+          ? { place_id: body.place_id.trim() }
+          : {}),
+        ...(typeof body.dataforseo_location_code === "number"
+          ? { dataforseo_location_code: body.dataforseo_location_code }
+          : {}),
+        ...(typeof body.state === "string" && body.state.trim()
+          ? { state: body.state.trim() }
+          : {}),
+      },
       score_result: {
         opportunity_score: data.opportunity_score,
         classification_label: data.classification_label,

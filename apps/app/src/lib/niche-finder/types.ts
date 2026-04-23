@@ -5,6 +5,10 @@ export interface NicheQueryInput {
   service: string;
   /** Two-letter state abbreviation resolved via CityAutocomplete (optional). */
   state?: string;
+  /** Canonical Mapbox place identifier selected from autocomplete (optional). */
+  place_id?: string;
+  /** DataForSEO location code bridged from selected place (optional). */
+  dataforseo_location_code?: number;
 }
 
 export interface NormalizedNicheQuery {

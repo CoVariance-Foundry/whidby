@@ -4,17 +4,17 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import StandardNicheForm from "./StandardNicheForm";
 import type { NicheQueryInput } from "@/lib/niche-finder/types";
-import type { MetroSuggestion } from "@/lib/niche-finder/metro-suggest";
+import type { PlaceSuggestion } from "@/lib/niche-finder/place-suggest";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
-const PHOENIX_SUGGESTION: MetroSuggestion = {
-  cbsa_code: "38060",
+const PHOENIX_SUGGESTION: PlaceSuggestion = {
   city: "Phoenix",
-  state: "AZ",
-  cbsa_name: "Phoenix-Mesa-Chandler, AZ",
-  population: 4946145,
+  region: "AZ",
+  country: "US",
+  place_id: "place.phoenix",
+  dataforseo_location_code: 1012873,
 };
 
 const INITIAL_QUERY: NicheQueryInput = { city: "", service: "" };
@@ -24,9 +24,9 @@ const INITIAL_QUERY: NicheQueryInput = { city: "", service: "" };
 //
 // We capture the onChange callback each time the component renders so that
 // tests can call it directly — both as a plain string (free-typed) and as
-// a string+MetroSuggestion pair (dropdown selection).
+// a string+PlaceSuggestion pair (dropdown selection).
 // ---------------------------------------------------------------------------
-let capturedOnChange: ((city: string, suggestion?: MetroSuggestion) => void) | null = null;
+let capturedOnChange: ((city: string, suggestion?: PlaceSuggestion) => void) | null = null;
 
 vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
   default: ({
@@ -36,7 +36,7 @@ vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
     "data-testid": testId,
   }: {
     value: string;
-    onChange: (city: string, suggestion?: MetroSuggestion) => void;
+    onChange: (city: string, suggestion?: PlaceSuggestion) => void;
     disabled?: boolean;
     "data-testid"?: string;
   }) => {
@@ -89,6 +89,8 @@ describe("StandardNicheForm", () => {
     expect(submitted.city).toBe("Phoenix");
     expect(submitted.state).toBe("AZ");
     expect(submitted.service).toBe("roofing");
+    expect(submitted.place_id).toBe("place.phoenix");
+    expect(submitted.dataforseo_location_code).toBe(1012873);
   });
 
   it("editing city after selecting a suggestion clears state", () => {
@@ -115,6 +117,8 @@ describe("StandardNicheForm", () => {
     const submitted: NicheQueryInput = onSubmit.mock.calls[0][0];
     expect(submitted.city).toBe("Scottsdale");
     expect(submitted.state).toBeUndefined();
+    expect(submitted.place_id).toBeUndefined();
+    expect(submitted.dataforseo_location_code).toBeUndefined();
   });
 
   it("submitting with only free-typed city sends state: undefined", () => {

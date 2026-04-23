@@ -6,7 +6,7 @@ import Link from "next/link";
 import CityAutocomplete from "@/components/niche-finder/CityAutocomplete";
 import NicheFinderTabs, { type TabKey } from "@/components/niche-finder/NicheFinderTabs";
 import StrategyPresetRail from "@/components/niche-finder/StrategyPresetRail";
-import type { MetroSuggestion } from "@/lib/niche-finder/metro-suggest";
+import type { PlaceSuggestion } from "@/lib/niche-finder/place-suggest";
 import type { StandardSurfaceResponse } from "@/lib/niche-finder/types";
 import type { HistoryEntry } from "@/lib/niche-finder/history-storage";
 import { validateNicheQueryInput } from "@/lib/niche-finder/request-validation";
@@ -81,6 +81,10 @@ export default function NicheFinderClient() {
   const searchParams = useSearchParams();
   const [city, setCity] = useState(searchParams.get("city") ?? "");
   const [state, setState] = useState<string | undefined>(undefined);
+  const [placeId, setPlaceId] = useState<string | undefined>(undefined);
+  const [dataforseoLocationCode, setDataforseoLocationCode] = useState<number | undefined>(
+    undefined,
+  );
   const [service, setService] = useState(searchParams.get("service") ?? "");
   const [pageState, setPageState] = useState<PageState>({ kind: "idle" });
   const [activeTab, setActiveTab] = useState<TabKey>("niche");
@@ -94,13 +98,22 @@ export default function NicheFinderClient() {
   const showToast = useCallback((msg: string) => setToast(msg), []);
   const dismissToast = useCallback(() => setToast(null), []);
 
-  const handleCityChange = (newCity: string, suggestion?: MetroSuggestion) => {
+  const handleCityChange = (newCity: string, suggestion?: PlaceSuggestion) => {
     if (suggestion) {
       setCity(suggestion.city);
-      setState(suggestion.state);
+      const normalizedRegion = suggestion.region?.trim().toUpperCase();
+      setState(normalizedRegion && normalizedRegion.length === 2 ? normalizedRegion : undefined);
+      setPlaceId(suggestion.place_id?.trim() || undefined);
+      setDataforseoLocationCode(
+        typeof suggestion.dataforseo_location_code === "number"
+          ? suggestion.dataforseo_location_code
+          : undefined,
+      );
     } else {
       setCity(newCity);
       setState(undefined);
+      setPlaceId(undefined);
+      setDataforseoLocationCode(undefined);
     }
   };
 
@@ -116,8 +129,12 @@ export default function NicheFinderClient() {
     setPageState({ kind: "loading" });
 
     try {
-      const body: Record<string, string> = { city: city.trim(), service: service.trim() };
+      const body: Record<string, unknown> = { city: city.trim(), service: service.trim() };
       if (state) body.state = state;
+      if (placeId) body.place_id = placeId;
+      if (typeof dataforseoLocationCode === "number") {
+        body.dataforseo_location_code = dataforseoLocationCode;
+      }
 
       const res = await fetch("/api/agent/scoring", {
         method: "POST",
@@ -142,7 +159,16 @@ export default function NicheFinderClient() {
       }
 
       setPageState({ kind: "success", data: json });
-      pushRecent({ city: city.trim(), service: service.trim(), at: Date.now() });
+      pushRecent({
+        city: city.trim(),
+        service: service.trim(),
+        at: Date.now(),
+        ...(state ? { state } : {}),
+        ...(placeId ? { place_id: placeId } : {}),
+        ...(typeof dataforseoLocationCode === "number"
+          ? { dataforseo_location_code: dataforseoLocationCode }
+          : {}),
+      });
       setRecent(loadRecent());
     } catch (err) {
       setPageState({
@@ -155,7 +181,9 @@ export default function NicheFinderClient() {
   const handleRecentPick = (entry: HistoryEntry) => {
     setCity(entry.city);
     setService(entry.service);
-    setState(undefined);
+    setState(entry.state);
+    setPlaceId(entry.place_id);
+    setDataforseoLocationCode(entry.dataforseo_location_code);
     setActiveTab("niche");
   };
 
@@ -416,6 +444,8 @@ export default function NicheFinderClient() {
                         setCity(ex.city);
                         setService(ex.service);
                         setState(undefined);
+                        setPlaceId(undefined);
+                        setDataforseoLocationCode(undefined);
                       }}
                     >
                       {ex.service} in {ex.city}

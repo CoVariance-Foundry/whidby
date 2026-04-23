@@ -47,4 +47,43 @@ describe("history-storage", () => {
     expect(loadRecent()).toEqual([]);
     expect(loadPinned()).toEqual([]);
   });
+
+  it("preserves optional place targeting metadata", () => {
+    pushRecent({
+      city: "Phoenix",
+      service: "roofing",
+      state: "AZ",
+      place_id: "place.phoenix",
+      dataforseo_location_code: 1012873,
+      at: 42,
+    });
+    const [recent] = loadRecent();
+    expect(recent.state).toBe("AZ");
+    expect(recent.place_id).toBe("place.phoenix");
+    expect(recent.dataforseo_location_code).toBe(1012873);
+  });
+
+  it("keeps distinct recents when place_id differs for same city/service", () => {
+    pushRecent({
+      city: "Springfield",
+      service: "roofing",
+      state: "IL",
+      place_id: "place.springfield-il",
+      dataforseo_location_code: 111,
+      at: 1,
+    });
+    pushRecent({
+      city: "Springfield",
+      service: "roofing",
+      state: "MO",
+      place_id: "place.springfield-mo",
+      dataforseo_location_code: 222,
+      at: 2,
+    });
+
+    const recent = loadRecent();
+    expect(recent).toHaveLength(2);
+    expect(recent[0].place_id).toBe("place.springfield-mo");
+    expect(recent[1].place_id).toBe("place.springfield-il");
+  });
 });

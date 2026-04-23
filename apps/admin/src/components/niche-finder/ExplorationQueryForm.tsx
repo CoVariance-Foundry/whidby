@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CityAutocomplete from "@/components/niche-finder/CityAutocomplete";
-import type { MetroSuggestion } from "@/lib/niche-finder/metro-suggest";
+import type { PlaceSuggestion } from "@/lib/niche-finder/place-suggest";
 import type { NicheQueryInput } from "@/lib/niche-finder/types";
 
 interface ExplorationQueryFormProps {
@@ -19,17 +19,30 @@ export default function ExplorationQueryForm({
   const [city, setCity] = useState(initialQuery.city);
   const [service, setService] = useState(initialQuery.service);
   const [state, setState] = useState<string | undefined>(initialQuery.state);
+  const [placeId, setPlaceId] = useState<string | undefined>(initialQuery.place_id);
+  const [dataforseoLocationCode, setDataforseoLocationCode] = useState<number | undefined>(
+    initialQuery.dataforseo_location_code,
+  );
 
-  function handleCityChange(text: string, suggestion?: MetroSuggestion) {
+  function handleCityChange(text: string, suggestion?: PlaceSuggestion) {
     if (suggestion) {
       // User picked from the dropdown — capture both city and state.
       setCity(suggestion.city);
-      setState(suggestion.state);
+      const normalizedRegion = suggestion.region?.trim().toUpperCase();
+      setState(normalizedRegion && normalizedRegion.length === 2 ? normalizedRegion : undefined);
+      setPlaceId(suggestion.place_id?.trim() || undefined);
+      setDataforseoLocationCode(
+        typeof suggestion.dataforseo_location_code === "number"
+          ? suggestion.dataforseo_location_code
+          : undefined,
+      );
     } else {
       // Free-typed edit — update city and clear any previously resolved state
       // so we never send a mismatched city+state pair.
       if (text !== city) {
         setState(undefined);
+        setPlaceId(undefined);
+        setDataforseoLocationCode(undefined);
       }
       setCity(text);
     }
@@ -40,7 +53,15 @@ export default function ExplorationQueryForm({
       className="grid gap-3 rounded-lg border border-[var(--color-dark-border)] bg-[var(--color-dark-card)] p-4 md:grid-cols-3"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit({ city, service, ...(state ? { state } : {}) });
+        onSubmit({
+          city,
+          service,
+          ...(state ? { state } : {}),
+          ...(placeId ? { place_id: placeId } : {}),
+          ...(typeof dataforseoLocationCode === "number"
+            ? { dataforseo_location_code: dataforseoLocationCode }
+            : {}),
+        });
       }}
     >
       <CityAutocomplete

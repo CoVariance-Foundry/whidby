@@ -32,6 +32,11 @@ from src.research_agent.memory.filesystem_store import FilesystemStore
 from src.research_agent.memory.graph_store import ResearchGraphStore
 from src.research_agent.plugins.registry_builder import build_plugin_registry
 from src.research_agent.plugins.report_plugin import REPORT_TIMESTAMP_FORMAT
+from src.research_agent.places import (
+    DataForSEOLocationBridge,
+    MapboxPlacesError,
+    fetch_mapbox_place_suggestions,
+)
 from src.research_agent.recipes.registry_builder import build_recipe_registry
 from src.research_agent.recipes.runner import RecipeRunner, RecipeRunnerError
 
@@ -71,6 +76,7 @@ app.add_middleware(
 )
 
 _METRO_DB: MetroDB | None = None
+_PLACES_DATAFORSEO_BRIDGE: DataForSEOLocationBridge | None = None
 
 
 def _metro_db() -> MetroDB:
@@ -78,6 +84,23 @@ def _metro_db() -> MetroDB:
     if _METRO_DB is None:
         _METRO_DB = MetroDB.from_seed()
     return _METRO_DB
+
+
+def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
+    """Build a cached DataForSEO bridge if credentials are configured."""
+    global _PLACES_DATAFORSEO_BRIDGE
+    if _PLACES_DATAFORSEO_BRIDGE is not None:
+        return _PLACES_DATAFORSEO_BRIDGE
+
+    login = os.environ.get("DATAFORSEO_LOGIN")
+    password = os.environ.get("DATAFORSEO_PASSWORD")
+    if not login or not password:
+        return None
+
+    _PLACES_DATAFORSEO_BRIDGE = DataForSEOLocationBridge(
+        DataForSEOClient(login=login, password=password)
+    )
+    return _PLACES_DATAFORSEO_BRIDGE
 
 
 @app.get("/health")
@@ -123,6 +146,50 @@ def metros_suggest(q: str, limit: int = 10) -> list[dict[str, Any]]:
     ]
 
 
+@app.get("/api/places/suggest")
+async def places_suggest(
+    q: str,
+    limit: int = 10,
+    country: str | None = None,
+    language: str | None = None,
+) -> list[dict[str, Any]]:
+    """Autocomplete places via Mapbox and bridge best-effort DataForSEO location codes."""
+    q_norm = q.strip()
+    if len(q_norm) < 2:
+        return []
+    clamped = max(1, min(limit, 20))
+
+    mapbox_access_token = os.environ.get("MAPBOX_ACCESS_TOKEN")
+    if not mapbox_access_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Mapbox autocomplete unavailable: MAPBOX_ACCESS_TOKEN is not configured.",
+        )
+
+    try:
+        suggestions = await fetch_mapbox_place_suggestions(
+            query=q_norm,
+            limit=clamped,
+            access_token=mapbox_access_token,
+            country=country,
+            language=language,
+        )
+    except MapboxPlacesError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception:
+        logger.error("Unexpected Mapbox places autocomplete failure", exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Mapbox autocomplete failed unexpectedly.",
+        ) from None
+
+    bridge = _places_dataforseo_bridge()
+    if bridge is not None:
+        suggestions = await bridge.enrich(suggestions)
+
+    return [row.to_dict() for row in suggestions]
+
+
 RUNS_DIR = Path(os.environ.get("RESEARCH_RUNS_DIR", "research_runs"))
 GRAPH_PATH = Path(os.environ.get("RESEARCH_GRAPH_PATH", "research_graph.json"))
 
@@ -154,6 +221,8 @@ class NicheScoreRequest(BaseModel):
     niche: str
     city: str
     state: str | None = None
+    place_id: str | None = None
+    dataforseo_location_code: int | None = None
     strategy_profile: str = "balanced"
     dry_run: bool = False
 
@@ -172,6 +241,23 @@ class NicheScoreRequest(BaseModel):
             return None
         trimmed = v.strip()
         return trimmed or None
+
+    @field_validator("place_id")
+    @classmethod
+    def _normalize_place_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        return trimmed or None
+
+    @field_validator("dataforseo_location_code")
+    @classmethod
+    def _validate_dataforseo_location_code(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v <= 0:
+            raise ValueError("must be a positive integer")
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +446,8 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
         if req.dry_run:
             result = await score_niche_for_metro(
                 niche=req.niche, city=req.city, state=req.state,
+                place_id=req.place_id,
+                dataforseo_location_code=req.dataforseo_location_code,
                 strategy_profile=req.strategy_profile,
                 llm_client=None, dataforseo_client=None, dry_run=True,
                 request_id=request_id,
@@ -374,6 +462,8 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
             llm = LLMClient()
             result = await score_niche_for_metro(
                 niche=req.niche, city=req.city, state=req.state,
+                place_id=req.place_id,
+                dataforseo_location_code=req.dataforseo_location_code,
                 strategy_profile=req.strategy_profile,
                 llm_client=llm, dataforseo_client=dfs,
                 request_id=request_id,
