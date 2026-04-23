@@ -8,6 +8,10 @@
 
 All Foundation phases (A through E) are implemented, tested, and committed. Branch is ready for review/merge.
 
+## Post-completion operational update
+
+- **2026-04-22:** Production Render env updated with `MAPBOX_ACCESS_TOKEN` for FastAPI `/api/places/suggest`. Verified end-to-end autocomplete behavior for small cities (Tuskegee, AL and Macon, GA) in consumer `/niche-finder`.
+
 ## References
 
 - **Design spec:** [docs/superpowers/specs/2026-04-21-widby-niche-finder-v1-design.md](../specs/2026-04-21-widby-niche-finder-v1-design.md)

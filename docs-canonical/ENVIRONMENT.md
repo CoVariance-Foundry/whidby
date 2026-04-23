@@ -51,6 +51,10 @@
 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Yes | DataForSEO when plugins call live SEO APIs. |
 | `MAPBOX_ACCESS_TOKEN` | Yes | Mapbox Geocoding for `/api/places/suggest` global autocomplete. |
 
+### Operational notes
+
+- **2026-04-22:** Confirmed Render API env now includes `MAPBOX_ACCESS_TOKEN`; `/api/places/suggest` resolves small metros/cities (e.g., Tuskegee, AL and Macon, GA) through Mapbox-backed autocomplete.
+
 See `docs/research_agent_design.md` §12 for production architecture, verified service name/URL, and an example `render.yaml`.
 
 ## Configuration Files

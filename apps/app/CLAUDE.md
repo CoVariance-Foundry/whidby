@@ -87,6 +87,8 @@ Currently uses:
 
 Note: `MAPBOX_ACCESS_TOKEN` is set on the FastAPI side (Render env), not the frontend. The frontend proxies through `/api/agent/places/suggest`.
 
+Operational note (2026-04-22): Render API env has been updated with `MAPBOX_ACCESS_TOKEN`; consumer `/niche-finder` autocomplete now returns small-city suggestions such as Tuskegee, AL and Macon, GA.
+
 ## Auth rate limits
 
 Two layers of protection on the login form:

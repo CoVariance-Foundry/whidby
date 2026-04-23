@@ -141,8 +141,7 @@ Required (see `.env.example`):
 - `NEXT_PUBLIC_API_URL` — Research agent FastAPI base URL for `apps/admin` proxies (production: Render, e.g. `https://whidby-1.onrender.com`; local: `http://localhost:8000`)
 - `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` — DataForSEO API
 - `ANTHROPIC_API_KEY` — Claude API for LLM client
-- `MAPBOX_ACCESS_TOKEN` — Mapbox Geocoding API (required for `/api/places/suggest` global autocomplete; endpoint returns 503 if missing)
-- `MAPBOX_ACCESS_TOKEN` — Mapbox Geocoding V6 for city autocomplete (places/suggest endpoint)
+- `MAPBOX_ACCESS_TOKEN` — Mapbox Geocoding API (required for `/api/places/suggest` global autocomplete; endpoint returns 503 if missing). Must be present in local `.env` and Render API service env vars.
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)
 
 ## Auth & Test Accounts
