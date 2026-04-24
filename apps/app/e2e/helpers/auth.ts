@@ -48,12 +48,32 @@ export async function signIn(
   await page.getByPlaceholder("••••••••").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
 
-  if (opts.expectLandOn !== undefined) {
-    await page.waitForURL(opts.expectLandOn, { timeout });
-  } else {
-    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-      timeout,
-    });
+  try {
+    if (opts.expectLandOn !== undefined) {
+      await page.waitForURL(opts.expectLandOn, { timeout });
+    } else {
+      await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+        timeout,
+      });
+    }
+  } catch (error) {
+    const currentUrl = page.url();
+    const buttonText = (
+      await page.getByRole("button").first().textContent()
+    )?.trim();
+    const visibleError = (await page.getByText(/timed out|invalid|failed/i).allTextContents())
+      .map((msg) => msg.trim())
+      .filter(Boolean)
+      .slice(0, 2);
+
+    const diagnostic = [
+      "signIn() timed out waiting for post-login navigation",
+      `url=${currentUrl}`,
+      `button=${buttonText ?? "<none>"}`,
+      `errors=${visibleError.join(" | ") || "<none>"}`,
+    ].join(" | ");
+
+    throw new Error(`${diagnostic}\nOriginal: ${String(error)}`);
   }
 }
 

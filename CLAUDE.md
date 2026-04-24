@@ -87,6 +87,7 @@ The pipeline is **deliberately not using any agent framework** for V1 scoring (n
 - Research constants (AIO rates, scoring weights, rate limits) live in `src/config/constants.py`, never hardcoded
 - **API contract casing**: All JSON payloads at service boundaries (Next.js route handlers <-> FastAPI, spec contracts) use **snake_case** keys. No camelCase in wire payloads.
 - Test file names mirror source: `src/scoring/demand_score.py` → `tests/unit/test_demand_score.py`
+- **Supabase query resilience**: Queries referencing columns added after `001_core_schema.sql` should use a fallback-retry pattern — if the query fails with "column does not exist", retry without the filter. This prevents hard crashes in dev/staging/preview environments where migrations may lag behind `main`.
 
 ## Architecture: Research Agent
 
@@ -210,6 +211,17 @@ Before every `git commit && git push` on module code (`src/`), you **must** run 
 4. **Spec artifacts**: If the branch name matches a feature pattern (`NNN-*`), a corresponding `specs/` directory must exist
 
 Skipping these gates results in CI failure on push. Run them locally first.
+
+## Deployment Checklist (After Code Changes)
+
+Every commit that touches infrastructure-adjacent files requires verifying the deployed state matches the code. **Never commit code that references new DB columns/tables without applying the migration.**
+
+| Trigger | Action | Verify |
+|---------|--------|--------|
+| New/modified files in `supabase/migrations/` | Apply the migration to Supabase via MCP `apply_migration` or SQL editor. Run migrations **in order** (each may depend on prior ones). | `list_tables` or column check via `execute_sql` confirms the schema matches. |
+| Changed Python files in `src/` | Trigger a Render redeploy (or verify auto-deploy picked it up). The FastAPI service at `NEXT_PUBLIC_API_URL` must be running the latest code. | `curl $NEXT_PUBLIC_API_URL/health` returns `{"status":"ok"}`. |
+| New env var requirements (`.env`, docs, code referencing `os.environ`) | Add the var to **both** the Render service env vars **and** the relevant Vercel project(s) env vars. | App starts without `KeyError` or `503 unavailable` from missing config. |
+| Changed `apps/app/` or `apps/admin/` | Vercel auto-deploys from `main`. For preview, check the Vercel deployment log. | Preview URL loads without error. |
 
 ## Spec-Kit (Spec-Driven Development)
 

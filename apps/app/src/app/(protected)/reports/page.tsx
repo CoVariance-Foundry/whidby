@@ -15,6 +15,15 @@ function archetypeShort(id: ArchetypeId): string {
   return ARCHETYPES.find((a) => a.id === id)?.short ?? "Mixed";
 }
 
+function isMissingArchivedAtColumn(message: string | undefined): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("archived_at") &&
+    (normalized.includes("does not exist") || normalized.includes("not found"))
+  );
+}
+
 export default async function ReportsPage() {
   const supabase = await createClient();
   let { data, error } = await supabase
@@ -24,7 +33,9 @@ export default async function ReportsPage() {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  if (error?.message?.includes("archived_at")) {
+  // Some environments can lag the migration that adds `reports.archived_at`.
+  // If that column is missing, retry the list query without the filter.
+  if (isMissingArchivedAtColumn(error?.message)) {
     ({ data, error } = await supabase
       .from("reports")
       .select("id, niche_keyword, geo_target, created_at, spec_version, metros")

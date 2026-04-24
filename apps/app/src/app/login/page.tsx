@@ -12,6 +12,7 @@ type Status = "idle" | "loading" | "error";
 // TODO: Replace with server-side IP-based rate-limiting (e.g. @upstash/ratelimit
 // in middleware or a /api/auth/login route handler) once Redis is provisioned.
 const MAX_LOCK_MS = 15_000;
+const LOGIN_TIMEOUT_MS = 12_000;
 function computeLockMs(failCount: number): number {
   if (failCount <= 0) return 0;
   return Math.min(1000 * 2 ** (failCount - 1), MAX_LOCK_MS);
@@ -59,19 +60,43 @@ function LoginForm() {
   const remainingSec = Math.ceil(remainingMs / 1000);
   const isBusy = status === "loading" || isLocked;
 
+  async function signInWithTimeout(email: string, password: string) {
+    const supabase = createClient();
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<{ error: { message: string } }>(
+      (resolve) => {
+        timeoutHandle = setTimeout(() => {
+          resolve({
+            error: {
+              message:
+                "Sign-in timed out. Check API health and try again in a few seconds.",
+            },
+          });
+        }, LOGIN_TIMEOUT_MS);
+      },
+    );
+
+    const signInPromise = supabase.auth.signInWithPassword({ email, password });
+    const result = await Promise.race([signInPromise, timeoutPromise]);
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    return result;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isBusy) return;
     setStatus("loading");
     setErrorMsg("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await signInWithTimeout(email, password);
 
     if (error) {
+      console.error("[login] sign-in failed", {
+        message: error.message,
+        email_domain: email.includes("@") ? email.split("@")[1] : "unknown",
+      });
       setErrorMsg(error.message);
       setStatus("error");
       failCountRef.current += 1;

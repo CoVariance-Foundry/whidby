@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from src.pipeline.dfs_normalizers import (
+    normalize_business_listings_rows,
+    normalize_gbp_info_rows,
+    normalize_google_reviews_rows,
+    normalize_serp_maps_rows,
+)
 from src.pipeline.extractors import (
     extract_ai_resilience_signals,
     extract_demand_signals,
@@ -52,13 +58,15 @@ def extract_signals(
         raise ValueError("keyword_expansion is required and must be a list")
 
     raw_serp = list(raw_metro_bundle.get("serp_organic", []))
-    raw_serp_maps = list(raw_metro_bundle.get("serp_maps", []))
+    raw_serp_maps = normalize_serp_maps_rows(list(raw_metro_bundle.get("serp_maps", [])))
     raw_keyword_volume = list(raw_metro_bundle.get("keyword_volume", []))
     raw_backlinks = list(raw_metro_bundle.get("backlinks", []))
     raw_lighthouse = list(raw_metro_bundle.get("lighthouse", []))
-    raw_reviews = list(raw_metro_bundle.get("google_reviews", []))
-    raw_gbp = list(raw_metro_bundle.get("gbp_info", []))
-    raw_listings = list(raw_metro_bundle.get("business_listings", []))
+    raw_reviews = normalize_google_reviews_rows(list(raw_metro_bundle.get("google_reviews", [])))
+    raw_gbp = normalize_gbp_info_rows(list(raw_metro_bundle.get("gbp_info", [])))
+    raw_listings = normalize_business_listings_rows(
+        list(raw_metro_bundle.get("business_listings", []))
+    )
 
     serp_context = parse_serp_features(raw_serp)
     aio_by_keyword = _keyword_aio_lookup(raw_serp)

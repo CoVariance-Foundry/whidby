@@ -54,25 +54,82 @@ class FakeDataForSEOClient:
         self.calls.append(("serp_maps", {"keyword": keyword, "location_code": location_code}))
         if self.fail_task_type == "serp_maps":
             return APIResponse(status="error", error="serp_maps failed")
-        return APIResponse(status="ok", data=[{"keyword": keyword, "items": [{"title": "Local Biz"}]}], cost=0.0006)
+        return APIResponse(
+            status="ok",
+            data=[{
+                "keyword": keyword,
+                "items": [
+                    {
+                        "type": "maps_search",
+                        "title": "Local Biz",
+                        "rating": {"value": 4.3, "votes_count": 42},
+                    },
+                ],
+            }],
+            cost=0.0006,
+        )
 
     async def business_listings(self, category: str, location_code: int) -> APIResponse:
         self.calls.append(("business_listings", {"category": category, "location_code": location_code}))
         if self.fail_task_type == "business_listings":
             return APIResponse(status="error", error="business_listings failed")
-        return APIResponse(status="ok", data=[{"title": "Business"}], cost=0.01)
+        return APIResponse(
+            status="ok",
+            data=[{
+                "total_count": 1,
+                "items": [
+                    {
+                        "type": "business_listing",
+                        "title": "Business",
+                        "phone": "+15551234",
+                        "address": "123 Main St",
+                        "domain": "biz.com",
+                        "rating": {"value": 4.0, "votes_count": 20},
+                    },
+                ],
+            }],
+            cost=0.01,
+        )
 
     async def google_reviews(self, keyword: str, location_code: int) -> APIResponse:
         self.calls.append(("google_reviews", {"keyword": keyword, "location_code": location_code}))
         if self.fail_task_type == "google_reviews":
             return APIResponse(status="error", error="google_reviews failed")
-        return APIResponse(status="ok", data=[{"rating": 4.4, "votes": 31}], cost=0.005)
+        return APIResponse(
+            status="ok",
+            data=[{
+                "rating": {"value": 4.4, "votes_count": 31},
+                "reviews_count": 31,
+                "items": [
+                    {"timestamp": "2026-01-15 10:00:00 +00:00", "rating": {"value": 5}},
+                    {"timestamp": "2026-02-15 10:00:00 +00:00", "rating": {"value": 4}},
+                ],
+            }],
+            cost=0.005,
+        )
 
     async def google_my_business_info(self, keyword: str, location_code: int) -> APIResponse:
         self.calls.append(("gbp_info", {"keyword": keyword, "location_code": location_code}))
         if self.fail_task_type == "gbp_info":
             return APIResponse(status="error", error="gbp_info failed")
-        return APIResponse(status="ok", data=[{"has_phone": True, "has_hours": True}], cost=0.004)
+        return APIResponse(
+            status="ok",
+            data=[{
+                "items": [
+                    {
+                        "type": "google_business_info",
+                        "phone": "+15551234",
+                        "url": "https://biz.com",
+                        "description": "A business",
+                        "work_time": {"work_hours": {"timetable": {"monday": []}}},
+                        "total_photos": 8,
+                        "category": "Service",
+                        "attributes": {"available_attributes": []},
+                    },
+                ],
+            }],
+            cost=0.004,
+        )
 
     async def backlinks_summary(self, target: str) -> APIResponse:
         self.calls.append(("backlinks", {"target": target}))
