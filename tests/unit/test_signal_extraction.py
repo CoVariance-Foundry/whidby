@@ -28,6 +28,21 @@ def test_extract_signals_returns_all_categories_and_required_keys() -> None:
     assert len(signals["ai_resilience"]) == 5
     assert len(signals["monetization"]) == 6
 
+    assert signals["demand"]["total_search_volume"] > 0
+    assert signals["demand"]["avg_cpc"] > 0
+
+    assert signals["organic_competition"]["avg_top5_da"] > 0
+    assert signals["organic_competition"]["title_keyword_match_rate"] > 0
+
+    assert signals["local_competition"]["local_pack_review_count_avg"] > 0
+    assert signals["local_competition"]["local_pack_rating_avg"] > 0
+    assert signals["local_competition"]["gbp_completeness_avg"] > 0
+    assert signals["local_competition"]["citation_consistency"] > 0
+
+    assert signals["ai_resilience"]["aio_trigger_rate"] > 0
+
+    assert signals["monetization"]["avg_cpc"] > 0
+
 
 def test_extract_signals_effective_volume_and_aio_detection_behavior() -> None:
     signals = extract_signals(build_sample_bundle(), build_keyword_expansion())

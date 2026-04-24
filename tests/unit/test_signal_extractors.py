@@ -78,6 +78,29 @@ def test_extract_local_competition_handles_missing_local_pack_defaults() -> None
     assert local["local_pack_review_count_avg"] == 0.0
 
 
+def test_extract_local_competition_produces_nonzero_values_with_data() -> None:
+    """Happy-path: when maps/reviews/GBP/listings data is present, signals must be non-zero."""
+    bundle = build_sample_bundle()
+    serp_context = parse_serp_features(bundle["serp_organic"])
+    local = extract_local_competition_signals(
+        serp_context=serp_context,
+        serp_maps_rows=bundle["serp_maps"],
+        google_reviews_rows=bundle["google_reviews"],
+        gbp_info_rows=bundle["gbp_info"],
+        business_listings_rows=bundle["business_listings"],
+    )
+    assert local["local_pack_present"] is True
+    assert local["local_pack_position"] < 10
+    assert local["local_pack_review_count_avg"] > 0
+    assert local["local_pack_review_count_max"] > 0
+    assert local["local_pack_rating_avg"] > 3.0
+    assert local["review_velocity_avg"] > 0
+    assert local["gbp_completeness_avg"] > 0
+    assert local["gbp_photo_count_avg"] > 0
+    assert local["gbp_posting_activity"] > 0
+    assert local["citation_consistency"] > 0
+
+
 def test_extract_demand_signals_handles_nested_dfs_keyword_volume() -> None:
     """DFS keyword_volume returns items nested under a wrapper dict."""
     dfs_volume_rows = [
@@ -140,3 +163,11 @@ def test_extract_ai_and_monetization_blocks_contract_shape() -> None:
         "aggregator_presence",
         "ads_present",
     }
+
+    assert local["local_pack_review_count_avg"] > 0
+    assert local["local_pack_review_count_max"] > 0
+    assert local["local_pack_rating_avg"] > 0
+    assert local["review_velocity_avg"] > 0
+    assert local["gbp_completeness_avg"] > 0
+    assert local["gbp_photo_count_avg"] > 0
+    assert local["citation_consistency"] > 0
