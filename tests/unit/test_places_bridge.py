@@ -197,7 +197,7 @@ async def test_bridge_logs_warning_on_empty_rows(caplog: pytest.LogCaptureFixtur
 
 @pytest.mark.asyncio
 async def test_bridge_logs_warning_on_zero_matches(caplog: pytest.LogCaptureFixture) -> None:
-    rows = [{"location_code": 9001, "location_name": "Berlin,Berlin,Germany", "country_iso_code": "DE"}]
+    rows = [{"location_code": 9001, "location_name": "Berlin,Berlin,Germany", "country_iso_code": "DE", "location_type": "City"}]
     bridge = DataForSEOLocationBridge(_FakeDFSClientOk(rows))  # type: ignore[arg-type]
     suggestions = [_suggestion("Huntsville", "AL")]
 
@@ -214,7 +214,7 @@ async def test_bridge_logs_info_on_successful_load(caplog: pytest.LogCaptureFixt
     with caplog.at_level(logging.INFO, logger="src.research_agent.places"):
         await bridge.enrich([_suggestion("Phoenix", "AZ")])
 
-    assert any("loaded" in r.message and "location rows" in r.message for r in caplog.records)
+    assert any("loaded" in r.message and "city rows" in r.message for r in caplog.records)
 
 
 @pytest.mark.asyncio

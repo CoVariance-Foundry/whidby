@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 MAPBOX_GEOCODE_V6_FORWARD_URL = "https://api.mapbox.com/search/geocode/v6/forward"
 _DFS_LOCATION_CACHE_TTL_SECONDS = 60 * 60
+_CITY_LOCATION_TYPES = frozenset({"city"})
 
 
 class MapboxPlacesError(RuntimeError):
@@ -259,6 +260,7 @@ class DataForSEOLocationBridge:
         self._client = client
         self._cache_lock = asyncio.Lock()
         self._cached_rows: list[dict[str, Any]] = []
+        self._city_index: dict[str, list[dict[str, Any]]] = {}
         self._cache_loaded_at = 0.0
 
     async def _location_rows(self) -> list[dict[str, Any]]:
@@ -277,16 +279,76 @@ class DataForSEOLocationBridge:
                 self._cache_loaded_at = time.monotonic()
                 return self._cached_rows
 
-            rows = _extract_candidate_rows(response.data)
+            raw_rows = _extract_candidate_rows(response.data)
+            rows = [
+                r for r in raw_rows
+                if str(r.get("location_type", "")).lower() in _CITY_LOCATION_TYPES
+            ]
+
+            index: dict[str, list[dict[str, Any]]] = {}
+            for row in rows:
+                loc_name = str(row.get("location_name") or "")
+                parts = [p.strip() for p in loc_name.split(",") if p.strip()]
+                if parts:
+                    key = _normalized_text(parts[0])
+                    if key:
+                        index.setdefault(key, []).append(row)
+
             if rows:
-                logger.info("DFS location bridge loaded %d location rows", len(rows))
+                logger.info(
+                    "DFS location bridge loaded %d city rows (from %d total), index keys=%d",
+                    len(rows), len(raw_rows), len(index),
+                )
             else:
                 logger.warning(
                     "DFS location bridge loaded 0 rows — autocomplete codes will be null"
                 )
             self._cached_rows = rows
+            self._city_index = index
             self._cache_loaded_at = time.monotonic()
             return self._cached_rows
+
+    def _resolve_indexed(self, suggestion: PlaceSuggestion) -> tuple[int | None, str | None]:
+        """Resolve DFS location code via pre-built city index — O(1) lookup."""
+        city_norm = _normalized_text(suggestion.city)
+        if not city_norm:
+            return None, None
+
+        candidates = self._city_index.get(city_norm, [])
+        if not candidates:
+            return None, None
+
+        full_name_norm = _normalized_text(suggestion.full_name)
+        country_norm = suggestion.country_iso_code.upper()
+
+        best_code: int | None = None
+        best_score = 0
+
+        for row in candidates:
+            row_country = str(row.get("country_iso_code") or "").strip().upper()
+            if country_norm and row_country and row_country != country_norm:
+                continue
+
+            code = row.get("location_code")
+            if not isinstance(code, int):
+                continue
+
+            location_name = str(row.get("location_name") or "").strip()
+            parts = [part.strip() for part in location_name.split(",") if part.strip()]
+
+            score = 100
+            if len(parts) > 1:
+                state_part_norm = _normalized_text(parts[1])
+                if state_part_norm and state_part_norm in full_name_norm:
+                    score = 110
+
+            if score > best_score:
+                best_score = score
+                best_code = code
+
+        if best_code is None:
+            return None, None
+        return best_code, "high"
 
     async def enrich(
         self, suggestions: list[PlaceSuggestion]
@@ -295,21 +357,21 @@ class DataForSEOLocationBridge:
             return suggestions
 
         try:
-            rows = await self._location_rows()
+            await self._location_rows()
         except Exception:
             logger.warning("DataForSEO location bridge failed", exc_info=True)
             return suggestions
 
-        if not rows:
+        if not self._city_index:
             logger.warning(
-                "DFS location bridge has 0 cached rows — skipping enrichment for %d suggestions",
+                "DFS location bridge has empty index — skipping enrichment for %d suggestions",
                 len(suggestions),
             )
             return suggestions
 
         matched = 0
         for suggestion in suggestions:
-            code, confidence = resolve_dataforseo_location(suggestion, rows)
+            code, confidence = self._resolve_indexed(suggestion)
             suggestion.dataforseo_location_code = code
             suggestion.dataforseo_match_confidence = confidence
             if code is not None:
@@ -317,8 +379,8 @@ class DataForSEOLocationBridge:
 
         if matched == 0 and suggestions:
             logger.warning(
-                "DFS bridge matched 0 of %d suggestions (rows=%d)",
-                len(suggestions), len(rows),
+                "DFS bridge matched 0 of %d suggestions (index_keys=%d)",
+                len(suggestions), len(self._city_index),
             )
         else:
             logger.info(
