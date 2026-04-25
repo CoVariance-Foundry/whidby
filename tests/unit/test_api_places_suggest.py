@@ -220,24 +220,23 @@ def test_places_suggest_region_prefers_trailing_region_code_segment(
     assert row["region"] == "AZ"
 
 
-def test_places_suggest_bridge_returns_code_when_dfs_has_match(
+def test_places_suggest_returns_null_dfs_code_without_bridge(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Autocomplete skips DFS bridge enrichment to avoid OOM on Render."""
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
     monkeypatch.setattr(
         "src.research_agent.places.httpx.AsyncClient",
         _FakeMapboxAsyncClient,
     )
     _FakeMapboxAsyncClient.payload = _mapbox_feature_payload()
-    bridge = DataForSEOLocationBridge(_FakeDataForSEOClientWithPhoenix())
-    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: bridge)
 
     response = client.get("/api/places/suggest", params={"q": "phoe"})
     assert response.status_code == 200
     row = response.json()[0]
-    assert row["dataforseo_location_code"] == 1013211
-    assert row["dataforseo_match_confidence"] == "high"
+    assert row["dataforseo_location_code"] is None
+    assert row["city"] == "Phoenix"
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,6 @@ Run with: uvicorn src.research_agent.api:app --reload --port 8000
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -199,15 +198,6 @@ async def places_suggest(
             status_code=502,
             detail="Mapbox autocomplete failed unexpectedly.",
         ) from None
-
-    bridge = _places_dataforseo_bridge()
-    if bridge is not None:
-        try:
-            suggestions = await asyncio.wait_for(bridge.enrich(suggestions), timeout=2.0)
-        except asyncio.TimeoutError:
-            logger.warning("DFS bridge enrichment timed out — returning raw Mapbox results")
-        except Exception:
-            logger.warning("DFS bridge enrichment failed — returning raw Mapbox results")
 
     return [row.to_dict() for row in suggestions]
 
