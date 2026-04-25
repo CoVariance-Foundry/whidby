@@ -37,6 +37,7 @@ export default function CityAutocomplete({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
 
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,12 +80,13 @@ export default function CityAutocomplete({
           setOpen(true);
           setHasFetched(true);
           setActiveIndex(-1);
+          setFetchError(false);
         } catch (err) {
-          // AbortError is expected when the user keeps typing — swallow it.
           if (err instanceof DOMException && err.name === "AbortError") return;
           setSuggestions([]);
           setOpen(false);
           setHasFetched(false);
+          setFetchError(true);
         } finally {
           setLoading(false);
         }
@@ -184,6 +186,12 @@ export default function CityAutocomplete({
         >
           …
         </span>
+      )}
+
+      {fetchError && !open && (
+        <div className="mt-1 text-xs italic text-[var(--color-muted)]">
+          City suggestions unavailable — try again shortly
+        </div>
       )}
 
       {open && (
