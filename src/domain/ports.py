@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from src.domain.entities import City, Market, Service, SeasonalityCurve
+from src.domain.entities import City, Market, SeasonalityCurve
 from src.domain.queries import MarketQuery
 
 
