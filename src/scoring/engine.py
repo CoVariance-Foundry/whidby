@@ -8,6 +8,7 @@ from typing import Any
 from src.config.constants import FIXED_WEIGHTS
 
 from .ai_resilience_score import compute_ai_resilience_score
+from .gbp_score import compute_gbp_score
 from .composite_score import compute_opportunity_score
 from .confidence_score import compute_confidence
 from .demand_score import compute_demand_score
@@ -48,6 +49,7 @@ def compute_scores(
     local_competition = compute_local_competition_score(metro)
     monetization = compute_monetization_score(metro)
     ai_resilience = compute_ai_resilience_score(metro)
+    gbp = compute_gbp_score(metro)
     resolved_weights = resolve_strategy_weights(strategy_profile, metro)
 
     component_scores = {
@@ -56,6 +58,7 @@ def compute_scores(
         "local_competition": local_competition,
         "monetization": monetization,
         "ai_resilience": ai_resilience,
+        "gbp": gbp,
     }
 
     composite_weights = {
@@ -77,6 +80,7 @@ def compute_scores(
         "local_competition": local_competition,
         "monetization": monetization,
         "ai_resilience": ai_resilience,
+        "gbp": gbp,
         "opportunity": opportunity,
         "confidence": confidence,
         "resolved_weights": resolved_weights,
