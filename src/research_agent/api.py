@@ -22,12 +22,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
-from src.data.metro_db import Metro, MetroDB
 from src.clients.llm.client import LLMClient
+from src.clients.supabase_adapter import SupabaseMarketStore
 from src.clients.supabase_persistence import SupabasePersistence
-from src.pipeline.canonical_key import resolve_canonical_key
-from src.pipeline.feedback_logger import log_feedback
+from src.data.metro_db import Metro, MetroDB
+from src.domain.services.market_service import MarketService, ScoreRequest
 from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
@@ -283,19 +284,54 @@ class NicheScoreRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Niche scoring helpers (patched in tests)
+# MarketService singleton (replaces per-request client construction)
 # ---------------------------------------------------------------------------
 
+_MARKET_SERVICE: MarketService | None = None
 
-def _persist_report(report: dict[str, Any]) -> str:
-    return SupabasePersistence().persist_report(report)
+
+def _build_market_service() -> MarketService:
+    dfs = _shared_dfs_client()
+    llm: Any = None
+    try:
+        llm = LLMClient()
+    except Exception:
+        logger.warning("LLMClient unavailable; only dry-run scoring will work")
+
+    store: Any = None
+    kb: Any = None
+    try:
+        store = SupabaseMarketStore(SupabasePersistence())
+    except Exception:
+        logger.warning("SupabaseMarketStore unavailable; persistence will fail")
+    try:
+        kb = KBKnowledgeStore(KBPersistence())
+    except Exception:
+        logger.warning("KBKnowledgeStore unavailable; KB operations will fail")
+
+    return MarketService(
+        pipeline_fn=score_niche_for_metro,
+        dfs_client=dfs,
+        llm_client=llm,
+        market_store=store,
+        knowledge_store=kb,
+    )
+
+
+def _market_service() -> MarketService:
+    global _MARKET_SERVICE
+    if _MARKET_SERVICE is None:
+        _MARKET_SERVICE = _build_market_service()
+    return _MARKET_SERVICE
 
 
 def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
+    """Read a report by ID. Used by GET /api/niches/{report_id}."""
+    svc = _market_service()
+    if svc._store is not None:
+        return svc._store.read_report(report_id)
     import os
-
     from supabase import create_client
-
     client = create_client(
         os.environ["NEXT_PUBLIC_SUPABASE_URL"],
         os.environ["SUPABASE_SERVICE_ROLE_KEY"],
@@ -455,149 +491,27 @@ def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
 @app.post("/api/niches/score")
 async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
-    import time as _time
-
-    request_id = str(uuid.uuid4())
-    handler_start = _time.monotonic()
-    logger.info(
-        "niches_score START request_id=%s niche=%r city=%r state=%r dry_run=%s",
-        request_id, req.niche, req.city, req.state, req.dry_run,
-    )
-
-    canonical = resolve_canonical_key(
-        niche=req.niche,
-        city=req.city,
-        state=req.state,
-        place_id=req.place_id,
-        dataforseo_location_code=req.dataforseo_location_code,
-    )
-    input_hash = canonical.input_hash(req.strategy_profile)
-
-    dfs: DataForSEOClient | None = None
     try:
-        if req.dry_run:
-            result = await score_niche_for_metro(
-                niche=req.niche, city=req.city, state=req.state,
-                place_id=req.place_id,
-                dataforseo_location_code=req.dataforseo_location_code,
-                strategy_profile=req.strategy_profile,
-                llm_client=None, dataforseo_client=None, dry_run=True,
-                request_id=request_id,
-            )
-        else:
-            dfs = _shared_dfs_client()
-            if dfs is None:
-                import os
-                dfs = DataForSEOClient(
-                    login=os.environ["DATAFORSEO_LOGIN"],
-                    password=os.environ["DATAFORSEO_PASSWORD"],
-                )
-            llm = LLMClient()
-            result = await score_niche_for_metro(
-                niche=req.niche, city=req.city, state=req.state,
-                place_id=req.place_id,
-                dataforseo_location_code=req.dataforseo_location_code,
-                strategy_profile=req.strategy_profile,
-                llm_client=llm, dataforseo_client=dfs,
-                request_id=request_id,
-            )
+        score_request = ScoreRequest(
+            niche=req.niche,
+            city=req.city,
+            state=req.state,
+            place_id=req.place_id,
+            dataforseo_location_code=req.dataforseo_location_code,
+            strategy_profile=req.strategy_profile,
+            dry_run=req.dry_run,
+        )
+        result = await _market_service().score(score_request)
+        return result.to_api_response()
     except ValueError as exc:
-        elapsed_ms = int((_time.monotonic() - handler_start) * 1000)
-        logger.warning("niches_score ValueError request_id=%s elapsed_ms=%d: %s",
-                       request_id, elapsed_ms, exc)
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
-        elapsed_ms = int((_time.monotonic() - handler_start) * 1000)
         logger.exception(
-            "niches_score pipeline failed request_id=%s elapsed_ms=%d niche=%r city=%r",
-            request_id, elapsed_ms, req.niche, req.city,
+            "niches_score pipeline failed niche=%r city=%r", req.niche, req.city
         )
-        raise HTTPException(status_code=500, detail="Scoring pipeline failed unexpectedly")
-
-    pipeline_ms = int((_time.monotonic() - handler_start) * 1000)
-
-    report_id: str | None = None
-    persist_failed = False
-    persist_start = _time.monotonic()
-    try:
-        report_id = _persist_report(result.report)
-    except Exception:
-        logger.exception("niches_score persistence failed for report_id=%s",
-                         result.report.get("report_id"))
-        report_id = result.report.get("report_id")
-        persist_failed = True
-    persist_ms = int((_time.monotonic() - persist_start) * 1000)
-
-    flush_ms = 0
-    if dfs is not None and report_id:
-        flush_start = _time.monotonic()
-        try:
-            dfs.cost_tracker.flush_to_supabase(report_id)
-        except Exception:
-            logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
-        flush_ms = int((_time.monotonic() - flush_start) * 1000)
-
-    entity_id: str | None = None
-    snapshot_id: str | None = None
-    try:
-        kb = KBPersistence()
-        entity_id = kb.upsert_entity(canonical)
-        snapshot_id = kb.create_snapshot(
-            entity_id=entity_id,
-            input_hash=input_hash,
-            strategy_profile=req.strategy_profile,
-            report=result.report,
-            report_id=report_id,
+        raise HTTPException(
+            status_code=500, detail="Scoring pipeline failed unexpectedly"
         )
-        if report_id:
-            kb.link_report(report_id=report_id, entity_id=entity_id, snapshot_id=snapshot_id)
-
-        kb.store_evidence(
-            snapshot_id=snapshot_id,
-            artifact_type="score_bundle",
-            payload=result.report.get("metros", []),
-        )
-        if result.report.get("keyword_expansion"):
-            kb.store_evidence(
-                snapshot_id=snapshot_id,
-                artifact_type="keyword_expansion",
-                payload=result.report["keyword_expansion"],
-            )
-    except Exception:
-        logger.exception("KB persistence failed for report_id=%s", report_id)
-
-    try:
-        if report_id and not persist_failed:
-            kb_client = KBPersistence()
-            log_feedback(result.report, kb_client)
-    except Exception:
-        logger.exception("Feedback logging failed for report_id=%s", report_id)
-
-    total_ms = int((_time.monotonic() - handler_start) * 1000)
-
-    response: dict[str, Any] = {
-        "report_id": report_id,
-        "opportunity_score": result.opportunity_score,
-        "classification_label": (
-            "High" if result.opportunity_score >= 75
-            else "Medium" if result.opportunity_score >= 50
-            else "Low"
-        ),
-        "evidence": result.evidence,
-        "report": result.report,
-        "entity_id": entity_id,
-        "snapshot_id": snapshot_id,
-    }
-    if persist_failed:
-        response["persist_warning"] = "Report scored successfully but failed to save to database"
-    logger.info(
-        "niches_score DONE request_id=%s report_id=%s entity_id=%s snapshot_id=%s "
-        "opportunity=%s persist_ok=%s pipeline_ms=%d persist_ms=%d flush_ms=%d total_ms=%d",
-        request_id, report_id, entity_id, snapshot_id,
-        result.opportunity_score, not persist_failed,
-        pipeline_ms, persist_ms, flush_ms, total_ms,
-    )
-    return response
 
 
 @app.get("/api/niches/{report_id}")

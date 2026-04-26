@@ -50,6 +50,10 @@ class KnowledgeStore(Protocol):
     def store_evidence(
         self, snapshot_id: str, artifact_type: str, payload: Any
     ) -> None: ...
+    def link_report(
+        self, *, report_id: str, entity_id: str, snapshot_id: str
+    ) -> None: ...
+    def insert_feedback(self, row: dict[str, Any]) -> str: ...
 
 
 class GeoLookup(Protocol):
