@@ -38,9 +38,14 @@ def compute_scores(
     *,
     metro_signals: Mapping[str, Any],
     all_metro_signals: Sequence[Mapping[str, Any]],
-    strategy_profile: str,
+    strategy_profile: str = "balanced",
+    weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """Compute all M7 scores for a single metro."""
+    """Compute all M7 scores for a single metro.
+
+    When *weights* is provided the composite score uses those weights
+    directly instead of deriving them from *strategy_profile*.
+    """
     metro = _flatten_signal_shape(metro_signals)
     cohort = [_flatten_signal_shape(item) for item in all_metro_signals]
 
@@ -50,7 +55,6 @@ def compute_scores(
     monetization = compute_monetization_score(metro)
     ai_resilience = compute_ai_resilience_score(metro)
     gbp = compute_gbp_score(metro)
-    resolved_weights = resolve_strategy_weights(strategy_profile, metro)
 
     component_scores = {
         "demand": demand,
@@ -61,13 +65,18 @@ def compute_scores(
         "gbp": gbp,
     }
 
-    composite_weights = {
-        "demand": FIXED_WEIGHTS["demand"],
-        "organic_competition": resolved_weights["organic"],
-        "local_competition": resolved_weights["local"],
-        "monetization": FIXED_WEIGHTS["monetization"],
-        "ai_resilience": FIXED_WEIGHTS["ai_resilience"],
-    }
+    if weights is not None:
+        composite_weights = weights
+        resolved = None
+    else:
+        resolved = resolve_strategy_weights(strategy_profile, metro)
+        composite_weights = {
+            "demand": FIXED_WEIGHTS["demand"],
+            "organic_competition": resolved["organic"],
+            "local_competition": resolved["local"],
+            "monetization": FIXED_WEIGHTS["monetization"],
+            "ai_resilience": FIXED_WEIGHTS["ai_resilience"],
+        }
 
     opportunity = compute_opportunity_score(
         component_scores=component_scores,
@@ -83,13 +92,14 @@ def compute_scores(
         "gbp": gbp,
         "opportunity": opportunity,
         "confidence": confidence,
-        "resolved_weights": resolved_weights,
+        "resolved_weights": resolved,
     }
 
 
 def compute_batch_scores(
     metros: Sequence[Mapping[str, Any]],
-    strategy_profile: str,
+    strategy_profile: str = "balanced",
+    weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Compute M7 scores for a metro batch using shared cohort context."""
     return [
@@ -97,6 +107,7 @@ def compute_batch_scores(
             metro_signals=metro,
             all_metro_signals=metros,
             strategy_profile=strategy_profile,
+            weights=weights,
         )
         for metro in metros
     ]
