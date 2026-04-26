@@ -867,7 +867,7 @@ tests/
 
 ### Pipeline Orchestrator (operational wiring)
 
-**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Resolves the metro via `MetroDB.from_seed().expand_scope(...)`, threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
+**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Geo resolution is delegated to `GeoResolver` (via `MetroDBGeoLookup`), which handles three paths: explicit DataForSEO code, CBSA seed lookup, and state-level DFS code fallback. The orchestrator then threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
 
 **Files:**
 ```
