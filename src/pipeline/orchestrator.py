@@ -11,7 +11,9 @@ from src.classification.ai_exposure import classify_ai_exposure
 from src.classification.difficulty_tier import compute_difficulty_tier
 from src.classification.guidance_generator import classify_and_generate_guidance
 from src.classification.serp_archetype import classify_serp_archetype
-from src.data.metro_db import Metro, MetroDB
+from src.data.metro_db import MetroDB
+from src.data.metro_db_adapter import MetroDBGeoLookup
+from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
 from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
@@ -60,59 +62,24 @@ async def score_niche_for_metro(
         request_id, niche, city, state, dry_run,
     )
     metros_db = metro_db or MetroDB.from_seed()
-    target: Metro | None = None
-    resolved_state = state.strip().upper() if isinstance(state, str) and state.strip() else None
+    geo_lookup = MetroDBGeoLookup(metros_db)
+    resolver = GeoResolver(geo_lookup)
+    resolved = resolver.resolve(
+        city=city,
+        state=state,
+        place_id=place_id,
+        dataforseo_location_code=dataforseo_location_code,
+    )
+    resolved_state = resolved.state_code
 
-    if isinstance(dataforseo_location_code, int) and dataforseo_location_code > 0:
-        synthetic_code = f"mapbox:{place_id}" if place_id else f"manual:{city.lower().replace(' ', '-')}"
-        target = Metro(
-            cbsa_code=synthetic_code,
-            cbsa_name=city if not resolved_state else f"{city}, {resolved_state}",
-            state=resolved_state or "",
-            population=0,
-            principal_cities=[city],
-            dataforseo_location_codes=[dataforseo_location_code],
-        )
-    else:
-        target = metros_db.find_by_city(city, state=state)
-        if target is None and resolved_state:
-            # Fallback: city not in CBSA seed but we know the state.
-            # Use any seeded metro in that state for its DFS location code.
-            state_metros = [
-                m for m in metros_db.all_metros()
-                if m.state == resolved_state and m.dataforseo_location_codes
-            ]
-            if state_metros:
-                state_metros.sort(key=lambda m: m.population, reverse=True)
-                donor = state_metros[0]
-                logger.warning(
-                    "City %r not in CBSA seed; falling back to state-level DFS code "
-                    "from %s (code=%d) for state=%s",
-                    city, donor.cbsa_name,
-                    donor.dataforseo_location_codes[0], resolved_state,
-                )
-                synthetic_code = f"mapbox:{place_id}" if place_id else f"fallback:{city.lower().replace(' ', '-')}"
-                target = Metro(
-                    cbsa_code=synthetic_code,
-                    cbsa_name=f"{city}, {resolved_state}",
-                    state=resolved_state,
-                    population=0,
-                    principal_cities=[city],
-                    dataforseo_location_codes=donor.dataforseo_location_codes[:1],
-                )
-        if target is None:
-            raise ValueError(f"no CBSA match for city={city!r} state={state!r}")
-        if not resolved_state:
-            resolved_state = target.state
-
-    logger.info("Metro resolved: cbsa=%s name=%r state=%s", target.cbsa_code, target.cbsa_name, resolved_state)
+    logger.info("Metro resolved: cbsa=%s name=%r state=%s", resolved.cbsa_code, resolved.metro_name, resolved_state)
 
     if dry_run:
         return await _dry_run_result(
             niche=niche,
             city=city,
             state=resolved_state,
-            target=target,
+            target=resolved,
             place_id=place_id,
             dataforseo_location_code=dataforseo_location_code,
             strategy_profile=strategy_profile,
@@ -120,13 +87,9 @@ async def score_niche_for_metro(
             run_id=f"score-dry-{uuid4()}",
         )
 
-    if not target.dataforseo_location_codes:
-        raise ValueError(
-            f"metro {target.cbsa_code} has no DataForSEO location codes"
-        )
     m5_metro_input: dict[str, Any] = {
-        "metro_id": target.cbsa_code,
-        "location_code": target.dataforseo_location_codes[0],
+        "metro_id": resolved.cbsa_code,
+        "location_code": resolved.location_code,
         "principal_city": city,
     }
 
@@ -166,7 +129,7 @@ async def score_niche_for_metro(
     # --- M6 signal extraction ---
     m6_start = time.monotonic()
     logger.info("[%s] M6 signal extraction START", run_id)
-    metro_result = raw.metros[target.cbsa_code]
+    metro_result = raw.metros[resolved.cbsa_code]
     metro_bundle = asdict(metro_result)
     metro_bundle.pop("metro_id", None)
     signals = extract_signals(
@@ -205,7 +168,7 @@ async def score_niche_for_metro(
 
     classification_input: dict[str, Any] = {
         "niche": niche,
-        "metro_name": target.cbsa_name,
+        "metro_name": resolved.metro_name,
         "signals": signals,
         "scores": scores,
         "strategy_profile": strategy_profile,
@@ -246,9 +209,9 @@ async def score_niche_for_metro(
         "keyword_expansion": expansion,
         "metros": [
             {
-                "cbsa_code": target.cbsa_code,
-                "cbsa_name": target.cbsa_name,
-                "population": target.population,
+                "cbsa_code": resolved.cbsa_code,
+                "cbsa_name": resolved.metro_name,
+                "population": resolved.population,
                 "scores": scores,
                 "confidence": scores["confidence"],
                 "serp_archetype": serp_archetype,
@@ -294,7 +257,7 @@ async def _dry_run_result(
     niche: str,
     city: str,
     state: str | None,
-    target: Any,
+    target: ResolvedTarget,
     place_id: str | None,
     dataforseo_location_code: int | None,
     strategy_profile: str,
@@ -331,7 +294,7 @@ async def _dry_run_result(
 
     classification_input: dict[str, Any] = {
         "niche": niche,
-        "metro_name": target.cbsa_name,
+        "metro_name": target.metro_name,
         "signals": signals,
         "scores": scores,
         "strategy_profile": strategy_profile,
@@ -358,7 +321,7 @@ async def _dry_run_result(
         "metros": [
             {
                 "cbsa_code": target.cbsa_code,
-                "cbsa_name": target.cbsa_name,
+                "cbsa_name": target.metro_name,
                 "population": target.population,
                 "scores": scores,
                 "confidence": scores["confidence"],
