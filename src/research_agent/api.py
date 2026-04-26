@@ -66,14 +66,24 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     return JSONResponse(status_code=400, content={"detail": errors})
 
 
+_CORS_EXTRA = [
+    o.strip()
+    for o in os.environ.get("CORS_EXTRA_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",  # apps/admin dev
-        "http://localhost:3002",  # apps/app (consumer) dev
-        "https://app.thewidby.com",  # admin prod
-        "https://whidby-1.onrender.com",  # FastAPI self-host origin for health checks
-    ],
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "https://app.thewidby.com",
+    ] + _CORS_EXTRA,
+    allow_origin_regex=(
+        r"https://.*\.vercel\.app"
+        if os.environ.get("ENVIRONMENT") != "production"
+        else None
+    ),
     allow_methods=["*"],
     allow_headers=["*"],
 )
