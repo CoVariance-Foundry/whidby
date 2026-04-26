@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from src.config.constants import FIXED_WEIGHTS
+
 from .ai_resilience_score import compute_ai_resilience_score
 from .composite_score import compute_opportunity_score
 from .confidence_score import compute_confidence
@@ -47,14 +49,26 @@ def compute_scores(
     monetization = compute_monetization_score(metro)
     ai_resilience = compute_ai_resilience_score(metro)
     resolved_weights = resolve_strategy_weights(strategy_profile, metro)
+
+    component_scores = {
+        "demand": demand,
+        "organic_competition": organic_competition,
+        "local_competition": local_competition,
+        "monetization": monetization,
+        "ai_resilience": ai_resilience,
+    }
+
+    composite_weights = {
+        "demand": FIXED_WEIGHTS["demand"],
+        "organic_competition": resolved_weights["organic"],
+        "local_competition": resolved_weights["local"],
+        "monetization": FIXED_WEIGHTS["monetization"],
+        "ai_resilience": FIXED_WEIGHTS["ai_resilience"],
+    }
+
     opportunity = compute_opportunity_score(
-        demand=demand,
-        organic_competition=organic_competition,
-        local_competition=local_competition,
-        monetization=monetization,
-        ai_resilience=ai_resilience,
-        organic_weight=resolved_weights["organic"],
-        local_weight=resolved_weights["local"],
+        component_scores=component_scores,
+        weights=composite_weights,
     )
     confidence = compute_confidence(metro)
     return {
