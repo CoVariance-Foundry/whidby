@@ -34,3 +34,23 @@ def test_balanced_profile_golden_baseline():
     assert result["resolved_weights"] == GOLDEN_WEIGHTS
     assert abs(result["confidence"]["score"] - GOLDEN_CONFIDENCE) < 0.001
     assert result["confidence"]["flags"] == []
+
+
+def test_balanced_lens_weights_match_engine_legacy_path():
+    """BALANCED lens through compute_scores(weights=...) matches strategy_profile='balanced'."""
+    from src.domain.lenses import BALANCED
+
+    cohort = metro_cohort()
+    metro = cohort[2]
+
+    from_profile = compute_scores(
+        metro_signals=metro,
+        all_metro_signals=cohort,
+        strategy_profile="balanced",
+    )
+    from_lens = compute_scores(
+        metro_signals=metro,
+        all_metro_signals=cohort,
+        weights=BALANCED.weights,
+    )
+    assert abs(from_profile["opportunity"] - from_lens["opportunity"]) < 0.001
