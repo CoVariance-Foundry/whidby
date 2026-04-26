@@ -29,11 +29,10 @@ BALANCED = ScoringLens(
     description="Default balanced scoring across all signal dimensions.",
     weights={
         "demand": 0.25,
-        "organic_competition": 0.175,
-        "local_competition": 0.175,
+        "organic_competition": 0.15,
+        "local_competition": 0.20,
         "monetization": 0.20,
         "ai_resilience": 0.15,
-        "gbp": 0.05,
     },
     required_signals=frozenset({"demand", "organic_competition"}),
 )
