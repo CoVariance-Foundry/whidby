@@ -16,6 +16,9 @@ class City:
     business_density: dict[str, Any] = field(default_factory=dict)
     broadband_penetration: float | None = None
     growth_rate: float | None = None
+    cbsa_code: str | None = None
+    dataforseo_location_codes: list[int] = field(default_factory=list)
+    principal_cities: list[str] = field(default_factory=list)
     archetype: str | None = None
     demographics: dict[str, Any] = field(default_factory=dict)
 
