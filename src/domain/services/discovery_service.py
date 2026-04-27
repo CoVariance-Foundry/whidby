@@ -63,7 +63,43 @@ class DiscoveryService:
         scored: list[ScoredMarket],
         context: list[Market],
     ) -> list[ScoredMarket]:
-        raise NotImplementedError("Task 4")
+        """Re-rank markets considering portfolio context.
+
+        Same-city bonus: +5 (complementarity — can share local knowledge).
+        Same-service penalty: -10 (diminishing returns — already doing this).
+        Full NAICS similarity scoring is Phase 7.
+        """
+        if not context:
+            return scored
+
+        portfolio_cities = {m.city.city_id for m in context}
+        portfolio_services = {m.service.service_id for m in context}
+
+        adjusted: list[ScoredMarket] = []
+        for sm in scored:
+            bonus = 0.0
+            if sm.market.city.city_id in portfolio_cities:
+                bonus += 5.0
+            if sm.market.service.service_id in portfolio_services:
+                bonus -= 10.0
+            adjusted.append(ScoredMarket(
+                market=sm.market,
+                opportunity_score=sm.opportunity_score + bonus,
+                lens_id=sm.lens_id,
+                score_breakdown=sm.score_breakdown,
+            ))
+
+        adjusted.sort(key=lambda s: s.opportunity_score, reverse=True)
+        return [
+            ScoredMarket(
+                market=s.market,
+                opportunity_score=s.opportunity_score,
+                lens_id=s.lens_id,
+                rank=i + 1,
+                score_breakdown=s.score_breakdown,
+            )
+            for i, s in enumerate(adjusted)
+        ]
 
 
 def _evaluate_predicate(value: Any, operator: str, target: Any) -> bool:

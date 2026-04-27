@@ -213,3 +213,61 @@ def test_discover_filter_excludes_all_returns_empty(discovery: DiscoveryService)
     )
     results = asyncio.run(discovery.discover(query))
     assert results == []
+
+
+# --- Portfolio ranking tests ---
+
+
+def test_portfolio_same_city_bonus():
+    """Markets in same city as portfolio entries get a score boost."""
+    existing = Market(city=BOISE, service=PLUMBING)
+    store = FakeMarketStore(markets=_make_markets())
+    svc = DiscoveryService(market_store=store)
+    query = MarketQuery(lens=BALANCED, portfolio_context=[existing])
+    results = asyncio.run(svc.discover(query))
+    boise_markets = [r for r in results if r.market.city.city_id == "boise-id"]
+    assert len(boise_markets) > 0
+    assert min(r.rank for r in boise_markets) <= len(results) // 2
+
+
+def test_portfolio_same_service_penalty():
+    """Markets with same service as portfolio entries get penalized."""
+    existing = Market(city=PHOENIX, service=PLUMBING)
+    store = FakeMarketStore(markets=_make_markets())
+    svc = DiscoveryService(market_store=store)
+    query_with_portfolio = MarketQuery(lens=BALANCED, portfolio_context=[existing])
+    query_without = MarketQuery(lens=BALANCED)
+
+    with_portfolio = asyncio.run(svc.discover(query_with_portfolio))
+    without = asyncio.run(svc.discover(query_without))
+
+    wd_rank_with = next(
+        r.rank for r in with_portfolio
+        if r.market.service.service_id == "web-design"
+    )
+    wd_rank_without = next(
+        r.rank for r in without
+        if r.market.service.service_id == "web-design"
+    )
+    assert wd_rank_with <= wd_rank_without
+
+
+def test_portfolio_empty_context_no_change():
+    """Empty portfolio context list doesn't alter ranking."""
+    store = FakeMarketStore(markets=_make_markets())
+    svc = DiscoveryService(market_store=store)
+    query = MarketQuery(lens=BALANCED, portfolio_context=[])
+    results = asyncio.run(svc.discover(query))
+    ranks = [r.rank for r in results]
+    assert ranks == list(range(1, len(ranks) + 1))
+
+
+def test_portfolio_reranked_results_have_sequential_ranks():
+    """After portfolio ranking, ranks are sequential starting at 1."""
+    existing = Market(city=BOISE, service=PLUMBING)
+    store = FakeMarketStore(markets=_make_markets())
+    svc = DiscoveryService(market_store=store)
+    query = MarketQuery(lens=BALANCED, portfolio_context=[existing])
+    results = asyncio.run(svc.discover(query))
+    ranks = [r.rank for r in results]
+    assert ranks == list(range(1, len(ranks) + 1))
