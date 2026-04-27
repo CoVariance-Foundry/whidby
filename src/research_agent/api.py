@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.kb_adapter import KBKnowledgeStore
@@ -128,6 +128,37 @@ def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
 
     _PLACES_DATAFORSEO_BRIDGE = DataForSEOLocationBridge(dfs)
     return _PLACES_DATAFORSEO_BRIDGE
+
+
+# ---------------------------------------------------------------------------
+# Discovery service DI wiring
+# ---------------------------------------------------------------------------
+
+from src.domain.services.discovery_service import DiscoveryService  # noqa: E402
+from src.domain.queries import MarketQuery, CityFilter, ServiceFilter  # noqa: E402
+
+
+class _NullMarketStore:
+    """Returns empty results until a real MarketStore adapter is wired."""
+
+    def persist_report(self, report: dict[str, Any]) -> str:
+        return ""
+
+    def read_report(self, report_id: str) -> dict[str, Any] | None:
+        return None
+
+    def query_markets(self, query: Any) -> list:
+        return []
+
+
+_DISCOVERY_SERVICE: DiscoveryService | None = None
+
+
+def _get_discovery_service() -> DiscoveryService:
+    global _DISCOVERY_SERVICE
+    if _DISCOVERY_SERVICE is None:
+        _DISCOVERY_SERVICE = DiscoveryService(market_store=_NullMarketStore())
+    return _DISCOVERY_SERVICE
 
 
 @app.get("/health")
@@ -891,5 +922,114 @@ def _demo_scoring_results() -> dict[str, Any]:
                     "ai_resilience": 90, "opportunity": 69,
                 },
             },
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
+# Discovery & Lens endpoints
+# ---------------------------------------------------------------------------
+
+
+class DiscoverRequest(BaseModel):
+    """Request body for /api/discover."""
+
+    lens_id: str = "balanced"
+    city_filters: list[dict[str, Any]] = Field(default_factory=list)
+    service_filters: list[dict[str, Any]] = Field(default_factory=list)
+    portfolio_market_ids: list[str] | None = None
+    reference_city_id: str | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+@app.post("/api/discover")
+async def discover(req: DiscoverRequest) -> dict[str, Any]:
+    """Multi-market discovery — filters, lenses, ranking."""
+    if req.portfolio_market_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="portfolio_market_ids not yet supported (Phase 7)",
+        )
+    if req.reference_city_id:
+        raise HTTPException(
+            status_code=400,
+            detail="reference_city_id not yet supported (Phase 7)",
+        )
+
+    from src.domain.lenses import get_lens
+
+    lens = get_lens(req.lens_id)
+
+    query = MarketQuery(
+        city_filters=[
+            CityFilter(f["field"], f["operator"], f["value"])
+            for f in req.city_filters
+        ],
+        service_filters=[
+            ServiceFilter(f["field"], f["operator"], f["value"])
+            for f in req.service_filters
+        ],
+        lens=lens,
+        limit=req.limit,
+        offset=req.offset,
+    )
+
+    svc = _get_discovery_service()
+    results = await svc.discover(query)
+
+    return {
+        "markets": [
+            {
+                "rank": r.rank,
+                "opportunity_score": round(r.opportunity_score, 1),
+                "lens_id": r.lens_id,
+                "city": {
+                    "city_id": r.market.city.city_id,
+                    "name": r.market.city.name,
+                    "state": r.market.city.state,
+                    "population": r.market.city.population,
+                },
+                "service": {
+                    "service_id": r.market.service.service_id,
+                    "name": r.market.service.name,
+                },
+                "score_breakdown": r.score_breakdown,
+            }
+            for r in results
+        ],
+        "total": len(results),
+        "lens": {
+            "lens_id": lens.lens_id,
+            "name": lens.name,
+            "description": lens.description,
+        },
+        "query": {
+            "city_filters": req.city_filters,
+            "service_filters": req.service_filters,
+            "limit": req.limit,
+            "offset": req.offset,
+        },
+    }
+
+
+@app.get("/api/lenses")
+async def list_lenses() -> dict[str, Any]:
+    """List all available scoring lenses."""
+    from src.domain.lenses import available_lenses
+
+    return {
+        "lenses": [
+            {
+                "lens_id": lens.lens_id,
+                "name": lens.name,
+                "description": lens.description,
+                "weights": lens.weights,
+                "filters": [
+                    {"signal": f.signal, "operator": f.operator, "value": f.value}
+                    for f in lens.filters
+                ],
+            }
+            for lens in available_lenses()
         ]
     }
