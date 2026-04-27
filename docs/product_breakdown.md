@@ -905,6 +905,25 @@ Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
 
 Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted). The `/api/metros/suggest` route is proxied by `apps/admin/src/app/api/agent/metros/suggest/route.ts`.
 
+### MarketService (Phase 3)
+
+**File:** `src/domain/services/market_service.py`
+
+**Purpose:** Extracted business logic from the `niches_score` API handler. Coordinates the full scoring flow:
+1. Canonical key resolution (KB identity)
+2. Pipeline execution (via injected `score_niche_for_metro`)
+3. Report persistence (via `MarketStore` adapter)
+4. KB entity/snapshot/evidence updates (via `KnowledgeStore` adapter)
+5. DFS cost log flushing
+6. Feedback logging
+
+**Input:** `ScoreRequest(niche, city, state?, place_id?, dataforseo_location_code?, strategy_profile, dry_run)`
+**Output:** `ScoreResult(report_id, opportunity_score, classification_label, evidence, report, entity_id, snapshot_id, persist_warning?)`
+
+**Adapters:**
+- `src/clients/supabase_adapter.py` — `SupabaseMarketStore` implements `MarketStore`
+- `src/clients/kb_adapter.py` — `KBKnowledgeStore` implements `KnowledgeStore`
+
 ---
 
 ### M10: Business Discovery + Qualification
