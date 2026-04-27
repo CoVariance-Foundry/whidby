@@ -1,8 +1,8 @@
 # Environment & Configuration
 
-<!-- docguard:version 1.0.2 -->
+<!-- docguard:version 1.3.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-06 -->
+<!-- docguard:last-reviewed 2026-04-25 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file documents everything needed to run this project.
@@ -50,6 +50,8 @@
 | `ANTHROPIC_API_KEY` | Yes | Claude / agent tool-use. |
 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Yes | DataForSEO when plugins call live SEO APIs. |
 | `MAPBOX_ACCESS_TOKEN` | Yes | Mapbox Geocoding for `/api/places/suggest` global autocomplete. |
+| `ENVIRONMENT` | Recommended | `production` or `staging`. Controls CORS: staging allows `*.vercel.app` preview origins. |
+| `CORS_EXTRA_ORIGINS` | No | Comma-separated extra CORS origins (e.g. custom staging domains). |
 
 ### Operational notes
 
@@ -97,6 +99,43 @@ For Vercel preview E2E, set these env vars in the project's **Preview** environm
 |----------|-------|
 | `E2E_AUTH_EMAIL` | `e2e-test@widby.dev` |
 | `E2E_AUTH_PASSWORD` | `WidbyTest2026!` |
+
+## Staging Environment
+
+The project uses a `dev` branch as a staging/integration gate. Feature branches PR into `dev`; verified work on `dev` PRs into `main` for production.
+
+### Staging stack
+
+| Layer | Service | Branch | URL |
+|-------|---------|--------|-----|
+| Frontend | Vercel preview deploys (all 3 apps) | any non-`main` push | auto-generated `*.vercel.app` URLs |
+| API | `whidby-staging` (Render, Starter) | `dev` | `https://whidby-staging.onrender.com` |
+| Database | `widby-staging` (Supabase, free tier) | — | separate project URL |
+
+### Env var scoping
+
+Vercel env vars for **Preview** environment point at the staging backend:
+
+| Variable | Preview Value |
+|----------|--------------|
+| `NEXT_PUBLIC_API_URL` | `https://whidby-staging.onrender.com` |
+| `NEXT_PUBLIC_SUPABASE_URL` | staging Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | staging Supabase anon key |
+
+Production env vars are unchanged and only apply to `main` deploys.
+
+The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which enables CORS for all `*.vercel.app` preview origins. The production Render service (`whidby-1`) has `ENVIRONMENT=production`, which restricts CORS to the explicit allowlist.
+
+### Migration workflow
+
+1. Write migration in `supabase/migrations/`
+2. Apply to staging Supabase first (SQL editor or CLI)
+3. Test end-to-end on staging (Vercel preview + staging Render + staging Supabase)
+4. On merge to `main`, apply the same migration to production Supabase
+
+### Staging auth users
+
+The staging Supabase project needs the same auth accounts as production (see E2E test accounts below). Redirect URL pattern `https://*.vercel.app/**` must be added to the staging project's Auth settings.
 
 ## Setup Steps
 
@@ -171,3 +210,4 @@ Run in order from `supabase/migrations/`:
 | 1.0.2 | 2026-04-06 | Middleware fix | Added Vercel deployment checklist, `apps/app` config files, `NEXT_PUBLIC_API_URL` to root `.env.example` |
 | 1.1.0 | 2026-04-21 | Apps reorg + operational wiring | Distinguish `apps/admin` (3001) vs `apps/app` (3002), drop magic-link language for email/password, add `NEXT_PUBLIC_NICHE_DRY_RUN`, document migration 005 |
 | 1.2.0 | 2026-04-22 | Mapbox autocomplete | Added `MAPBOX_ACCESS_TOKEN` to both root and Render env tables |
+| 1.3.0 | 2026-04-25 | Staging environment | Added staging stack docs, `ENVIRONMENT`/`CORS_EXTRA_ORIGINS` vars, migration workflow, env scoping |
