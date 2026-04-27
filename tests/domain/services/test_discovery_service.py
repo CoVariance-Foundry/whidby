@@ -1,13 +1,16 @@
 """Tests for DiscoveryService — multi-market discovery."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
 
-from src.domain.entities import City, Service
-from src.domain.queries import CityFilter, ServiceFilter
+from src.domain.entities import City, Market, ScoredMarket, Service
+from src.domain.lenses import BALANCED
+from src.domain.queries import CityFilter, MarketQuery, ServiceFilter
 from src.domain.services.discovery_service import (
+    DiscoveryService,
     _evaluate_predicate,
     _passes_city_filters,
     _passes_service_filters,
@@ -99,3 +102,114 @@ def test_passes_service_filters_fulfillment_type():
 def test_passes_filters_missing_field_returns_false():
     filters = [CityFilter("nonexistent_field", ">", 0)]
     assert _passes_city_filters(BOISE, filters) is False
+
+
+# --- Fake MarketStore ---
+
+
+class FakeMarketStore:
+    """Returns pre-configured markets regardless of query."""
+
+    def __init__(self, markets: list[Market] | None = None):
+        self._markets = markets or []
+
+    def persist_report(self, report: dict[str, Any]) -> str:
+        return "fake-id"
+
+    def read_report(self, report_id: str) -> dict[str, Any] | None:
+        return None
+
+    def query_markets(self, query: MarketQuery) -> list[Market]:
+        return list(self._markets)
+
+
+def _make_markets() -> list[Market]:
+    return [
+        Market(city=BOISE, service=PLUMBING, signals=FULL_SIGNALS),
+        Market(city=PHOENIX, service=PLUMBING, signals=FULL_SIGNALS),
+        Market(city=BOISE, service=WEB_DESIGN, signals=FULL_SIGNALS),
+        Market(city=SMALL_TOWN, service=PLUMBING, signals=FULL_SIGNALS),
+    ]
+
+
+@pytest.fixture
+def discovery() -> DiscoveryService:
+    store = FakeMarketStore(markets=_make_markets())
+    return DiscoveryService(market_store=store)
+
+
+def test_discover_returns_scored_markets(discovery: DiscoveryService):
+    query = MarketQuery(lens=BALANCED)
+    results = asyncio.run(discovery.discover(query))
+    assert len(results) > 0
+    assert all(isinstance(r, ScoredMarket) for r in results)
+
+
+def test_discover_with_city_population_filter(discovery: DiscoveryService):
+    query = MarketQuery(
+        city_filters=[CityFilter("population", ">", 200_000)],
+        lens=BALANCED,
+    )
+    results = asyncio.run(discovery.discover(query))
+    assert len(results) > 0
+    for r in results:
+        assert r.market.city.population > 200_000
+
+
+def test_discover_with_service_filter(discovery: DiscoveryService):
+    query = MarketQuery(
+        service_filters=[ServiceFilter("fulfillment_type", "=", "physical")],
+        lens=BALANCED,
+    )
+    results = asyncio.run(discovery.discover(query))
+    assert len(results) > 0
+    for r in results:
+        assert r.market.service.fulfillment_type == "physical"
+
+
+def test_discover_combined_filters(discovery: DiscoveryService):
+    """City + service filters narrow results to intersection."""
+    query = MarketQuery(
+        city_filters=[CityFilter("population", ">", 200_000)],
+        service_filters=[ServiceFilter("fulfillment_type", "=", "physical")],
+        lens=BALANCED,
+    )
+    results = asyncio.run(discovery.discover(query))
+    for r in results:
+        assert r.market.city.population > 200_000
+        assert r.market.service.fulfillment_type == "physical"
+
+
+def test_discover_respects_limit(discovery: DiscoveryService):
+    query = MarketQuery(lens=BALANCED, limit=2)
+    results = asyncio.run(discovery.discover(query))
+    assert len(results) <= 2
+
+
+def test_discover_respects_offset(discovery: DiscoveryService):
+    all_results = asyncio.run(discovery.discover(MarketQuery(lens=BALANCED)))
+    offset_results = asyncio.run(discovery.discover(MarketQuery(lens=BALANCED, offset=1)))
+    assert len(offset_results) == len(all_results) - 1
+
+
+def test_discover_results_are_ranked(discovery: DiscoveryService):
+    query = MarketQuery(lens=BALANCED)
+    results = asyncio.run(discovery.discover(query))
+    ranks = [r.rank for r in results]
+    assert ranks == list(range(1, len(ranks) + 1))
+
+
+def test_discover_empty_store_returns_empty():
+    store = FakeMarketStore(markets=[])
+    svc = DiscoveryService(market_store=store)
+    results = asyncio.run(svc.discover(MarketQuery(lens=BALANCED)))
+    assert results == []
+
+
+def test_discover_filter_excludes_all_returns_empty(discovery: DiscoveryService):
+    query = MarketQuery(
+        city_filters=[CityFilter("population", ">", 99_000_000)],
+        lens=BALANCED,
+    )
+    results = asyncio.run(discovery.discover(query))
+    assert results == []

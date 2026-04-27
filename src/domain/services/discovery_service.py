@@ -12,6 +12,7 @@ from typing import Any
 from src.domain.entities import City, Market, ScoredMarket, Service
 from src.domain.queries import CityFilter, MarketQuery, ServiceFilter
 from src.domain.ports import CityDataProvider, MarketStore, ServiceDataProvider
+from src.domain.scoring import score_markets_batch
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,32 @@ class DiscoveryService:
         self._service_provider = service_provider
 
     async def discover(self, query: MarketQuery) -> list[ScoredMarket]:
-        raise NotImplementedError("Task 3")
+        markets = self._market_store.query_markets(query)
+        logger.info("Discovery: %d cached markets fetched", len(markets))
+
+        if query.has_city_filters():
+            markets = [
+                m for m in markets
+                if _passes_city_filters(m.city, query.city_filters)
+            ]
+
+        if query.has_service_filters():
+            markets = [
+                m for m in markets
+                if _passes_service_filters(m.service, query.service_filters)
+            ]
+
+        logger.info("Discovery: %d markets after filtering", len(markets))
+
+        if not markets:
+            return []
+
+        scored = score_markets_batch(markets, query.lens)
+
+        if query.is_portfolio_query() and query.portfolio_context:
+            scored = self._apply_portfolio_ranking(scored, query.portfolio_context)
+
+        return scored[query.offset : query.offset + query.limit]
 
     def _apply_portfolio_ranking(
         self,
