@@ -124,3 +124,31 @@ def test_batch_scoring_skips_ineligible():
     )
     results = score_markets_batch([ok_market, bad_market, ok_market], BALANCED)
     assert len(results) == 2
+
+
+def test_gate_fires_through_score_market():
+    """Hard-cap gate applies when a base component is below threshold."""
+    market = _make_market(demand=3.0)
+    result = score_market(market, BALANCED)
+    assert result.opportunity_score <= 20.0
+
+
+def test_batch_scoring_skips_filter_failures():
+    """Markets failing lens filters are excluded from batch results."""
+    ok_signals = dict(_make_market().signals)
+    ok_signals["local_competition"] = {"score": 55.0, "avg_reviews": 15.0}
+    ok_market = Market(
+        city=City(city_id="ok", name="OK", state="OK"),
+        service=Service(service_id="plumbing", name="Plumbing"),
+        signals=ok_signals,
+    )
+    bad_signals = dict(_make_market().signals)
+    bad_signals["local_competition"] = {"score": 55.0, "avg_reviews": 50.0}
+    bad_market = Market(
+        city=City(city_id="bad", name="Bad", state="BD"),
+        service=Service(service_id="plumbing", name="Plumbing"),
+        signals=bad_signals,
+    )
+    results = score_markets_batch([ok_market, bad_market], GBP_BLITZ)
+    assert len(results) == 1
+    assert results[0].lens_id == "gbp_blitz"
