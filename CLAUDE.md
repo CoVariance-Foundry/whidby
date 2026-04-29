@@ -188,13 +188,29 @@ Key files:
 
 Consumer API routes require auth — scoring E2E tests use `signIn()` + `page.evaluate(fetch())` for authenticated API calls.
 
-## TDD Workflow
+## Testing Philosophy
 
-Tests are written **before** implementation. For each module:
+Tests verify **module boundaries**, not individual functions. Implement first, then test at service entry points.
 
-1. Read the module spec in `docs/product_breakdown.md`
-2. Create test files from eval criteria
-3. Run tests (expect red) → implement → green → refactor → commit
+### What gets tested
+
+| Category | Example | Test? |
+|----------|---------|-------|
+| Module boundary entry points | `score_niche_for_metro`, `compute_scores`, classification pipeline | Yes — boundary test |
+| Complex pure logic | Scoring formulas, weight calculations, confidence math, difficulty tiers | Yes — targeted unit test |
+| Simple pass-through / glue code | API route handlers, Supabase insert wrappers, data mapping adapters | No — covered by boundary tests + structured logging |
+
+### Rules
+
+1. **Existing tests stay.** All tests in `tests/unit/` and `tests/integration/` must continue to pass. Do not delete working tests.
+2. **New tests target boundaries.** When adding a new module or pipeline stage, write tests for the module's entry-point function with representative inputs and expected outputs.
+3. **Complex pure logic still gets unit tests.** Scoring formulas (`src/scoring/`), classification logic (`src/classification/`), and any function with branching math should have targeted tests.
+4. **Simple glue code does NOT need tests.** A Supabase insert route, a config loader, or a data-mapping adapter is verified by the boundary test that exercises it plus structured logging at the boundary.
+5. **Test file naming is unchanged:** `src/scoring/demand_score.py` → `tests/unit/test_demand_score.py`
+
+### Skill Override
+
+**Do NOT invoke `superpowers:test-driven-development`.** This project uses implement-first, test-at-boundaries. Write implementation first, then add boundary tests and targeted tests for complex logic.
 
 ## Pre-Commit Quality Gates (MANDATORY)
 
@@ -211,6 +227,36 @@ Before every `git commit && git push` on module code (`src/`), you **must** run 
 4. **Spec artifacts**: If the branch name matches a feature pattern (`NNN-*`), a corresponding `specs/` directory must exist
 
 Skipping these gates results in CI failure on push. Run them locally first.
+
+## Logging & Observability
+
+Structured logging at module boundaries replaces granular unit-test coverage for glue code. The orchestrator (`src/pipeline/orchestrator.py`) demonstrates the canonical pattern — formalize it everywhere.
+
+### Canonical Log Format
+
+Use stdlib `logging` with `logging.getLogger(__name__)`. No new dependencies. The pattern:
+
+```
+[run_id] MODULE_NAME PHASE START key=value ...
+[run_id] MODULE_NAME PHASE DONE — metric=value duration_ms=N
+```
+
+### Required Logging at Module Boundaries
+
+Every module boundary function MUST log:
+
+1. **START marker**: `run_id`, input shape (counts, key identifiers — never raw PII or full payloads)
+2. **DONE marker**: `run_id`, output shape (counts, key result values), `duration_ms`
+3. **ERROR marker**: `run_id`, exception class, message, `exc_info=True`
+4. **Decision points** (scoring/classification only): log the values that drove the decision (e.g., which signals contributed most, what archetype was selected and why)
+
+### Correlation ID
+
+The `run_id` (generated in orchestrator as `score-{uuid4()}`) is the correlation ID. Pass it through all pipeline stages. Extend the pattern to classification pipeline functions (currently no `run_id`).
+
+### Module Dependency Index
+
+`docs/module_dependency.md` documents the full dependency graph. When a boundary test fails, consult the dependency matrix to identify which upstream module may have changed.
 
 ## Deployment Checklist (After Code Changes)
 
@@ -232,7 +278,7 @@ This project uses [github/spec-kit](https://github.com/github/spec-kit) v0.5.0 f
 1. `/speckit.specify` — Define scope and acceptance criteria
 2. `/speckit.clarify` — Resolve ambiguity
 3. `/speckit.plan` — Technical implementation plan
-4. `/speckit.tasks` — TDD-first task breakdown
+4. `/speckit.tasks` — Dependency-ordered task breakdown
 5. `/speckit.implement` — Build with hard CI gates
 
 See `docs/spec_workflow_guide.md` for the full workflow, naming conventions, and gate definitions. The project constitution is in `.specify/memory/constitution.md`.

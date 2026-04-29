@@ -1,0 +1,2169 @@
+[
+  {
+    "cbsa_code": "35620",
+    "cbsa_name": "New York-Newark-Jersey City, NY-NJ",
+    "state": "NY",
+    "population": 19756722,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.5148,
+    "dataforseo_location_codes": [
+      1023191,
+      1022773,
+      1022703
+    ]
+  },
+  {
+    "cbsa_code": "31080",
+    "cbsa_name": "Los Angeles-Long Beach-Anaheim, CA",
+    "state": "CA",
+    "population": 13012469,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.4857,
+    "dataforseo_location_codes": [
+      1013962,
+      1013849,
+      1013549
+    ]
+  },
+  {
+    "cbsa_code": "16980",
+    "cbsa_name": "Chicago-Naperville-Elgin, IL-IN",
+    "state": "IL",
+    "population": 9359555,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.653,
+    "dataforseo_location_codes": [
+      1016367,
+      1016659,
+      1016434
+    ]
+  },
+  {
+    "cbsa_code": "19100",
+    "cbsa_name": "Dallas-Fort Worth-Arlington, TX",
+    "state": "TX",
+    "population": 7807555,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.6002,
+    "dataforseo_location_codes": [
+      1026339,
+      1026424,
+      1026284
+    ]
+  },
+  {
+    "cbsa_code": "26420",
+    "cbsa_name": "Houston-Pasadena-The Woodlands, TX",
+    "state": "TX",
+    "population": 7274714,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.6121,
+    "dataforseo_location_codes": [
+      1026481
+    ]
+  },
+  {
+    "cbsa_code": "47900",
+    "cbsa_name": "Washington-Arlington-Alexandria, DC-VA-MD-WV",
+    "state": "DC",
+    "population": 6263796,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.6355,
+    "dataforseo_location_codes": [
+      1018089,
+      1027616,
+      1027610
+    ]
+  },
+  {
+    "cbsa_code": "37980",
+    "cbsa_name": "Philadelphia-Camden-Wilmington, PA-NJ-DE-MD",
+    "state": "PA",
+    "population": 6241882,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.6699,
+    "dataforseo_location_codes": [
+      1025292,
+      1022695,
+      1011015
+    ]
+  },
+  {
+    "cbsa_code": "12060",
+    "cbsa_name": "Atlanta-Sandy Springs-Roswell, GA",
+    "state": "GA",
+    "population": 6176937,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.658,
+    "dataforseo_location_codes": [
+      1015548
+    ]
+  },
+  {
+    "cbsa_code": "33100",
+    "cbsa_name": "Miami-Fort Lauderdale-West Palm Beach, FL",
+    "state": "FL",
+    "population": 6138876,
+    "population_class": "mega_5m_plus",
+    "owner_occupancy_rate": 0.6035,
+    "dataforseo_location_codes": [
+      1015116,
+      1015035,
+      1015182
+    ]
+  },
+  {
+    "cbsa_code": "38060",
+    "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+    "state": "AZ",
+    "population": 4941206,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6633,
+    "dataforseo_location_codes": [
+      1012873,
+      1012831,
+      1012789
+    ]
+  },
+  {
+    "cbsa_code": "14460",
+    "cbsa_name": "Boston-Cambridge-Newton, MA-NH",
+    "state": "MA",
+    "population": 4917661,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6176,
+    "dataforseo_location_codes": [
+      1018522,
+      1018542
+    ]
+  },
+  {
+    "cbsa_code": "41860",
+    "cbsa_name": "San Francisco-Oakland-Fremont, CA",
+    "state": "CA",
+    "population": 4653593,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5539,
+    "dataforseo_location_codes": [
+      1014221,
+      1014155,
+      1013643
+    ]
+  },
+  {
+    "cbsa_code": "40140",
+    "cbsa_name": "Riverside-San Bernardino-Ontario, CA",
+    "state": "CA",
+    "population": 4637725,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6544,
+    "dataforseo_location_codes": [
+      1014195
+    ]
+  },
+  {
+    "cbsa_code": "19820",
+    "cbsa_name": "Detroit-Warren-Dearborn, MI",
+    "state": "MI",
+    "population": 4367620,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.7094,
+    "dataforseo_location_codes": [
+      1014567
+    ]
+  },
+  {
+    "cbsa_code": "42660",
+    "cbsa_name": "Seattle-Tacoma-Bellevue, WA",
+    "state": "WA",
+    "population": 4021467,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6041,
+    "dataforseo_location_codes": [
+      1027744,
+      1027778,
+      1027700
+    ]
+  },
+  {
+    "cbsa_code": "33460",
+    "cbsa_name": "Minneapolis-St. Paul-Bloomington, MN-WI",
+    "state": "MN",
+    "population": 3693351,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.7094,
+    "dataforseo_location_codes": [
+      1019590,
+      1019600
+    ]
+  },
+  {
+    "cbsa_code": "41740",
+    "cbsa_name": "San Diego-Chula Vista-Carlsbad, CA",
+    "state": "CA",
+    "population": 3282782,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5451,
+    "dataforseo_location_codes": [
+      1014203
+    ]
+  },
+  {
+    "cbsa_code": "45300",
+    "cbsa_name": "Tampa-St. Petersburg-Clearwater, FL",
+    "state": "FL",
+    "population": 3240469,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6761,
+    "dataforseo_location_codes": [
+      1015270
+    ]
+  },
+  {
+    "cbsa_code": "12580",
+    "cbsa_name": "Baltimore-Columbia-Towson, MD",
+    "state": "MD",
+    "population": 2839409,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6688,
+    "dataforseo_location_codes": [
+      1018263
+    ]
+  },
+  {
+    "cbsa_code": "41180",
+    "cbsa_name": "St. Louis, MO-IL",
+    "state": "MO",
+    "population": 2809414,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.7009,
+    "dataforseo_location_codes": [
+      1020603
+    ]
+  },
+  {
+    "cbsa_code": "36740",
+    "cbsa_name": "Orlando-Kissimmee-Sanford, FL",
+    "state": "FL",
+    "population": 2721022,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6325,
+    "dataforseo_location_codes": [
+      1015170
+    ]
+  },
+  {
+    "cbsa_code": "16740",
+    "cbsa_name": "Charlotte-Concord-Gastonia, NC-SC",
+    "state": "NC",
+    "population": 2712818,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6582,
+    "dataforseo_location_codes": [
+      1024335
+    ]
+  },
+  {
+    "cbsa_code": "41700",
+    "cbsa_name": "San Antonio-New Braunfels, TX",
+    "state": "TX",
+    "population": 2612802,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6351,
+    "dataforseo_location_codes": [
+      1026698
+    ]
+  },
+  {
+    "cbsa_code": "38900",
+    "cbsa_name": "Portland-Vancouver-Hillsboro, OR-WA",
+    "state": "OR",
+    "population": 2510529,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6201,
+    "dataforseo_location_codes": [
+      1024502
+    ]
+  },
+  {
+    "cbsa_code": "38300",
+    "cbsa_name": "Pittsburgh, PA",
+    "state": "PA",
+    "population": 2443921,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.7045,
+    "dataforseo_location_codes": [
+      1025300
+    ]
+  },
+  {
+    "cbsa_code": "40900",
+    "cbsa_name": "Sacramento-Roseville-Folsom, CA",
+    "state": "CA",
+    "population": 2406563,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.625,
+    "dataforseo_location_codes": [
+      1014199
+    ]
+  },
+  {
+    "cbsa_code": "12420",
+    "cbsa_name": "Austin-Round Rock-San Marcos, TX",
+    "state": "TX",
+    "population": 2357497,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5889,
+    "dataforseo_location_codes": [
+      1026290
+    ]
+  },
+  {
+    "cbsa_code": "29820",
+    "cbsa_name": "Las Vegas-Henderson-North Las Vegas, NV",
+    "state": "NV",
+    "population": 2293764,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5705,
+    "dataforseo_location_codes": [
+      1021165
+    ]
+  },
+  {
+    "cbsa_code": "28140",
+    "cbsa_name": "Kansas City, MO-KS",
+    "state": "MO",
+    "population": 2202006,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6559,
+    "dataforseo_location_codes": [
+      1020567
+    ]
+  },
+  {
+    "cbsa_code": "17410",
+    "cbsa_name": "Cleveland, OH",
+    "state": "OH",
+    "population": 2171978,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6611,
+    "dataforseo_location_codes": [
+      1024784
+    ]
+  },
+  {
+    "cbsa_code": "18140",
+    "cbsa_name": "Columbus, OH",
+    "state": "OH",
+    "population": 2151847,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6127,
+    "dataforseo_location_codes": [
+      1024792
+    ]
+  },
+  {
+    "cbsa_code": "26900",
+    "cbsa_name": "Indianapolis-Carmel-Greenwood, IN",
+    "state": "IN",
+    "population": 2106327,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6661,
+    "dataforseo_location_codes": [
+      1016532
+    ]
+  },
+  {
+    "cbsa_code": "34980",
+    "cbsa_name": "Nashville-Davidson--Murfreesboro--Franklin, TN",
+    "state": "TN",
+    "population": 2043713,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6559,
+    "dataforseo_location_codes": [
+      1025820
+    ]
+  },
+  {
+    "cbsa_code": "41940",
+    "cbsa_name": "San Jose-Sunnyvale-Santa Clara, CA",
+    "state": "CA",
+    "population": 1969353,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5566,
+    "dataforseo_location_codes": [
+      1014232
+    ]
+  },
+  {
+    "cbsa_code": "27260",
+    "cbsa_name": "Jacksonville, FL",
+    "state": "FL",
+    "population": 1645707,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6627,
+    "dataforseo_location_codes": [
+      1015094
+    ]
+  },
+  {
+    "cbsa_code": "39580",
+    "cbsa_name": "Raleigh-Cary, NC",
+    "state": "NC",
+    "population": 1449594,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6698,
+    "dataforseo_location_codes": [
+      1024421
+    ]
+  },
+  {
+    "cbsa_code": "36420",
+    "cbsa_name": "Oklahoma City, OK",
+    "state": "OK",
+    "population": 1445122,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.639,
+    "dataforseo_location_codes": [
+      1024262
+    ]
+  },
+  {
+    "cbsa_code": "31140",
+    "cbsa_name": "Louisville/Jefferson County, KY-IN",
+    "state": "KY",
+    "population": 1361847,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6861,
+    "dataforseo_location_codes": [
+      1017427
+    ]
+  },
+  {
+    "cbsa_code": "32820",
+    "cbsa_name": "Memphis, TN-MS-AR",
+    "state": "TN",
+    "population": 1341606,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6059,
+    "dataforseo_location_codes": [
+      1025808
+    ]
+  },
+  {
+    "cbsa_code": "40060",
+    "cbsa_name": "Richmond, VA",
+    "state": "VA",
+    "population": 1327321,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6712,
+    "dataforseo_location_codes": [
+      1027654
+    ]
+  },
+  {
+    "cbsa_code": "41620",
+    "cbsa_name": "Salt Lake City-Murray, UT",
+    "state": "UT",
+    "population": 1261337,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6782,
+    "dataforseo_location_codes": [
+      1027456
+    ]
+  },
+  {
+    "cbsa_code": "13820",
+    "cbsa_name": "Birmingham, AL",
+    "state": "AL",
+    "population": 1181432,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.7059,
+    "dataforseo_location_codes": [
+      1012277
+    ]
+  },
+  {
+    "cbsa_code": "23420",
+    "cbsa_name": "Fresno, CA",
+    "state": "CA",
+    "population": 1170942,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5664,
+    "dataforseo_location_codes": [
+      1013755
+    ]
+  },
+  {
+    "cbsa_code": "15380",
+    "cbsa_name": "Buffalo-Cheektowaga, NY",
+    "state": "NY",
+    "population": 1161385,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6645,
+    "dataforseo_location_codes": [
+      1023161
+    ]
+  },
+  {
+    "cbsa_code": "24340",
+    "cbsa_name": "Grand Rapids-Wyoming-Kentwood, MI",
+    "state": "MI",
+    "population": 1154320,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.7431,
+    "dataforseo_location_codes": [
+      1019351
+    ]
+  },
+  {
+    "cbsa_code": "46060",
+    "cbsa_name": "Tucson, AZ",
+    "state": "AZ",
+    "population": 1049947,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6481,
+    "dataforseo_location_codes": [
+      1012938
+    ]
+  },
+  {
+    "cbsa_code": "46520",
+    "cbsa_name": "Urban Honolulu, HI",
+    "state": "HI",
+    "population": 1003666,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.5954,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17140",
+    "cbsa_name": "Cincinnati, OH-KY-IN",
+    "state": "OH",
+    "population": 2255257,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6806,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "41980",
+    "cbsa_name": "San Juan-Bayam\u00f3n-Caguas, PR",
+    "state": "PR",
+    "population": 2063795,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6784,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "46140",
+    "cbsa_name": "Tulsa, OK",
+    "state": "OK",
+    "population": 1026209,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6543,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "40380",
+    "cbsa_name": "Rochester, NY",
+    "state": "NY",
+    "population": 1058875,
+    "population_class": "metro_1m_5m",
+    "owner_occupancy_rate": 0.6718,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "24860",
+    "cbsa_name": "Greenville-Anderson-Greer, SC",
+    "state": "SC",
+    "population": 945301,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7059,
+    "dataforseo_location_codes": [
+      1025672
+    ]
+  },
+  {
+    "cbsa_code": "10740",
+    "cbsa_name": "Albuquerque, NM",
+    "state": "NM",
+    "population": 918567,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6872,
+    "dataforseo_location_codes": [
+      1023112
+    ]
+  },
+  {
+    "cbsa_code": "12940",
+    "cbsa_name": "Baton Rouge, LA",
+    "state": "LA",
+    "population": 871379,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6914,
+    "dataforseo_location_codes": [
+      1017780
+    ]
+  },
+  {
+    "cbsa_code": "37100",
+    "cbsa_name": "Oxnard-Thousand Oaks-Ventura, CA",
+    "state": "CA",
+    "population": 838259,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6416,
+    "dataforseo_location_codes": [
+      1014163
+    ]
+  },
+  {
+    "cbsa_code": "16700",
+    "cbsa_name": "Charleston-North Charleston, SC",
+    "state": "SC",
+    "population": 817756,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6866,
+    "dataforseo_location_codes": [
+      1025656
+    ]
+  },
+  {
+    "cbsa_code": "44700",
+    "cbsa_name": "Stockton-Lodi, CA",
+    "state": "CA",
+    "population": 787416,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6153,
+    "dataforseo_location_codes": [
+      1014276
+    ]
+  },
+  {
+    "cbsa_code": "30780",
+    "cbsa_name": "Little Rock-North Little Rock-Conway, AR",
+    "state": "AR",
+    "population": 753605,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6364,
+    "dataforseo_location_codes": [
+      1012540
+    ]
+  },
+  {
+    "cbsa_code": "36260",
+    "cbsa_name": "Ogden, UT",
+    "state": "UT",
+    "population": 645510,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7637,
+    "dataforseo_location_codes": [
+      1027430
+    ]
+  },
+  {
+    "cbsa_code": "20500",
+    "cbsa_name": "Durham-Chapel Hill, NC",
+    "state": "NC",
+    "population": 594291,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6191,
+    "dataforseo_location_codes": [
+      1024347
+    ]
+  },
+  {
+    "cbsa_code": "39900",
+    "cbsa_name": "Reno, NV",
+    "state": "NV",
+    "population": 556539,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6161,
+    "dataforseo_location_codes": [
+      1021181
+    ]
+  },
+  {
+    "cbsa_code": "13140",
+    "cbsa_name": "Beaumont-Port Arthur, TX",
+    "state": "TX",
+    "population": 396058,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6774,
+    "dataforseo_location_codes": [
+      1026297
+    ]
+  },
+  {
+    "cbsa_code": "22180",
+    "cbsa_name": "Fayetteville, NC",
+    "state": "NC",
+    "population": 389851,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5596,
+    "dataforseo_location_codes": [
+      1024353
+    ]
+  },
+  {
+    "cbsa_code": "33660",
+    "cbsa_name": "Mobile, AL",
+    "state": "AL",
+    "population": 413162,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6487,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "15180",
+    "cbsa_name": "Brownsville-Harlingen, TX",
+    "state": "TX",
+    "population": 423192,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6524,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "28700",
+    "cbsa_name": "Kingsport-Bristol, TN-VA",
+    "state": "TN",
+    "population": 309580,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.744,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "25060",
+    "cbsa_name": "Gulfport-Biloxi, MS",
+    "state": "MS",
+    "population": 418452,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.675,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "43340",
+    "cbsa_name": "Shreveport-Bossier City, LA",
+    "state": "LA",
+    "population": 389004,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6336,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "27140",
+    "cbsa_name": "Jackson, MS",
+    "state": "MS",
+    "population": 615908,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6746,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "35840",
+    "cbsa_name": "North Port-Bradenton-Sarasota, FL",
+    "state": "FL",
+    "population": 865031,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7559,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29180",
+    "cbsa_name": "Lafayette, LA",
+    "state": "LA",
+    "population": 410883,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6901,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17900",
+    "cbsa_name": "Columbia, SC",
+    "state": "SC",
+    "population": 839868,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6921,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "28940",
+    "cbsa_name": "Knoxville, TN",
+    "state": "TN",
+    "population": 919553,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7018,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "40220",
+    "cbsa_name": "Roanoke, VA",
+    "state": "VA",
+    "population": 314661,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6872,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "37860",
+    "cbsa_name": "Pensacola-Ferry Pass-Brent, FL",
+    "state": "FL",
+    "population": 516994,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6971,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "48900",
+    "cbsa_name": "Wilmington, NC",
+    "state": "NC",
+    "population": 440578,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7118,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "45220",
+    "cbsa_name": "Tallahassee, FL",
+    "state": "FL",
+    "population": 388298,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5746,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "38940",
+    "cbsa_name": "Port St. Lucie, FL",
+    "state": "FL",
+    "population": 506701,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7849,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "40420",
+    "cbsa_name": "Rockford, IL",
+    "state": "IL",
+    "population": 336605,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6777,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "19780",
+    "cbsa_name": "Des Moines-West Des Moines, IA",
+    "state": "IA",
+    "population": 720331,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6951,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "49660",
+    "cbsa_name": "Youngstown-Warren, OH",
+    "state": "OH",
+    "population": 428430,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7085,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "37900",
+    "cbsa_name": "Peoria, IL",
+    "state": "IL",
+    "population": 365773,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7286,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "48620",
+    "cbsa_name": "Wichita, KS",
+    "state": "KS",
+    "population": 648935,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6468,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "31540",
+    "cbsa_name": "Madison, WI",
+    "state": "WI",
+    "population": 683967,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6082,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "10420",
+    "cbsa_name": "Akron, OH",
+    "state": "OH",
+    "population": 699508,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6792,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "15940",
+    "cbsa_name": "Canton-Massillon, OH",
+    "state": "OH",
+    "population": 400495,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6922,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "11460",
+    "cbsa_name": "Ann Arbor, MI",
+    "state": "MI",
+    "population": 368394,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6163,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29620",
+    "cbsa_name": "Lansing-East Lansing, MI",
+    "state": "MI",
+    "population": 470434,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6675,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "43780",
+    "cbsa_name": "South Bend-Mishawaka, IN-MI",
+    "state": "IN",
+    "population": 324180,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7076,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "19340",
+    "cbsa_name": "Davenport-Moline-Rock Island, IA-IL",
+    "state": "IA",
+    "population": 381864,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7112,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "19430",
+    "cbsa_name": "Dayton-Kettering-Beavercreek, OH",
+    "state": "OH",
+    "population": 813608,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.648,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "45780",
+    "cbsa_name": "Toledo, OH",
+    "state": "OH",
+    "population": 602977,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6359,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "44180",
+    "cbsa_name": "Springfield, MO",
+    "state": "MO",
+    "population": 481671,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6304,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "44140",
+    "cbsa_name": "Springfield, MA",
+    "state": "MA",
+    "population": 462853,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6222,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "28880",
+    "cbsa_name": "Kiryas Joel-Poughkeepsie-Newburgh, NY",
+    "state": "NY",
+    "population": 700984,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6861,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29540",
+    "cbsa_name": "Lancaster, PA",
+    "state": "PA",
+    "population": 555151,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6994,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "45060",
+    "cbsa_name": "Syracuse, NY",
+    "state": "NY",
+    "population": 657128,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6833,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "42540",
+    "cbsa_name": "Scranton--Wilkes-Barre, PA",
+    "state": "PA",
+    "population": 567887,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6727,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39740",
+    "cbsa_name": "Reading, PA",
+    "state": "PA",
+    "population": 429989,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7105,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "12100",
+    "cbsa_name": "Atlantic City-Hammonton, NJ",
+    "state": "NJ",
+    "population": 369940,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7116,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "25420",
+    "cbsa_name": "Harrisburg-Carlisle, PA",
+    "state": "PA",
+    "population": 597894,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6811,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "10580",
+    "cbsa_name": "Albany-Schenectady-Troy, NY",
+    "state": "NY",
+    "population": 902372,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6404,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "35300",
+    "cbsa_name": "New Haven, CT",
+    "state": "CT",
+    "population": 566803,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6056,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "45940",
+    "cbsa_name": "Trenton-Princeton, NJ",
+    "state": "NJ",
+    "population": 383286,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6189,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "10900",
+    "cbsa_name": "Allentown-Bethlehem-Easton, PA-NJ",
+    "state": "PA",
+    "population": 866764,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6952,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "49620",
+    "cbsa_name": "York-Hanover, PA",
+    "state": "PA",
+    "population": 459312,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7583,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "49340",
+    "cbsa_name": "Worcester, MA",
+    "state": "MA",
+    "population": 861664,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6567,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "38860",
+    "cbsa_name": "Portland-South Portland, ME",
+    "state": "ME",
+    "population": 557764,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7308,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "42200",
+    "cbsa_name": "Santa Maria-Santa Barbara, CA",
+    "state": "CA",
+    "population": 443975,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5287,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "21660",
+    "cbsa_name": "Eugene-Springfield, OR",
+    "state": "OR",
+    "population": 382628,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5938,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39340",
+    "cbsa_name": "Provo-Orem-Lehi, UT",
+    "state": "UT",
+    "population": 695895,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6837,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "12540",
+    "cbsa_name": "Bakersfield-Delano, CA",
+    "state": "CA",
+    "population": 910433,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5981,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "33700",
+    "cbsa_name": "Modesto, CA",
+    "state": "CA",
+    "population": 552250,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.61,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17820",
+    "cbsa_name": "Colorado Springs, CO",
+    "state": "CO",
+    "population": 760782,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6699,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "14260",
+    "cbsa_name": "Boise City, ID",
+    "state": "ID",
+    "population": 790640,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.7273,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "41420",
+    "cbsa_name": "Salem, OR",
+    "state": "OR",
+    "population": 435085,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6273,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "42220",
+    "cbsa_name": "Santa Rosa-Petaluma, CA",
+    "state": "CA",
+    "population": 485642,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.622,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "47300",
+    "cbsa_name": "Visalia, CA",
+    "state": "CA",
+    "population": 475774,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5862,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "28420",
+    "cbsa_name": "Kennewick-Richland, WA",
+    "state": "WA",
+    "population": 307900,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6893,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "22660",
+    "cbsa_name": "Fort Collins-Loveland, CO",
+    "state": "CO",
+    "population": 363561,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6432,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "14500",
+    "cbsa_name": "Boulder, CO",
+    "state": "CO",
+    "population": 328317,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6246,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "44060",
+    "cbsa_name": "Spokane-Spokane Valley, WA",
+    "state": "WA",
+    "population": 591793,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.6513,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "41500",
+    "cbsa_name": "Salinas, CA",
+    "state": "CA",
+    "population": 435834,
+    "population_class": "large_300k_1m",
+    "owner_occupancy_rate": 0.5228,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "46340",
+    "cbsa_name": "Tyler, TX",
+    "state": "TX",
+    "population": 238014,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6931,
+    "dataforseo_location_codes": [
+      1026766
+    ]
+  },
+  {
+    "cbsa_code": "13980",
+    "cbsa_name": "Blacksburg-Christiansburg-Radford, VA",
+    "state": "VA",
+    "population": 181605,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6247,
+    "dataforseo_location_codes": [
+      1027616
+    ]
+  },
+  {
+    "cbsa_code": "43300",
+    "cbsa_name": "Sherman-Denison, TX",
+    "state": "TX",
+    "population": 139988,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6733,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "18260",
+    "cbsa_name": "Cookeville, TN",
+    "state": "TN",
+    "population": 143819,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6839,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "49020",
+    "cbsa_name": "Winchester, VA-WV",
+    "state": "VA",
+    "population": 144676,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7114,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "35100",
+    "cbsa_name": "New Bern, NC",
+    "state": "NC",
+    "population": 122634,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7177,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "48260",
+    "cbsa_name": "Weirton-Steubenville, WV-OH",
+    "state": "WV",
+    "population": 115566,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7284,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "30980",
+    "cbsa_name": "Longview, TX",
+    "state": "TX",
+    "population": 288921,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6954,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "20020",
+    "cbsa_name": "Dothan, AL",
+    "state": "AL",
+    "population": 151804,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6835,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "22500",
+    "cbsa_name": "Florence, SC",
+    "state": "SC",
+    "population": 199675,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6651,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "11100",
+    "cbsa_name": "Amarillo, TX",
+    "state": "TX",
+    "population": 270207,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6393,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "26140",
+    "cbsa_name": "Homosassa Springs, FL",
+    "state": "FL",
+    "population": 158693,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.8483,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "11360",
+    "cbsa_name": "Anderson Creek, NC",
+    "state": "NC",
+    "population": 136503,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6949,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29340",
+    "cbsa_name": "Lake Charles, LA",
+    "state": "LA",
+    "population": 245973,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7332,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "25940",
+    "cbsa_name": "Hilton Head Island-Bluffton-Port Royal, SC",
+    "state": "SC",
+    "population": 222781,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7577,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "18880",
+    "cbsa_name": "Crestview-Fort Walton Beach-Destin, FL",
+    "state": "FL",
+    "population": 294127,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7038,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "14740",
+    "cbsa_name": "Bremerton-Silverdale-Port Orchard, WA",
+    "state": "WA",
+    "population": 276581,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7015,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "43420",
+    "cbsa_name": "Sierra Vista-Douglas, AZ",
+    "state": "AZ",
+    "population": 125458,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.705,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "22140",
+    "cbsa_name": "Farmington, NM",
+    "state": "NM",
+    "population": 121178,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7018,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "42020",
+    "cbsa_name": "San Luis Obispo-Paso Robles, CA",
+    "state": "CA",
+    "population": 281486,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.619,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "27980",
+    "cbsa_name": "Kahului-Wailuku, HI",
+    "state": "HI",
+    "population": 164675,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6497,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39380",
+    "cbsa_name": "Pueblo, CO",
+    "state": "CO",
+    "population": 168726,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6832,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "34580",
+    "cbsa_name": "Mount Vernon-Anacortes, WA",
+    "state": "WA",
+    "population": 130407,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7064,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "32780",
+    "cbsa_name": "Medford, OR",
+    "state": "OR",
+    "population": 222563,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6498,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "34900",
+    "cbsa_name": "Napa, CA",
+    "state": "CA",
+    "population": 136070,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.644,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39150",
+    "cbsa_name": "Prescott Valley-Prescott, AZ",
+    "state": "AZ",
+    "population": 241656,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7351,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "49420",
+    "cbsa_name": "Yakima, WA",
+    "state": "WA",
+    "population": 256605,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6242,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "22380",
+    "cbsa_name": "Flagstaff, AZ",
+    "state": "AZ",
+    "population": 144643,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.5884,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "14580",
+    "cbsa_name": "Bozeman, MT",
+    "state": "MT",
+    "population": 122194,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6152,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29740",
+    "cbsa_name": "Las Cruces, NM",
+    "state": "NM",
+    "population": 221665,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.653,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "44220",
+    "cbsa_name": "Springfield, OH",
+    "state": "OH",
+    "population": 135445,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6916,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "13020",
+    "cbsa_name": "Bay City, MI",
+    "state": "MI",
+    "population": 103235,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7636,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "20740",
+    "cbsa_name": "Eau Claire, WI",
+    "state": "WI",
+    "population": 172886,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6732,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "13900",
+    "cbsa_name": "Bismarck, ND",
+    "state": "ND",
+    "population": 134286,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7272,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "45820",
+    "cbsa_name": "Topeka, KS",
+    "state": "KS",
+    "population": 232724,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7018,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "27900",
+    "cbsa_name": "Joplin, MO-KS",
+    "state": "MO",
+    "population": 202258,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6798,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "21780",
+    "cbsa_name": "Evansville, IN",
+    "state": "IN",
+    "population": 269721,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7006,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "21140",
+    "cbsa_name": "Elkhart-Goshen, IN",
+    "state": "IN",
+    "population": 206868,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7125,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "11180",
+    "cbsa_name": "Ames, IA",
+    "state": "IA",
+    "population": 125261,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.615,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "34740",
+    "cbsa_name": "Muskegon-Norton Shores, MI",
+    "state": "MI",
+    "population": 175378,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7826,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17860",
+    "cbsa_name": "Columbia, MO",
+    "state": "MO",
+    "population": 212850,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6049,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "36837",
+    "cbsa_name": "Ottawa, IL",
+    "state": "IL",
+    "population": 147676,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.747,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "27100",
+    "cbsa_name": "Jackson, MI",
+    "state": "MI",
+    "population": 160187,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7505,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "34620",
+    "cbsa_name": "Muncie, IN",
+    "state": "IN",
+    "population": 112109,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6649,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "12300",
+    "cbsa_name": "Augusta-Waterville, ME",
+    "state": "ME",
+    "population": 125614,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7276,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "15540",
+    "cbsa_name": "Burlington-South Burlington, VT",
+    "state": "VT",
+    "population": 226603,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.675,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "48060",
+    "cbsa_name": "Watertown-Fort Drum, NY",
+    "state": "NY",
+    "population": 116130,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.5413,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "13780",
+    "cbsa_name": "Binghamton, NY",
+    "state": "NY",
+    "population": 245844,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6728,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "12620",
+    "cbsa_name": "Bangor, ME",
+    "state": "ME",
+    "population": 153571,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7028,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "27060",
+    "cbsa_name": "Ithaca, NY",
+    "state": "NY",
+    "population": 102879,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.5383,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "12700",
+    "cbsa_name": "Barnstable Town, MA",
+    "state": "MA",
+    "population": 230073,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.8055,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "20700",
+    "cbsa_name": "East Stroudsburg, PA",
+    "state": "PA",
+    "population": 167784,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7953,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "32390",
+    "cbsa_name": "Massena-Ogdensburg, NY",
+    "state": "NY",
+    "population": 107796,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.715,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "24020",
+    "cbsa_name": "Glens Falls, NY",
+    "state": "NY",
+    "population": 126443,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7374,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "27780",
+    "cbsa_name": "Johnstown, PA",
+    "state": "PA",
+    "population": 132355,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7581,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "23900",
+    "cbsa_name": "Gettysburg, PA",
+    "state": "PA",
+    "population": 105183,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7906,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "28740",
+    "cbsa_name": "Kingston, NY",
+    "state": "NY",
+    "population": 182109,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6999,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "25850",
+    "cbsa_name": "Hermitage, PA",
+    "state": "PA",
+    "population": 109852,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7252,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "10380",
+    "cbsa_name": "Aguadilla, PR",
+    "state": "PR",
+    "population": 252430,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6635,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "38660",
+    "cbsa_name": "Ponce, PR",
+    "state": "PR",
+    "population": 273739,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.7143,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "32420",
+    "cbsa_name": "Mayag\u00fcez, PR",
+    "state": "PR",
+    "population": 211487,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6485,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "11640",
+    "cbsa_name": "Arecibo, PR",
+    "state": "PR",
+    "population": 181380,
+    "population_class": "medium_100_300k",
+    "owner_occupancy_rate": 0.6835,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "18900",
+    "cbsa_name": "Crossville, TN",
+    "state": "TN",
+    "population": 62529,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.8024,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "24180",
+    "cbsa_name": "Granbury, TX",
+    "state": "TX",
+    "population": 64198,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.8132,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "41820",
+    "cbsa_name": "Sanford, NC",
+    "state": "NC",
+    "population": 64565,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6595,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "48180",
+    "cbsa_name": "Waycross, GA",
+    "state": "GA",
+    "population": 55954,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.676,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "35020",
+    "cbsa_name": "Natchez, MS-LA",
+    "state": "MS",
+    "population": 54550,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6914,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "10700",
+    "cbsa_name": "Albertville, AL",
+    "state": "AL",
+    "population": 98712,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7548,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "35900",
+    "cbsa_name": "North Wilkesboro, NC",
+    "state": "NC",
+    "population": 65983,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7392,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "41460",
+    "cbsa_name": "Salina, KS",
+    "state": "KS",
+    "population": 59583,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6788,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39020",
+    "cbsa_name": "Portsmouth, OH",
+    "state": "OH",
+    "population": 73118,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6902,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "23380",
+    "cbsa_name": "Fremont, OH",
+    "state": "OH",
+    "population": 58770,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.743,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "44780",
+    "cbsa_name": "Sturgis, MI",
+    "state": "MI",
+    "population": 60870,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7515,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "32060",
+    "cbsa_name": "Marion-Herrin, IL",
+    "state": "IL",
+    "population": 66902,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7113,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "13180",
+    "cbsa_name": "Beaver Dam, WI",
+    "state": "WI",
+    "population": 88818,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7126,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "47660",
+    "cbsa_name": "Warrensburg, MO",
+    "state": "MO",
+    "population": 54331,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6386,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39780",
+    "cbsa_name": "Red Bluff, CA",
+    "state": "CA",
+    "population": 65520,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6758,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "10140",
+    "cbsa_name": "Aberdeen, WA",
+    "state": "WA",
+    "population": 76397,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7261,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "28180",
+    "cbsa_name": "Kapaa, HI",
+    "state": "HI",
+    "population": 73610,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6728,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "39940",
+    "cbsa_name": "Rexburg, ID",
+    "state": "ID",
+    "population": 67279,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.5169,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17340",
+    "cbsa_name": "Clearlake, CA",
+    "state": "CA",
+    "population": 68139,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7093,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "26020",
+    "cbsa_name": "Hobbs, NM",
+    "state": "NM",
+    "population": 73154,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.6949,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "38820",
+    "cbsa_name": "Port Angeles, WA",
+    "state": "WA",
+    "population": 77593,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7276,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "26460",
+    "cbsa_name": "Hudson, NY",
+    "state": "NY",
+    "population": 61245,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7536,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "20180",
+    "cbsa_name": "DuBois, PA",
+    "state": "PA",
+    "population": 78902,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7833,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "42380",
+    "cbsa_name": "Sayre, PA",
+    "state": "PA",
+    "population": 59971,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7227,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29060",
+    "cbsa_name": "Laconia, NH",
+    "state": "NH",
+    "population": 64300,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7869,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "24100",
+    "cbsa_name": "Gloversville, NY",
+    "state": "NY",
+    "population": 52787,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.692,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "26860",
+    "cbsa_name": "Indiana, PA",
+    "state": "PA",
+    "population": 83213,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7112,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "12180",
+    "cbsa_name": "Auburn, NY",
+    "state": "NY",
+    "population": 75464,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7191,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "25020",
+    "cbsa_name": "Guayama, PR",
+    "state": "PR",
+    "population": 67171,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7243,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17620",
+    "cbsa_name": "Coamo, PR",
+    "state": "PR",
+    "population": 54358,
+    "population_class": "small_50_100k",
+    "owner_occupancy_rate": 0.7659,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "37940",
+    "cbsa_name": "Peru, IN",
+    "state": "IN",
+    "population": 35772,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.7503,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "24600",
+    "cbsa_name": "Greencastle, IN",
+    "state": "IN",
+    "population": 37091,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.7356,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "44900",
+    "cbsa_name": "Summerville, GA",
+    "state": "GA",
+    "population": 24975,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.6739,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "23240",
+    "cbsa_name": "Fredericksburg, TX",
+    "state": "TX",
+    "population": 27202,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.7101,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "11220",
+    "cbsa_name": "Amsterdam, NY",
+    "state": "NY",
+    "population": 49461,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.6934,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "14710",
+    "cbsa_name": "Brattleboro, VT",
+    "state": "VT",
+    "population": 45913,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.7277,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "13940",
+    "cbsa_name": "Blackfoot, ID",
+    "state": "ID",
+    "population": 48993,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.8064,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "43500",
+    "cbsa_name": "Silver City, NM",
+    "state": "NM",
+    "population": 27856,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.7324,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "17640",
+    "cbsa_name": "Coco, PR",
+    "state": "PR",
+    "population": 25397,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.7678,
+    "dataforseo_location_codes": []
+  },
+  {
+    "cbsa_code": "29720",
+    "cbsa_name": "Lares, PR",
+    "state": "PR",
+    "population": 27944,
+    "population_class": "micro_under_50k",
+    "owner_occupancy_rate": 0.6543,
+    "dataforseo_location_codes": []
+  }
+]
