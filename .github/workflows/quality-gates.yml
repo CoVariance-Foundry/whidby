@@ -66,6 +66,22 @@ jobs:
             tests/unit/test_signal_extractors.py \
             -v --tb=short
 
+  architecture-check:
+    name: Architecture Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.x"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Check domain layer imports
+        run: uv run python scripts/check_domain_imports.py
+
   web-quality:
     name: Web Quality
     runs-on: ubuntu-latest
