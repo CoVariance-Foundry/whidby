@@ -162,6 +162,27 @@ class DataForSEOClient:
         ]
         return await self._live_request(ep.KEYWORD_SUGGESTIONS, payload)
 
+    async def google_trends(
+        self,
+        keywords: list[str],
+        location_code: int = 2840,  # US
+        time_range: str = "past_5_years",
+    ) -> APIResponse:
+        """Fetch Google Trends interest-over-time data.
+
+        Returns monthly interest index (0-100) for keywords.
+        Endpoint: keywords_data/google_trends/explore/live
+        Max 5 keywords per request, $0.05/task.
+        """
+        payload = [
+            {
+                "keywords": keywords[:5],
+                "location_code": location_code,
+                "time_range": time_range,
+            }
+        ]
+        return await self._live_request(ep.GOOGLE_TRENDS, payload)
+
     async def business_listings(
         self,
         category: str,
