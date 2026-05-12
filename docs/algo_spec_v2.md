@@ -256,66 +256,17 @@ def ai_resilience(signals):
 
 `seo_benchmarks` is recomputed periodically from `seo_facts`. Recommended cadence: nightly during data accumulation phase, weekly once stable.
 
+The executable recompute contract is `public.recompute_seo_benchmarks(p_window_days integer)` from `supabase/migrations/012_recompute_seo_benchmarks.sql`.
+
 ### 3.1 Aggregation SQL
 
-```sql
-INSERT INTO seo_benchmarks (
-    niche_normalized, naics_code, population_class,
-    p25_total_volume_per_capita, median_total_volume_per_capita, p75_total_volume_per_capita,
-    p25_avg_cpc, median_avg_cpc, p75_avg_cpc,
-    median_top3_review_count_min, median_top3_review_velocity, pct_with_local_pack,
-    median_aggregator_count, median_local_biz_count,
-    median_aio_trigger_rate,
-    sample_size_metros, sample_size_observations, confidence_label,
-    fact_window_start, fact_window_end
-)
-SELECT
-    f.niche_normalized,
-    nm.naics_code,
-    m.population_class,
-    -- Demand
-    PERCENTILE_CONT(0.25) WITHIN GROUP (
-        ORDER BY (f.search_volume_monthly::float / NULLIF(m.population, 0))
-    ) AS p25_vol,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (
-        ORDER BY (f.search_volume_monthly::float / NULLIF(m.population, 0))
-    ) AS median_vol,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (
-        ORDER BY (f.search_volume_monthly::float / NULLIF(m.population, 0))
-    ) AS p75_vol,
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY f.cpc_usd) AS p25_cpc,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY f.cpc_usd) AS median_cpc,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY f.cpc_usd) AS p75_cpc,
-    -- Local
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY f.top3_review_count_min)
-        FILTER (WHERE f.local_pack_present) AS median_top3_floor,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY f.top3_review_velocity_avg)
-        FILTER (WHERE f.local_pack_present) AS median_velocity,
-    AVG(CASE WHEN f.local_pack_present THEN 1.0 ELSE 0.0 END) AS pct_local_pack,
-    -- Organic
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY f.aggregator_count_top10) AS median_agg,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY f.local_biz_count_top10) AS median_local,
-    -- AI
-    AVG(CASE WHEN f.aio_present THEN 1.0 ELSE 0.0 END) AS median_aio,
-    -- Sample
-    COUNT(DISTINCT f.cbsa_code) AS n_metros,
-    COUNT(*) AS n_obs,
-    CASE
-        WHEN COUNT(DISTINCT f.cbsa_code) >= 20 THEN 'high'
-        WHEN COUNT(DISTINCT f.cbsa_code) >= 8  THEN 'medium'
-        WHEN COUNT(DISTINCT f.cbsa_code) >= 3  THEN 'low'
-        ELSE 'insufficient'
-    END AS confidence,
-    MIN(f.snapshot_date), MAX(f.snapshot_date)
-FROM seo_facts f
-JOIN metros m USING (cbsa_code)
-LEFT JOIN niche_naics_mapping nm
-    ON nm.niche_normalized = f.niche_normalized AND nm.is_primary = TRUE
-WHERE f.intent IN ('transactional', 'commercial')
-GROUP BY f.niche_normalized, nm.naics_code, m.population_class
-ON CONFLICT (niche_normalized, population_class) DO UPDATE SET
-    /* update all stat columns, last_recomputed_at = NOW() */ ...;
-```
+The executable recompute function aggregates at metro grain before producing benchmark cells:
+
+- Roll up actionable `seo_facts` only, using `WHERE f.intent IN ('transactional', 'commercial')`, by `(niche_normalized, cbsa_code)`.
+- Join `metros` to attach `population_class` and `population`, then compute per-metro demand, CPC, local pack, organic, paid, and AIO measures.
+- Normalize `niche_naics_mapping.weight` within each niche before joining `census_cbp_establishments`, so multi-NAICS CBP density is weighted without inflating establishments.
+- Aggregate metro rollups into `(niche_normalized, population_class)` benchmark cells, including percentile bands, sample counts, fact window bounds, and confidence labels.
+- Upsert the computed cells into `seo_benchmarks` via `public.recompute_seo_benchmarks(p_window_days integer)`.
 
 ### 3.2 Confidence labeling
 
@@ -326,15 +277,67 @@ low           n_metros >= 3     -- shown but flagged prominently as preliminary
 insufficient  n_metros < 3      -- no benchmark; score is computed without one and flagged
 ```
 
-### 3.3 Refresh trigger
+Minimum usable benchmark cell: sample_size_metros >= 8
+Stable benchmark cell: sample_size_metros >= 20
+Required before production cutover: every launch niche has at least one medium cell in its most common population class.
 
-Initial bulk load: run benchmark generator (`scripts/benchmarks/run_pilot.py` for pilot scope, full runner TBD for production). Recompute benchmarks after each batch.
+### 3.3 Benchmark coverage
+
+Current staging audit after the latest pilot recompute:
+
+Current coverage totals are 43 insufficient cells, 12 low cells, and 0 medium/high cells.
+
+| Confidence | Cell count | Notes |
+|------------|------------|-------|
+| insufficient | 43 | Below scoring coverage target |
+| low | 12 | Preliminary only |
+| medium | 0 | No usable benchmark cells yet |
+| high | 0 | No stable benchmark cells yet |
+
+Full-sample runs are required before medium coverage is possible; the default pilot slice remains too thin for `sample_size_metros >= 8`.
+
+Thin-cell follow-up:
+
+| Niche | Population class | Sample metros | Confidence | Follow-up |
+|-------|------------------|---------------|------------|-----------|
+| auto repair | micro_under_50k | 1 | insufficient | +7 metros to medium |
+| concrete contractor | medium_100_300k | 1 | insufficient | +7 metros to medium |
+| plumber | large_300k_1m | 1 | insufficient | +7 metros to medium |
+| roofing contractor | large_300k_1m | 1 | insufficient | +7 metros to medium |
+
+Expanded paid collection has not yet been run in this implementation pass.
+
+### 3.4 Refresh trigger
+
+Initial bulk load: run benchmark generator (`scripts/benchmarks/run_pilot.py` for pilot scope, or `--full-sample` when expanding benchmark coverage). Recompute benchmarks after each batch.
 
 Steady state: benchmarks recomputed nightly via cron. Each user-initiated scoring run also adds to `seo_facts`, so benchmarks accumulate naturally.
 
 ---
 
+## Sonar Compatibility Boundary
+
+The current benchmark tables can produce a Sonar slice-lite CellRecord for LA plumbing (`238220__msa__31080__2023`) using ACS-backed `metros`, CBP-backed `census_cbp_establishments`, NAICS mapping, and DataForSEO-derived `seo_facts`.
+
+The full Sonar residual spec remains blocked on these source layers:
+
+| Required layer | Current status | Blocking effect |
+| --- | --- | --- |
+| `geo.canonical_geo` and `geo.crosswalk` | Not loaded | Cannot roll county-level NES or BDS to MSA with auditable weights. |
+| NES county extracts | Not loaded | Cannot compute `nonemp_to_emp_ratio`. |
+| BDS 2018-2023 extracts | Not loaded | Cannot compute establishment exit/churn trajectory. |
+| CBP 2018-2022 history | Not loaded | Cannot compute five-year establishment CAGR. |
+| Google Trends 24-month series | Adapter exists, not stored by cell | Cannot compute `trends_slope_24mo` or `seasonality_index`. |
+| Top-3 review floors | `seo_facts` columns exist, current rows are null | Cannot compute Sonar local-pack review barriers until paid collection is rerun. |
+| Residual peer matrix | Not materialized | Cannot rank cells on actual-minus-expected residuals. |
+
+Slice-lite scores must use `score_version = "sonar-lite-0.1"` and include data-quality warnings for each missing layer. Full Sonar scores must use a distinct score version after residuals are backed by a peer matrix.
+
+---
+
 ## 4. Confidence in the per-(niche, metro) score
+
+Current boundary: Phase 7 completes when `seo_benchmarks` can be recomputed and audited in staging. V2 scoring integration is the next implementation slice and should add a repository around `seo_benchmarks` rather than querying Supabase ad hoc from scoring formulas.
 
 The benchmark's confidence carries forward to the score. `metro_score_v2.benchmark_confidence` is one of `{high, medium, low, insufficient}` — copied from the benchmark cell used.
 

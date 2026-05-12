@@ -1,51 +1,33 @@
--- Phase 7: Reference tables for data providers
--- Census ACS demographics, CBP business patterns, BLS ACV estimates
+-- 011_data_provider_tables.sql
+--
+-- Phase 7 provider persistence that does not duplicate the benchmark schema.
+-- Canonical demographics live in public.metros.
+-- Canonical CBP business density lives in public.census_cbp_establishments.
 
--- Cities reference table (Census ACS)
-CREATE TABLE IF NOT EXISTS cities (
-    city_id TEXT PRIMARY KEY,
-    cbsa_code TEXT UNIQUE,
-    name TEXT NOT NULL,
-    state TEXT,
-    population INTEGER,
-    median_income NUMERIC,
-    homeownership_rate NUMERIC,
-    housing_age_median NUMERIC,
-    broadband_penetration NUMERIC,
-    growth_rate NUMERIC,
-    archetype TEXT,
-    demographics JSONB DEFAULT '{}',
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_cities_population ON cities(population);
-CREATE INDEX IF NOT EXISTS idx_cities_state ON cities(state);
-CREATE INDEX IF NOT EXISTS idx_cities_archetype ON cities(archetype);
-
--- Business patterns (Census CBP)
-CREATE TABLE IF NOT EXISTS business_patterns (
-    cbsa_code TEXT NOT NULL,
-    naics_code TEXT NOT NULL,
-    year INTEGER NOT NULL,
-    establishments INTEGER,
-    employees INTEGER,
-    payroll_thousands INTEGER,
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (cbsa_code, naics_code, year)
-);
-
-CREATE INDEX IF NOT EXISTS idx_bp_cbsa ON business_patterns(cbsa_code);
-CREATE INDEX IF NOT EXISTS idx_bp_naics ON business_patterns(naics_code);
-
--- Service ACV estimates (BLS wages)
-CREATE TABLE IF NOT EXISTS service_acv_estimates (
-    naics_code TEXT NOT NULL,
-    cbsa_code TEXT DEFAULT 'national',
+CREATE TABLE IF NOT EXISTS public.service_acv_estimates (
+    naics_code TEXT NOT NULL REFERENCES public.census_target_naics(naics_code),
+    cbsa_code TEXT NOT NULL DEFAULT 'national',
     mean_hourly_wage NUMERIC,
     avg_job_hours NUMERIC,
-    overhead_multiplier NUMERIC DEFAULT 2.0,
+    overhead_multiplier NUMERIC NOT NULL DEFAULT 2.0,
     acv_estimate NUMERIC,
     year INTEGER,
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    source TEXT NOT NULL DEFAULT 'bls'
+        CHECK (source IN ('bls', 'manual', 'derived')),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (naics_code, cbsa_code)
 );
+
+CREATE INDEX IF NOT EXISTS idx_service_acv_cbsa
+    ON public.service_acv_estimates(cbsa_code);
+
+ALTER TABLE public.service_acv_estimates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS service_acv_read_all ON public.service_acv_estimates;
+CREATE POLICY service_acv_read_all
+    ON public.service_acv_estimates
+    FOR SELECT
+    USING (true);
+
+COMMENT ON TABLE public.service_acv_estimates IS
+    'Phase 7 BLS-derived service annual contract value estimates keyed by NAICS and CBSA. Demographics and CBP density remain in metros/census_cbp_establishments.';

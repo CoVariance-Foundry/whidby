@@ -4,7 +4,8 @@ Populates `seo_facts` with keyword-grain market observations across a
 stratified sample of (niche, metro) pairs. Skips V1.1 scoring entirely —
 no writes to reports/metro_signals/metro_scores.
 
-Pilot scope: 10 niches × 20 metros = 200 reports.
+Default pilot scope: 10 niches × 20 metros = 200 reports.
+Full-sample scope: 10 niches × all metros in metros_sampled.json.
 Per (niche, metro):
   1. Keyword expansion (cached per niche — one LLM call per niche total)
   2. DataForSEO keyword_volume (batched, one task per metro)
@@ -21,6 +22,7 @@ Reads credentials from .env in repo root.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import logging
@@ -50,12 +52,15 @@ log = logging.getLogger("benchmark_runner")
 # Config
 # -------------------------------------------------------------------
 # Benchmark runs always go to STAGING. The .env's NEXT_PUBLIC_SUPABASE_URL
-# points to prod; explicit STAGING_SUPABASE_URL overrides for benchmarking.
+# points to prod; explicit benchmark overrides keep writes separated.
 SUPABASE_URL = os.environ.get(
     "BENCHMARK_SUPABASE_URL",
     "https://wuybidpvqhhgkukpyyhq.supabase.co",  # staging
 )
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_KEY = (
+    os.environ.get("BENCHMARK_SUPABASE_KEY")
+    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+)
 DFS_LOGIN = os.environ.get("DATAFORSEO_LOGIN")
 DFS_PASS = os.environ.get("DATAFORSEO_PASSWORD")
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -107,37 +112,76 @@ class RunStats:
         )
 
 
+def positive_int(value: str) -> int:
+    """Parse a positive integer for optional batch-size controls."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Collect benchmark seo_facts for stratified (niche, metro) pairs."
+    )
+    parser.add_argument("--limit-pairs", type=positive_int, default=None)
+    parser.add_argument(
+        "--niche",
+        action="append",
+        default=None,
+        help="Pilot niche to run. Repeat to run multiple niches in CLI order.",
+    )
+    parser.add_argument(
+        "--population-class",
+        action="append",
+        default=None,
+        help="Population class to include. Repeat to include multiple classes.",
+    )
+    parser.add_argument(
+        "--sample-mode",
+        choices=("pilot", "full"),
+        default="pilot",
+        help="Use pilot metro subset or every metro in metros_sampled.json.",
+    )
+    parser.add_argument(
+        "--full-sample",
+        action="store_const",
+        const="full",
+        dest="sample_mode",
+        help="Shortcut for --sample-mode full.",
+    )
+    return parser.parse_args()
+
+
+def fail_cli(message: str) -> None:
+    print(f"run_pilot.py: error: {message}", file=sys.stderr)
+    sys.exit(2)
+
+
+def select_niches(requested: list[str] | None) -> list[str]:
+    if not requested:
+        return PILOT_NICHES
+
+    for niche in requested:
+        if niche not in PILOT_NICHES:
+            allowed = ", ".join(PILOT_NICHES)
+            fail_cli(f"unknown niche {niche!r}; expected one of: {allowed}")
+
+    return requested
+
+
 # -------------------------------------------------------------------
 # Sampling plan loader
 # -------------------------------------------------------------------
-def load_sample(metros_path: Path) -> list[dict[str, Any]]:
-    """Pick the pilot's 20 metros from the larger sample plan.
-
-    Also builds a state→best-DFS-code index for the state-borrow fallback
-    used when a metro has no native DFS codes.
-    """
-    full = json.loads(metros_path.read_text())
-    by_class: dict[str, list[dict]] = {}
-    for m in full:
-        by_class.setdefault(m["population_class"], []).append(m)
-
-    pilot: list[dict] = []
-    for cls, n in PILOT_METROS_PER_CLASS.items():
-        pool = by_class.get(cls, [])
-        with_dfs = [m for m in pool if m.get("dataforseo_location_codes")]
-        without_dfs = [m for m in pool if not m.get("dataforseo_location_codes")]
-        ordered = with_dfs + without_dfs
-        pilot.extend(ordered[:n])
-
-    # Build state→DFS code map for state-level fallback (largest metro in state wins)
+def attach_state_dfs_fallback(metros: list[dict[str, Any]], full_sample: list[dict[str, Any]]) -> None:
+    """Attach state-level DFS fallback codes to selected metros in place."""
     state_dfs: dict[str, list[int]] = {}
-    for m in sorted(full, key=lambda x: -(x.get("population") or 0)):
+    for m in sorted(full_sample, key=lambda x: -(x.get("population") or 0)):
         codes = m.get("dataforseo_location_codes") or []
         if codes and m["state"] not in state_dfs:
             state_dfs[m["state"]] = codes
 
-    # Stitch state fallback codes onto pilot metros that lack native codes
-    for m in pilot:
+    for m in metros:
         if not m.get("dataforseo_location_codes"):
             fallback = state_dfs.get(m["state"], [])
             if fallback:
@@ -148,7 +192,56 @@ def load_sample(metros_path: Path) -> list[dict[str, Any]]:
         else:
             m["_dfs_source"] = "native"
 
+
+def select_metros(full: list[dict[str, Any]], sample_mode: str) -> list[dict[str, Any]]:
+    """Select pilot metros by default, or all sampled metros for full coverage runs."""
+    if sample_mode == "full":
+        selected = [dict(m) for m in full]
+        attach_state_dfs_fallback(selected, full)
+        return selected
+
+    by_class: dict[str, list[dict]] = {}
+    for m in full:
+        by_class.setdefault(m["population_class"], []).append(m)
+
+    pilot: list[dict] = []
+    for cls, n in PILOT_METROS_PER_CLASS.items():
+        pool = by_class.get(cls, [])
+        with_dfs = [m for m in pool if m.get("dataforseo_location_codes")]
+        without_dfs = [m for m in pool if not m.get("dataforseo_location_codes")]
+        ordered = with_dfs + without_dfs
+        pilot.extend(dict(m) for m in ordered[:n])
+
+    attach_state_dfs_fallback(pilot, full)
     return pilot
+
+
+def load_full_sample(metros_path: Path) -> list[dict[str, Any]]:
+    """Load the full sampled metro plan."""
+    return json.loads(metros_path.read_text())
+
+
+def validate_population_classes(
+    requested: list[str] | None,
+    full_sample: list[dict[str, Any]],
+) -> None:
+    if not requested:
+        return
+
+    known_classes = sorted(
+        {
+            metro.get("population_class")
+            for metro in full_sample
+            if metro.get("population_class")
+        }
+    )
+    known_set = set(known_classes)
+    for population_class in requested:
+        if population_class not in known_set:
+            allowed = ", ".join(known_classes)
+            fail_cli(
+                f"unknown population class {population_class!r}; expected one of: {allowed}"
+            )
 
 
 # -------------------------------------------------------------------
@@ -180,6 +273,9 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
         "ads_present": False,
         "lsa_present": False,
         "top_local_pack_items": [],
+        "top3_review_count_min": None,
+        "top3_review_count_avg": None,
+        "top3_rating_avg": None,
     }
     if not serp_data:
         return flags
@@ -223,6 +319,21 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
                     flags["aggregator_count_top10"] += 1
                 else:
                     flags["local_biz_count_top10"] += 1
+    review_counts = [
+        item["rating_count"]
+        for item in flags["top_local_pack_items"][:3]
+        if isinstance(item.get("rating_count"), (int, float))
+    ]
+    ratings = [
+        item["rating"]
+        for item in flags["top_local_pack_items"][:3]
+        if isinstance(item.get("rating"), (int, float))
+    ]
+    if review_counts:
+        flags["top3_review_count_min"] = int(min(review_counts))
+        flags["top3_review_count_avg"] = int(round(sum(review_counts) / len(review_counts)))
+    if ratings:
+        flags["top3_rating_avg"] = round(sum(ratings) / len(ratings), 2)
     return flags
 
 
@@ -377,6 +488,9 @@ async def score_one(
                 "aio_present": row_features.get("aio_present"),
                 "local_pack_present": row_features.get("local_pack_present"),
                 "local_pack_position": row_features.get("local_pack_position"),
+                "top3_review_count_min": row_features.get("top3_review_count_min"),
+                "top3_review_count_avg": row_features.get("top3_review_count_avg"),
+                "top3_rating_avg": row_features.get("top3_rating_avg"),
                 "aggregator_count_top10": row_features.get("aggregator_count_top10"),
                 "local_biz_count_top10": row_features.get("local_biz_count_top10"),
                 "featured_snippet_present": row_features.get("featured_snippet_present"),
@@ -414,9 +528,7 @@ async def score_one(
 # Main
 # -------------------------------------------------------------------
 async def main():
-    if not (SUPABASE_KEY and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
-        log.error("missing env vars — check .env")
-        sys.exit(1)
+    args = parse_args()
 
     # Sampling plan lives next to this script
     metros_path = Path(__file__).parent / "metros_sampled.json"
@@ -424,9 +536,37 @@ async def main():
         log.error(f"sampling plan missing: {metros_path}")
         sys.exit(1)
 
-    pilot_metros = load_sample(metros_path)
-    pairs = [(n, m) for n in PILOT_NICHES for m in pilot_metros]
-    log.info(f"pilot: {len(PILOT_NICHES)} niches × {len(pilot_metros)} metros = {len(pairs)} reports")
+    full_sample = load_full_sample(metros_path)
+    validate_population_classes(args.population_class, full_sample)
+
+    selected_metros = select_metros(full_sample, args.sample_mode)
+    if args.population_class:
+        allowed_classes = set(args.population_class)
+        selected_metros = [
+            metro
+            for metro in selected_metros
+            if metro.get("population_class") in allowed_classes
+        ]
+
+    niches = select_niches(args.niche)
+    pairs = [(n, m) for n in niches for m in selected_metros]
+    if args.limit_pairs is not None:
+        pairs = pairs[:args.limit_pairs]
+
+    if not pairs:
+        fail_cli("filters produced zero (niche, metro) pairs")
+
+    if not (SUPABASE_KEY and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
+        log.error("missing env vars — check .env")
+        sys.exit(1)
+
+    log.info(
+        "%s sample: %s niches × %s metros = %s reports",
+        args.sample_mode,
+        len(niches),
+        len(selected_metros),
+        len(pairs),
+    )
 
     # Disable persistent cache: it reads NEXT_PUBLIC_SUPABASE_URL (prod) but the
     # service key in .env is staging — they don't match and produce 401 spam.
