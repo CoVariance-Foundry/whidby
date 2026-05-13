@@ -37,7 +37,10 @@ log = logging.getLogger("smoke")
 SUPABASE_URL = os.environ.get(
     "BENCHMARK_SUPABASE_URL", "https://wuybidpvqhhgkukpyyhq.supabase.co"
 )
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+SUPABASE_KEY = (
+    os.environ.get("BENCHMARK_SUPABASE_KEY")
+    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+)
 
 
 async def main():
@@ -60,6 +63,7 @@ async def main():
     dfs = DataForSEOClient(
         login=os.environ["DATAFORSEO_LOGIN"],
         password=os.environ["DATAFORSEO_PASSWORD"],
+        persistent_cache=False,
     )
     llm = LLMClient(api_key=os.environ["ANTHROPIC_API_KEY"])
     cache = NicheExpansionCache(llm=llm, dfs=dfs)

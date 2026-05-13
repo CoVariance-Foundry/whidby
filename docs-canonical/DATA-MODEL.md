@@ -31,6 +31,22 @@
 | KBEvidenceArtifact  | Supabase `kb_evidence_artifacts`     | artifact_id (UUID) | Raw M5 collection payloads linked to snapshots                  |
 | ApiResponseCache    | Supabase `api_response_cache` table  | cache_id (UUID)  | Persistent cross-run DataForSEO response cache                     |
 | FeedbackEvent       | Supabase `feedback_events` table     | event_id (UUID)  | Runtime feedback linked to snapshots, reports, and entities        |
+| MetroBenchmarkSource | Supabase `metros` table             | cbsa_code        | ACS-backed metro demographics and population class                 |
+| CBPEstablishment    | Supabase `census_cbp_establishments` table | cbsa_code + naics_code + year | Census CBP establishment density for monetization benchmarks |
+| SeoFact             | Supabase `seo_facts` table           | id (UUID); unique niche + cbsa + keyword + date | Keyword-grain observations used to build benchmarks             |
+| SeoBenchmark        | Supabase `seo_benchmarks` table      | niche + population_class | V2 benchmark cell used by scoring                              |
+| ServiceACVEstimate  | Supabase `service_acv_estimates` table | naics_code + cbsa_code | BLS-derived ACV estimates                                      |
+
+
+### Sonar Slice-Lite Entities
+
+| Entity | Storage | Primary Key | Description |
+| --- | --- | --- | --- |
+| SonarCell | Supabase `sonar.cells` | `cell_id` | Cell registry keyed by NAICS, geo level, geo id, and year. |
+| SonarCellRun | Supabase `sonar.cell_runs` | `run_id` | Versioned CellRecord JSONB output. Slice-lite records include explicit data-quality warnings for missing NES, BDS, Trends, geo crosswalk, and residual model inputs. |
+| SonarScoringWeights | Supabase `sonar.scoring_weights` | `version` | Active score weights by Sonar score version. |
+
+Full Sonar residuals require additional canonical layers before implementation: `geo.canonical_geo`, `geo.crosswalk`, county-level NES source tables, BDS source tables, historical CBP source tables, and residual model artifact storage. Do not mark a Sonar cell as full-spec unless residuals are computed from a peer matrix with `peer_count >= 30` and recorded model quality.
 
 
 ### PlaceSuggestion (autocomplete output — in-memory)
@@ -218,5 +234,3 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 0.1.0   | 2026-04-05 | DocGuard Init | Initial template                                             |
 | 1.0.0   | 2026-04-05 | Migration     | Populated from `docs/algo_spec_v1_1.md`, `docs/data_flow.md` |
 | 1.1.0   | 2026-04-22 | Mapbox autocomplete | Added PlaceSuggestion and HistoryEntry schemas for global autocomplete + canonical place targeting |
-
-

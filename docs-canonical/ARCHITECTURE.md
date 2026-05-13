@@ -48,6 +48,8 @@ Both apps share request validation, score shape, and the `CityAutocomplete` comp
 
 ## Component Map
 
+V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_facts, ACS-backed metros, and CBP-backed census_cbp_establishments. Scoring code should consume them through a repository boundary so tests can use fixtures without network access.
+
 | Component | Responsibility | Location | Tests |
 |-----------|---------------|----------|-------|
 | DataForSEO Client (M0) | API auth, rate limiting, caching, cost tracking | `src/clients/dataforseo/` | `tests/unit/test_dataforseo_client.py` |

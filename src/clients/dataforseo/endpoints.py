@@ -118,3 +118,10 @@ LOCATIONS = Endpoint(
     mode=QueueMode.LIVE,
     cost_per_call=0.0,
 )
+
+GOOGLE_TRENDS = Endpoint(
+    post_path="keywords_data/google_trends/explore/live",
+    get_path=None,
+    mode=QueueMode.LIVE,
+    cost_per_call=0.05,
+)

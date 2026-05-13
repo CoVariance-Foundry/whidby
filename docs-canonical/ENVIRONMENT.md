@@ -126,6 +126,19 @@ Production env vars are unchanged and only apply to `main` deploys.
 
 The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which enables CORS for all `*.vercel.app` preview origins. The production Render service (`whidby-1`) has `ENVIRONMENT=production`, which restricts CORS to the explicit allowlist.
 
+### Benchmark Runner Environment
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `BENCHMARK_SUPABASE_URL` | Recommended | Supabase project URL for benchmark writes. Defaults to `whidby-staging`. |
+| `BENCHMARK_SUPABASE_KEY` | Recommended | Service-role key for the benchmark Supabase project. The runner requires either `BENCHMARK_SUPABASE_KEY` or `SUPABASE_SERVICE_ROLE_KEY`; this variable falls back to `SUPABASE_SERVICE_ROLE_KEY`. |
+
+### Benchmark Commands
+
+| Command | Purpose |
+|---------|---------|
+| `.venv/bin/python -m scripts.benchmarks.recompute_benchmarks 120` | Rebuild staging `seo_benchmarks` from recent `seo_facts` |
+
 ### Migration workflow
 
 1. Write migration in `supabase/migrations/`
