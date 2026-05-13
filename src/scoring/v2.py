@@ -115,6 +115,11 @@ def _flatten_signals(signals: Mapping[str, Any]) -> dict[str, Any]:
         value = signals.get(key)
         if isinstance(value, Mapping):
             flattened.update(value)
+    if "commercial_search_volume" not in flattened:
+        transactional_ratio = clamp(_number(flattened.get("transactional_ratio")), 0.0, 1.0)
+        flattened["commercial_search_volume"] = (
+            _number(flattened.get("total_search_volume")) * transactional_ratio
+        )
     return flattened
 
 

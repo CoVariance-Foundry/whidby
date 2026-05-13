@@ -122,6 +122,15 @@ class _FakeBenchmarkRepository:
         )
 
 
+class _FakeCityDataProvider:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+
+    def get_business_density(self, city_id: str, naics: str | None = None) -> dict[str, int]:
+        self.calls.append((city_id, naics))
+        return {"establishments": 350}
+
+
 def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     fake_dfs = _make_fake_dfs_client()
     with patch("src.pipeline.orchestrator.expand_keywords",
@@ -182,26 +191,37 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:
     fake_dfs = _make_fake_dfs_client()
     repo = _FakeBenchmarkRepository()
+    city_provider = _FakeCityDataProvider()
     signals = {
-        **_FAKE_SIGNALS,
-        "population": 500_000,
-        "population_class": "metro_1m_5m",
-        "commercial_search_volume": 2_000,
-        "total_search_volume": 2_000,
-        "avg_cpc": 12.0,
-        "aggregator_count": 2.0,
-        "local_biz_count": 5.0,
-        "avg_top5_da": 30.0,
-        "local_pack_present": True,
-        "top3_review_count_min": 60,
-        "review_velocity_avg": 4.5,
-        "cbp_establishments": 350,
-        "lsa_present": True,
-        "ads_present": True,
-        "aio_trigger_rate": 0.08,
-        "transactional_keyword_ratio": 0.7,
-        "local_fulfillment_required": 1.0,
-        "paa_density": 2.0,
+        "demand": {
+            "total_search_volume": 2_000,
+            "avg_cpc": 12.0,
+            "transactional_ratio": 0.7,
+            "effective_search_volume": 99_999,
+        },
+        "organic_competition": {
+            "aggregator_count": 2.0,
+            "local_biz_count": 5.0,
+            "avg_top5_da": 30.0,
+            "median_top10_dr": 45,
+        },
+        "local_competition": {
+            "local_pack_present": True,
+            "top3_review_count_min": 60,
+            "review_velocity_avg": 4.5,
+            "gbp_saturation": 0.6,
+        },
+        "monetization": {
+            "lsa_present": True,
+            "ads_present": True,
+            "median_cpc": 12.5,
+        },
+        "ai_resilience": {
+            "aio_trigger_rate": 0.08,
+            "transactional_keyword_ratio": 0.7,
+            "local_fulfillment_required": 1.0,
+            "paa_density": 2.0,
+        },
     }
 
     with patch("src.pipeline.orchestrator.expand_keywords",
@@ -228,15 +248,22 @@ def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() 
                 llm_client=object(),
                 dataforseo_client=fake_dfs,
                 benchmark_repository=repo,
+                city_data_provider=city_provider,
             )
         )
 
     assert repo.calls == [("roofing", "metro_1m_5m")]
+    assert city_provider.calls == [("38060", "238160")]
     metro = result.report["metros"][0]
     assert metro["v2_scores"]["spec_version"] == "2.0"
     assert metro["v2_scores"]["benchmark"]["confidence_label"] == "medium"
-    assert metro["v2_scores"]["scores"]["demand_strength"]["value"] == 200
+    assert metro["v2_scores"]["scores"]["demand_strength"]["value"] == 17
+    assert metro["v2_scores"]["scores"]["monetization_signal"]["value"] == 32
+    assert metro["v2_scores"]["flags"]["cbp_data_missing"] is False
     assert "opportunity" in metro["scores"]
+    assert "population" not in metro["signals"]
+    assert "population_class" not in metro["signals"]
+    assert "cbp_establishments" not in metro["signals"]
 
 
 def test_v2_population_class_derives_from_population_when_signal_missing() -> None:
