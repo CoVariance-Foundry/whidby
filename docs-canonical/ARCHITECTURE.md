@@ -48,7 +48,7 @@ Both apps share request validation, score shape, and the `CityAutocomplete` comp
 
 ## Component Map
 
-V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_facts, ACS-backed metros, and CBP-backed census_cbp_establishments. Scoring code should consume them through a repository boundary so tests can use fixtures without network access.
+V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_facts, ACS-backed metros, and CBP-backed census_cbp_establishments. Scoring reads benchmark cells through `src.scoring.benchmark_repository.SeoBenchmarkRepository`; the Supabase adapter is `src.clients.seo_benchmark_repository.SupabaseSeoBenchmarkRepository`. Scoring formulas stay repository-backed so tests can use fixtures without network access.
 
 | Component | Responsibility | Location | Tests |
 |-----------|---------------|----------|-------|
@@ -75,6 +75,7 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | KB persistence | Canonical entity, versioned snapshot, evidence artifact, and feedback event CRUD for the knowledge base | `src/clients/kb_persistence.py` | `tests/unit/test_kb_persistence.py` |
 | Canonical key resolver | Deterministic niche+geo identity normalization for KB entity dedup | `src/pipeline/canonical_key.py` | `tests/unit/test_canonical_key.py` |
 | Persistent API cache | Two-tier (in-memory L1 + Supabase L2) DataForSEO response cache shared across runs | `src/clients/dataforseo/persistent_cache.py` | `tests/unit/test_persistent_cache.py` |
+| V2 benchmark repository boundary | Repository contract and Supabase adapter for V2 `seo_benchmarks` cells used by scoring formulas | `src/scoring/benchmark_repository.py`, `src/clients/seo_benchmark_repository.py`, `src/scoring/v2.py` | `tests/scoring/test_benchmark_repository_contract.py`, `tests/clients/test_seo_benchmark_repository.py`, `tests/scoring/test_v2_scoring.py` |
 | FastAPI niche bridge | `POST /api/niches/score`, `GET /api/niches/{id}`, `GET /api/metros/suggest` | `src/research_agent/api.py` | `tests/unit/test_api_niches.py`, `test_api_metros_suggest.py` |
 | Mapbox places autocomplete | `GET /api/places/suggest` — Mapbox v6 forward geocoding + DataForSEO location bridge | `src/research_agent/api.py`, `src/research_agent/places.py` | `tests/unit/test_api_places_suggest.py`, `tests/unit/test_places_bridge.py` |
 | Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |

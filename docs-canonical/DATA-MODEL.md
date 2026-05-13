@@ -37,6 +37,8 @@
 | SeoBenchmark        | Supabase `seo_benchmarks` table      | niche + population_class | V2 benchmark cell used by scoring                              |
 | ServiceACVEstimate  | Supabase `service_acv_estimates` table | naics_code + cbsa_code | BLS-derived ACV estimates                                      |
 
+V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.SeoBenchmarkRepository`. Scoring formulas must not query Supabase directly; Supabase access belongs in repository adapters such as `src.clients.seo_benchmark_repository.SupabaseSeoBenchmarkRepository`.
+
 
 ### Sonar Slice-Lite Entities
 
