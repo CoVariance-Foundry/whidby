@@ -13,12 +13,15 @@ from src.classification.guidance_generator import classify_and_generate_guidance
 from src.classification.serp_archetype import classify_serp_archetype
 from src.data.metro_db import MetroDB
 from src.data.metro_db_adapter import MetroDBGeoLookup
+from src.domain.ports import CityDataProvider
 from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
 from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
 from src.pipeline.signal_extraction import extract_signals
+from src.scoring.benchmark_repository import SeoBenchmarkRepository
 from src.scoring.engine import compute_scores
+from src.scoring.v2 import compute_v2_scores
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,8 @@ async def score_niche_for_metro(
     llm_client: Any,
     dataforseo_client: Any,
     metro_db: MetroDB | None = None,
+    benchmark_repository: SeoBenchmarkRepository | None = None,
+    city_data_provider: CityDataProvider | None = None,
     dry_run: bool = False,
     request_id: str | None = None,
 ) -> ScoreNicheResult:
@@ -83,6 +88,8 @@ async def score_niche_for_metro(
             place_id=place_id,
             dataforseo_location_code=dataforseo_location_code,
             strategy_profile=strategy_profile,
+            benchmark_repository=benchmark_repository,
+            city_data_provider=city_data_provider,
             started=started,
             run_id=f"score-dry-{uuid4()}",
         )
@@ -180,6 +187,17 @@ async def score_niche_for_metro(
     m8_ms = int((time.monotonic() - m8_start) * 1000)
     logger.info("[%s] M8 guidance generation DONE duration_ms=%d", run_id, m8_ms)
 
+    v2_scores = None
+    if benchmark_repository is not None:
+        v2_scores = _compute_v2_scores_for_orchestrator(
+            niche_normalized=niche.strip().lower(),
+            cbsa_code=resolved.cbsa_code,
+            signals=signals,
+            population=resolved.population,
+            benchmark_repository=benchmark_repository,
+            city_data_provider=city_data_provider,
+        )
+
     # --- M9 report assembly ---
     m9_start = time.monotonic()
     logger.info("[%s] M9 report assembly START", run_id)
@@ -219,6 +237,7 @@ async def score_niche_for_metro(
                 "difficulty_tier": difficulty,
                 "signals": signals,
                 "guidance": guidance_bundle,
+                **({"v2_scores": v2_scores} if v2_scores is not None else {}),
             }
         ],
         "meta": {
@@ -263,6 +282,8 @@ async def _dry_run_result(
     strategy_profile: str,
     started: float,
     run_id: str,
+    benchmark_repository: SeoBenchmarkRepository | None = None,
+    city_data_provider: CityDataProvider | None = None,
 ) -> ScoreNicheResult:
     """Return a contract-compliant ScoreNicheResult using fixture data, no live calls.
 
@@ -302,6 +323,17 @@ async def _dry_run_result(
     # llm_client=None — guidance_generator safely falls back to rule-based templates.
     guidance_bundle = await classify_and_generate_guidance(classification_input, None)
 
+    v2_scores = None
+    if benchmark_repository is not None:
+        v2_scores = _compute_v2_scores_for_orchestrator(
+            niche_normalized=niche.strip().lower(),
+            cbsa_code=target.cbsa_code,
+            signals=signals,
+            population=target.population,
+            benchmark_repository=benchmark_repository,
+            city_data_provider=city_data_provider,
+        )
+
     run_input = {
         "run_id": run_id,
         "input": {
@@ -330,6 +362,7 @@ async def _dry_run_result(
                 "difficulty_tier": difficulty,
                 "signals": signals,
                 "guidance": guidance_bundle,
+                **({"v2_scores": v2_scores} if v2_scores is not None else {}),
             }
         ],
         "meta": {
@@ -365,6 +398,65 @@ def _log_dfs_cost_summary(
             ep_parts.append(f"{short}={info['calls']}/${info['cost']:.4f}")
         parts.append("breakdown: " + ", ".join(ep_parts))
     logger.info(" — ".join(parts))
+
+
+def _population_class_for_benchmarks(population: int | None) -> str | None:
+    if population is None or population <= 0:
+        return None
+    if population < 50_000:
+        return "micro_under_50k"
+    if population < 100_000:
+        return "small_50_100k"
+    if population < 300_000:
+        return "medium_100_300k"
+    if population < 1_000_000:
+        return "large_300k_1m"
+    if population < 5_000_000:
+        return "metro_1m_5m"
+    return "mega_5m_plus"
+
+
+def _signals_for_v2_benchmarks(signals: dict[str, Any], population: int | None) -> dict[str, Any]:
+    existing_population_class = str(signals.get("population_class") or "").strip() or None
+    signal_population = signals.get("population")
+    return {
+        **signals,
+        "population": signal_population if signal_population is not None else population,
+        "population_class": existing_population_class
+        or _population_class_for_benchmarks(population),
+    }
+
+
+def _compute_v2_scores_for_orchestrator(
+    *,
+    niche_normalized: str,
+    cbsa_code: str,
+    signals: dict[str, Any],
+    population: int | None,
+    benchmark_repository: SeoBenchmarkRepository,
+    city_data_provider: CityDataProvider | None,
+) -> dict[str, Any]:
+    v2_signals = _signals_for_v2_benchmarks(signals, population)
+    population_class = str(v2_signals.get("population_class") or "").strip()
+    benchmark = None
+    if population_class:
+        benchmark = benchmark_repository.get(
+            niche_normalized=niche_normalized,
+            population_class=population_class,
+        )
+
+    naics_code = (benchmark.naics_code or "").strip() if benchmark is not None else ""
+    if city_data_provider is not None and naics_code:
+        density = city_data_provider.get_business_density(cbsa_code, naics_code)
+        if isinstance(density, dict) and density.get("establishments") is not None:
+            v2_signals["cbp_establishments"] = density["establishments"]
+
+    return compute_v2_scores(
+        niche_normalized=niche_normalized,
+        cbsa_code=cbsa_code,
+        metro_signals=v2_signals,
+        benchmark=benchmark,
+    )
 
 
 def _build_evidence_from_signals(signals: dict[str, dict]) -> list[dict[str, Any]]:
