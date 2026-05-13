@@ -1,0 +1,49 @@
+{
+  "strata": {
+    "mega_5m_plus": {
+      "available": 9,
+      "target": 10,
+      "sampled": 9,
+      "with_dfs": 9
+    },
+    "metro_1m_5m": {
+      "available": 47,
+      "target": 45,
+      "sampled": 42,
+      "with_dfs": 37
+    },
+    "large_300k_1m": {
+      "available": 112,
+      "target": 75,
+      "sampled": 72,
+      "with_dfs": 12
+    },
+    "medium_100_300k": {
+      "available": 233,
+      "target": 75,
+      "sampled": 62,
+      "with_dfs": 2
+    },
+    "small_50_100k": {
+      "available": 211,
+      "target": 35,
+      "sampled": 30,
+      "with_dfs": 0
+    },
+    "micro_under_50k": {
+      "available": 323,
+      "target": 10,
+      "sampled": 10,
+      "with_dfs": 0
+    }
+  },
+  "regions": {
+    "Northeast": 44,
+    "West": 57,
+    "Midwest": 48,
+    "South": 67,
+    "Territory": 9
+  },
+  "with_dfs": 60,
+  "without_dfs": 165
+}

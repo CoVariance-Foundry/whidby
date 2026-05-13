@@ -867,7 +867,7 @@ tests/
 
 ### Pipeline Orchestrator (operational wiring)
 
-**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Resolves the metro via `MetroDB.from_seed().expand_scope(...)`, threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
+**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Geo resolution is delegated to `GeoResolver` (via `MetroDBGeoLookup`), which handles three paths: explicit DataForSEO code, CBSA seed lookup, and state-level DFS code fallback. The orchestrator then threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
 
 **Files:**
 ```
@@ -904,6 +904,25 @@ Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
 - `GET /api/metros/suggest?q=<prefix>&limit=<int>` — city autocomplete. Matches `q` (min 2 chars) against `principal_cities` (prefix) and `cbsa_name` (prefix fallback); emits one row per matching principal city. Returns highest-population matches first, capped at `limit` (default 10, max 20). Response shape: `[{cbsa_code, city, state, cbsa_name, population}]`. Module-level `MetroDB` singleton loaded once at import time.
 
 Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/exploration`, replacing the prior hash-based stub in `apps/admin/src/lib/niche-finder/response-adapter.ts` (deleted). The `/api/metros/suggest` route is proxied by `apps/admin/src/app/api/agent/metros/suggest/route.ts`.
+
+### MarketService (Phase 3)
+
+**File:** `src/domain/services/market_service.py`
+
+**Purpose:** Extracted business logic from the `niches_score` API handler. Coordinates the full scoring flow:
+1. Canonical key resolution (KB identity)
+2. Pipeline execution (via injected `score_niche_for_metro`)
+3. Report persistence (via `MarketStore` adapter)
+4. KB entity/snapshot/evidence updates (via `KnowledgeStore` adapter)
+5. DFS cost log flushing
+6. Feedback logging
+
+**Input:** `ScoreRequest(niche, city, state?, place_id?, dataforseo_location_code?, strategy_profile, dry_run)`
+**Output:** `ScoreResult(report_id, opportunity_score, classification_label, evidence, report, entity_id, snapshot_id, persist_warning?)`
+
+**Adapters:**
+- `src/clients/supabase_adapter.py` — `SupabaseMarketStore` implements `MarketStore`
+- `src/clients/kb_adapter.py` — `KBKnowledgeStore` implements `KnowledgeStore`
 
 ---
 

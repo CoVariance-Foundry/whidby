@@ -16,23 +16,26 @@ def test_lower_da_competitor_gets_higher_organic_competition_score() -> None:
 
 def test_higher_competition_does_not_inflate_opportunity() -> None:
     weights = resolve_strategy_weights("balanced", metro_signal())
+    composite_weights = {
+        "demand": 0.25,
+        "organic_competition": weights["organic"],
+        "local_competition": weights["local"],
+        "monetization": 0.20,
+        "ai_resilience": 0.15,
+    }
     easier = compute_opportunity_score(
-        demand=70.0,
-        organic_competition=75.0,
-        local_competition=72.0,
-        monetization=65.0,
-        ai_resilience=70.0,
-        organic_weight=weights["organic"],
-        local_weight=weights["local"],
+        component_scores={
+            "demand": 70.0, "organic_competition": 75.0,
+            "local_competition": 72.0, "monetization": 65.0, "ai_resilience": 70.0,
+        },
+        weights=composite_weights,
     )
     harder = compute_opportunity_score(
-        demand=70.0,
-        organic_competition=30.0,
-        local_competition=25.0,
-        monetization=65.0,
-        ai_resilience=70.0,
-        organic_weight=weights["organic"],
-        local_weight=weights["local"],
+        component_scores={
+            "demand": 70.0, "organic_competition": 30.0,
+            "local_competition": 25.0, "monetization": 65.0, "ai_resilience": 70.0,
+        },
+        weights=composite_weights,
     )
     assert easier > harder
 

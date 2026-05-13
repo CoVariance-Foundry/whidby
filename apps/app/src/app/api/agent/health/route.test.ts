@@ -3,7 +3,7 @@ import { GET } from "./route";
 
 describe("GET /api/agent/health", () => {
   it("returns ok when FastAPI /health returns ok", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    globalThis.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: "ok" }), { status: 200 }),
     );
     const res = await GET();
@@ -14,7 +14,7 @@ describe("GET /api/agent/health", () => {
   });
 
   it("returns unavailable with upstream_status when FastAPI is down", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
     const res = await GET();
     expect(res.status).toBe(502);
     const body = await res.json();

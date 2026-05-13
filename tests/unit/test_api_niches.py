@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+import src.research_agent.api as api_module
 from src.research_agent.api import app
+from src.domain.services.market_service import MarketService
+from tests.domain.services.fakes import FakeMarketStore, FakeKnowledgeStore
 
 
 class _FakeScoreResult:
@@ -37,6 +40,20 @@ class _FakeScoreResult:
                            "source": "s", "is_available": True}]
 
 
+def _make_test_market_service(
+    pipeline_fn: Any | None = None,
+) -> MarketService:
+    """Build a MarketService with fakes for handler-level tests."""
+    async def _default_pipeline(**kwargs: Any) -> _FakeScoreResult:
+        return _FakeScoreResult()
+
+    return MarketService(
+        pipeline_fn=pipeline_fn or _default_pipeline,
+        market_store=FakeMarketStore(),
+        knowledge_store=FakeKnowledgeStore(),
+    )
+
+
 def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: Any) -> None:
     async def _fake_orchestrator(**kwargs: Any) -> _FakeScoreResult:
         assert kwargs["dry_run"] is True
@@ -44,20 +61,21 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
         assert kwargs["dataforseo_location_code"] == 12345
         return _FakeScoreResult()
 
-    with patch("src.research_agent.api.score_niche_for_metro", new=_fake_orchestrator), \
-         patch("src.research_agent.api._persist_report", return_value="abc"):
-        client = TestClient(app)
-        res = client.post("/api/niches/score", json={
-            "niche": "roofing",
-            "city": "Phoenix",
-            "state": "AZ",
-            "place_id": "place.123",
-            "dataforseo_location_code": 12345,
-            "dry_run": True,
-        })
+    svc = _make_test_market_service(pipeline_fn=_fake_orchestrator)
+    monkeypatch.setattr(api_module, "_MARKET_SERVICE", svc)
+
+    client = TestClient(app)
+    res = client.post("/api/niches/score", json={
+        "niche": "roofing",
+        "city": "Phoenix",
+        "state": "AZ",
+        "place_id": "place.123",
+        "dataforseo_location_code": 12345,
+        "dry_run": True,
+    })
     assert res.status_code == 200
     body = res.json()
-    assert body["report_id"] == "abc"
+    assert body["report_id"] is None  # dry_run skips persistence
     assert body["opportunity_score"] == 72
     assert body["evidence"][0]["category"] == "demand"
 

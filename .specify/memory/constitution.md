@@ -2,9 +2,9 @@
 
 ## Core Principles
 
-### I. Spec-Driven, Test-Driven Development (NON-NEGOTIABLE)
+### I. Spec-Driven Development with Module-Boundary Testing (NON-NEGOTIABLE)
 
-Every module follows a strict lifecycle: read the spec slice, write the test file first (red), implement until tests pass (green), refactor without breaking tests. No code ships without a corresponding spec artifact and passing tests. Unit tests run without API keys or network access. Integration tests are tagged `@pytest.mark.integration` and skipped in CI by default.
+Every module follows a strict lifecycle: read the spec slice, implement the module, then verify with boundary tests at module entry points and targeted tests for complex pure logic. No code ships without a corresponding spec artifact and passing tests. Simple pass-through code (API routes, adapters, data mapping) is verified by boundary tests and structured logging rather than per-function unit tests. Unit tests run without API keys or network access. Integration tests are tagged `@pytest.mark.integration` and skipped in CI by default.
 
 ### II. Module-First Architecture
 
@@ -35,7 +35,7 @@ All code changes require documentation updates. **Canonical docs** in `docs-cano
 - `docs-canonical/TEST-SPEC.md` — test obligations, coverage rules, quality gates
 - `docs-canonical/ENVIRONMENT.md` — prerequisites, env vars, setup steps
 
-Detailed reference docs (`docs/algo_spec_v1_1.md`, `docs/product_breakdown.md`, etc.) are retained for deep algorithm context and per-module I/O contracts. Spec-kit artifacts (`spec.md`, `plan.md`, `tasks.md`) are mandatory deliverables alongside implementation. Every public function has at least one unit test. Every input/output contract from the spec has a corresponding test.
+Detailed reference docs (`docs/algo_spec_v1_1.md`, `docs/product_breakdown.md`, etc.) are retained for deep algorithm context and per-module I/O contracts. Spec-kit artifacts (`spec.md`, `plan.md`, `tasks.md`) are mandatory deliverables alongside implementation. Every module boundary entry point and every complex pure-logic function has at least one test. Every input/output contract from the spec has a corresponding boundary test. Simple glue code is covered by boundary tests and structured logging.
 
 ### VI. Simplicity and Determinism
 
@@ -61,7 +61,7 @@ Every remaining module (M4-M15, M16 pages) follows this mandatory sequence:
 1. **`/speckit.specify`** -- Define what the module does, acceptance criteria, I/O contracts
 2. **`/speckit.clarify`** -- Resolve ambiguity before planning
 3. **`/speckit.plan`** -- Technical implementation plan with stack specifics
-4. **`/speckit.tasks`** -- TDD-first task breakdown with dependency-safe parallelism
+4. **`/speckit.tasks`** -- Dependency-ordered task breakdown with safe parallelism
 5. **Hard Gate: Spec and Plan review** -- Artifacts must pass integrity checks
 6. **`/speckit.implement`** -- Execute tasks; tests must pass before considering complete
 7. **Hard Gate: CI passes** -- `ruff`, `pytest`, `eslint`, docs-sync validation
@@ -91,8 +91,9 @@ tests/
 ```
 
 Rules:
-- Every public function has at least one unit test
-- Every I/O contract from the spec has a corresponding test
+- Every module boundary entry point and every complex pure-logic function has at least one test
+- Every I/O contract from the spec has a corresponding boundary test
+- Simple glue code (API routes, adapters, data mapping) is covered by boundary tests and structured logging
 - Use `pytest` with `pytest-asyncio` for async code
 - Use `pytest-mock` for mocking external dependencies
 - Fixtures live alongside tests, not buried in conftest.py
@@ -106,4 +107,4 @@ This constitution supersedes ad-hoc practices. Amendments require:
 
 All PRs must verify compliance with these principles. The spec-kit workflow is the single path for delivering new module work. Skipping steps requires explicit justification documented in the PR.
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-08
+**Version**: 1.3.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-26

@@ -148,13 +148,16 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
 
 
 def test_score_niche_raises_valueerror_on_unknown_city() -> None:
+    # Pre-existing stale: "Atlantis, AZ" now succeeds via state-level DFS fallback
+    # (documented orchestrator behavior). Test is updated to use genuinely
+    # unresolvable input: unknown city with no state supplied means Path 3
+    # (state fallback) is skipped and GeoResolutionError fires.
     import pytest
     with pytest.raises(ValueError, match="no CBSA match"):
         asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
                 city="Atlantis",
-                state="AZ",
                 llm_client=object(),
                 dataforseo_client=object(),
             )

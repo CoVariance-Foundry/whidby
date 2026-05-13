@@ -49,6 +49,10 @@ run_check "ruff check" ruff check src/ tests/
 run_check "unit tests" python -m pytest tests/unit/ -v --tb=short -q
 
 echo ""
+echo "Architecture:"
+run_check "domain imports" python scripts/check_domain_imports.py
+
+echo ""
 echo "Web Quality:"
 run_warn "npm lint" npm run lint 2>&1
 

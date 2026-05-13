@@ -19,15 +19,16 @@ from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
-from src.data.metro_db import Metro, MetroDB
 from src.clients.llm.client import LLMClient
+from src.clients.supabase_adapter import SupabaseMarketStore
 from src.clients.supabase_persistence import SupabasePersistence
-from src.pipeline.canonical_key import resolve_canonical_key
-from src.pipeline.feedback_logger import log_feedback
+from src.data.metro_db import Metro, MetroDB
+from src.domain.services.market_service import MarketService, ScoreRequest
 from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
 from src.research_agent.loop.ralph_loop import LoopConfig
@@ -66,14 +67,24 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     return JSONResponse(status_code=400, content={"detail": errors})
 
 
+_CORS_EXTRA = [
+    o.strip()
+    for o in os.environ.get("CORS_EXTRA_ORIGINS", "").split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",  # apps/admin dev
-        "http://localhost:3002",  # apps/app (consumer) dev
-        "https://app.thewidby.com",  # admin prod
-        "https://whidby-1.onrender.com",  # FastAPI self-host origin for health checks
-    ],
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "https://app.thewidby.com",
+    ] + _CORS_EXTRA,
+    allow_origin_regex=(
+        r"https://.*\.vercel\.app"
+        if os.environ.get("ENVIRONMENT") != "production"
+        else None
+    ),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -117,6 +128,37 @@ def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
 
     _PLACES_DATAFORSEO_BRIDGE = DataForSEOLocationBridge(dfs)
     return _PLACES_DATAFORSEO_BRIDGE
+
+
+# ---------------------------------------------------------------------------
+# Discovery service DI wiring
+# ---------------------------------------------------------------------------
+
+from src.domain.services.discovery_service import DiscoveryService  # noqa: E402
+from src.domain.queries import MarketQuery, CityFilter, ServiceFilter  # noqa: E402
+
+
+class _NullMarketStore:
+    """Returns empty results until a real MarketStore adapter is wired."""
+
+    def persist_report(self, report: dict[str, Any]) -> str:
+        return ""
+
+    def read_report(self, report_id: str) -> dict[str, Any] | None:
+        return None
+
+    def query_markets(self, query: Any) -> list:
+        return []
+
+
+_DISCOVERY_SERVICE: DiscoveryService | None = None
+
+
+def _get_discovery_service() -> DiscoveryService:
+    global _DISCOVERY_SERVICE
+    if _DISCOVERY_SERVICE is None:
+        _DISCOVERY_SERVICE = DiscoveryService(market_store=_NullMarketStore())
+    return _DISCOVERY_SERVICE
 
 
 @app.get("/health")
@@ -273,19 +315,54 @@ class NicheScoreRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Niche scoring helpers (patched in tests)
+# MarketService singleton (replaces per-request client construction)
 # ---------------------------------------------------------------------------
 
+_MARKET_SERVICE: MarketService | None = None
 
-def _persist_report(report: dict[str, Any]) -> str:
-    return SupabasePersistence().persist_report(report)
+
+def _build_market_service() -> MarketService:
+    dfs = _shared_dfs_client()
+    llm: Any = None
+    try:
+        llm = LLMClient()
+    except Exception:
+        logger.warning("LLMClient unavailable; only dry-run scoring will work")
+
+    store: Any = None
+    kb: Any = None
+    try:
+        store = SupabaseMarketStore(SupabasePersistence())
+    except Exception:
+        logger.warning("SupabaseMarketStore unavailable; persistence will fail")
+    try:
+        kb = KBKnowledgeStore(KBPersistence())
+    except Exception:
+        logger.warning("KBKnowledgeStore unavailable; KB operations will fail")
+
+    return MarketService(
+        pipeline_fn=score_niche_for_metro,
+        dfs_client=dfs,
+        llm_client=llm,
+        market_store=store,
+        knowledge_store=kb,
+    )
+
+
+def _market_service() -> MarketService:
+    global _MARKET_SERVICE
+    if _MARKET_SERVICE is None:
+        _MARKET_SERVICE = _build_market_service()
+    return _MARKET_SERVICE
 
 
 def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
+    """Read a report by ID. Used by GET /api/niches/{report_id}."""
+    svc = _market_service()
+    if svc._store is not None:
+        return svc._store.read_report(report_id)
     import os
-
     from supabase import create_client
-
     client = create_client(
         os.environ["NEXT_PUBLIC_SUPABASE_URL"],
         os.environ["SUPABASE_SERVICE_ROLE_KEY"],
@@ -445,149 +522,27 @@ def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
 @app.post("/api/niches/score")
 async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
-    import time as _time
-
-    request_id = str(uuid.uuid4())
-    handler_start = _time.monotonic()
-    logger.info(
-        "niches_score START request_id=%s niche=%r city=%r state=%r dry_run=%s",
-        request_id, req.niche, req.city, req.state, req.dry_run,
-    )
-
-    canonical = resolve_canonical_key(
-        niche=req.niche,
-        city=req.city,
-        state=req.state,
-        place_id=req.place_id,
-        dataforseo_location_code=req.dataforseo_location_code,
-    )
-    input_hash = canonical.input_hash(req.strategy_profile)
-
-    dfs: DataForSEOClient | None = None
     try:
-        if req.dry_run:
-            result = await score_niche_for_metro(
-                niche=req.niche, city=req.city, state=req.state,
-                place_id=req.place_id,
-                dataforseo_location_code=req.dataforseo_location_code,
-                strategy_profile=req.strategy_profile,
-                llm_client=None, dataforseo_client=None, dry_run=True,
-                request_id=request_id,
-            )
-        else:
-            dfs = _shared_dfs_client()
-            if dfs is None:
-                import os
-                dfs = DataForSEOClient(
-                    login=os.environ["DATAFORSEO_LOGIN"],
-                    password=os.environ["DATAFORSEO_PASSWORD"],
-                )
-            llm = LLMClient()
-            result = await score_niche_for_metro(
-                niche=req.niche, city=req.city, state=req.state,
-                place_id=req.place_id,
-                dataforseo_location_code=req.dataforseo_location_code,
-                strategy_profile=req.strategy_profile,
-                llm_client=llm, dataforseo_client=dfs,
-                request_id=request_id,
-            )
+        score_request = ScoreRequest(
+            niche=req.niche,
+            city=req.city,
+            state=req.state,
+            place_id=req.place_id,
+            dataforseo_location_code=req.dataforseo_location_code,
+            strategy_profile=req.strategy_profile,
+            dry_run=req.dry_run,
+        )
+        result = await _market_service().score(score_request)
+        return result.to_api_response()
     except ValueError as exc:
-        elapsed_ms = int((_time.monotonic() - handler_start) * 1000)
-        logger.warning("niches_score ValueError request_id=%s elapsed_ms=%d: %s",
-                       request_id, elapsed_ms, exc)
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
-        elapsed_ms = int((_time.monotonic() - handler_start) * 1000)
         logger.exception(
-            "niches_score pipeline failed request_id=%s elapsed_ms=%d niche=%r city=%r",
-            request_id, elapsed_ms, req.niche, req.city,
+            "niches_score pipeline failed niche=%r city=%r", req.niche, req.city
         )
-        raise HTTPException(status_code=500, detail="Scoring pipeline failed unexpectedly")
-
-    pipeline_ms = int((_time.monotonic() - handler_start) * 1000)
-
-    report_id: str | None = None
-    persist_failed = False
-    persist_start = _time.monotonic()
-    try:
-        report_id = _persist_report(result.report)
-    except Exception:
-        logger.exception("niches_score persistence failed for report_id=%s",
-                         result.report.get("report_id"))
-        report_id = result.report.get("report_id")
-        persist_failed = True
-    persist_ms = int((_time.monotonic() - persist_start) * 1000)
-
-    flush_ms = 0
-    if dfs is not None and report_id:
-        flush_start = _time.monotonic()
-        try:
-            dfs.cost_tracker.flush_to_supabase(report_id)
-        except Exception:
-            logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
-        flush_ms = int((_time.monotonic() - flush_start) * 1000)
-
-    entity_id: str | None = None
-    snapshot_id: str | None = None
-    try:
-        kb = KBPersistence()
-        entity_id = kb.upsert_entity(canonical)
-        snapshot_id = kb.create_snapshot(
-            entity_id=entity_id,
-            input_hash=input_hash,
-            strategy_profile=req.strategy_profile,
-            report=result.report,
-            report_id=report_id,
+        raise HTTPException(
+            status_code=500, detail="Scoring pipeline failed unexpectedly"
         )
-        if report_id:
-            kb.link_report(report_id=report_id, entity_id=entity_id, snapshot_id=snapshot_id)
-
-        kb.store_evidence(
-            snapshot_id=snapshot_id,
-            artifact_type="score_bundle",
-            payload=result.report.get("metros", []),
-        )
-        if result.report.get("keyword_expansion"):
-            kb.store_evidence(
-                snapshot_id=snapshot_id,
-                artifact_type="keyword_expansion",
-                payload=result.report["keyword_expansion"],
-            )
-    except Exception:
-        logger.exception("KB persistence failed for report_id=%s", report_id)
-
-    try:
-        if report_id and not persist_failed:
-            kb_client = KBPersistence()
-            log_feedback(result.report, kb_client)
-    except Exception:
-        logger.exception("Feedback logging failed for report_id=%s", report_id)
-
-    total_ms = int((_time.monotonic() - handler_start) * 1000)
-
-    response: dict[str, Any] = {
-        "report_id": report_id,
-        "opportunity_score": result.opportunity_score,
-        "classification_label": (
-            "High" if result.opportunity_score >= 75
-            else "Medium" if result.opportunity_score >= 50
-            else "Low"
-        ),
-        "evidence": result.evidence,
-        "report": result.report,
-        "entity_id": entity_id,
-        "snapshot_id": snapshot_id,
-    }
-    if persist_failed:
-        response["persist_warning"] = "Report scored successfully but failed to save to database"
-    logger.info(
-        "niches_score DONE request_id=%s report_id=%s entity_id=%s snapshot_id=%s "
-        "opportunity=%s persist_ok=%s pipeline_ms=%d persist_ms=%d flush_ms=%d total_ms=%d",
-        request_id, report_id, entity_id, snapshot_id,
-        result.opportunity_score, not persist_failed,
-        pipeline_ms, persist_ms, flush_ms, total_ms,
-    )
-    return response
 
 
 @app.get("/api/niches/{report_id}")
@@ -967,5 +922,114 @@ def _demo_scoring_results() -> dict[str, Any]:
                     "ai_resilience": 90, "opportunity": 69,
                 },
             },
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
+# Discovery & Lens endpoints
+# ---------------------------------------------------------------------------
+
+
+class DiscoverRequest(BaseModel):
+    """Request body for /api/discover."""
+
+    lens_id: str = "balanced"
+    city_filters: list[dict[str, Any]] = Field(default_factory=list)
+    service_filters: list[dict[str, Any]] = Field(default_factory=list)
+    portfolio_market_ids: list[str] | None = None
+    reference_city_id: str | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+@app.post("/api/discover")
+async def discover(req: DiscoverRequest) -> dict[str, Any]:
+    """Multi-market discovery — filters, lenses, ranking."""
+    if req.portfolio_market_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="portfolio_market_ids not yet supported (Phase 7)",
+        )
+    if req.reference_city_id:
+        raise HTTPException(
+            status_code=400,
+            detail="reference_city_id not yet supported (Phase 7)",
+        )
+
+    from src.domain.lenses import get_lens
+
+    lens = get_lens(req.lens_id)
+
+    query = MarketQuery(
+        city_filters=[
+            CityFilter(f["field"], f["operator"], f["value"])
+            for f in req.city_filters
+        ],
+        service_filters=[
+            ServiceFilter(f["field"], f["operator"], f["value"])
+            for f in req.service_filters
+        ],
+        lens=lens,
+        limit=req.limit,
+        offset=req.offset,
+    )
+
+    svc = _get_discovery_service()
+    results = await svc.discover(query)
+
+    return {
+        "markets": [
+            {
+                "rank": r.rank,
+                "opportunity_score": round(r.opportunity_score, 1),
+                "lens_id": r.lens_id,
+                "city": {
+                    "city_id": r.market.city.city_id,
+                    "name": r.market.city.name,
+                    "state": r.market.city.state,
+                    "population": r.market.city.population,
+                },
+                "service": {
+                    "service_id": r.market.service.service_id,
+                    "name": r.market.service.name,
+                },
+                "score_breakdown": r.score_breakdown,
+            }
+            for r in results
+        ],
+        "total": len(results),
+        "lens": {
+            "lens_id": lens.lens_id,
+            "name": lens.name,
+            "description": lens.description,
+        },
+        "query": {
+            "city_filters": req.city_filters,
+            "service_filters": req.service_filters,
+            "limit": req.limit,
+            "offset": req.offset,
+        },
+    }
+
+
+@app.get("/api/lenses")
+async def list_lenses() -> dict[str, Any]:
+    """List all available scoring lenses."""
+    from src.domain.lenses import available_lenses
+
+    return {
+        "lenses": [
+            {
+                "lens_id": lens.lens_id,
+                "name": lens.name,
+                "description": lens.description,
+                "weights": lens.weights,
+                "filters": [
+                    {"signal": f.signal, "operator": f.operator, "value": f.value}
+                    for f in lens.filters
+                ],
+            }
+            for lens in available_lenses()
         ]
     }

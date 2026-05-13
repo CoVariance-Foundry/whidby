@@ -4,13 +4,13 @@
       "type": "http",
       "url": "https://covariance33049.activehosted.com/api/agents/mcp/http",
       "headers": {
-        "Api-Token": "3b22eabcb8d2b6e8a4ea36f31be35011d4e074e9886bafdbbf8c776070ada59f586a05d6"
+        "Api-Token": "${ACTIVECAMPAIGN_API_TOKEN}"
       }
     },
     "render": {
       "url": "https://mcp.render.com/mcp",
       "headers": {
-        "Authorization": "Bearer rnd_jJk2PAnl1YUMXqkk2tQ3AUsm6zBT"
+        "Authorization": "Bearer ${RENDER_API_TOKEN}"
       }
     }
   }

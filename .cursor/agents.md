@@ -24,8 +24,8 @@ All remaining module work (M4-M15, M16 page increments) MUST use the spec-kit li
 
 ### When Writing Code
 
-1. Follow TDD: write tests first, confirm they fail, then implement
-2. Unit tests go in `tests/unit/test_{module}.py` (no network, no API keys)
+1. Implement first, then add boundary tests for module entry points and targeted tests for complex pure logic
+2. Boundary and unit tests go in `tests/unit/test_{module}.py` (no network, no API keys)
 3. Integration tests go in `tests/integration/test_{module}_integration.py` with `@pytest.mark.integration`
 4. All Python code must pass `ruff check`
 5. All TypeScript/JS must pass `npm run lint`
@@ -48,7 +48,7 @@ All remaining module work (M4-M15, M16 page increments) MUST use the spec-kit li
 
 ## Constitution
 
-The project constitution is at `.specify/memory/constitution.md`. It defines non-negotiable principles including TDD, module-first architecture, and the "no framework for V1" rule.
+The project constitution is at `.specify/memory/constitution.md`. It defines non-negotiable principles including spec-driven development, module-boundary testing, module-first architecture, and the "no framework for V1" rule.
 
 ## Key References
 
