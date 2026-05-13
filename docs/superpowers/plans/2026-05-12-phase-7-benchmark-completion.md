@@ -26,6 +26,15 @@ Deferred or blocked:
 - Task 13 production promotion was not executed. Production must wait for explicit approval plus a staging health review.
 - Task 14 final validation is the current closeout step.
 
+Sampling prune update:
+
+- Paid benchmark collection now distinguishes census-available metros from SEO-benchmark-eligible metros. Default paid runs include only metros with native DataForSEO codes in `mega_5m_plus`, `metro_1m_5m`, `large_300k_1m`, or validated `medium_100_300k` classes.
+- Default paid runs exclude `small_50_100k`, `micro_under_50k`, empty-code metros, and state-borrowed DFS codes. Use `--include-low-signal` only for explicit diagnostics.
+- `--preflight-only` validates keyword-volume coverage without SERP pulls or Supabase writes. The current full filtered launch sample is 60 metros: 9 mega, 37 metro, 12 large, and 2 medium.
+- Live filtered preflight on 2026-05-12 covered 10 pilot pairs across plumber and concrete contractor with 10/10 success, zero writes, and one repeated invalid New York keyword-volume code. `metros_sampled.json` now keeps New York SERP codes intact while using `keyword_volume_location_codes=[1023191, 1022703]` for volume.
+- Concurrent same-niche pilot pairs now share one in-flight keyword expansion to avoid repeated paid Anthropic and DFS suggestion calls.
+- Small and micro metros remain census-only until a cheaper or better local keyword-volume source exists; they should not block Phase 7 benchmark completion.
+
 ---
 
 ## Verified Current State
@@ -1048,7 +1057,9 @@ Do not commit secrets or generated Supabase data.
 **Files:**
 - Modify: `scripts/benchmarks/run_pilot.py` or create `scripts/benchmarks/run_collection.py`
 - Modify: `scripts/benchmarks/metros_sampled.json`
-- Modify: `docs/algo_spec_v2.md`
+- Modify: `tests/scripts/test_benchmark_sampling.py`
+- Modify: `tests/unit/test_dataforseo_client.py`
+- Modify: `src/clients/dataforseo/client.py`
 
 - [ ] **Step 1: Define minimum coverage target**
 
@@ -1060,61 +1071,54 @@ Stable benchmark cell: sample_size_metros >= 20
 Required before production cutover: every launch niche has at least one medium cell in its most common population class.
 ```
 
-- [ ] **Step 2: Add batch controls to runner**
+- [ ] **Step 2: Add paid eligibility controls to runner**
 
-Add CLI arguments to `run_pilot.py`:
+Add default paid-collection pruning to `run_pilot.py`:
 
-```python
-import argparse
+```text
+Default paid eligible:
+- native DataForSEO code exists
+- population_class is mega_5m_plus, metro_1m_5m, large_300k_1m, or validated medium_100_300k
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--limit-pairs", type=int, default=None)
-    parser.add_argument("--niche", action="append", default=None)
-    parser.add_argument("--population-class", action="append", default=None)
-    return parser.parse_args()
+Default excluded:
+- small_50_100k
+- micro_under_50k
+- no native DFS code
+- state-borrowed DFS code
 ```
 
-Use the parsed filters before building `pairs`.
+Add `--include-low-signal` as an explicit diagnostic escape hatch and `--preflight-only` to run keyword-volume validation without SERP pulls or Supabase writes.
 
-- [ ] **Step 3: Run a two-niche expansion batch**
+- [ ] **Step 3: Run a cheap keyword-volume preflight**
 
 Run:
 
 ```bash
-.venv/bin/python -m scripts.benchmarks.run_pilot --niche plumber --niche roofing\ contractor --limit-pairs 80
+.venv/bin/python -m scripts.benchmarks.run_pilot --preflight-only --niche plumber --niche concrete\ contractor --limit-pairs 10
 ```
 
-Expected: no systemic failure bucket. If failures cluster by DFS location code, fix sampling before expanding further.
+Expected: no systemic `invalid_keyword_volume_code`, `keyword_volume_empty`, or `task_queue_timeout` bucket across the filtered launch sample.
 
-- [ ] **Step 4: Run full launch-niche collection**
+- [ ] **Step 4: Run filtered launch-niche collection**
 
 Run:
 
 ```bash
-.venv/bin/python -m scripts.benchmarks.run_pilot
+.venv/bin/python -m scripts.benchmarks.run_pilot --full-sample
 .venv/bin/python -m scripts.benchmarks.recompute_benchmarks 120
 ```
 
-Expected: `seo_benchmarks` has medium-or-better cells for the launch niches where data volume allows.
+Expected: paid collection uses the 60-metro filtered launch sample unless preflight data reduces the valid location-code set further. Do not spend on small/micro metros by default.
 
 - [ ] **Step 5: Document remaining thin cells**
 
-Add a short table to `docs/algo_spec_v2.md` under benchmark coverage:
-
-```markdown
-| Niche | Population class | Sample metros | Confidence | Follow-up |
-|-------|------------------|---------------|------------|-----------|
-```
-
-Only include cells that are still `insufficient` or `low` after the expanded run.
+Record any remaining insufficient/low cells in this plan's execution status and `.Codex/ACTIVE_WORK.md`. Do not create duplicate validation reports.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/benchmarks/run_pilot.py scripts/benchmarks/metros_sampled.json docs/algo_spec_v2.md
-git commit -m "feat: expand benchmark collection controls"
+git add scripts/benchmarks/run_pilot.py src/clients/dataforseo/client.py tests/scripts/test_benchmark_sampling.py tests/unit/test_dataforseo_client.py docs/superpowers/plans/2026-05-12-phase-7-benchmark-completion.md
+git commit -m "feat: prune benchmark sampling for paid collection"
 ```
 
 ---
@@ -1451,7 +1455,7 @@ def build_cell_record(
     volume = seo["cluster_monthly_volume"]
     avg_cpc = seo["avg_cpc_volume_weighted"] or seo["avg_cpc_unweighted"] or 0
     commercial_intent_share = seo["commercial_transactional_volume"] / max(volume, 1)
-    establishments_per_10k = establishments / (population / 10_000)
+    establishments_per_10k = establishments / max(population / 10_000, 1)
     searches_per_household = volume / max(households, 1)
     avg_employees_per_estab = employees / max(establishments, 1)
     payroll_per_emp = (payroll_thousands * 1000) / max(employees, 1)
@@ -1634,9 +1638,15 @@ def fetch_la_plumber_inputs(year: int) -> tuple[dict[str, Any], dict[str, Any], 
         "&intent=in.(transactional,commercial)&select=*"
     )
     volume = sum(row["search_volume_monthly"] or 0 for row in seo_rows)
+    volume_with_cpc = sum(
+        row["search_volume_monthly"] or 0
+        for row in seo_rows
+        if row.get("cpc_usd") is not None
+    )
     weighted_cpc_numerator = sum(
         (row["search_volume_monthly"] or 0) * float(row["cpc_usd"] or 0)
         for row in seo_rows
+        if row.get("cpc_usd") is not None
     )
     seo = {
         "keyword_rows": len(seo_rows),
@@ -1645,14 +1655,19 @@ def fetch_la_plumber_inputs(year: int) -> tuple[dict[str, Any], dict[str, Any], 
         "avg_cpc_unweighted": (
             sum(float(row["cpc_usd"] or 0) for row in seo_rows) / max(len(seo_rows), 1)
         ),
-        "avg_cpc_volume_weighted": weighted_cpc_numerator / max(volume, 1),
+        "avg_cpc_volume_weighted": (
+            weighted_cpc_numerator / volume_with_cpc if volume_with_cpc else None
+        ),
         "serp_local_pack_rate": (
             sum(1 for row in seo_rows if row["local_pack_present"]) / max(len(seo_rows), 1)
         ),
         "avg_aggregator_count_top10": (
             sum(row["aggregator_count_top10"] or 0 for row in seo_rows) / max(len(seo_rows), 1)
         ),
-        "fact_window_end": max(row["snapshot_date"] for row in seo_rows),
+        "fact_window_end": max(
+            (row.get("snapshot_date") for row in seo_rows if row.get("snapshot_date")),
+            default=None,
+        ),
     }
     peers = postgrest_get(
         "census_cbp_establishments?naics_code=eq.238220&year=eq.2023"

@@ -53,6 +53,8 @@ async def test_business_density_all_naics(provider):
     data = provider.get_business_density("14260")
     assert data is not None
     assert data["establishments"] == 145 + 210
+    assert data["employees"] == 890 + 1_200
+    assert data["payroll_thousands"] == 42_000 + 28_000
 
 
 async def test_business_density_missing_city(provider):

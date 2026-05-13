@@ -104,12 +104,41 @@ class RunStats:
     reports_failed: int = 0
     facts_inserted: int = 0
     failures: list[str] = field(default_factory=list)
+    failure_reasons: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> str:
         return (
             f"reports: {self.reports_succeeded}/{self.reports_attempted} succeeded, "
             f"{self.reports_failed} failed; facts inserted: {self.facts_inserted}"
         )
+
+    def record_failure(self, niche: str, cbsa_code: str, reason: str, detail: str = "") -> None:
+        self.failure_reasons[reason] = self.failure_reasons.get(reason, 0) + 1
+        suffix = f": {detail}" if detail else ""
+        self.failures.append(f"{niche}@{cbsa_code}: {reason}{suffix}")
+
+
+@dataclass(frozen=True)
+class VolumeAttemptFailure:
+    location_code: int
+    reason: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class VolumeCollectionResult:
+    volume_by_kw: dict[str, dict[str, Any]]
+    valid_location_codes: list[int]
+    failures: list[VolumeAttemptFailure]
+
+
+BENCHMARK_PAID_POPULATION_CLASSES = {
+    "mega_5m_plus",
+    "metro_1m_5m",
+    "large_300k_1m",
+    "medium_100_300k",
+}
+LOW_SIGNAL_POPULATION_CLASSES = {"small_50_100k", "micro_under_50k"}
 
 
 def positive_int(value: str) -> int:
@@ -149,6 +178,19 @@ def parse_args() -> argparse.Namespace:
         const="full",
         dest="sample_mode",
         help="Shortcut for --sample-mode full.",
+    )
+    parser.add_argument(
+        "--include-low-signal",
+        action="store_true",
+        help=(
+            "Diagnostic escape hatch: include low-signal and borrowed-code metros "
+            "that paid benchmark runs exclude by default."
+        ),
+    )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Validate keyword-volume coverage without SERP pulls or Supabase writes.",
     )
     return parser.parse_args()
 
@@ -193,12 +235,47 @@ def attach_state_dfs_fallback(metros: list[dict[str, Any]], full_sample: list[di
             m["_dfs_source"] = "native"
 
 
-def select_metros(full: list[dict[str, Any]], sample_mode: str) -> list[dict[str, Any]]:
+def mark_benchmark_eligibility(metro: dict[str, Any], *, include_low_signal: bool) -> None:
+    """Annotate one metro with paid benchmark eligibility metadata."""
+    population_class = metro.get("population_class")
+    loc_codes = list(
+        metro.get("keyword_volume_location_codes")
+        or metro.get("dataforseo_location_codes")
+        or []
+    )
+    source = metro.get("_dfs_source") or ("native" if loc_codes else "none")
+    reason = None
+
+    if population_class in LOW_SIGNAL_POPULATION_CLASSES and not include_low_signal:
+        reason = "population_too_small"
+    elif population_class not in BENCHMARK_PAID_POPULATION_CLASSES and not include_low_signal:
+        reason = "population_too_small"
+    elif source != "native" and not include_low_signal:
+        reason = "no_native_dfs_code"
+    elif not loc_codes:
+        reason = "no_native_dfs_code"
+
+    metro["keyword_volume_location_codes"] = loc_codes
+    metro["paid_eligible"] = reason is None
+    metro["benchmark_exclusion_reason"] = reason
+
+
+def select_metros(
+    full: list[dict[str, Any]],
+    sample_mode: str,
+    *,
+    include_low_signal: bool = False,
+) -> list[dict[str, Any]]:
     """Select pilot metros by default, or all sampled metros for full coverage runs."""
     if sample_mode == "full":
         selected = [dict(m) for m in full]
-        attach_state_dfs_fallback(selected, full)
-        return selected
+        for metro in selected:
+            metro["_dfs_source"] = "native" if metro.get("dataforseo_location_codes") else "none"
+        if include_low_signal:
+            attach_state_dfs_fallback(selected, full)
+        for metro in selected:
+            mark_benchmark_eligibility(metro, include_low_signal=include_low_signal)
+        return selected if include_low_signal else [m for m in selected if m["paid_eligible"]]
 
     by_class: dict[str, list[dict]] = {}
     for m in full:
@@ -212,8 +289,13 @@ def select_metros(full: list[dict[str, Any]], sample_mode: str) -> list[dict[str
         ordered = with_dfs + without_dfs
         pilot.extend(dict(m) for m in ordered[:n])
 
-    attach_state_dfs_fallback(pilot, full)
-    return pilot
+    for metro in pilot:
+        metro["_dfs_source"] = "native" if metro.get("dataforseo_location_codes") else "none"
+    if include_low_signal:
+        attach_state_dfs_fallback(pilot, full)
+    for metro in pilot:
+        mark_benchmark_eligibility(metro, include_low_signal=include_low_signal)
+    return pilot if include_low_signal else [m for m in pilot if m["paid_eligible"]]
 
 
 def load_full_sample(metros_path: Path) -> list[dict[str, Any]]:
@@ -242,6 +324,11 @@ def validate_population_classes(
             fail_cli(
                 f"unknown population class {population_class!r}; expected one of: {allowed}"
             )
+
+
+def build_pairs(niches: list[str], metros: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """Build a metro-major pair order so limited multi-niche runs cover each niche."""
+    return [(niche, metro) for metro in metros for niche in niches]
 
 
 # -------------------------------------------------------------------
@@ -337,6 +424,76 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
     return flags
 
 
+def classify_keyword_volume_failure(response: Any) -> str:
+    """Map a DataForSEO keyword-volume response error to a benchmark failure bucket."""
+    error_text = str(getattr(response, "error", "") or "").lower()
+    if "invalid field" in error_text and "location_code" in error_text:
+        return "invalid_keyword_volume_code"
+    if "task in queue" in error_text or "queue timeout" in error_text:
+        return "task_queue_timeout"
+    return "keyword_volume_empty"
+
+
+async def collect_keyword_volume(
+    dfs: DataForSEOClient,
+    keywords: list[str],
+    location_codes: list[int],
+) -> VolumeCollectionResult:
+    """Collect keyword volume across candidate location codes."""
+    volume_by_kw: dict[str, dict[str, Any]] = {}
+    valid_location_codes: list[int] = []
+    failures: list[VolumeAttemptFailure] = []
+
+    for code in location_codes:
+        vol_resp = await dfs.keyword_volume(keywords=keywords, location_code=code)
+        if vol_resp.status != "ok":
+            failures.append(
+                VolumeAttemptFailure(
+                    location_code=code,
+                    reason=classify_keyword_volume_failure(vol_resp),
+                    detail=vol_resp.error or "keyword_volume error",
+                )
+            )
+            continue
+
+        vol_items = vol_resp.data if isinstance(vol_resp.data, list) else [vol_resp.data]
+        code_had_usable_rows = False
+        for row in vol_items:
+            if not isinstance(row, dict):
+                continue
+            kw_lower = (row.get("keyword") or "").lower()
+            if not kw_lower:
+                continue
+            sv, cpc = row.get("search_volume"), row.get("cpc")
+            if sv is None and cpc is None:
+                continue
+
+            code_had_usable_rows = True
+            existing = volume_by_kw.get(kw_lower, {})
+            existing_sv = existing.get("search_volume") or 0
+            existing_cpc = existing.get("cpc")
+            new_sv = max(sv or 0, existing_sv) if sv is not None else existing_sv
+            new_cpc = max(cpc or 0, existing_cpc or 0) if (cpc or existing_cpc) else None
+            volume_by_kw[kw_lower] = {"search_volume": new_sv or None, "cpc": new_cpc}
+
+        if code_had_usable_rows:
+            valid_location_codes.append(code)
+        else:
+            failures.append(
+                VolumeAttemptFailure(
+                    location_code=code,
+                    reason="keyword_volume_empty",
+                    detail="no usable keyword volume rows",
+                )
+            )
+
+    return VolumeCollectionResult(
+        volume_by_kw=volume_by_kw,
+        valid_location_codes=valid_location_codes,
+        failures=failures,
+    )
+
+
 # -------------------------------------------------------------------
 # PostgREST upsert
 # -------------------------------------------------------------------
@@ -370,23 +527,40 @@ class NicheExpansionCache:
         self.llm = llm
         self.dfs = dfs
         self._cache: dict[str, dict] = {}
+        self._inflight: dict[str, asyncio.Task[dict]] = {}
         self._lock = asyncio.Lock()
 
     async def get(self, niche: str) -> dict:
         async with self._lock:
             if niche in self._cache:
                 return self._cache[niche]
-        # outside the lock — expand can be slow
+            task = self._inflight.get(niche)
+            if task is None:
+                task = asyncio.create_task(self._expand(niche))
+                self._inflight[niche] = task
+
+        try:
+            expanded = await task
+        except Exception:
+            async with self._lock:
+                if self._inflight.get(niche) is task:
+                    self._inflight.pop(niche, None)
+            raise
+
+        async with self._lock:
+            self._cache[niche] = expanded
+            if self._inflight.get(niche) is task:
+                self._inflight.pop(niche, None)
+        return expanded
+
+    async def _expand(self, niche: str) -> dict:
         log.info(f"  [expansion] niche={niche!r}")
-        expanded = await expand_keywords(
+        return await expand_keywords(
             niche=niche,
             llm_client=self.llm,
             dataforseo_client=self.dfs,
             suggestions_limit=20,
         )
-        async with self._lock:
-            self._cache[niche] = expanded
-        return expanded
 
 
 # -------------------------------------------------------------------
@@ -398,6 +572,8 @@ async def score_one(
     expansion_cache: NicheExpansionCache,
     dfs: DataForSEOClient,
     stats: RunStats,
+    *,
+    preflight_only: bool = False,
 ) -> int:
     """Score one (niche, metro) pair → returns count of facts inserted."""
     cbsa = metro["cbsa_code"]
@@ -414,13 +590,19 @@ async def score_one(
         if not actionable:
             log.warning(f"  no actionable keywords for {niche!r}")
             stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, "no_actionable_keywords")
             return 0
 
         # Resolve all DFS location codes for this metro (city + fallback)
-        loc_codes = metro.get("dataforseo_location_codes") or []
+        loc_codes = (
+            metro.get("keyword_volume_location_codes")
+            or metro.get("dataforseo_location_codes")
+            or []
+        )
         if not loc_codes:
             log.info(f"  no DFS codes for {cbsa} (no state fallback); skipping")
             stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, "no_native_dfs_code")
             return 0
 
         # 1) Keyword volume — try each loc_code, take max volume per keyword
@@ -428,29 +610,37 @@ async def score_one(
         # Anaheim. Many keywords have data in only one of these. Max captures
         # the principal-city signal.)
         kw_strs = [k["keyword"] for k in actionable[:50]]
-        volume_by_kw: dict[str, dict] = {}
-        for code in loc_codes:
-            vol_resp = await dfs.keyword_volume(keywords=kw_strs, location_code=code)
-            if vol_resp.status != "ok" or not vol_resp.data:
-                continue
-            vol_items = vol_resp.data if isinstance(vol_resp.data, list) else [vol_resp.data]
-            for r in vol_items:
-                if not isinstance(r, dict):
-                    continue
-                kw_lower = (r.get("keyword") or "").lower()
-                sv, cpc = r.get("search_volume"), r.get("cpc")
-                existing = volume_by_kw.get(kw_lower, {})
-                existing_sv = existing.get("search_volume") or 0
-                existing_cpc = existing.get("cpc")
-                # Take max search volume; CPC: take whichever is non-null,
-                # prefer the higher one (more competitive signal).
-                new_sv = max(sv or 0, existing_sv) if sv is not None else existing_sv
-                new_cpc = max(cpc or 0, existing_cpc or 0) if (cpc or existing_cpc) else None
-                volume_by_kw[kw_lower] = {"search_volume": new_sv or None, "cpc": new_cpc}
+        volume_result = await collect_keyword_volume(dfs, kw_strs, loc_codes)
+        for failure in volume_result.failures:
+            stats.record_failure(
+                niche,
+                cbsa,
+                failure.reason,
+                f"location_code={failure.location_code}; {failure.detail}",
+            )
+        volume_by_kw = volume_result.volume_by_kw
+        if volume_result.valid_location_codes:
+            metro["keyword_volume_location_codes"] = volume_result.valid_location_codes
+
+        if preflight_only:
+            if volume_by_kw:
+                stats.reports_succeeded += 1
+                log.info(
+                    "[preflight] %r × %s: %s keywords, valid volume codes=%s",
+                    niche,
+                    name,
+                    len(volume_by_kw),
+                    volume_result.valid_location_codes,
+                )
+                return 0
+            stats.reports_failed += 1
+            if not volume_result.failures:
+                stats.record_failure(niche, cbsa, "keyword_volume_empty", "no usable rows")
+            return 0
 
         # 2) SERP — query the highest-population code (loc_codes[0] is the
         # principal city per seed ordering; it gives the cleanest SERP shape).
-        loc_code_for_serp = loc_codes[0]
+        loc_code_for_serp = (metro.get("dataforseo_location_codes") or loc_codes)[0]
         head_kws = [k for k in actionable if k["tier"] == 1][:2] or actionable[:2]
         serp_features_by_kw: dict[str, dict] = {}
         for k in head_kws:
@@ -507,7 +697,7 @@ async def score_one(
             if status >= 300:
                 log.error(f"  upsert failed: {status} {body[:200]}")
                 stats.reports_failed += 1
-                stats.failures.append(f"{niche}@{cbsa}: upsert {status}")
+                stats.record_failure(niche, cbsa, "upsert_failed", f"status={status}")
                 return 0
             stats.facts_inserted += len(rows)
             stats.reports_succeeded += 1
@@ -515,12 +705,13 @@ async def score_one(
             return len(rows)
 
         stats.reports_failed += 1
+        stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
         return 0
 
     except Exception as e:
         log.exception(f"failure on {niche} × {cbsa}")
         stats.reports_failed += 1
-        stats.failures.append(f"{niche}@{cbsa}: {type(e).__name__}: {e}")
+        stats.record_failure(niche, cbsa, type(e).__name__, str(e))
         return 0
 
 
@@ -539,7 +730,11 @@ async def main():
     full_sample = load_full_sample(metros_path)
     validate_population_classes(args.population_class, full_sample)
 
-    selected_metros = select_metros(full_sample, args.sample_mode)
+    selected_metros = select_metros(
+        full_sample,
+        args.sample_mode,
+        include_low_signal=args.include_low_signal,
+    )
     if args.population_class:
         allowed_classes = set(args.population_class)
         selected_metros = [
@@ -549,23 +744,24 @@ async def main():
         ]
 
     niches = select_niches(args.niche)
-    pairs = [(n, m) for n in niches for m in selected_metros]
+    pairs = build_pairs(niches, selected_metros)
     if args.limit_pairs is not None:
         pairs = pairs[:args.limit_pairs]
 
     if not pairs:
         fail_cli("filters produced zero (niche, metro) pairs")
 
-    if not (SUPABASE_KEY and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
+    if not ((SUPABASE_KEY or args.preflight_only) and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
         log.error("missing env vars — check .env")
         sys.exit(1)
 
     log.info(
-        "%s sample: %s niches × %s metros = %s reports",
+        "%s sample: %s niches × %s paid-eligible metros = %s reports%s",
         args.sample_mode,
         len(niches),
         len(selected_metros),
         len(pairs),
+        " (preflight only)" if args.preflight_only else "",
     )
 
     # Disable persistent cache: it reads NEXT_PUBLIC_SUPABASE_URL (prod) but the
@@ -581,12 +777,21 @@ async def main():
 
     async def runner(pair):
         async with sem:
-            return await score_one(pair[0], pair[1], cache, dfs, stats)
+            return await score_one(
+                pair[0],
+                pair[1],
+                cache,
+                dfs,
+                stats,
+                preflight_only=args.preflight_only,
+            )
 
     await asyncio.gather(*(runner(p) for p in pairs), return_exceptions=False)
 
     elapsed = time.time() - started
     log.info(f"DONE in {elapsed:.1f}s — {stats.summary()}")
+    if stats.failure_reasons:
+        log.warning("failure reasons: %s", stats.failure_reasons)
     if stats.failures:
         log.warning(f"first 5 failures: {stats.failures[:5]}")
 

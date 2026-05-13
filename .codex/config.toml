@@ -1,0 +1,11 @@
+[mcp_servers.activecampaign]
+url = "https://covariance33049.activehosted.com/api/agents/mcp/http"
+
+[mcp_servers.activecampaign.http_headers]
+Api-Token = "${ACTIVECAMPAIGN_API_KEY}"
+
+[mcp_servers.render]
+url = "https://mcp.render.com/mcp"
+
+[mcp_servers.render.http_headers]
+Authorization = "Bearer ${RENDER_API_TOKEN}"

@@ -272,7 +272,9 @@ class DataForSEOClient:
         task_map: list[tuple[int, str, dict[str, Any], float]] = []
         for i, (idx, params) in enumerate(uncached):
             task = tasks[i] if i < len(tasks) and isinstance(tasks[i], dict) else None
-            if task is None or task.get("status_code", 0) >= 40000:
+            if task is None or (
+                task.get("status_code", 0) >= 40000 and not self._is_queued_pending_task(task)
+            ):
                 results[idx] = self._task_error(task, start) if task else self._error_response("No task in batch response", start)
                 continue
             task_id = task.get("id", "")
@@ -307,7 +309,7 @@ class DataForSEOClient:
                 result_task = self._extract_task(get_body)
                 if result_task is None:
                     continue
-                if result_task.get("status_code", 0) == 20100:
+                if self._is_queued_pending_task(result_task):
                     continue
                 if result_task.get("status_code", 0) >= 40000:
                     results[idx] = self._task_error(result_task, start)
@@ -390,7 +392,7 @@ class DataForSEOClient:
             result_task = self._extract_task(get_body)
             if result_task is None:
                 continue
-            if result_task.get("status_code", 0) == 20100:
+            if self._is_queued_pending_task(result_task):
                 continue  # still pending
             if result_task.get("status_code", 0) >= 40000:
                 return self._task_error(result_task, start)
@@ -509,6 +511,12 @@ class DataForSEOClient:
     @staticmethod
     def _elapsed_ms(start: float) -> int:
         return int((time.monotonic() - start) * 1000)
+
+    @staticmethod
+    def _is_queued_pending_task(task: dict[str, Any]) -> bool:
+        status_code = task.get("status_code", 0)
+        status_message = str(task.get("status_message", "")).lower()
+        return status_code == 20100 or "task in queue" in status_message
 
     @staticmethod
     def _error_response(msg: str, start: float) -> APIResponse:

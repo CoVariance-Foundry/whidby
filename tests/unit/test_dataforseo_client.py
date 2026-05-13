@@ -105,6 +105,39 @@ class TestStandardQueue:
         result = await client.keyword_volume(keywords=["plumber"], location_code=1012873)
         assert result.status == "ok"
 
+    @pytest.mark.asyncio
+    async def test_queue_treats_task_in_queue_message_as_pending(self, mocker):
+        """DataForSEO sometimes returns a 4xxxx status while the task is still queued."""
+        task_in_queue_response = {
+            "version": "0.1",
+            "status_code": 20000,
+            "status_message": "Ok.",
+            "tasks": [
+                {
+                    "id": "task-serp-001",
+                    "status_code": 40602,
+                    "status_message": "Task In Queue.",
+                }
+            ],
+            "tasks_count": 1,
+            "tasks_error": 0,
+        }
+        client = _make_client()
+        mocker.patch.object(
+            client,
+            "_post",
+            side_effect=[
+                SERP_TASK_POST_RESPONSE,
+                task_in_queue_response,
+                SERP_TASK_GET_RESPONSE,
+            ],
+        )
+        mocker.patch("asyncio.sleep", return_value=None)
+
+        result = await client.keyword_volume(keywords=["plumber"], location_code=1012873)
+
+        assert result.status == "ok"
+
 
 # ---------------------------------------------------------------------------
 # Live endpoints

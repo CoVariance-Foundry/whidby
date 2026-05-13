@@ -179,6 +179,12 @@ def _safe_div(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _safe_div_or_none(numerator: float, denominator: float) -> float | None:
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
 def build_seo_rollup(seo_rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate keyword-grain seo_facts rows into the slice-lite SEO inputs."""
     volume = sum(_as_int(row.get("search_volume_monthly")) for row in seo_rows)
@@ -205,11 +211,11 @@ def build_seo_rollup(seo_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "keyword_rows": row_count,
         "cluster_monthly_volume": volume,
         "commercial_transactional_volume": volume,
-        "avg_cpc_unweighted": _safe_div(
+        "avg_cpc_unweighted": _safe_div_or_none(
             sum(_as_float(row.get("cpc_usd")) for row in seo_rows),
             cpc_count,
         ),
-        "avg_cpc_volume_weighted": _safe_div(weighted_cpc_numerator, volume_with_cpc),
+        "avg_cpc_volume_weighted": _safe_div_or_none(weighted_cpc_numerator, volume_with_cpc),
         "serp_local_pack_rate": _safe_div(local_pack_count, row_count),
         "avg_aggregator_count_top10": avg_aggregators,
         "fact_window_end": max(fact_dates) if fact_dates else None,
@@ -272,7 +278,10 @@ def build_cell_record(
     employees = _as_float(cbp.get("emp"))
     payroll_thousands = _as_float(cbp.get("ap"))
     volume = _as_float(seo.get("cluster_monthly_volume"))
-    avg_cpc = _as_float(seo.get("avg_cpc_volume_weighted") or seo.get("avg_cpc_unweighted"))
+    avg_cpc_raw = seo.get("avg_cpc_volume_weighted")
+    if avg_cpc_raw is None:
+        avg_cpc_raw = seo.get("avg_cpc_unweighted")
+    avg_cpc = _as_float(avg_cpc_raw)
     commercial_intent_share = _safe_div(
         _as_float(seo.get("commercial_transactional_volume")),
         max(volume, 1.0),
@@ -406,7 +415,7 @@ def build_cell_record(
         },
         "seo_economics": {
             "cpc_top_low_weighted": build_metric_block(
-                value=round(avg_cpc, 2),
+                value=round(avg_cpc_raw, 2) if avg_cpc_raw is not None else None,
                 raw_inputs={"cluster_monthly_volume": seo.get("cluster_monthly_volume")},
                 source="seo_facts.cpc_usd",
                 vintage=str(seo.get("fact_window_end")),
