@@ -107,7 +107,7 @@ export default async function ReportsPage() {
                 margin: "4px 0 0",
               }}
             >
-              Every niche score you've run, most recent first.
+              Every niche score you&apos;ve run, most recent first.
             </p>
           </header>
           <ReportsPageClient rows={rows} />

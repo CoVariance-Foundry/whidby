@@ -4,7 +4,7 @@
       "type": "http",
       "url": "https://covariance33049.activehosted.com/api/agents/mcp/http",
       "headers": {
-        "Api-Token": "${ACTIVECAMPAIGN_API_TOKEN}"
+        "Api-Token": "${ACTIVECAMPAIGN_API_KEY}"
       }
     },
     "render": {

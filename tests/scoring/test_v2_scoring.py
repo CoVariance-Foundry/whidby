@@ -172,6 +172,27 @@ def test_demand_derives_commercial_volume_from_nested_m6_demand_ratio() -> None:
     assert result["scores"]["demand_strength"]["value"] == 168
 
 
+def test_demand_derives_commercial_volume_from_transactional_keyword_ratio() -> None:
+    signals = signal_fixture()
+    signals.pop("commercial_search_volume")
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals={
+            **signals,
+            "demand": {
+                "total_search_volume": 2_000,
+                "transactional_keyword_ratio": 0.7,
+                "avg_cpc": 12.0,
+                "effective_search_volume": 99_999,
+            },
+        },
+        benchmark=benchmark_cell(),
+    )
+
+    assert result["scores"]["demand_strength"]["value"] == 168
+
+
 def test_ai_resilience_sanitizes_null_inputs() -> None:
     result = compute_v2_scores(
         niche_normalized="plumber",
