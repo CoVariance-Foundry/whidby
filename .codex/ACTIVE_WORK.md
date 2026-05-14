@@ -1,5 +1,25 @@
 # Active Work
 
+## Consumer User Management, Billing, and Report Quotas
+
+Status: implementation in progress.
+
+Target behavior:
+
+- `free` users can browse cached reports but cannot generate fresh reports.
+- `plus` users pay $49/month and can generate 10 fresh reports per billing month.
+- `pro` users pay $100/month and can generate 50 fresh reports per billing month.
+- Fresh generated reports are owned by the user's account; existing ownerless reports remain shared cached reports.
+- PostHog flags control rollout and kill switches only; Supabase RLS remains the hard data-isolation boundary.
+
+Implementation path:
+
+- Add account, membership, subscription, usage, billing customer, and report ownership schema in Supabase.
+- Replace broad authenticated report read policies with cached-or-account-member policies.
+- Add consumer app entitlement checks before `/api/agent/scoring` calls the Render/FastAPI bridge.
+- Add Stripe Checkout, Customer Portal, and webhook endpoints.
+- Thread `owner_account_id` and `created_by_user_id` through FastAPI and Supabase report persistence.
+
 ## Explore Cities Backend Design
 
 Status: design accepted; ready for implementation planning.

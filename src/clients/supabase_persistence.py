@@ -31,6 +31,12 @@ def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
         "metros": report["metros"],
         "meta": report["meta"],
         "feedback_log_id": report["meta"].get("feedback_log_id"),
+        "owner_account_id": report.get("owner_account_id"),
+        "created_by_user_id": report.get("created_by_user_id"),
+        "access_scope": report.get(
+            "access_scope",
+            "account" if report.get("owner_account_id") else "cached",
+        ),
     }
 
 

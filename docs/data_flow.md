@@ -118,6 +118,30 @@ Consumer /reports read path (not shown above):
 
 The write path above is triggered by the FastAPI `POST /api/niches/score` handler after `score_niche_for_metro` returns a report. The read path is a direct SSR Supabase fetch from the consumer app — no FastAPI round-trip for the list view. Per-report detail retrieval goes through FastAPI `GET /api/niches/{report_id}`.
 
+## Consumer Account, Billing, and Quota Flow
+
+```
+Supabase Auth user
+     │
+     ▼
+ensure_account_for_current_user()
+     │
+     ├──→ user_profiles
+     ├──→ accounts
+     ├──→ account_memberships
+     └──→ subscriptions
+             ▲
+             │
+Stripe Checkout / Portal / Webhook
+             │
+             ▼
+syncSubscriptionToAccount()
+```
+
+Consumer fresh-report generation is account-scoped. `apps/app/src/app/api/agent/scoring/route.ts` resolves the authenticated Supabase user, account entitlement, and server feature flags before calling the Render/FastAPI scoring bridge. If quota enforcement is enabled, the route calls `consume_report_quota(account_id)` before forwarding the scoring request and calls `refund_report_quota(account_id)` when validation or upstream scoring fails.
+
+The route forwards `owner_account_id` and `created_by_user_id` to `POST /api/niches/score`. FastAPI validates those UUIDs, `MarketService` attaches them to the generated report, and `SupabasePersistence.persist_report()` writes them to `reports`. Reports with `access_scope = 'account'` are readable only by account members; ownerless reports remain shared cached reports with `access_scope = 'cached'`.
+
 ## Experiment Pipeline (M10 → M15)
 
 ```
