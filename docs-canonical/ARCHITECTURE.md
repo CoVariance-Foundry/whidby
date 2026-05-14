@@ -1,8 +1,8 @@
 # Architecture
 
-<!-- docguard:version 1.2.0 -->
+<!-- docguard:version 1.3.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-23 -->
+<!-- docguard:last-reviewed 2026-05-14 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file describes WHAT the system is designed to be.
@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.2.0` |
-| **Last Updated** | 2026-04-23 |
+| **Version** | `1.3.0` |
+| **Last Updated** | 2026-05-14 |
 | **Owner** | @widby-team |
 
 ---
@@ -28,7 +28,7 @@ Five subsystems compose the platform:
 3. **Research Agent** (`src/research_agent/`) — Claude-native tool-use agent + Ralph loop wrapping the scoring engine
 4. **Marketing Site** (`apps/web/`) — Next.js 16 pre-launch landing page
 5. **Admin Dashboard** (`apps/admin/`) — Next.js 16 internal dashboard (research agent sessions, niche finder + exploration, knowledge graph, experiments, recommendations). Port 3001 local, deploys to `app.thewidby.com` as Vercel project `whidby-agent`.
-6. **Consumer Product** (`apps/app/`) — Next.js 16 light-theme consumer surface (niche finder, saved reports). Port 3002 local, separate Vercel project.
+6. **Consumer Product** (`apps/app/`) — Next.js 16 light-theme consumer surface (niche finder, Explore Cities, saved reports). Port 3002 local, separate Vercel project.
 
 **Production split:** The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/admin/src/app/api/agent/` and `apps/app/src/app/api/agent/` both proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Email/password sign-in callbacks redirect to each frontend via **`NEXT_PUBLIC_APP_FRONTEND_URL`** (the Vercel origin, not the API). Supabase backs auth and product data for both apps. Details: `docs/research_agent_design.md` §12.
 
@@ -39,12 +39,52 @@ Admin (`apps/admin`) hosts a **dual-surface niche finder**:
 - **Standard surface (`/`)**: city + service input returns an opportunity score for quick triage.
 - **Exploration surface (`/exploration`)**: same input and score pathway, plus evidence categories that explain score rationale and a follow-up chat assistant that pulls deeper signals via approved scoring/search tools while preserving active city/service context.
 
-Consumer (`apps/app`) hosts a **single scoring surface**:
+Consumer (`apps/app`) hosts scoring and discovery surfaces:
 
 - **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by Mapbox Geocoding `/api/places/suggest` endpoint → autocompletes to `{city, region, country, place_id, dataforseo_location_code}` with global coverage; falls back to legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable). The DataForSEO location bridge (`src/research_agent/places.py::DataForSEOLocationBridge`) fetches the full ~95k location list via `GET /serp/google/locations`, caches it for 1 hour, and matches each Mapbox suggestion to a DFS location code using city-name matching with state-aware disambiguation (when multiple cities share a name, the state portion of the DFS `location_name` is compared against the Mapbox suggestion's `full_name`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label. When a canonical `place_id` + `dataforseo_location_code` are available from autocomplete, scoring bypasses MetroDB seed lookup and targets DataForSEO directly. When no DFS code is available but a `state` is known, the orchestrator falls back to borrowing a DFS location code from the highest-population seeded metro in the same state (degraded but functional geotargeting).
+- **Explore Cities (`/explore`)**: cached market-discovery surface backed by a backend Explore domain service, not by client-side table slicing. It lists all eligible metros from `public.metros`, joins cached service scores from `metro_score_v2` first and legacy `metro_scores` as a fallback, calculates density/growth from `census_cbp_establishments` and `niche_naics_mapping`, and applies filters server-side. Users can inspect cached service scores in a city drawer, run a new report for any city + service, or refresh an existing cached city + service target through the backend scoring bridge.
 - **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read thanks to migration 005; writes remain service-role only via the Python scoring engine.
 
-Both apps share request validation, score shape, and the `CityAutocomplete` component (currently mirrored; extraction to `packages/niche-finder/` is a future PR). Admin's dual surface and consumer's single surface are contractually bound to the same FastAPI `POST /api/niches/score` endpoint — scores are always from the same backend pipeline.
+Both apps share request validation, score shape, and the `CityAutocomplete` component (currently mirrored; extraction to `packages/niche-finder/` is a future PR). Admin's dual surface and consumer scoring/discovery surfaces are contractually bound to the same FastAPI `POST /api/niches/score` endpoint — scores are always from the same backend pipeline.
+
+### Explore Cities System
+
+Explore Cities is a read-optimized backend system over canonical scoring/reference tables. It must not create duplicate `cities`, `business_patterns`, `_simplified`, or `_v2` source tables. Its source-of-truth inputs are:
+
+1. `public.metros` — ACS-backed CBSA identity, demographics, population class, principal cities, and DataForSEO location codes.
+2. `public.census_cbp_establishments` — CBP establishment counts by `cbsa_code`, NAICS, and year.
+3. `public.niche_naics_mapping` — weighted mapping from service keywords to one or more NAICS codes.
+4. `public.reports`, `public.metro_scores`, and `public.metro_score_v2` — cached report and score outputs.
+5. `public.seo_facts` and `public.seo_benchmarks` — benchmark facts and population-class benchmark cells.
+
+The backend boundary is `src/domain/explore/` for pure entities and metric formulas, `src/domain/services/explore_city_service.py` for orchestration, and a `SupabaseExploreRepository` adapter under `src/clients/`. Next.js route handlers or FastAPI endpoints call the service; React components receive already-filtered, paginated result DTOs. Domain formulas must remain fixture-testable without Supabase.
+
+Data flow:
+
+```
+Census/CBP loaders ──→ metros + census_cbp_establishments
+Niche scoring runs ──→ reports + metro_scores + metro_score_v2 + seo_facts
+Benchmark recompute ─→ seo_benchmarks
+Explore service ─────→ filtered city/service summaries + freshness + metrics
+apps/app /explore ───→ table, drawer, run report, refresh controls
+```
+
+Explore service API contracts:
+
+| API | Responsibility |
+| --- | --- |
+| `GET /api/explore/cities` | Server-side filtering, sorting, and cursor pagination for Explore table rows. Filters include state, population class, population range, income range, service, density range, growth range, stale-only, and score-system fallback. |
+| `GET /api/explore/cities/{cbsa_code}` | City detail with demographics, cached service rows, V2 score vectors when present, legacy score fallback when not, density/growth lineage, and freshness. |
+| `POST /api/explore/reports` | Run a new report for any selected city + service through the existing scoring bridge. This is available even when no cached service exists. |
+| `POST /api/explore/refresh/runs` | Refresh existing cached city + service targets with selected, visible, stale, or all scopes. Refresh execution stays backend-side and records run lineage. |
+
+Filtering rules:
+
+- Population, income, state, and population class filter against `metros`.
+- Service filters resolve through normalized service names and `niche_naics_mapping`.
+- Density and growth filters are computed from CBP inputs; if the needed historical CBP years are absent, growth filters are unavailable and must be reported as `growth_available=false`.
+- Stale filters compare latest cached score timestamps against the active freshness policy.
+- The frontend must not limit the search universe to the first 100 metros; pagination/cursors belong in the backend contract.
 
 ## Component Map
 
@@ -75,6 +115,7 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | KB persistence | Canonical entity, versioned snapshot, evidence artifact, and feedback event CRUD for the knowledge base | `src/clients/kb_persistence.py` | `tests/unit/test_kb_persistence.py` |
 | Canonical key resolver | Deterministic niche+geo identity normalization for KB entity dedup | `src/pipeline/canonical_key.py` | `tests/unit/test_canonical_key.py` |
 | Persistent API cache | Two-tier (in-memory L1 + Supabase L2) DataForSEO response cache shared across runs | `src/clients/dataforseo/persistent_cache.py` | `tests/unit/test_persistent_cache.py` |
+| Explore Cities domain service | Server-side cached market discovery, filters, density/growth metrics, score freshness, and run-report/refresh target resolution | `src/domain/explore/`, `src/domain/services/explore_city_service.py`, `src/clients/explore_repository.py` | `tests/unit/test_explore_city_service.py`, `tests/unit/test_explore_metrics.py`, app route/component tests |
 | FastAPI niche bridge | `POST /api/niches/score`, `GET /api/niches/{id}`, `GET /api/metros/suggest` | `src/research_agent/api.py` | `tests/unit/test_api_niches.py`, `test_api_metros_suggest.py` |
 | Mapbox places autocomplete | `GET /api/places/suggest` — Mapbox v6 forward geocoding + DataForSEO location bridge | `src/research_agent/api.py`, `src/research_agent/places.py` | `tests/unit/test_api_places_suggest.py`, `tests/unit/test_places_bridge.py` |
 | Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |
@@ -247,3 +288,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.0.2 | 2026-04-07 | Doc alignment pass | Added repository config surfaces and tightened active voice in build sequencing |
 | 1.1.0 | 2026-04-22 | Mapbox autocomplete migration | Added Mapbox places autocomplete + DataForSEO bridge component, updated niche finder flow to support global city coverage with canonical place targeting |
 | 1.2.0 | 2026-04-23 | DFS bridge fix + E2E scoring suite | Fixed DFS locations endpoint to use GET (was POST), added state-aware city disambiguation in bridge matcher, added state-level fallback in orchestrator for unseeded cities, added observability logging to bridge, added Playwright E2E scoring regression/matrix/lifecycle/quality-gate test suite |
+| 1.3.0 | 2026-05-14 | Explore Cities system design | Added backend-backed Explore Cities architecture, canonical source tables, server-side filtering contract, metric ownership, and run report/refresh boundaries |

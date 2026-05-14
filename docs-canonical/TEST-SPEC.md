@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.0.0 -->
+<!-- docguard:version 1.2.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-05 -->
+<!-- docguard:last-reviewed 2026-05-14 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
@@ -28,6 +28,8 @@
 | `src/classification/**/*.py` | `tests/unit/test_*.py` | Unit |
 | `src/experiment/**/*.py` | `tests/unit/test_*.py` | Unit |
 | `src/research_agent/**/*.py` | `tests/unit/test_*.py` | Unit |
+| `src/domain/explore/**/*.py` | `tests/unit/test_explore_*.py` | Unit |
+| `src/domain/services/explore_city_service.py` | `tests/unit/test_explore_city_service.py` | Unit |
 
 ## Test Rules (Constitution-Mandated)
 
@@ -65,6 +67,21 @@ tests/
 | `src/research_agent/` | `tests/unit/test_research_agent_loop.py` | — | ✅ |
 | `src/research_agent/places.py` | `tests/unit/test_places_bridge.py`, `tests/unit/test_api_places_suggest.py` | — | ✅ |
 | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` | — | ✅ |
+
+## Explore Cities Test Obligations
+
+| Test | Scope | Expected |
+|------|-------|----------|
+| Business density formula | Weighted CBP rows + population | Returns establishments per 1,000 residents using `niche_naics_mapping.weight`; missing population returns null with a quality flag |
+| Establishment growth formula | Prior/latest weighted CBP rows | Returns annualized growth; missing historical CBP year returns `growth_available=false` |
+| Freshness calculation | Latest score timestamp + cadence | Marks stale when older than cadence; null score timestamp is stale only for cached-service targets |
+| V2 score preference | V2 and legacy rows for same city/service | Uses `metro_score_v2` for presentation score and marks `score_system=v2` |
+| Legacy fallback | Legacy row with no V2 row | Returns legacy opportunity with `score_system=legacy` |
+| Server-side filters | State, population, income, service, density, growth, stale | Repository receives filters; frontend does not filter the first 100 rows as the source universe |
+| Run report availability | City with no cached services | API accepts city + service and returns queued/started report response through scoring bridge |
+| Refresh target resolution | Selected, visible, stale, all scopes | Resolves existing cached city + service targets without browser-side scoring loops |
+| Readiness audit | `metros`, CBP, NAICS mapping, scores | Fails clearly when canonical tables are missing, empty, or hidden from PostgREST schema cache |
+| Explore E2E smoke | Explore table, filters, drawer, run-report control | Loads from backend API and exposes run report even when a city has no cached services |
 
 ## E2E Scoring Tests (Playwright)
 
@@ -138,3 +155,4 @@ npm run lint
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md` §12, `docs/product_breakdown.md`, `.specify/memory/constitution.md` |
 | 1.1.0 | 2026-04-23 | E2E scoring suite | Added places bridge + orchestrator to service-test map, added E2E scoring tests section (regression, autocomplete flow, matrix, lifecycle, quality gates) |
+| 1.2.0 | 2026-05-14 | Explore Cities system design | Added domain metric, service, repository, API, and E2E obligations for backend-backed Explore Cities |

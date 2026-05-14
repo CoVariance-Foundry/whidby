@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.0.0`     |
-| **Last Updated** | 2026-04-05  |
+| **Version**      | `1.2.0`     |
+| **Last Updated** | 2026-05-14  |
 | **Owner**        | @widby-team |
 
 
@@ -36,6 +36,8 @@
 | SeoFact             | Supabase `seo_facts` table           | id (UUID); unique niche + cbsa + keyword + date | Keyword-grain observations used to build benchmarks             |
 | SeoBenchmark        | Supabase `seo_benchmarks` table      | niche + population_class | V2 benchmark cell used by scoring                              |
 | ServiceACVEstimate  | Supabase `service_acv_estimates` table | naics_code + cbsa_code | BLS-derived ACV estimates                                      |
+| ExploreCitySummary  | DTO from Explore Cities service       | cbsa_code        | Filterable cached market row combining metro demographics, cached scores, density, growth, and freshness |
+| ExploreServiceMetric | DTO from Explore Cities service      | cbsa_code + niche_normalized | Cached service score, score-system provenance, density/growth lineage, and refresh/run-report target data |
 
 
 ### Sonar Slice-Lite Entities
@@ -78,6 +80,82 @@ Source: `src/research_agent/places.py::PlaceSuggestion`. Returned by `GET /api/p
 | `dataforseo_location_code` | number | No | Bridged DFS code for rerun targeting |
 
 Source: `apps/app/src/lib/niche-finder/history-storage.ts`. Dedupe key prefers `place_id` when present.
+
+### ExploreCitySummary (service DTO)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cbsa_code` | string | Yes | Metro key from `public.metros` |
+| `cbsa_name` | string | Yes | Display metro name |
+| `state` | string | Yes | Primary state from `public.metros` |
+| `population` | integer | No | ACS population |
+| `population_class` | string | No | Derived class from `public.metros.population_class` |
+| `median_household_income_usd` | integer | No | ACS median household income |
+| `owner_occupancy_rate` | float | No | ACS owner-occupied housing units / households |
+| `median_age_years` | float | No | ACS median age |
+| `business_density_per_1k` | float | No | Weighted CBP establishments per 1,000 residents for the active service filter |
+| `establishment_growth_yoy` | float | No | Annualized CBP establishment growth for the active service filter |
+| `growth_available` | boolean | Yes | False when historical CBP years needed for growth are not loaded |
+| `cached_services_count` | integer | Yes | Count of latest cached service rows for the metro |
+| `best_score` | integer | No | V2 lens projection when available; legacy opportunity fallback otherwise |
+| `score_system` | string | Yes | `v2`, `legacy`, or `none` |
+| `last_scored_at` | timestamptz | No | Latest cached score timestamp |
+| `stale` | boolean | Yes | Whether latest score exceeds the active freshness cadence |
+
+Source: `src/domain/services/explore_city_service.py`. The frontend must treat this as an already-filtered backend result, not as a raw table dump.
+
+### ExploreServiceMetric (service DTO)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cbsa_code` | string | Yes | Metro key |
+| `niche_keyword` | string | Yes | Display service keyword |
+| `niche_normalized` | string | Yes | Stable service key used for joins |
+| `report_id` | UUID | No | Source report |
+| `score_system` | string | Yes | `v2` if `metro_score_v2` exists, else `legacy` when sourced from `metro_scores` |
+| `v2_scores` | object | No | Demand, organic difficulty, local difficulty, monetization, and AI resilience vector |
+| `legacy_opportunity_score` | integer | No | Legacy V1.1 opportunity score fallback |
+| `presentation_score` | integer | No | User-selected V2 lens projection or legacy opportunity fallback |
+| `business_density_per_1k` | float | No | Weighted CBP establishments per 1,000 residents for this service |
+| `establishment_growth_yoy` | float | No | Annualized establishment growth for this service |
+| `benchmark_confidence` | string | No | V2 benchmark confidence label |
+| `latest_scored_at` | timestamptz | No | Latest score timestamp |
+| `refresh_target_id` | UUID | No | Existing refresh target when configured |
+| `next_refresh_at` | timestamptz | No | Next scheduled refresh time |
+| `stale` | boolean | Yes | Whether this cached service exceeds the active freshness cadence |
+
+Source: `src/domain/explore/entities.py` and `src/domain/services/explore_city_service.py`.
+
+### Explore Metric Formulas
+
+Business density is service-aware and based on CBP establishments, not DataForSEO business-listing count:
+
+```text
+weighted_establishments =
+  sum(census_cbp_establishments.est * niche_naics_mapping.weight)
+
+business_density_per_1k =
+  weighted_establishments / metros.population * 1,000
+```
+
+`seo_benchmarks` may continue to store the same concept per 100,000 residents (`median_establishments_per_100k`) for benchmark scoring. Explore uses per 1,000 residents for table readability.
+
+Establishment growth is annualized from historical CBP establishment counts:
+
+```text
+establishment_growth_yoy =
+  (latest_weighted_establishments / prior_weighted_establishments) ** (1 / year_span) - 1
+```
+
+If historical CBP years are not loaded, return `establishment_growth_yoy = null` and `growth_available = false`; do not silently filter out all cities.
+
+Freshness uses the latest cached score timestamp and the active policy cadence:
+
+```text
+stale = latest_scored_at < now() - cadence_days
+```
+
+Default `cadence_days` is 30 until a persisted refresh policy overrides it.
 
 ## Schema Definitions
 
@@ -234,3 +312,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 0.1.0   | 2026-04-05 | DocGuard Init | Initial template                                             |
 | 1.0.0   | 2026-04-05 | Migration     | Populated from `docs/algo_spec_v1_1.md`, `docs/data_flow.md` |
 | 1.1.0   | 2026-04-22 | Mapbox autocomplete | Added PlaceSuggestion and HistoryEntry schemas for global autocomplete + canonical place targeting |
+| 1.2.0   | 2026-05-14 | Explore Cities system design | Added Explore service DTOs, density/growth/freshness formulas, and backend filtering expectations |
