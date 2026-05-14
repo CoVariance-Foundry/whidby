@@ -47,7 +47,7 @@ function ExperimentsContent() {
   const [sessions, setSessions] = useState<Array<{ run_id: string }>>([]);
   const [selectedRun, setSelectedRun] = useState(runId || "");
   const [experiments, setExperiments] = useState<Experiment[]>([]);
-  const [loadingRun, setLoadingRun] = useState<string | null>(runId || null);
+  const [loading, setLoading] = useState(false);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,13 +55,8 @@ function ExperimentsContent() {
       .then((r) => r.json())
       .then((data) => {
         setSessions(data);
-        if (data.length > 0) {
-          setSelectedRun((prev) => {
-            if (prev) return prev;
-            const next = data[0].run_id;
-            setLoadingRun(next);
-            return next;
-          });
+        if (!selectedRun && data.length > 0) {
+          setSelectedRun(data[0].run_id);
         }
       })
       .catch(() => {});
@@ -69,11 +64,12 @@ function ExperimentsContent() {
 
   useEffect(() => {
     if (!selectedRun) return;
+    setLoading(true);
     fetch(`/api/agent/experiments/${selectedRun}`)
       .then((r) => r.json())
       .then(setExperiments)
       .catch(() => setExperiments([]))
-      .finally(() => setLoadingRun(null));
+      .finally(() => setLoading(false));
   }, [selectedRun]);
 
   return (
@@ -87,11 +83,7 @@ function ExperimentsContent() {
         </div>
         <select
           value={selectedRun}
-          onChange={(e) => {
-            const nextRun = e.target.value;
-            setLoadingRun(nextRun || null);
-            setSelectedRun(nextRun);
-          }}
+          onChange={(e) => setSelectedRun(e.target.value)}
           className="rounded-md border border-[var(--color-dark-border)] bg-[var(--color-dark-alt)] px-3 py-1.5 text-sm text-[var(--color-text-primary)]"
         >
           <option value="">Select a run...</option>
@@ -115,7 +107,7 @@ function ExperimentsContent() {
             </tr>
           </thead>
           <tbody>
-            {Boolean(loadingRun) ? (
+            {loading ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-[var(--color-text-muted)]">
                   Loading...

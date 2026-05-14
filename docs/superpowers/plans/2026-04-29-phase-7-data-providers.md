@@ -746,7 +746,6 @@ class CBPCityDataProvider:
                 }
             self._cache[all_key]["establishments"] += r["establishments"]
             self._cache[all_key]["employees"] += r["employees"]
-            self._cache[all_key]["payroll_thousands"] += r["payroll_thousands"]
             self._cache[all_key]["density"] += r["establishments"]
 
         logger.info(
