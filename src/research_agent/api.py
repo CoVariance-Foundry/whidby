@@ -14,10 +14,10 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import anthropic
-from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -28,8 +28,13 @@ from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
 from src.clients.llm.client import LLMClient
 from src.clients.supabase_adapter import SupabaseMarketStore
-from src.clients.supabase_persistence import SupabasePersistence
+from src.clients.supabase_persistence import SupabaseExploreRefreshStore, SupabasePersistence
 from src.data.metro_db import Metro, MetroDB
+from src.domain.services.explore_refresh_service import (
+    ExploreRefreshFlags,
+    ExploreRefreshService,
+    QueuedExploreRefreshRun,
+)
 from src.domain.services.market_service import MarketService, ScoreRequest
 from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
@@ -358,6 +363,8 @@ class NicheScoreRequest(BaseModel):
     metadata_source: str = "typed"
     strategy_profile: str = "balanced"
     dry_run: bool = False
+    owner_account_id: str | None = None
+    created_by_user_id: str | None = None
 
     @field_validator("niche", "city")
     @classmethod
@@ -401,12 +408,43 @@ class NicheScoreRequest(BaseModel):
             raise ValueError("metadata_source must be one of typed|mapbox_selected|recent_history|fallback_cbsa")
         return normalized
 
+    @field_validator("owner_account_id", "created_by_user_id")
+    @classmethod
+    def _normalize_uuid_context(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            return None
+        try:
+            uuid.UUID(trimmed)
+        except ValueError as exc:
+            raise ValueError("must be a valid UUID") from exc
+        return trimmed
+
+
+class ExploreRefreshFlagsPayload(BaseModel):
+    force: bool = False
+    dry_run: bool = False
+    strategy_profile: Literal["balanced", "growth", "defensive"] = "balanced"
+    max_items: int = Field(default=50, ge=1, le=500)
+    concurrency: int = Field(default=2, ge=1, le=5)
+
+
+class ExploreRefreshRunRequest(BaseModel):
+    scope: Literal["selected", "visible", "stale", "all"]
+    target_ids: list[str] = Field(default_factory=list)
+    report_ids: list[str] = Field(default_factory=list)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    flags: ExploreRefreshFlagsPayload = Field(default_factory=ExploreRefreshFlagsPayload)
+
 
 # ---------------------------------------------------------------------------
 # MarketService singleton (replaces per-request client construction)
 # ---------------------------------------------------------------------------
 
 _MARKET_SERVICE: MarketService | None = None
+_EXPLORE_REFRESH_SERVICE: ExploreRefreshService | None = None
 
 
 def _build_market_service() -> MarketService:
@@ -442,6 +480,18 @@ def _market_service() -> MarketService:
     if _MARKET_SERVICE is None:
         _MARKET_SERVICE = _build_market_service()
     return _MARKET_SERVICE
+
+
+def _get_explore_refresh_service() -> ExploreRefreshService:
+    global _EXPLORE_REFRESH_SERVICE
+    if _EXPLORE_REFRESH_SERVICE is None:
+        persistence = SupabasePersistence()
+        store = SupabaseExploreRefreshStore(client=persistence._client)
+        _EXPLORE_REFRESH_SERVICE = ExploreRefreshService(
+            store=store,
+            market_service=_market_service(),
+        )
+    return _EXPLORE_REFRESH_SERVICE
 
 
 def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
@@ -631,6 +681,8 @@ async def niches_score(req: NicheScoreRequest, request: Request) -> dict[str, An
             request_id=request_id,
             strategy_profile=req.strategy_profile,
             dry_run=req.dry_run,
+            owner_account_id=req.owner_account_id,
+            created_by_user_id=req.created_by_user_id,
         )
         result = await _market_service().score(score_request)
         logger.info(
@@ -677,6 +729,156 @@ def niches_read(report_id: str) -> dict[str, Any]:
         "metros": row["metros"],
         "meta": row["meta"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Explore refresh endpoints
+# ---------------------------------------------------------------------------
+
+
+def _explore_refresh_service_or_503() -> ExploreRefreshService:
+    try:
+        return _get_explore_refresh_service()
+    except RuntimeError as exc:
+        logger.warning("Explore refresh service unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Explore refresh service unavailable: {exc}",
+        ) from exc
+
+
+def _explore_refresh_flags(payload: ExploreRefreshFlagsPayload) -> ExploreRefreshFlags:
+    return ExploreRefreshFlags(
+        force=payload.force,
+        dry_run=payload.dry_run,
+        strategy_profile=payload.strategy_profile,
+        max_items=payload.max_items,
+        concurrency=payload.concurrency,
+    )
+
+
+def _queued_refresh_response(result: str | dict[str, Any] | QueuedExploreRefreshRun) -> dict[str, str]:
+    if isinstance(result, QueuedExploreRefreshRun):
+        run_id = result.run_id
+    elif isinstance(result, dict):
+        run_id = result.get("run_id")
+    else:
+        run_id = result
+    if not run_id:
+        raise RuntimeError("Explore refresh service returned no run_id")
+    return {"run_id": str(run_id), "status": "queued"}
+
+
+async def _execute_explore_refresh_run(
+    service: ExploreRefreshService,
+    queued_run: QueuedExploreRefreshRun,
+) -> None:
+    try:
+        await service.execute_queued_run(queued_run)
+    except Exception:
+        logger.exception("Explore refresh background run failed run_id=%s", queued_run.run_id)
+
+
+@app.post("/api/explore/refresh/runs")
+async def create_explore_refresh_run(
+    payload: ExploreRefreshRunRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """Queue a manual Explore cache refresh run."""
+    service = _explore_refresh_service_or_503()
+    flags = _explore_refresh_flags(payload.flags)
+    try:
+        targets = service.resolve_manual_targets(
+            scope=payload.scope,
+            target_ids=payload.target_ids,
+            report_ids=payload.report_ids,
+            filters=payload.filters,
+            flags=flags,
+        )
+        queued_run = service.queue_selected_targets(
+            targets,
+            flags=flags,
+            requested_by=None,
+            now=datetime.now(timezone.utc),
+            scope=payload.scope,
+        )
+        background_tasks.add_task(_execute_explore_refresh_run, service, queued_run)
+        return _queued_refresh_response(queued_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Explore refresh run failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Explore refresh run failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Explore refresh run failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Explore refresh run failed unexpectedly",
+        ) from exc
+
+
+@app.post("/api/explore/refresh/due")
+async def refresh_due_explore_targets(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """Queue refreshes for due Explore cache targets."""
+    expected_secret = os.environ.get("EXPLORE_REFRESH_CRON_SECRET")
+    if not expected_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Explore refresh cron secret is not configured",
+        )
+    if request.headers.get("x-cron-secret") != expected_secret:
+        raise HTTPException(status_code=401, detail="Invalid cron secret")
+
+    service = _explore_refresh_service_or_503()
+    try:
+        queued_run = service.queue_due_targets(
+            now=datetime.now(timezone.utc),
+            flags=ExploreRefreshFlags(),
+        )
+        background_tasks.add_task(_execute_explore_refresh_run, service, queued_run)
+        return _queued_refresh_response(queued_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Explore due refresh failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Explore due refresh failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Explore due refresh failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Explore due refresh failed unexpectedly",
+        ) from exc
+
+
+@app.get("/api/explore/refresh/runs/{run_id}")
+def get_explore_refresh_run(run_id: str) -> dict[str, Any]:
+    """Return Explore refresh run status and items."""
+    service = _explore_refresh_service_or_503()
+    try:
+        return service.get_run_status(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Explore refresh status lookup failed run_id=%s", run_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Explore refresh status lookup failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Explore refresh status lookup failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Explore refresh status lookup failed unexpectedly",
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

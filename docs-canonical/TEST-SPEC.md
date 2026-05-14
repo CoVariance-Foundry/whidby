@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.2.0 -->
+<!-- docguard:version 1.3.0 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-14 -->
 <!-- docguard:owner @widby-team -->
@@ -98,6 +98,12 @@ Additional contract checks for scoring/autocomplete:
 - `tests/unit/test_api_niches.py`: validates `metadata_source` request contract on FastAPI boundary.
 - `tests/unit/test_api_places_suggest.py`: verifies `enrichment_status` semantics for `enriched`, `mapbox_only`, and `not_configured`.
 
+## Explore Refresh Control Tests
+
+| Scope | Required Coverage | Required Tests |
+|-------|-------------------|----------------|
+| Explore refresh control | 30-day refresh policy defaults, loader freshness mapping, refresh store persistence, stale target selection, run status transitions, snapshot lineage, score/trend deltas, API behavior, bounded Next proxy behavior, and cron auth enforcement | `tests/unit/test_explore_refresh_service.py`, `tests/unit/test_explore_refresh_schema.py`, `tests/unit/test_api_explore_refresh.py`, `apps/app/src/lib/explore/load-explore-data.test.ts`, `apps/app/src/lib/explore/load-score-trends.test.ts`, `apps/app/src/app/api/explore/refresh/runs/route.test.ts`, `apps/app/src/app/api/explore/refresh/runs/[runId]/route.test.ts`, `apps/app/src/app/api/explore/refresh/due/route.test.ts`, `apps/app/src/components/explore/ExplorePageClient.test.tsx`, `apps/app/e2e/reports-smoke.spec.ts` |
+
 ## Unit Test Obligations (Algo Spec §12.1)
 
 | Test | Input | Expected |
@@ -161,3 +167,4 @@ npm run lint
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md` §12, `docs/product_breakdown.md`, `.specify/memory/constitution.md` |
 | 1.1.0 | 2026-04-23 | E2E scoring suite | Added places bridge + orchestrator to service-test map, added E2E scoring tests section (regression, autocomplete flow, matrix, lifecycle, quality gates) |
 | 1.2.0 | 2026-05-14 | Explore Cities system design | Added domain metric, service, repository, API, and E2E obligations for backend-backed Explore Cities |
+| 1.3.0 | 2026-05-14 | Explore refresh control | Added refresh policy, target selection, run status, snapshot lineage, trend delta, and cron auth test obligations |

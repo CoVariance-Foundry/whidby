@@ -30,6 +30,8 @@ class ScoreRequest:
     request_id: str | None = None
     strategy_profile: str = "balanced"
     dry_run: bool = False
+    owner_account_id: str | None = None
+    created_by_user_id: str | None = None
 
 
 @dataclass
@@ -132,6 +134,11 @@ class MarketService:
             )
 
         pipeline_ms = int((time.monotonic() - handler_start) * 1000)
+
+        if request.owner_account_id and request.created_by_user_id:
+            result.report["owner_account_id"] = request.owner_account_id
+            result.report["created_by_user_id"] = request.created_by_user_id
+            result.report["access_scope"] = "account"
 
         # --- Persist report ---
         report_id: str | None = None

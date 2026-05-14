@@ -22,6 +22,8 @@ class TestMigrationFiles:
             "004_rls_policies.sql",
             "007_kb_schema.sql",
             "008_kb_rls_and_lifecycle.sql",
+            "014_user_management_billing.sql",
+            "015_explore_refresh_control.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -172,3 +174,55 @@ class TestKBRLSAndLifecycle:
     def test_reports_entity_and_snapshot_fk(self, sql: str):
         assert "entity_id" in sql
         assert "snapshot_id" in sql
+
+
+class TestUserManagementBillingSchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "014_user_management_billing.sql").read_text()
+
+    def test_account_and_billing_tables(self, sql: str):
+        for table in [
+            "user_profiles",
+            "accounts",
+            "account_memberships",
+            "subscriptions",
+            "billing_customers",
+            "usage_counters",
+        ]:
+            assert f"CREATE TABLE IF NOT EXISTS {table}" in sql
+
+    def test_plan_catalog_seed_matches_tiers(self, sql: str):
+        assert "('free', 'Free', 0, 0, NULL)" in sql
+        assert "('plus', 'Plus', 4900, 10, 'STRIPE_PLUS_PRICE_ID')" in sql
+        assert "('pro', 'Pro', 10000, 50, 'STRIPE_PRO_PRICE_ID')" in sql
+
+    def test_reports_get_ownership_columns(self, sql: str):
+        assert "owner_account_id" in sql
+        assert "created_by_user_id" in sql
+        assert "access_scope TEXT NOT NULL DEFAULT 'cached'" in sql
+        assert "reports_scope_owner_consistency" in sql
+
+    def test_broad_authenticated_report_policies_are_removed(self, sql: str):
+        assert 'DROP POLICY IF EXISTS "Authenticated users can read reports"' in sql
+        assert 'DROP POLICY IF EXISTS "Authenticated users can delete reports"' in sql
+        assert "Authenticated users can read visible reports" in sql
+        assert "public.is_account_member(owner_account_id)" in sql
+
+    def test_child_report_tables_inherit_parent_visibility(self, sql: str):
+        for policy in [
+            "Authenticated users can read visible report_keywords",
+            "Authenticated users can read visible metro_signals",
+            "Authenticated users can read visible metro_scores",
+        ]:
+            assert policy in sql
+        assert "WHERE r.id = report_keywords.report_id" in sql
+        assert "WHERE r.id = metro_signals.report_id" in sql
+        assert "WHERE r.id = metro_scores.report_id" in sql
+
+    def test_quota_functions_exist(self, sql: str):
+        assert "FUNCTION public.get_account_entitlement()" in sql
+        assert "FUNCTION public.consume_report_quota(p_account_id UUID)" in sql
+        assert "FUNCTION public.refund_report_quota(p_account_id UUID)" in sql
+        assert "ON CONFLICT (account_id, metric_key, period_start, period_end)" in sql
+        assert "WHERE usage_counters.used_count < v_limit" in sql

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  EntitlementError,
+  consumeReportQuota,
+  refundReportQuota,
+  resolveEntitlementContext,
+} from "@/lib/account/entitlements";
+import { getServerFeatureFlag, captureServerEvent } from "@/lib/flags/server";
+import { PRODUCT_FLAGS } from "@/lib/flags/product-flags";
 import { validateNicheQueryInput } from "@/lib/niche-finder/request-validation";
 import type { FallbackPath, MetadataSource } from "@/lib/niche-finder/types";
+import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -36,10 +45,79 @@ function normalizeMetadataSource(value: unknown): MetadataSource {
 export async function POST(req: NextRequest) {
   const proxyStart = Date.now();
   const requestId = req.headers.get("x-request-id") || createRequestId();
+  let quotaConsumedForAccount: string | null = null;
+  let supabaseForRefund: Awaited<ReturnType<typeof createClient>> | null = null;
   try {
+    const supabase = await createClient();
+    supabaseForRefund = supabase;
+    const { user, entitlement } = await resolveEntitlementContext(supabase);
+    const flagProperties = {
+      account_id: entitlement.account_id,
+      tier: entitlement.plan_key,
+      subscription_status: entitlement.subscription_status,
+    };
+
+    const freshReportsEnabled = await getServerFeatureFlag(
+      PRODUCT_FLAGS.freshReportGenerationEnabled.key,
+      PRODUCT_FLAGS.freshReportGenerationEnabled.defaultValue,
+      user.id,
+      flagProperties,
+    );
+    if (!freshReportsEnabled) {
+      return NextResponse.json(
+        {
+          status: "disabled",
+          code: "fresh_report_generation_disabled",
+          message: "Fresh report generation is temporarily unavailable.",
+        },
+        { status: 503 },
+      );
+    }
+
+    const quotaEnforcementEnabled = await getServerFeatureFlag(
+      PRODUCT_FLAGS.reportQuotaEnforcementEnabled.key,
+      PRODUCT_FLAGS.reportQuotaEnforcementEnabled.defaultValue,
+      user.id,
+      flagProperties,
+    );
+
+    if (quotaEnforcementEnabled) {
+      if (entitlement.monthly_report_limit <= 0) {
+        return NextResponse.json(
+          {
+            status: "tier_limit",
+            code: "fresh_reports_not_included",
+            message: "Your current plan can browse cached reports but cannot generate fresh reports.",
+            tier: entitlement.plan_key,
+            monthly_report_limit: entitlement.monthly_report_limit,
+          },
+          { status: 403 },
+        );
+      }
+
+      const consumed = await consumeReportQuota(supabase, entitlement.account_id);
+      if (!consumed) {
+        return NextResponse.json(
+          {
+            status: "quota_exceeded",
+            code: "monthly_report_quota_exceeded",
+            message: "You have reached your monthly fresh report limit.",
+            tier: entitlement.plan_key,
+            monthly_report_limit: entitlement.monthly_report_limit,
+          },
+          { status: 429 },
+        );
+      }
+      quotaConsumedForAccount = entitlement.account_id;
+    }
+
     const body = await req.json();
     const validation = validateNicheQueryInput(body);
     if (!validation.ok) {
+      if (quotaConsumedForAccount) {
+        await refundReportQuota(supabase, quotaConsumedForAccount);
+        quotaConsumedForAccount = null;
+      }
       return NextResponse.json(
         { status: "validation_error", message: validation.message },
         { status: 400 },
@@ -89,12 +167,18 @@ export async function POST(req: NextRequest) {
         metadata_source: metadataSource,
         strategy_profile: body.strategy_profile ?? "balanced",
         dry_run: dryRun,
+        owner_account_id: entitlement.account_id,
+        created_by_user_id: user.id,
       }),
     });
 
     const proxyMs = Date.now() - proxyStart;
 
     if (!upstream.ok) {
+      if (quotaConsumedForAccount) {
+        await refundReportQuota(supabase, quotaConsumedForAccount);
+        quotaConsumedForAccount = null;
+      }
       const upstreamBody = await upstream.text();
       console.warn(
         "[scoring-proxy] FAIL request_id=%s upstream_status=%d proxy_ms=%d",
@@ -117,6 +201,12 @@ export async function POST(req: NextRequest) {
 
     const data = await upstream.json();
     const totalMs = Date.now() - proxyStart;
+    captureServerEvent(user.id, "fresh_report_generated", {
+      account_id: entitlement.account_id,
+      tier: entitlement.plan_key,
+      report_id: data.report_id ?? null,
+      opportunity_score: data.opportunity_score ?? null,
+    });
     console.info(
       "[scoring-proxy] DONE request_id=%s report_id=%s opportunity=%d fallback_path=%s upstream_ms=%d total_ms=%d",
       requestId,
@@ -147,10 +237,28 @@ export async function POST(req: NextRequest) {
       entity_id: data.entity_id ?? null,
       snapshot_id: data.snapshot_id ?? null,
       persist_warning: data.persist_warning ?? null,
+      account: {
+        account_id: entitlement.account_id,
+        tier: entitlement.plan_key,
+        monthly_report_limit: entitlement.monthly_report_limit,
+      },
       status: "success",
     });
   } catch (err) {
+    if (quotaConsumedForAccount && supabaseForRefund) {
+      await refundReportQuota(supabaseForRefund, quotaConsumedForAccount);
+    }
     const proxyMs = Date.now() - proxyStart;
+    if (err instanceof EntitlementError) {
+      return NextResponse.json(
+        {
+          status: "entitlement_error",
+          code: err.code,
+          message: err.message,
+        },
+        { status: err.status },
+      );
+    }
     console.error(
       "[scoring-proxy] ERROR request_id=%s proxy_ms=%d error=%s",
       requestId,
