@@ -110,6 +110,23 @@ def test_score_persists_report(
     assert "rpt-1" in store.reports
 
 
+def test_score_marks_report_with_account_ownership(
+    service: MarketService, store: FakeMarketStore
+) -> None:
+    req = ScoreRequest(
+        niche="plumbing",
+        city="Boise",
+        state="ID",
+        owner_account_id="33333333-3333-3333-3333-333333333333",
+        created_by_user_id="44444444-4444-4444-4444-444444444444",
+    )
+    result = asyncio.run(service.score(req))
+    stored = store.reports[result.report_id or ""]
+    assert stored["owner_account_id"] == "33333333-3333-3333-3333-333333333333"
+    assert stored["created_by_user_id"] == "44444444-4444-4444-4444-444444444444"
+    assert stored["access_scope"] == "account"
+
+
 def test_score_updates_kb(
     service: MarketService, kb: FakeKnowledgeStore
 ) -> None:

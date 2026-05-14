@@ -68,6 +68,19 @@ def test_build_report_row_maps_core_fields() -> None:
     assert row["strategy_profile"] == "balanced"
     assert row["feedback_log_id"] == "22222222-2222-2222-2222-222222222222"
     assert isinstance(row["metros"], list)
+    assert row["access_scope"] == "cached"
+    assert row["owner_account_id"] is None
+
+
+def test_build_report_row_maps_account_ownership() -> None:
+    report = _sample_report()
+    report["owner_account_id"] = "33333333-3333-3333-3333-333333333333"
+    report["created_by_user_id"] = "44444444-4444-4444-4444-444444444444"
+    report["access_scope"] = "account"
+    row = build_report_row(report)
+    assert row["owner_account_id"] == "33333333-3333-3333-3333-333333333333"
+    assert row["created_by_user_id"] == "44444444-4444-4444-4444-444444444444"
+    assert row["access_scope"] == "account"
 
 
 def test_build_keyword_rows_one_per_keyword() -> None:

@@ -80,56 +80,20 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby] recent context, 2026-05-12 4:42pm PDT
+# [whidby/whidby] recent context, 2026-05-13 10:15pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (17,724t read) | 366,663t work | 95% savings
+Stats: 50 obs (22,609t read) | 468,046t work | 95% savings
 
 ### Apr 26, 2026
-S181 Merge all pending PRs into dev if their reviews have passed — finishing the Phase 5 development branch (Apr 26 at 6:59 PM)
-S183 Benchmark Pilot Fix Plan Written — Three Failure Buckets Identified and Addressed (Apr 26 at 7:04 PM)
-S184 Supabase MCP Available via Two Distinct Integrations (Apr 26 at 7:06 PM)
-220 7:06p 🔵 Supabase MCP Available via Two Distinct Integrations
-S187 dev Branch Pushed to Remote — Phase 3 + Phase 5 Complete (Apr 26 at 7:06 PM)
-221 7:10p 🟣 Phase 3 MarketService Domain Extraction — PR #31 Code Review
-222 7:11p ✅ PR #31 Phase 3 MarketService Merged to dev
-223 " 🔵 Merge Conflict in domain/services/__init__.py Between dev and phase-5-discovery-service
-224 " 🔴 Merge Conflict Resolved in domain/services/__init__.py — All 119 Tests Pass
-225 " ✅ Phase 5 DiscoveryService Merged into dev — Commit f0505fa
-226 " ✅ dev Branch Pushed to Remote — Phase 3 + Phase 5 Complete
 S188 Run pilot benchmark (scripts.benchmarks.run_pilot) against DataForSEO and Anthropic APIs for two niches across 200 metro slots (Apr 26 at 7:11 PM)
-227 7:20p ✅ Pilot Benchmark Script Launched as Background Task
-228 7:30p 🔵 Pilot Benchmark Completed — 62/200 Reports Succeeded, 1667 Facts Inserted
 S203 Phase 6 CI Enforcement — implement domain layer import guardrails via lint script, CI job, pre-push hook, and pytest architecture tests (Apr 26 at 7:30 PM)
-229 7:31p 🔵 Pilot Failure Mode Is Silent — 138 Reports Started But Never Logged Completion or Error
-230 " 🔵 DataForSEO keyword_suggestions/live Endpoint Exhibited 38–62 Second Latency Spikes
-231 " 🔵 Pilot Success Rate Varies Significantly by Niche — Concrete Contractor Only 10%, Auto Repair 50%
 ### Apr 29, 2026
-232 2:24p 🔵 Whidby Domain Layer Structure and CI Workflow Mapped
-233 " 🔵 Existing CI Enforcement Infrastructure in Widby Repo
-234 2:25p 🔵 Phase 6 CI/CD Enforcement Spec Loaded for Planning
-235 2:26p 🔵 Domain Layer Has Existing Architecture Violations Before Phase 6 Enforcement
-236 2:48p 🔵 Domain Layer Audit — Additional Violation in market_service.py and Clean Results Elsewhere
-237 2:49p ✅ Phase 6 CI Enforcement Implementation Plan Written
-238 2:52p 🟣 Phase 6 CI Enforcement Plan Written for whidby Domain Layer
-239 2:53p 🔵 quality-gates.yml Structure Confirmed — 4 Jobs, PR-Only Trigger
-240 2:54p 🟣 Phase 6 CI Enforcement Files Created and Confirmed Working
-241 2:55p 🔵 tests/ Directory Structure — No architecture/ Subdirectory Yet
-242 " 🟣 pytest Architecture Tests Created and Passing — 2 Tests Green
-243 2:56p 🟣 Violation Detection Validated — Both Lint Script and pytest Correctly Fail on Banned Import
-244 2:57p 🔵 Full Test Suite: 627 Pass, 3 Pre-existing Failures in test_api_reports.py Unrelated to Phase 6
 S205 Phase 6 CI Enforcement Branch Entering Finishing Workflow (Apr 29 at 2:57 PM)
-245 2:59p ✅ Phase 6 CI Enforcement Branch Entering Finishing Workflow
 S213 vitest Fix Verified Stable After Root package.json Cleanup (Apr 29 at 2:59 PM)
-246 " 🔵 Phase 6 CI Enforcement — Uncommitted State Snapshot Before Commit
-247 3:03p 🔵 Vitest Module Resolution Error in Agent Health Route Test
-248 " 🔵 Vitest Not Installed Despite Being in package.json devDependencies
-249 " 🔴 Vitest Installed by Running npm install in apps/app Workspace
-250 " 🔵 Running npm install in apps/app Broke React Type Resolution via Monorepo Conflict
-251 " 🔵 vitest Still Not Installed After npm install — 25 Test Files Affected Project-Wide
 252 3:04p 🔵 vitest Missing from Root node_modules After npm install in Monorepo
 253 3:05p 🔵 vitest Listed in package-lock.json but Not Installed in node_modules
 254 " 🔵 Root node_modules Has 304 Packages but No vitest; No .npmrc Present
@@ -141,6 +105,7 @@ S213 vitest Fix Verified Stable After Root package.json Cleanup (Apr 29 at 2:59 
 260 " ✅ vitest Removed from Monorepo Root package.json devDependencies
 261 " 🔴 vitest Fix Verified Stable After Root package.json Cleanup
 S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/agent/health/route.test.ts (Apr 29 at 3:07 PM)
+S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 3:07 PM)
 262 3:11p ✅ Phase 7 Data Providers — Plan Execution Initiated
 263 4:19p 🔵 Phase 6 Already Committed to Dev Branch
 264 " 🟣 DataForSEO Google Trends API Research Initiated for Phase 7
@@ -149,24 +114,43 @@ S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/
 268 4:24p 🟣 Phase 7 Data Providers Implementation Plan Written
 270 " ✅ Phase 7 Plan Corrected: DataForSEO Trends Response Parsing Fixed
 271 4:25p ✅ Phase 7 Plan: FakeTrendsClient Test Fixture Corrected to Match Real API Structure
-S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 4:28 PM)
-**Investigated**: Plan file reviewed: 2,079 lines, 55 checkboxes, 17 main tasks. Plan structure covers 4 independent data provider implementations plus composition and validation. Plan has been finalized with design decisions documented (Census/BLS raw httpx, growth_rate deferred, APIResponse handling patterns confirmed, Trends endpoint specs finalized)
+S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
+### May 13, 2026
+272 1:09p ✅ Phase 6 CI Enforcement Planning Session Initiated
+S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:09 PM)
+S268 V2 Scoring — Repository Boundary for seo_benchmarks Access Planned (May 13 at 1:10 PM)
+277 1:26p ⚖️ V2 Scoring — Repository Boundary for seo_benchmarks Access Planned
+S269 V2 scoring repository boundary plan — orientation phase for writing a formal implementation plan (May 13 at 1:26 PM)
+278 7:19p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
+279 7:20p ✅ Explore Refresh Control — Canonical Docs Update (Task 1)
+280 7:21p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
+281 " 🔵 Explore Refresh Control Doc Verification — git diff --check Clean, docguard-cli Hung
+283 7:22p 🔵 Whidby Sandbox Blocks `ps` Command — Operation Not Permitted
+284 " 🔵 docguard-cli Never Spawned — Not Found in Process List; Only MCP Servers Running via npx
+285 " 🔵 docguard-cli Fails with ENOTFOUND — npm Registry Unreachable in Whidby Sandbox
+287 7:23p 🔵 DocGuard v0.9.11 Full Guard Run — 124/191 Passed, All HIGH Checks Clean, 97 MEDIUM Warnings
+288 7:24p 🔵 Explore Refresh Control — Task 1 Spec-Compliance Review Findings
+289 " 🔵 Explore Refresh Control — Task 1 Doc Review: Diff and Schema Cross-Check
+290 7:25p ✅ Explore Refresh Control — Task 1 Spec-Compliance Review Initiated
+291 7:26p 🔵 Explore Refresh Control — Canonical Doc Review: Version Metadata and Placeholder Audit Results
+292 " 🔵 Whidby Explore Component and Test File Inventory (as of codex/explore-refresh-control)
+293 7:27p 🔵 docguard-cli Sandbox Hang Confirmed: Process Tracker Shows Running But No OS Process Exists
+294 7:28p 🔵 Explore Refresh Control — Planned API Route and Test File Structure Confirmed
+295 7:30p ✅ Explore Refresh Control — Canonical Docs Updated (Task 1)
+296 " 🔵 Whidby Sandbox Blocks npm Registry, ps Syscall, and pgrep Without Escalation
+297 7:31p 🔵 Primary Key Naming Discrepancy Between DATA-MODEL.md and Migration SQL Plan
+298 " ✅ DATA-MODEL.md Refresh Entity Schemas Reconciled with Migration SQL Plan
+299 " ✅ TEST-SPEC.md Explore Refresh Test Obligation Expanded with Two Additional Test Files
+300 7:32p 🔵 Supabase `reports` Table Uses `id` as PK, Not `report_id` — Application Layer Translates
+301 " ✅ Explore Refresh Control Task 1 Canonical Docs — Final Verified State
+302 " ✅ Explore Refresh Control Task 1 — Canonical Docs Complete at DONE_WITH_CONCERNS
+304 7:33p 🔵 docguard-cli Exact Failure: ENOTFOUND registry.npmjs.org + npm Log Write Blocked
+305 7:34p 🔵 Explore Refresh Control — Task 1 Spec-Compliance Review Criteria Established
+306 " ⚖️ Explore Refresh Control — Task 1 Doc-Quality Review Criteria Established
+307 7:35p 🔵 Explore Refresh Control Task 1 — Spec-Compliance Review Result: PASS
+308 " 🔵 Explore Refresh Control — Canonical Docs Verified Against SQL Contract
+309 " 🔵 Explore Refresh Control — Git Diff Confirms Prior Session Fixed Stale reports.report_id PK
+310 7:37p 🔵 Explore Refresh Control — DATA-MODEL.md Task 1 Spec Compliance Verified
 
-**Learned**: **Design finalization:**
-- Census ACS/CBP and BLS clients use raw httpx (no rate-limiting, cost tracking, or caching—free government APIs with annual data)
-- DataForSEO Trends reuses existing DataForSEO client infrastructure ($0.05/task, max 5 keywords, time_range parameter simplified)
-- APIResponse is a dataclass with `.data` attribute containing raw JSON
-- Growth rate computation deferred (would require ~800 API calls on first load—acceptable for v1 with placeholder 0 in vector)
-- Architecture lint now requires both check_domain_imports.py script AND pytest tests/architecture/ validation
-
-**Completed**: **Session setup complete:**
-- Plan file finalized at docs/superpowers/plans/2026-04-29-phase-7-data-providers.md
-- All design decisions documented and corrections incorporated
-- Plan structure: Task 0 (feature branch) → Task 1 (numpy dep) → Tasks 2-4 (7A) → Tasks 5-7 (7B) → Tasks 8-11 (7C) → Tasks 12-14 (7D) → Tasks 15-17 (composition/migration) → Task 18 (validation)
-- Expected outcome: 20 new files, 3 modified files, 660+ passing tests
-
-**Next Steps**: Begin Task 0 execution: Create feature branch from dev (`git checkout dev && git pull origin dev`, then `git checkout -b phase-7-data-providers`). Then Task 1: Run baseline test suite, add numpy to pyproject.toml, verify architecture lint passes before proceeding to Task Group 7A.
-
-
-Access 367k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 468k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

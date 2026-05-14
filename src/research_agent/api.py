@@ -279,6 +279,8 @@ class NicheScoreRequest(BaseModel):
     dataforseo_location_code: int | None = None
     strategy_profile: str = "balanced"
     dry_run: bool = False
+    owner_account_id: str | None = None
+    created_by_user_id: str | None = None
 
     @field_validator("niche", "city")
     @classmethod
@@ -312,6 +314,20 @@ class NicheScoreRequest(BaseModel):
         if v <= 0:
             raise ValueError("must be a positive integer")
         return v
+
+    @field_validator("owner_account_id", "created_by_user_id")
+    @classmethod
+    def _normalize_uuid_context(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            return None
+        try:
+            uuid.UUID(trimmed)
+        except ValueError as exc:
+            raise ValueError("must be a valid UUID") from exc
+        return trimmed
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +547,8 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
             dataforseo_location_code=req.dataforseo_location_code,
             strategy_profile=req.strategy_profile,
             dry_run=req.dry_run,
+            owner_account_id=req.owner_account_id,
+            created_by_user_id=req.created_by_user_id,
         )
         result = await _market_service().score(score_request)
         return result.to_api_response()
