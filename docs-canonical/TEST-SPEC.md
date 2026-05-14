@@ -93,6 +93,11 @@ tests/
 | `apps/app/e2e/scoring-lifecycle.spec.ts` | Full UI lifecycle: submit → result → reports list → recent searches | Yes (FastAPI) |
 | `apps/app/e2e/scoring-quality-gates.spec.ts` | Pass rate, flake rate, latency, cost gates (reads matrix JSONL) | No (post-run analysis) |
 
+Additional contract checks for scoring/autocomplete:
+- `apps/app/src/app/api/agent/scoring/route.test.ts`: verifies `metadata_source` passthrough, `fallback_path` derivation, and `request_id` propagation.
+- `tests/unit/test_api_niches.py`: validates `metadata_source` request contract on FastAPI boundary.
+- `tests/unit/test_api_places_suggest.py`: verifies `enrichment_status` semantics for `enriched`, `mapbox_only`, and `not_configured`.
+
 ## Unit Test Obligations (Algo Spec §12.1)
 
 | Test | Input | Expected |

@@ -153,6 +153,7 @@ describe("NicheFinderClient", () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.city).toBe("Phoenix");
     expect(body.service).toBe("roofing");
+    expect(body.metadata_source).toBe("typed");
   });
 
   it("success response renders the opportunity score", async () => {
@@ -193,6 +194,7 @@ describe("NicheFinderClient", () => {
     expect(body.state).toBe("AZ");
     expect(body.place_id).toBe("place.phoenix");
     expect(body.dataforseo_location_code).toBe(1012873);
+    expect(body.metadata_source).toBe("mapbox_selected");
     expect(body.city).not.toBe("Phoenix, AZ");
   });
 
@@ -242,6 +244,7 @@ describe("NicheFinderClient", () => {
           at: 1,
           place_id: "place.paris-fr",
           dataforseo_location_code: 98765,
+          metadata_source: "recent_history",
         },
       ]),
     );
@@ -264,5 +267,6 @@ describe("NicheFinderClient", () => {
     expect(body.service).toBe("roofing");
     expect(body.place_id).toBe("place.paris-fr");
     expect(body.dataforseo_location_code).toBe(98765);
+    expect(body.metadata_source).toBe("recent_history");
   });
 });

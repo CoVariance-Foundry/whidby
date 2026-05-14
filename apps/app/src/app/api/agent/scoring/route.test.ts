@@ -3,7 +3,7 @@ import { POST } from "./route";
 
 describe("POST /api/agent/scoring", () => {
   it("proxies to FastAPI and maps the response", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    const spy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         report_id: "r1",
         opportunity_score: 72,
@@ -12,6 +12,7 @@ describe("POST /api/agent/scoring", () => {
         report: { input: { niche_keyword: "roofing" } },
       }), { status: 200 }),
     );
+    global.fetch = spy;
     const req = new Request("http://localhost/api/agent/scoring", {
       method: "POST",
       body: JSON.stringify({ city: "Phoenix", service: "roofing", state: "AZ" }),
@@ -22,6 +23,11 @@ describe("POST /api/agent/scoring", () => {
     expect(body.score_result.opportunity_score).toBe(72);
     expect(body.score_result.classification_label).toBe("Medium");
     expect(body.report_id).toBe("r1");
+    expect(body.query.metadata_source).toBe("typed");
+    expect(body.fallback_path).toBe("city_state");
+    expect(typeof body.request_id).toBe("string");
+    const init = spy.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Record<string, string>)["x-request-id"]).toBeTruthy();
   });
 
   it("passes dry_run=true when NEXT_PUBLIC_NICHE_DRY_RUN=1", async () => {
@@ -66,5 +72,31 @@ describe("POST /api/agent/scoring", () => {
     const sent = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string);
     expect(sent.place_id).toBe("place.123");
     expect(sent.dataforseo_location_code).toBe(12345);
+    expect(sent.metadata_source).toBe("typed");
+  });
+
+  it("forwards metadata_source when provided", async () => {
+    const spy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        report_id: "r4",
+        opportunity_score: 88,
+        classification_label: "High",
+        evidence: [],
+        report: { input: { niche_keyword: "roofing" } },
+      }), { status: 200 }),
+    );
+    global.fetch = spy;
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({
+        city: "Phoenix",
+        service: "roofing",
+        metadata_source: "mapbox_selected",
+      }),
+    });
+    await POST(req as never);
+
+    const sent = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string);
+    expect(sent.metadata_source).toBe("mapbox_selected");
   });
 });

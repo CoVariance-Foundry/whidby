@@ -65,6 +65,8 @@ Full Sonar residuals require additional canonical layers before implementation: 
 | `longitude` | float | No | WGS84 longitude |
 | `dataforseo_location_code` | integer | No | Best-effort bridged DataForSEO location code (null when no confident match) |
 | `dataforseo_match_confidence` | string | No | `high`, `medium`, `low`, or null |
+| `enrichment_status` | string | No | `enriched`, `mapbox_only`, `not_configured`, `timeout`, `degraded`, or `fallback_cbsa` |
+| `enrichment_reason` | string | No | Human-readable reason when enrichment degrades or falls back |
 
 Source: `src/research_agent/places.py::PlaceSuggestion`. Returned by `GET /api/places/suggest`.
 
@@ -78,6 +80,7 @@ Source: `src/research_agent/places.py::PlaceSuggestion`. Returned by `GET /api/p
 | `state` | string | No | Two-letter state code (US entries) |
 | `place_id` | string | No | Canonical Mapbox place id for rerun targeting |
 | `dataforseo_location_code` | number | No | Bridged DFS code for rerun targeting |
+| `metadata_source` | string | No | `typed`, `mapbox_selected`, `recent_history`, or `fallback_cbsa` |
 
 Source: `apps/app/src/lib/niche-finder/history-storage.ts`. Dedupe key prefers `place_id` when present.
 
