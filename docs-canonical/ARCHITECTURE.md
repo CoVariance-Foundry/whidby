@@ -32,6 +32,20 @@ Five subsystems compose the platform:
 
 **Production split:** The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/admin/src/app/api/agent/` and `apps/app/src/app/api/agent/` both proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Email/password sign-in callbacks redirect to each frontend via **`NEXT_PUBLIC_APP_FRONTEND_URL`** (the Vercel origin, not the API). Supabase backs auth and product data for both apps. Details: `docs/research_agent_design.md` §12.
 
+### Consumer User Management and Entitlements
+
+The consumer product uses Supabase Auth plus account-scoped authorization. Every authenticated consumer user resolves to a `user_profiles` row, one default `accounts` row, and an `account_memberships` row. The active `subscriptions` row determines the tier:
+
+| Tier | Price | Fresh report quota | Cached report access |
+| --- | --- | --- | --- |
+| `free` | $0/mo | 0 reports/month | Yes |
+| `plus` | $49/mo | 10 reports/month | Yes |
+| `pro` | $100/mo | 50 reports/month | Yes |
+
+Fresh report generation is gated in `apps/app` route handlers before the Render/FastAPI scoring bridge is called. The route resolves the Supabase session, account entitlement, PostHog rollout flags, and monthly usage, then atomically consumes one `fresh_report` credit before forwarding the request. Generated reports are persisted with `owner_account_id` and `created_by_user_id`; existing ownerless reports remain shared cached reports. Stripe Checkout and the Stripe Customer Portal are the billing UI; Stripe webhooks update Supabase subscription state.
+
+RLS is the durable isolation boundary. PostHog flags may hide UI, stage quota enforcement, or disable fresh report generation, but they must never weaken account-scoped report policies.
+
 ### Niche Finder (both apps)
 
 Admin (`apps/admin`) hosts a **dual-surface niche finder**:
@@ -43,7 +57,7 @@ Consumer (`apps/app`) hosts scoring and discovery surfaces:
 
 - **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by Mapbox Geocoding `/api/places/suggest` endpoint → autocompletes to `{city, region, country, place_id, dataforseo_location_code}` with global coverage; falls back to legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable). The DataForSEO location bridge (`src/research_agent/places.py::DataForSEOLocationBridge`) fetches the full ~95k location list via `GET /serp/google/locations`, caches it for 1 hour, and matches each Mapbox suggestion to a DFS location code using city-name matching with state-aware disambiguation (when multiple cities share a name, the state portion of the DFS `location_name` is compared against the Mapbox suggestion's `full_name`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label. When a canonical `place_id` + `dataforseo_location_code` are available from autocomplete, scoring bypasses MetroDB seed lookup and targets DataForSEO directly. When no DFS code is available but a `state` is known, the orchestrator falls back to borrowing a DFS location code from the highest-population seeded metro in the same state (degraded but functional geotargeting).
 - **Explore Cities (`/explore`)**: cached market-discovery surface backed by a backend Explore domain service, not by client-side table slicing. It lists all eligible metros from `public.metros`, joins cached service scores from `metro_score_v2` first and legacy `metro_scores` as a fallback, calculates density/growth from `census_cbp_establishments` and `niche_naics_mapping`, and applies filters server-side. Users can inspect cached service scores in a city drawer, run a new report for any city + service, or refresh an existing cached city + service target through the backend scoring bridge.
-- **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read thanks to migration 005; writes remain service-role only via the Python scoring engine.
+- **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read shared cached reports plus reports owned by their account. Writes remain service-role only via the Python scoring engine.
 
 Both apps share request validation, score shape, and the `CityAutocomplete` component (currently mirrored; extraction to `packages/niche-finder/` is a future PR). Admin's dual surface and consumer scoring/discovery surfaces are contractually bound to the same FastAPI `POST /api/niches/score` endpoint — scores are always from the same backend pipeline.
 
@@ -110,8 +124,9 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Experiment Analysis (M15) | A/B analysis + rentability signal | `src/experiment/` | `tests/unit/test_experiment_analysis.py` |
 | Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments | `apps/admin/` | Admin vitest + Playwright |
 | Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
+| Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags | `apps/app/src/lib/account/`, `apps/app/src/app/api/billing/` | Consumer vitest |
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
-| Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores` | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
+| Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores`, including report ownership when supplied | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
 | KB persistence | Canonical entity, versioned snapshot, evidence artifact, and feedback event CRUD for the knowledge base | `src/clients/kb_persistence.py` | `tests/unit/test_kb_persistence.py` |
 | Canonical key resolver | Deterministic niche+geo identity normalization for KB entity dedup | `src/pipeline/canonical_key.py` | `tests/unit/test_canonical_key.py` |
 | Persistent API cache | Two-tier (in-memory L1 + Supabase L2) DataForSEO response cache shared across runs | `src/clients/dataforseo/persistent_cache.py` | `tests/unit/test_persistent_cache.py` |
@@ -197,6 +212,8 @@ M16 (Eval Frontend): scaffolded in Phase 1, pages added as each module is built
 | DataForSEO | SERP, keyword, business, review, backlink, lighthouse data | 2000 calls/min | Response cache (24h TTL) + retry with backoff |
 | Anthropic Claude API | Keyword expansion, intent classification, audit copy, guidance | Per-model limits | Temperature=0 determinism; fallback defaults on failure |
 | Supabase | Data persistence (reports, feedback, experiments) | — | — |
+| Stripe | Consumer subscriptions for Plus and Pro tiers | — | Hosted Checkout/Portal; webhook-synced subscription state |
+| PostHog | Consumer feature flags and rollout controls | — | Secure defaults in server route handlers |
 | ActiveCampaign | Email CRM for waitlist/marketing | 5 req/s | Sequential tagging |
 
 ## Build Sequence

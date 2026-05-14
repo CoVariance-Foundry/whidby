@@ -38,6 +38,12 @@
 | ServiceACVEstimate  | Supabase `service_acv_estimates` table | naics_code + cbsa_code | BLS-derived ACV estimates                                      |
 | ExploreCitySummary  | DTO from Explore Cities service       | cbsa_code        | Filterable cached market row combining metro demographics, cached scores, density, growth, and freshness |
 | ExploreServiceMetric | DTO from Explore Cities service      | cbsa_code + niche_normalized | Cached service score, score-system provenance, density/growth lineage, and refresh/run-report target data |
+| UserProfile         | Supabase `user_profiles` table        | user_id (UUID)   | Consumer profile linked 1:1 to Supabase Auth user |
+| Account             | Supabase `accounts` table             | account_id (UUID) | Billing and data-isolation boundary |
+| AccountMembership   | Supabase `account_memberships` table  | account_id + user_id | User access to an account, with role |
+| Subscription        | Supabase `subscriptions` table        | subscription_id (UUID) | Active tier state synced from Stripe |
+| UsageCounter        | Supabase `usage_counters` table       | account + metric + period | Atomic monthly quota usage for fresh reports |
+| BillingCustomer     | Supabase `billing_customers` table    | account_id       | Stripe customer mapping |
 
 
 ### Sonar Slice-Lite Entities
@@ -156,6 +162,25 @@ stale = latest_scored_at < now() - cadence_days
 ```
 
 Default `cadence_days` is 30 until a persisted refresh policy overrides it.
+
+### Consumer Account and Report Ownership
+
+Consumer account state is account-scoped even when an account has one user. New users default to `free`; Stripe webhooks move accounts to `plus` or `pro`.
+
+| Tier | Monthly price | Fresh report quota |
+| --- | ---: | ---: |
+| `free` | 0 | 0 |
+| `plus` | 4900 cents | 10 |
+| `pro` | 10000 cents | 50 |
+
+Reports have two visibility modes:
+
+| `reports.access_scope` | Ownership | Read rule |
+| --- | --- | --- |
+| `cached` | `owner_account_id` is null | Authenticated users can read as shared product cache |
+| `account` | `owner_account_id` required | Only members of the owning account can read |
+
+Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report.
 
 ## Schema Definitions
 
@@ -299,6 +324,8 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | Strategy            | Tool                 | Notes                                                   |
 | ------------------- | -------------------- | ------------------------------------------------------- |
 | SQL migrations      | Supabase CLI         | `supabase/migrations/` directory, RLS policies included |
+| Consumer billing    | Stripe Checkout + Portal | Plus/Pro subscription state synced to Supabase by webhook |
+| Feature flags       | PostHog              | Rollout controls only; never the authority for RLS or billing |
 | In-memory contracts | Pydantic / TypedDict | Validated at module boundaries, no ORM                  |
 
 
