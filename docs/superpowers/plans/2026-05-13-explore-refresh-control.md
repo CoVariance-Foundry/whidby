@@ -13,7 +13,7 @@
 ## File Structure
 
 Create:
-- `supabase/migrations/014_explore_refresh_control.sql` - refresh policy/run/lineage schema, RLS, latest/trend views.
+- `supabase/migrations/015_explore_refresh_control.sql` - refresh policy/run/lineage schema, RLS, latest/trend views.
 - `src/domain/services/explore_refresh_service.py` - selects due targets, creates runs, executes items through `MarketService`.
 - `tests/unit/test_explore_refresh_service.py` - service unit tests with fake market/scoring stores.
 - `tests/unit/test_explore_refresh_schema.py` - migration structure assertions.
@@ -218,7 +218,7 @@ git commit -m "docs: specify explore refresh control model"
 ## Task 2: Supabase Schema For Refresh Policy, Runs, And Trend Snapshots
 
 **Files:**
-- Create: `supabase/migrations/014_explore_refresh_control.sql`
+- Create: `supabase/migrations/015_explore_refresh_control.sql`
 - Test: `tests/unit/test_explore_refresh_schema.py`
 
 - [ ] **Step 1: Write schema test**
@@ -229,7 +229,7 @@ Create `tests/unit/test_explore_refresh_schema.py`:
 from pathlib import Path
 
 
-MIGRATION = Path("supabase/migrations/014_explore_refresh_control.sql")
+MIGRATION = Path("supabase/migrations/015_explore_refresh_control.sql")
 
 
 def test_refresh_schema_has_policy_run_and_snapshot_tables() -> None:
@@ -269,10 +269,10 @@ Expected: FAIL because migration file does not exist.
 
 - [ ] **Step 3: Add migration**
 
-Create `supabase/migrations/014_explore_refresh_control.sql`:
+Create `supabase/migrations/015_explore_refresh_control.sql`:
 
 ```sql
--- 014_explore_refresh_control.sql
+-- 015_explore_refresh_control.sql
 -- Explore refresh policy, run lineage, and report snapshot history.
 
 CREATE TABLE IF NOT EXISTS public.explore_refresh_policies (
@@ -469,7 +469,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit schema**
 
 ```bash
-git add supabase/migrations/014_explore_refresh_control.sql tests/unit/test_explore_refresh_schema.py
+git add supabase/migrations/015_explore_refresh_control.sql tests/unit/test_explore_refresh_schema.py
 git commit -m "feat: add explore refresh schema"
 ```
 

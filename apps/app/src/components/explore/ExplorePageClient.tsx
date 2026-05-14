@@ -7,6 +7,11 @@ import type {
   ExploreCitySummary,
   ExploreData,
 } from "@/lib/explore/types";
+import type {
+  ExploreRefreshRunRequest,
+  ExploreRefreshRunResponse,
+  ExploreRefreshScope,
+} from "@/lib/explore-refresh/types";
 import type { StandardSurfaceResponse } from "@/lib/niche-finder/types";
 import { Icon, I } from "@/lib/icons";
 import CityDrawer from "./CityDrawer";
@@ -15,6 +20,8 @@ import ExploreTable, { type ExploreSortKey, type SortDirection } from "./Explore
 import FreshScanConfirmation, {
   type FreshScanResult,
 } from "./FreshScanConfirmation";
+import RefreshControlPanel from "./RefreshControlPanel";
+import RefreshRunStatus from "./RefreshRunStatus";
 
 interface ExplorePageClientProps {
   data: ExploreData;
@@ -33,6 +40,8 @@ const DEFAULT_FILTERS: ExploreFilterState = {
   service: "",
   growingOnly: false,
 };
+
+const REFRESH_BATCH_CAP = 50;
 
 const NUMERIC_SORTS: Record<ExploreSortKey, (city: ExploreCitySummary) => number | null> = {
   city: () => null,
@@ -127,6 +136,43 @@ function cityNameForScoring(city: ExploreCitySummary): string {
   return cityName;
 }
 
+function serializeFilters(filters: ExploreFilterState): Record<string, unknown> {
+  return {
+    population_min: parseNumber(filters.populationMin),
+    population_max: parseNumber(filters.populationMax),
+    income_min: parseNumber(filters.incomeMin),
+    income_max: parseNumber(filters.incomeMax),
+    selected_states: filters.selectedStates,
+    service: filters.service,
+    growing_only: filters.growingOnly,
+  };
+}
+
+function uniqueTargetIds(scores: ExploreCachedScore[]): string[] {
+  return [
+    ...new Set(
+      scores
+        .map((score) => score.refresh_target_id)
+        .filter((targetId): targetId is string => Boolean(targetId)),
+    ),
+  ];
+}
+
+async function readRefreshError(response: Response): Promise<string> {
+  const fallback = `Refresh run unavailable (HTTP ${response.status}). Try again shortly.`;
+  try {
+    const json = (await response.clone().json()) as { message?: string; error?: string };
+    return json.message ?? json.error ?? fallback;
+  } catch {
+    try {
+      const text = await response.text();
+      return text.trim() || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
 async function runFreshScanForService(
   city: ExploreCitySummary,
   service: ExploreCachedScore,
@@ -184,6 +230,7 @@ export default function ExplorePageClient({
   const freshScanButtonRef = useRef<HTMLButtonElement>(null);
   const freshScanRequestIdRef = useRef(0);
   const freshScanInFlightRef = useRef(false);
+  const refreshInFlightRef = useRef(false);
   const [filters, setFilters] = useState<ExploreFilterState>(DEFAULT_FILTERS);
   const [sortKey, setSortKey] = useState<ExploreSortKey>("best_opportunity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -192,6 +239,9 @@ export default function ExplorePageClient({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [freshScanResults, setFreshScanResults] = useState<FreshScanResult[]>([]);
   const [isFreshScanRunning, setIsFreshScanRunning] = useState(false);
+  const [refreshRun, setRefreshRun] = useState<ExploreRefreshRunResponse | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [isRefreshSubmitting, setIsRefreshSubmitting] = useState(false);
 
   const states = useMemo(
     () => [...new Set(data.cities.map((city) => city.state).filter(Boolean))].sort(),
@@ -210,6 +260,22 @@ export default function ExplorePageClient({
   const visibleCities = useMemo(
     () => sortCities(filterCities(data.cities, filters), sortKey, sortDirection),
     [data.cities, filters, sortDirection, sortKey],
+  );
+  const visibleScores = useMemo(
+    () => visibleCities.flatMap((city) => city.cached_scores),
+    [visibleCities],
+  );
+  const selectedRefreshableScores = useMemo(
+    () => selectedScores.filter((score) => score.refresh_target_id),
+    [selectedScores],
+  );
+  const staleRefreshableScores = useMemo(
+    () => visibleScores.filter((score) => score.is_stale && score.refresh_target_id),
+    [visibleScores],
+  );
+  const visibleRefreshableScores = useMemo(
+    () => visibleScores.filter((score) => score.refresh_target_id),
+    [visibleScores],
   );
 
   function resetFilters() {
@@ -254,6 +320,59 @@ export default function ExplorePageClient({
       }
       return [...current, score];
     });
+  }
+
+  async function startRefreshRun(scope: ExploreRefreshScope) {
+    if (refreshInFlightRef.current) return;
+
+    const scores =
+      scope === "selected"
+        ? selectedRefreshableScores
+        : scope === "stale"
+          ? staleRefreshableScores
+          : visibleRefreshableScores;
+    const targetIds = uniqueTargetIds(scores);
+    if (targetIds.length === 0) return;
+    refreshInFlightRef.current = true;
+
+    const body: ExploreRefreshRunRequest = {
+      scope,
+      target_ids: targetIds,
+      filters: serializeFilters(filters),
+      flags: {
+        force: false,
+        dry_run: false,
+        strategy_profile: "balanced",
+        max_items: scope === "selected" ? scores.length : REFRESH_BATCH_CAP,
+        concurrency: 2,
+      },
+    };
+
+    setIsRefreshSubmitting(true);
+    setRefreshRun(null);
+    setRefreshError(null);
+
+    try {
+      const response = await fetch("/api/explore/refresh/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readRefreshError(response));
+      }
+
+      const json = (await response.json()) as ExploreRefreshRunResponse;
+      setRefreshRun(json);
+    } catch (error) {
+      setRefreshError(
+        error instanceof Error ? error.message : "Failed to start refresh run.",
+      );
+    } finally {
+      refreshInFlightRef.current = false;
+      setIsRefreshSubmitting(false);
+    }
   }
 
   function openFreshScanConfirmation() {
@@ -387,6 +506,19 @@ export default function ExplorePageClient({
           onReset={resetFilters}
         />
 
+        <RefreshControlPanel
+          batchCap={REFRESH_BATCH_CAP}
+          selectedCount={selectedRefreshableScores.length}
+          staleCount={staleRefreshableScores.length}
+          visibleCount={visibleRefreshableScores.length}
+          isSubmitting={isRefreshSubmitting}
+          onRefreshSelected={() => void startRefreshRun("selected")}
+          onRefreshStale={() => void startRefreshRun("stale")}
+          onRefreshVisible={() => void startRefreshRun("visible")}
+        />
+
+        <RefreshRunStatus run={refreshRun} error={refreshError} />
+
         <ExploreTable
           cities={visibleCities}
           sortKey={sortKey}
@@ -402,9 +534,12 @@ export default function ExplorePageClient({
         selectedServices={selectedScores}
         isTopLayer={!confirmOpen}
         freshScanButtonRef={freshScanButtonRef}
+        isRefreshSubmitting={isRefreshSubmitting}
+        selectedRefreshableCount={selectedRefreshableScores.length}
         onClose={closeDrawer}
         onToggleService={toggleService}
         onOpenConfirmation={openFreshScanConfirmation}
+        onRefreshSelected={() => void startRefreshRun("selected")}
       />
 
       <FreshScanConfirmation

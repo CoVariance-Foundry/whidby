@@ -40,6 +40,12 @@ const fixtureData: ExploreData = {
           ai_resilience_score: 72,
           ai_exposure: "AI_MINIMAL",
           difficulty_tier: "MODERATE",
+          refresh_target_id: "target-austin-roofing",
+          last_refreshed_at: "2026-05-01T12:30:00Z",
+          next_refresh_at: "2026-05-31T12:30:00Z",
+          stale_after_days: 30,
+          is_stale: true,
+          opportunity_delta: 6,
         },
         {
           report_id: "report-austin-plumbing",
@@ -48,6 +54,7 @@ const fixtureData: ExploreData = {
           archetype_id: "FRAG_WEAK",
           archetype_label: "Fragmented, weak",
           last_scored_at: "2026-05-02T12:00:00Z",
+          refresh_target_id: "target-austin-roofing",
         },
       ],
     },
@@ -73,6 +80,12 @@ const fixtureData: ExploreData = {
           archetype_id: "PACK_EST",
           archetype_label: "Pack, established",
           last_scored_at: "2026-05-03T12:00:00Z",
+          refresh_target_id: "target-phoenix-hvac",
+          last_refreshed_at: "2026-05-03T12:30:00Z",
+          next_refresh_at: "2026-06-02T12:30:00Z",
+          stale_after_days: 30,
+          is_stale: false,
+          opportunity_delta: null,
         },
       ],
     },
@@ -220,6 +233,69 @@ describe("ExplorePageClient", () => {
         state: "TX",
       },
     ]);
+  });
+
+  it("posts one selected refresh run with refreshable selected services and filters", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ run_id: "refresh-run-123", status: "queued" }), {
+          status: 202,
+        }),
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
+      target: { value: "roofing" },
+    });
+    fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
+    const drawer = screen.getByRole("dialog", { name: /austin-round rock/i });
+    fireEvent.click(screen.getByLabelText("Select roofing for fresh scan"));
+    fireEvent.click(screen.getByLabelText("Select plumbing for fresh scan"));
+    const refreshSelectedButton = within(drawer).getByRole("button", {
+      name: "Refresh selected",
+    });
+    act(() => {
+      refreshSelectedButton.click();
+      refreshSelectedButton.click();
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/explore/refresh/runs",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const requestInit = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(JSON.parse(requestInit.body as string)).toEqual({
+      scope: "selected",
+      target_ids: ["target-austin-roofing"],
+      filters: {
+        population_min: null,
+        population_max: null,
+        income_min: null,
+        income_max: null,
+        selected_states: [],
+        service: "roofing",
+        growing_only: false,
+      },
+      flags: {
+        force: false,
+        dry_run: false,
+        strategy_profile: "balanced",
+        max_items: 2,
+        concurrency: 2,
+      },
+    });
+    expect(screen.getByRole("link", { name: /view refresh run refresh-run-123/i }).getAttribute("href")).toBe(
+      "/explore?refresh_run=refresh-run-123",
+    );
+    expect(screen.getByText(/refresh-run-123 queued/i)).toBeTruthy();
   });
 
   it("renders successful fresh scan report links", async () => {

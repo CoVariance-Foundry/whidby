@@ -23,6 +23,7 @@ class TestMigrationFiles:
             "007_kb_schema.sql",
             "008_kb_rls_and_lifecycle.sql",
             "014_user_management_billing.sql",
+            "015_explore_refresh_control.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name

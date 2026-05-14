@@ -11,6 +11,9 @@ const METRO_LIMIT = 100;
 const REPORT_LIMIT = 500;
 const SCORE_LIMIT = 500;
 const SCORE_REPORT_BATCH_SIZE = 100;
+const FRESHNESS_REPORT_BATCH_SIZE = 100;
+const FRESHNESS_TARGET_BATCH_SIZE = 100;
+const DEFAULT_STALE_AFTER_DAYS = 30;
 
 interface MetroRow {
   cbsa_code: string;
@@ -43,6 +46,36 @@ interface MetroScoreRow {
   ai_resilience_score?: number | string | null;
 }
 
+interface LatestTargetScoreRow {
+  target_id: string | null;
+  report_id: string;
+  cbsa_code: string;
+  scored_at: string | null;
+  opportunity_score: number | string | null;
+}
+
+interface TargetTrendRow {
+  target_id: string | null;
+  report_id: string;
+  cbsa_code: string;
+  scored_at: string | null;
+  opportunity_delta: number | string | null;
+}
+
+interface RefreshTargetRow {
+  id: string;
+  next_refresh_at: string | null;
+}
+
+interface ScoreFreshness {
+  refresh_target_id: string;
+  last_refreshed_at: string;
+  next_refresh_at?: string;
+  stale_after_days: number;
+  is_stale: boolean;
+  opportunity_delta: number | null;
+}
+
 function isMissingArchivedAtColumn(message: string | undefined): boolean {
   if (!message) return false;
   const normalized = message.toLowerCase();
@@ -50,6 +83,25 @@ function isMissingArchivedAtColumn(message: string | undefined): boolean {
     normalized.includes("archived_at") &&
     (normalized.includes("does not exist") || normalized.includes("not found"))
   );
+}
+
+function isMissingRefreshSource(
+  message: string | undefined,
+  sourceName: string
+): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  const source = sourceName.toLowerCase();
+  const mentionsSource =
+    normalized.includes(source) || normalized.includes(`public.${source}`);
+
+  if (!mentionsSource || normalized.includes("column ")) return false;
+  if (normalized.includes("permission denied")) return true;
+  if (normalized.includes("schema cache")) return true;
+  if (normalized.includes("could not find")) return true;
+  if (normalized.includes("not found")) return true;
+
+  return normalized.includes("does not exist");
 }
 
 function asNumber(value: number | string | null | undefined): number | null {
@@ -67,6 +119,35 @@ function optionalNumber(value: number | string | null | undefined): number | und
 
 function optionalText(value: string | null | undefined): string | undefined {
   return value?.trim() ? value : undefined;
+}
+
+function scoreKey(reportId: string, cbsaCode: string): string {
+  return `${reportId}:${cbsaCode}`;
+}
+
+function toTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function computeIsStale(
+  lastRefreshedAt: string,
+  nextRefreshAt: string | undefined,
+  staleAfterDays: number
+): boolean {
+  const now = Date.now();
+  const nextRefreshTimestamp = toTimestamp(nextRefreshAt);
+  if (nextRefreshTimestamp !== null) {
+    return nextRefreshTimestamp <= now;
+  }
+
+  const lastRefreshedTimestamp = toTimestamp(lastRefreshedAt);
+  if (lastRefreshedTimestamp === null) return false;
+
+  const staleTimestamp =
+    lastRefreshedTimestamp + staleAfterDays * 24 * 60 * 60 * 1000;
+  return staleTimestamp <= now;
 }
 
 const BACKEND_ARCHETYPE_MAP: Record<string, ArchetypeId> = {
@@ -156,9 +237,218 @@ async function loadMetroScores(
   return rows;
 }
 
+async function loadLatestTargetScores(
+  client: SupabaseClient,
+  reportIds: string[],
+  cbsaCodes: string[]
+): Promise<LatestTargetScoreRow[] | null> {
+  if (reportIds.length === 0 || cbsaCodes.length === 0) return [];
+
+  const rows: LatestTargetScoreRow[] = [];
+
+  for (
+    let index = 0;
+    index < reportIds.length && rows.length < SCORE_LIMIT;
+    index += FRESHNESS_REPORT_BATCH_SIZE
+  ) {
+    const remaining = SCORE_LIMIT - rows.length;
+    const reportIdsBatch = reportIds.slice(
+      index,
+      index + FRESHNESS_REPORT_BATCH_SIZE
+    );
+
+    const { data, error } = await client
+      .from("explore_latest_target_scores")
+      .select("target_id, report_id, cbsa_code, scored_at, opportunity_score")
+      .in("report_id", reportIdsBatch)
+      .in("cbsa_code", cbsaCodes)
+      .order("scored_at", { ascending: false })
+      .limit(remaining);
+
+    if (error) {
+      if (isMissingRefreshSource(error.message, "explore_latest_target_scores")) {
+        return null;
+      }
+      throw new Error(
+        `loadExploreData explore_latest_target_scores: ${error.message}`
+      );
+    }
+
+    rows.push(...((data ?? []) as LatestTargetScoreRow[]).slice(0, remaining));
+  }
+
+  return rows;
+}
+
+async function loadTargetTrendRows(
+  client: SupabaseClient,
+  reportIds: string[],
+  cbsaCodes: string[],
+  targetIds: string[]
+): Promise<TargetTrendRow[] | null> {
+  if (targetIds.length === 0) return [];
+
+  const rows: TargetTrendRow[] = [];
+
+  for (
+    let targetIndex = 0;
+    targetIndex < targetIds.length && rows.length < SCORE_LIMIT;
+    targetIndex += FRESHNESS_TARGET_BATCH_SIZE
+  ) {
+    const targetIdsBatch = targetIds.slice(
+      targetIndex,
+      targetIndex + FRESHNESS_TARGET_BATCH_SIZE
+    );
+
+    for (
+      let reportIndex = 0;
+      reportIndex < reportIds.length && rows.length < SCORE_LIMIT;
+      reportIndex += FRESHNESS_REPORT_BATCH_SIZE
+    ) {
+      const remaining = SCORE_LIMIT - rows.length;
+      const reportIdsBatch = reportIds.slice(
+        reportIndex,
+        reportIndex + FRESHNESS_REPORT_BATCH_SIZE
+      );
+
+      const { data, error } = await client
+        .from("explore_target_trends")
+        .select("target_id, report_id, cbsa_code, scored_at, opportunity_delta")
+        .in("target_id", targetIdsBatch)
+        .in("report_id", reportIdsBatch)
+        .in("cbsa_code", cbsaCodes)
+        .order("scored_at", { ascending: false })
+        .limit(remaining);
+
+      if (error) {
+        if (isMissingRefreshSource(error.message, "explore_target_trends")) {
+          return null;
+        }
+        throw new Error(`loadExploreData explore_target_trends: ${error.message}`);
+      }
+
+      rows.push(...((data ?? []) as TargetTrendRow[]).slice(0, remaining));
+    }
+  }
+
+  return rows;
+}
+
+async function loadRefreshTargetRows(
+  client: SupabaseClient,
+  targetIds: string[]
+): Promise<RefreshTargetRow[]> {
+  if (targetIds.length === 0) return [];
+
+  const rows: RefreshTargetRow[] = [];
+
+  for (
+    let index = 0;
+    index < targetIds.length;
+    index += FRESHNESS_TARGET_BATCH_SIZE
+  ) {
+    const targetIdsBatch = targetIds.slice(
+      index,
+      index + FRESHNESS_TARGET_BATCH_SIZE
+    );
+
+    const { data, error } = await client
+      .from("explore_refresh_targets")
+      .select("id, next_refresh_at")
+      .in("id", targetIdsBatch)
+      .limit(targetIdsBatch.length);
+
+    if (error) {
+      if (isMissingRefreshSource(error.message, "explore_refresh_targets")) {
+        return [];
+      }
+      throw new Error(`loadExploreData explore_refresh_targets: ${error.message}`);
+    }
+
+    rows.push(...((data ?? []) as RefreshTargetRow[]));
+  }
+
+  return rows;
+}
+
+async function loadScoreFreshness(
+  client: SupabaseClient,
+  scoreRows: MetroScoreRow[]
+): Promise<Map<string, ScoreFreshness>> {
+  if (scoreRows.length === 0) return new Map();
+
+  const reportIds = Array.from(new Set(scoreRows.map((row) => row.report_id)));
+  const cbsaCodes = Array.from(new Set(scoreRows.map((row) => row.cbsa_code)));
+  const latestRows = await loadLatestTargetScores(client, reportIds, cbsaCodes);
+  if (!latestRows || latestRows.length === 0) return new Map();
+
+  const targetIds = Array.from(
+    new Set(
+      latestRows
+        .map((row) => row.target_id)
+        .filter((targetId): targetId is string => Boolean(targetId))
+    )
+  );
+  const latestReportIds = Array.from(new Set(latestRows.map((row) => row.report_id)));
+  const [trendRows, targetRows] = await Promise.all([
+    loadTargetTrendRows(client, latestReportIds, cbsaCodes, targetIds),
+    loadRefreshTargetRows(client, targetIds),
+  ]);
+
+  const trendsByScore = new Map<string, TargetTrendRow>();
+
+  for (const trendRow of trendRows ?? []) {
+    const key = scoreKey(trendRow.report_id, trendRow.cbsa_code);
+    const current = trendsByScore.get(key);
+    if (!current || (trendRow.scored_at ?? "") > (current.scored_at ?? "")) {
+      trendsByScore.set(key, trendRow);
+    }
+  }
+
+  const targetById = new Map(targetRows.map((row) => [row.id, row]));
+  const freshnessByScore = new Map<string, ScoreFreshness>();
+
+  for (const latestRow of latestRows) {
+    if (!latestRow.target_id || !latestRow.scored_at) continue;
+
+    const key = scoreKey(latestRow.report_id, latestRow.cbsa_code);
+    const current = freshnessByScore.get(key);
+    if (current && latestRow.scored_at <= current.last_refreshed_at) continue;
+
+    const target = targetById.get(latestRow.target_id);
+    const nextRefreshAt = target?.next_refresh_at ?? undefined;
+    const staleAfterDays = DEFAULT_STALE_AFTER_DAYS;
+    const trend = trendsByScore.get(key);
+
+    const freshness: ScoreFreshness = {
+      refresh_target_id: latestRow.target_id,
+      last_refreshed_at: latestRow.scored_at,
+      stale_after_days: staleAfterDays,
+      is_stale: computeIsStale(
+        latestRow.scored_at,
+        nextRefreshAt,
+        staleAfterDays
+      ),
+      opportunity_delta:
+        trend && trend.opportunity_delta !== null
+          ? asNumber(trend.opportunity_delta)
+          : null,
+    };
+
+    if (nextRefreshAt) {
+      freshness.next_refresh_at = nextRefreshAt;
+    }
+
+    freshnessByScore.set(key, freshness);
+  }
+
+  return freshnessByScore;
+}
+
 function toCachedScore(
   row: MetroScoreRow,
-  reportById: Map<string, ReportRow>
+  reportById: Map<string, ReportRow>,
+  freshness?: ScoreFreshness
 ): ExploreCachedScore | null {
   const report = reportById.get(row.report_id);
   const opportunity_score = asNumber(row.opportunity_score);
@@ -176,6 +466,18 @@ function toCachedScore(
     ai_resilience_score: optionalNumber(row.ai_resilience_score),
     ai_exposure: optionalText(row.ai_exposure),
     difficulty_tier: optionalText(row.difficulty_tier),
+    ...(freshness
+      ? {
+          refresh_target_id: freshness.refresh_target_id,
+          last_refreshed_at: freshness.last_refreshed_at,
+          ...(freshness.next_refresh_at
+            ? { next_refresh_at: freshness.next_refresh_at }
+            : {}),
+          stale_after_days: freshness.stale_after_days,
+          is_stale: freshness.is_stale,
+          opportunity_delta: freshness.opportunity_delta,
+        }
+      : {}),
   };
 }
 
@@ -243,10 +545,15 @@ export async function loadExploreData(client: SupabaseClient): Promise<ExploreDa
   const cbsaCodes = Array.from(new Set(metros.map((metro) => metro.cbsa_code)));
   const reportById = new Map(reports.map((report) => [report.id, report]));
   const scoreRows = await loadMetroScores(client, reportIds, cbsaCodes);
+  const freshnessByScore = await loadScoreFreshness(client, scoreRows);
   const scoresByCbsa = new Map<string, ExploreCachedScore[]>();
 
   for (const scoreRow of scoreRows) {
-    const cachedScore = toCachedScore(scoreRow, reportById);
+    const cachedScore = toCachedScore(
+      scoreRow,
+      reportById,
+      freshnessByScore.get(scoreKey(scoreRow.report_id, scoreRow.cbsa_code))
+    );
     if (!cachedScore) continue;
 
     const current = scoresByCbsa.get(scoreRow.cbsa_code) ?? [];

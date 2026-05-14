@@ -11,6 +11,12 @@ export interface ExploreCachedScore {
   ai_resilience_score?: number;
   ai_exposure?: string;
   difficulty_tier?: string;
+  refresh_target_id?: string;
+  last_refreshed_at?: string;
+  next_refresh_at?: string;
+  stale_after_days?: number;
+  is_stale?: boolean;
+  opportunity_delta?: number | null;
 }
 
 export interface ExploreCitySummary {

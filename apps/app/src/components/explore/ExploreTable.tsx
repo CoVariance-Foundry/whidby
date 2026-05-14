@@ -204,14 +204,38 @@ export default function ExploreTable({
             <span role="cell" style={{ minWidth: 0 }}>
               <span
                 style={{
-                  display: "block",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  fontWeight: 650,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  minWidth: 0,
                 }}
               >
-                {city.cbsa_name}
+                <span
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    fontWeight: 650,
+                  }}
+                >
+                  {city.cbsa_name}
+                </span>
+                {city.cached_scores.some((score) => score.is_stale) && (
+                  <span
+                    style={{
+                      flex: "0 0 auto",
+                      padding: "2px 7px",
+                      borderRadius: 999,
+                      background: "var(--accent-soft)",
+                      color: "var(--accent-ink)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  >
+                    Stale
+                  </span>
+                )}
               </span>
               <span
                 style={{
