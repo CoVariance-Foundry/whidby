@@ -80,19 +80,16 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby] recent context, 2026-05-13 12:46am PDT
+# [whidby] recent context, 2026-05-13 6:39pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (17,724t read) | 366,663t work | 95% savings
+Stats: 50 obs (17,580t read) | 377,763t work | 95% savings
 
 ### Apr 26, 2026
-S181 Merge all pending PRs into dev if their reviews have passed — finishing the Phase 5 development branch (Apr 26 at 6:59 PM)
-S183 Benchmark Pilot Fix Plan Written — Three Failure Buckets Identified and Addressed (Apr 26 at 7:04 PM)
 S184 Supabase MCP Available via Two Distinct Integrations (Apr 26 at 7:06 PM)
-220 7:06p 🔵 Supabase MCP Available via Two Distinct Integrations
 S187 dev Branch Pushed to Remote — Phase 3 + Phase 5 Complete (Apr 26 at 7:06 PM)
 221 7:10p 🟣 Phase 3 MarketService Domain Extraction — PR #31 Code Review
 222 7:11p ✅ PR #31 Phase 3 MarketService Merged to dev
@@ -141,6 +138,7 @@ S213 vitest Fix Verified Stable After Root package.json Cleanup (Apr 29 at 2:59 
 260 " ✅ vitest Removed from Monorepo Root package.json devDependencies
 261 " 🔴 vitest Fix Verified Stable After Root package.json Cleanup
 S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/agent/health/route.test.ts (Apr 29 at 3:07 PM)
+S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 3:07 PM)
 262 3:11p ✅ Phase 7 Data Providers — Plan Execution Initiated
 263 4:19p 🔵 Phase 6 Already Committed to Dev Branch
 264 " 🟣 DataForSEO Google Trends API Research Initiated for Phase 7
@@ -149,24 +147,22 @@ S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/
 268 4:24p 🟣 Phase 7 Data Providers Implementation Plan Written
 270 " ✅ Phase 7 Plan Corrected: DataForSEO Trends Response Parsing Fixed
 271 4:25p ✅ Phase 7 Plan: FakeTrendsClient Test Fixture Corrected to Match Real API Structure
-S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 4:28 PM)
-**Investigated**: Plan file reviewed: 2,079 lines, 55 checkboxes, 17 main tasks. Plan structure covers 4 independent data provider implementations plus composition and validation. Plan has been finalized with design decisions documented (Census/BLS raw httpx, growth_rate deferred, APIResponse handling patterns confirmed, Trends endpoint specs finalized)
+S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
+### May 13, 2026
+272 1:09p ✅ Phase 6 CI Enforcement Planning Session Initiated
+S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:10 PM)
+**Investigated**: The spec at docs/redesign/phase-6-ci-enforcement.md was reviewed to understand what CI enforcement controls were required for the domain layer.
 
-**Learned**: **Design finalization:**
-- Census ACS/CBP and BLS clients use raw httpx (no rate-limiting, cost tracking, or caching—free government APIs with annual data)
-- DataForSEO Trends reuses existing DataForSEO client infrastructure ($0.05/task, max 5 keywords, time_range parameter simplified)
-- APIResponse is a dataclass with `.data` attribute containing raw JSON
-- Growth rate computation deferred (would require ~800 API calls on first load—acceptable for v1 with placeholder 0 in vector)
-- Architecture lint now requires both check_domain_imports.py script AND pytest tests/architecture/ validation
+**Learned**: The domain layer requires strict import isolation — no infrastructure/framework imports allowed, no direct environment variable access. These constraints are now enforced at three levels: pre-push hooks, CI pipeline jobs, and pytest architecture tests.
 
-**Completed**: **Session setup complete:**
-- Plan file finalized at docs/superpowers/plans/2026-04-29-phase-7-data-providers.md
-- All design decisions documented and corrections incorporated
-- Plan structure: Task 0 (feature branch) → Task 1 (numpy dep) → Tasks 2-4 (7A) → Tasks 5-7 (7B) → Tasks 8-11 (7C) → Tasks 12-14 (7D) → Tasks 15-17 (composition/migration) → Task 18 (validation)
-- Expected outcome: 20 new files, 3 modified files, 660+ passing tests
+**Completed**: - scripts/check_domain_imports.py: standalone AST-based linter that exits 1 on banned import violations
+    - .github/workflows/quality-gates.yml: new architecture-check CI job added
+    - scripts/pre-push-check.sh: architecture check section added to pre-push hook
+    - tests/architecture/test_domain_imports.py: 2 pytest tests covering banned imports and env var access
+    - All 5 files committed and pushed to dev branch (commit b3b2154), 186 insertions, zero behavior changes
 
-**Next Steps**: Begin Task 0 execution: Create feature branch from dev (`git checkout dev && git pull origin dev`, then `git checkout -b phase-7-data-providers`). Then Task 1: Run baseline test suite, add numpy to pyproject.toml, verify architecture lint passes before proceeding to Task Group 7A.
+**Next Steps**: Session appears to have completed Phase 6 CI Enforcement work. Likely trajectory is Phase 7 or continuing GeoResolver domain service implementation (Task 3 — implementing src/domain/services/geo_resolver.py to pass the 12 failing TDD tests written in Task 2).
 
 
-Access 367k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 378k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
