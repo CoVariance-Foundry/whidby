@@ -222,6 +222,7 @@ Run in order from `supabase/migrations/`:
 | 007 | `007_kb_schema.sql` | Knowledge base tables: `kb_entities`, `kb_snapshots`, `kb_evidence_artifacts`, `api_response_cache`, `feedback_events` — canonical geo+industry entities, versioned snapshots with supersedence, raw evidence persistence, persistent API cache, and runtime feedback |
 | 008 | `008_kb_rls_and_lifecycle.sql` | RLS on KB tables, authenticated SELECT on entities/snapshots/feedback, soft-delete governance (`archived_at` + `entity_id` + `snapshot_id` columns on `reports`) |
 | 014 | `014_user_management_billing.sql` | Consumer accounts, memberships, subscriptions, usage counters, billing customer mapping, report ownership columns, account-scoped report RLS, and quota RPCs |
+| 015 | `015_explore_refresh_control.sql` | Explore refresh policies, targets, runs, run items, report snapshots, latest/trend views, and read/service-role RLS policies |
 
 ## Revision History
 

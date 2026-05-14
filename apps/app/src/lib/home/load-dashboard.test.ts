@@ -4,7 +4,8 @@ import { loadDashboard } from "./load-dashboard";
 function makeClient(rows: Array<Record<string, unknown>>) {
   const limit = vi.fn().mockResolvedValue({ data: rows, error: null });
   const order = vi.fn().mockReturnValue({ limit });
-  const select = vi.fn().mockReturnValue({ order });
+  const is = vi.fn().mockReturnValue({ order });
+  const select = vi.fn().mockReturnValue({ is });
   const from = vi.fn().mockReturnValue({ select });
   return { from } as never;
 }

@@ -88,12 +88,8 @@ export default function NicheFinderClient() {
   const [service, setService] = useState(searchParams.get("service") ?? "");
   const [pageState, setPageState] = useState<PageState>({ kind: "idle" });
   const [activeTab, setActiveTab] = useState<TabKey>("niche");
-  const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [recent, setRecent] = useState<HistoryEntry[]>(() => loadRecent());
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    setRecent(loadRecent());
-  }, []);
 
   const showToast = useCallback((msg: string) => setToast(msg), []);
   const dismissToast = useCallback(() => setToast(null), []);

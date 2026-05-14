@@ -142,6 +142,35 @@ Consumer fresh-report generation is account-scoped. `apps/app/src/app/api/agent/
 
 The route forwards `owner_account_id` and `created_by_user_id` to `POST /api/niches/score`. FastAPI validates those UUIDs, `MarketService` attaches them to the generated report, and `SupabasePersistence.persist_report()` writes them to `reports`. Reports with `access_scope = 'account'` are readable only by account members; ownerless reports remain shared cached reports with `access_scope = 'cached'`.
 
+## Explore Refresh Control Flow
+
+```
+apps/app /explore refresh control
+     │
+     ▼
+Next.js /api/explore/refresh/* proxy routes
+     │
+     ▼
+FastAPI /api/explore/refresh/* endpoints
+     │
+     ▼
+ExploreRefreshService
+     │
+     ├──→ SupabaseExploreRefreshStore
+     │       ├──→ explore_refresh_policies
+     │       ├──→ explore_refresh_targets
+     │       ├──→ explore_refresh_runs
+     │       ├──→ explore_refresh_run_items
+     │       └──→ explore_report_snapshots
+     │
+     └──→ MarketService.score()
+             │
+             ▼
+        reports + score tables
+```
+
+Manual refresh requests select existing cached city/service targets by selected IDs, visible filters, stale targets, or all targets. Scheduled due checks call the same FastAPI service through the app-scoped Vercel cron route and require the configured cron secret. Successful refreshes update target freshness, record run-item before/after opportunity scores, and insert normalized report snapshots for latest-score and trend views.
+
 ## Experiment Pipeline (M10 → M15)
 
 ```

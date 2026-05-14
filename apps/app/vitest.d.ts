@@ -1,2 +1,2 @@
 /// <reference types="vitest/globals" />
-import "@testing-library/jest-dom/vitest";
+/// <reference types="@testing-library/jest-dom" />
