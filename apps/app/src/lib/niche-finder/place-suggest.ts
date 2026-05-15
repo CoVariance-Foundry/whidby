@@ -1,6 +1,7 @@
 // Mirror of apps/admin/src/lib/niche-finder/place-suggest.ts. Keep in sync until lifted to packages/.
 
 import { fetchMetroSuggestions } from "@/lib/niche-finder/metro-suggest";
+import { trackEvent } from "@/lib/analytics/track";
 
 /** Shape returned by /api/agent/places/suggest. */
 export interface PlaceSuggestion {
@@ -10,6 +11,14 @@ export interface PlaceSuggestion {
   country: string;
   dataforseo_location_code?: number | null;
   dataforseo_match_confidence?: string | null;
+  enrichment_status?:
+    | "enriched"
+    | "mapbox_only"
+    | "not_configured"
+    | "timeout"
+    | "degraded"
+    | "fallback_cbsa";
+  enrichment_reason?: string | null;
 }
 
 function toFallbackPlaceSuggestions(
@@ -19,6 +28,8 @@ function toFallbackPlaceSuggestions(
     city: metro.city,
     region: metro.state,
     country: "US",
+    enrichment_status: "fallback_cbsa",
+    enrichment_reason: "Places API unavailable; used CBSA seed fallback.",
   }));
 }
 
@@ -51,11 +62,19 @@ export async function fetchPlaceSuggestions(
       throw new Error(`Place suggest failed: ${placeRes.status}`);
     }
 
-    return await placeRes.json() as PlaceSuggestion[];
+    const places = await placeRes.json() as PlaceSuggestion[];
+    return places.map((place) => ({
+      ...place,
+      enrichment_status: place.enrichment_status ?? "mapbox_only",
+    }));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
+    trackEvent("autocomplete_fallback_used", {
+      fallback_path: "fallback_cbsa",
+      reason: error instanceof Error ? error.message : String(error),
+    });
     const metros = await fetchMetroSuggestions(query, limit, signal);
     return toFallbackPlaceSuggestions(metros);
   }

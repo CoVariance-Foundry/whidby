@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function GET(req: NextRequest) {
+  const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
   const limit = searchParams.get("limit") ?? "";
@@ -14,13 +15,14 @@ export async function GET(req: NextRequest) {
   try {
     const upstream = await fetch(
       `${API_BASE}/api/places/suggest?${upstreamParams.toString()}`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: { "x-request-id": requestId } },
     );
     if (!upstream.ok) {
       const upstreamBody = await upstream.text();
       return NextResponse.json(
         {
           status: "unavailable",
+          request_id: requestId,
           upstream_status: upstream.status,
           upstream_body: upstreamBody.slice(0, 500),
         },
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         status: "unavailable",
+        request_id: requestId,
         error: err instanceof Error ? err.message : String(err),
       },
       { status: 502 },

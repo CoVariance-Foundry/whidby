@@ -8,12 +8,43 @@ import {
 import { getServerFeatureFlag, captureServerEvent } from "@/lib/flags/server";
 import { PRODUCT_FLAGS } from "@/lib/flags/product-flags";
 import { validateNicheQueryInput } from "@/lib/niche-finder/request-validation";
+import type { FallbackPath, MetadataSource } from "@/lib/niche-finder/types";
 import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function createRequestId() {
+  return crypto.randomUUID();
+}
+
+function inferFallbackPath(payload: {
+  state?: string;
+  place_id?: string;
+  dataforseo_location_code?: number;
+}): FallbackPath {
+  if (payload.place_id && typeof payload.dataforseo_location_code === "number") {
+    return "canonical_targeting";
+  }
+  if (payload.state) return "city_state";
+  return "city_only";
+}
+
+function normalizeMetadataSource(value: unknown): MetadataSource {
+  const allowed: MetadataSource[] = [
+    "typed",
+    "mapbox_selected",
+    "recent_history",
+    "fallback_cbsa",
+  ];
+  if (typeof value === "string" && allowed.includes(value as MetadataSource)) {
+    return value as MetadataSource;
+  }
+  return "typed";
+}
+
 export async function POST(req: NextRequest) {
   const proxyStart = Date.now();
+  const requestId = req.headers.get("x-request-id") || createRequestId();
   let quotaConsumedForAccount: string | null = null;
   let supabaseForRefund: Awaited<ReturnType<typeof createClient>> | null = null;
   try {
@@ -93,29 +124,47 @@ export async function POST(req: NextRequest) {
       );
     }
     const dryRun = process.env.NEXT_PUBLIC_NICHE_DRY_RUN === "1";
+    const normalizedCity = body.city.trim();
+    const normalizedService = body.service.trim();
+    const normalizedState =
+      typeof body.state === "string" && body.state.trim() ? body.state.trim() : undefined;
+    const normalizedPlaceId =
+      typeof body.place_id === "string" && body.place_id.trim()
+        ? body.place_id.trim()
+        : undefined;
+    const normalizedDfsCode =
+      typeof body.dataforseo_location_code === "number"
+        ? body.dataforseo_location_code
+        : undefined;
+    const metadataSource = normalizeMetadataSource(body.metadata_source);
+    const fallbackPath = inferFallbackPath({
+      state: normalizedState,
+      place_id: normalizedPlaceId,
+      dataforseo_location_code: normalizedDfsCode,
+    });
 
     console.info(
-      "[scoring-proxy] START city=%s service=%s dry_run=%s",
-      body.city,
-      body.service,
+      "[scoring-proxy] START request_id=%s city=%s service=%s metadata_source=%s fallback_path=%s dry_run=%s",
+      requestId,
+      normalizedCity,
+      normalizedService,
+      metadataSource,
+      fallbackPath,
       dryRun,
     );
 
     const upstream = await fetch(`${API_BASE}/api/niches/score`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-request-id": requestId },
       body: JSON.stringify({
-        niche: body.service.trim(),
-        city: body.city.trim(),
-        ...(typeof body.place_id === "string" && body.place_id.trim()
-          ? { place_id: body.place_id.trim() }
+        niche: normalizedService,
+        city: normalizedCity,
+        ...(normalizedPlaceId ? { place_id: normalizedPlaceId } : {}),
+        ...(typeof normalizedDfsCode === "number"
+          ? { dataforseo_location_code: normalizedDfsCode }
           : {}),
-        ...(typeof body.dataforseo_location_code === "number"
-          ? { dataforseo_location_code: body.dataforseo_location_code }
-          : {}),
-        ...(typeof body.state === "string" && body.state.trim()
-          ? { state: body.state.trim() }
-          : {}),
+        ...(normalizedState ? { state: normalizedState } : {}),
+        metadata_source: metadataSource,
         strategy_profile: body.strategy_profile ?? "balanced",
         dry_run: dryRun,
         owner_account_id: entitlement.account_id,
@@ -132,7 +181,8 @@ export async function POST(req: NextRequest) {
       }
       const upstreamBody = await upstream.text();
       console.warn(
-        "[scoring-proxy] FAIL upstream_status=%d proxy_ms=%d",
+        "[scoring-proxy] FAIL request_id=%s upstream_status=%d proxy_ms=%d",
+        requestId,
         upstream.status,
         proxyMs,
       );
@@ -140,6 +190,8 @@ export async function POST(req: NextRequest) {
         {
           status: "unavailable",
           message: "Scoring engine did not return a result.",
+          request_id: requestId,
+          fallback_path: fallbackPath,
           upstream_status: upstream.status,
           upstream_body: upstreamBody.slice(0, 2000),
         },
@@ -156,30 +208,31 @@ export async function POST(req: NextRequest) {
       opportunity_score: data.opportunity_score ?? null,
     });
     console.info(
-      "[scoring-proxy] DONE report_id=%s opportunity=%d upstream_ms=%d total_ms=%d",
+      "[scoring-proxy] DONE request_id=%s report_id=%s opportunity=%d fallback_path=%s upstream_ms=%d total_ms=%d",
+      requestId,
       data.report_id,
       data.opportunity_score,
+      fallbackPath,
       proxyMs,
       totalMs,
     );
     return NextResponse.json({
       query: {
-        city: body.city.trim(),
-        service: body.service.trim(),
-        ...(typeof body.place_id === "string" && body.place_id.trim()
-          ? { place_id: body.place_id.trim() }
+        city: normalizedCity,
+        service: normalizedService,
+        ...(normalizedPlaceId ? { place_id: normalizedPlaceId } : {}),
+        ...(typeof normalizedDfsCode === "number"
+          ? { dataforseo_location_code: normalizedDfsCode }
           : {}),
-        ...(typeof body.dataforseo_location_code === "number"
-          ? { dataforseo_location_code: body.dataforseo_location_code }
-          : {}),
-        ...(typeof body.state === "string" && body.state.trim()
-          ? { state: body.state.trim() }
-          : {}),
+        ...(normalizedState ? { state: normalizedState } : {}),
+        metadata_source: metadataSource,
       },
       score_result: {
         opportunity_score: data.opportunity_score,
         classification_label: data.classification_label,
       },
+      fallback_path: fallbackPath,
+      request_id: requestId,
       report_id: data.report_id,
       entity_id: data.entity_id ?? null,
       snapshot_id: data.snapshot_id ?? null,
@@ -207,7 +260,8 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error(
-      "[scoring-proxy] ERROR proxy_ms=%d error=%s",
+      "[scoring-proxy] ERROR request_id=%s proxy_ms=%d error=%s",
+      requestId,
       proxyMs,
       err instanceof Error ? err.message : String(err),
     );
@@ -215,6 +269,7 @@ export async function POST(req: NextRequest) {
       {
         status: "unavailable",
         message: "Failed to process scoring request.",
+        request_id: requestId,
         error: err instanceof Error ? err.message : String(err),
       },
       { status: 502 },

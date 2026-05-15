@@ -172,6 +172,8 @@ def test_places_suggest_mapbox_success_normalizes_output(
     assert top["longitude"] == pytest.approx(-112.074)
     assert top["dataforseo_location_code"] is None
     assert top["dataforseo_match_confidence"] is None
+    assert top["enrichment_status"] == "not_configured"
+    assert "credentials" in (top["enrichment_reason"] or "").lower()
 
     assert _FakeMapboxAsyncClient.captured_params["types"] == "place"
     assert _FakeMapboxAsyncClient.captured_params["autocomplete"] == "true"
@@ -199,6 +201,27 @@ def test_places_suggest_bridge_returns_null_when_no_match(
     row = response.json()[0]
     assert row["dataforseo_location_code"] is None
     assert row["dataforseo_match_confidence"] is None
+    assert row["enrichment_status"] == "mapbox_only"
+
+
+def test_places_suggest_bridge_marks_enriched_when_match_found(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
+    monkeypatch.setattr(
+        "src.research_agent.places.httpx.AsyncClient",
+        _FakeMapboxAsyncClient,
+    )
+    _FakeMapboxAsyncClient.payload = _mapbox_feature_payload()
+    bridge = DataForSEOLocationBridge(_FakeDataForSEOClientWithPhoenix())
+    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: bridge)
+
+    response = client.get("/api/places/suggest", params={"q": "phoe"})
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["dataforseo_location_code"] == 1013211
+    assert row["enrichment_status"] == "enriched"
 
 
 def test_places_suggest_region_prefers_trailing_region_code_segment(
@@ -218,6 +241,7 @@ def test_places_suggest_region_prefers_trailing_region_code_segment(
     assert response.status_code == 200
     row = response.json()[0]
     assert row["region"] == "AZ"
+    assert row["enrichment_status"] == "not_configured"
 
 
 def test_places_suggest_returns_null_dfs_code_without_bridge(
@@ -237,6 +261,7 @@ def test_places_suggest_returns_null_dfs_code_without_bridge(
     row = response.json()[0]
     assert row["dataforseo_location_code"] is None
     assert row["city"] == "Phoenix"
+    assert row["enrichment_status"] == "not_configured"
 
 
 @pytest.mark.asyncio

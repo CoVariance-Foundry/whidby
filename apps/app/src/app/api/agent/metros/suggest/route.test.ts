@@ -8,7 +8,7 @@ vi.mock("@/lib/niche-finder/cbsa-search", () => ({
 }));
 
 describe("GET /api/agent/metros/suggest", () => {
-  it("forwards q + limit and returns the upstream list verbatim", async () => {
+  it("returns searchMetros results using q + clamped limit", async () => {
     const sample = [
       { cbsa_code: "38060", city: "Phoenix", state: "AZ", cbsa_name: "Phoenix-Mesa-Chandler, AZ", population: 4946145 },
     ];
@@ -20,6 +20,15 @@ describe("GET /api/agent/metros/suggest", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(sample);
     expect(searchMetros).toHaveBeenCalledWith("phoe", 5);
+  });
+
+  it("clamps limit into [1, 20] before search", async () => {
+    vi.mocked(searchMetros).mockReturnValue([]);
+
+    const req = new NextRequest("http://localhost/api/agent/metros/suggest?q=phoe&limit=999");
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(searchMetros).toHaveBeenCalledWith("phoe", 20);
   });
 
   it("returns fallback results when query is empty", async () => {

@@ -37,6 +37,8 @@ class PlaceSuggestion:
     longitude: float | None
     dataforseo_location_code: int | None = None
     dataforseo_match_confidence: str | None = None
+    enrichment_status: str | None = None
+    enrichment_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +52,8 @@ class PlaceSuggestion:
             "longitude": self.longitude,
             "dataforseo_location_code": self.dataforseo_location_code,
             "dataforseo_match_confidence": self.dataforseo_match_confidence,
+            "enrichment_status": self.enrichment_status,
+            "enrichment_reason": self.enrichment_reason,
         }
 
 

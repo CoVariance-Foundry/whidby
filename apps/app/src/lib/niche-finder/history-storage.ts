@@ -5,6 +5,7 @@ export interface HistoryEntry {
   state?: string;
   place_id?: string;
   dataforseo_location_code?: number;
+  metadata_source?: "typed" | "mapbox_selected" | "recent_history" | "fallback_cbsa";
 }
 
 const RECENT_KEY = "widby.niche.recent";
@@ -24,6 +25,10 @@ function safeParse(raw: string | null): HistoryEntry[] {
         typeof (x as HistoryEntry).at === "number" &&
         ((x as HistoryEntry).state === undefined || typeof (x as HistoryEntry).state === "string") &&
         ((x as HistoryEntry).place_id === undefined || typeof (x as HistoryEntry).place_id === "string") &&
+        (
+          (x as HistoryEntry).metadata_source === undefined ||
+          typeof (x as HistoryEntry).metadata_source === "string"
+        ) &&
         (
           (x as HistoryEntry).dataforseo_location_code === undefined ||
           typeof (x as HistoryEntry).dataforseo_location_code === "number"

@@ -5,10 +5,12 @@ Run with: uvicorn src.research_agent.api:app --reload --port 8000
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +46,7 @@ from src.research_agent.plugins.report_plugin import REPORT_TIMESTAMP_FORMAT
 from src.research_agent.places import (
     DataForSEOLocationBridge,
     MapboxPlacesError,
+    PlaceSuggestion,
     fetch_mapbox_place_suggestions,
 )
 from src.research_agent.recipes.registry_builder import build_recipe_registry
@@ -51,6 +54,7 @@ from src.research_agent.recipes.runner import RecipeRunner, RecipeRunnerError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+_DFS_ENRICH_TIMEOUT_SECONDS = 1.5
 
 app = FastAPI(title="Widby Research Agent API", version="0.1.0")
 
@@ -135,6 +139,18 @@ def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
     return _PLACES_DATAFORSEO_BRIDGE
 
 
+def _apply_places_enrichment_status(
+    suggestions: list[PlaceSuggestion],
+    *,
+    status: str,
+    reason: str | None = None,
+) -> list[PlaceSuggestion]:
+    for suggestion in suggestions:
+        suggestion.enrichment_status = status
+        suggestion.enrichment_reason = reason
+    return suggestions
+
+
 # ---------------------------------------------------------------------------
 # Discovery service DI wiring
 # ---------------------------------------------------------------------------
@@ -211,19 +227,29 @@ def metros_suggest(q: str, limit: int = 10) -> list[dict[str, Any]]:
 
 @app.get("/api/places/suggest")
 async def places_suggest(
+    request: Request,
     q: str,
     limit: int = 10,
     country: str | None = None,
     language: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Autocomplete places via Mapbox and bridge best-effort DataForSEO location codes."""
+    """Autocomplete places with bounded, best-effort DFS enrichment."""
+    request_id = request.headers.get("x-request-id", "unknown")
+    started_at = time.perf_counter()
     q_norm = q.strip()
     if len(q_norm) < 2:
         return []
     clamped = max(1, min(limit, 20))
+    logger.info(
+        "[%s] PLACES_SUGGEST START query=%r limit=%d",
+        request_id,
+        q_norm,
+        clamped,
+    )
 
     mapbox_access_token = os.environ.get("MAPBOX_ACCESS_TOKEN")
     if not mapbox_access_token:
+        logger.warning("[%s] PLACES_SUGGEST ERROR reason=missing_mapbox_token", request_id)
         raise HTTPException(
             status_code=503,
             detail="Mapbox autocomplete unavailable: MAPBOX_ACCESS_TOKEN is not configured.",
@@ -238,15 +264,67 @@ async def places_suggest(
             language=language,
         )
     except MapboxPlacesError as exc:
+        logger.warning("[%s] PLACES_SUGGEST ERROR reason=mapbox_failure detail=%s", request_id, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception:
-        logger.error("Unexpected Mapbox places autocomplete failure", exc_info=True)
+        logger.error("[%s] PLACES_SUGGEST ERROR reason=mapbox_unexpected", request_id, exc_info=True)
         raise HTTPException(
             status_code=502,
             detail="Mapbox autocomplete failed unexpectedly.",
         ) from None
 
-    return [row.to_dict() for row in suggestions]
+    bridge = _places_dataforseo_bridge()
+    if bridge is None:
+        suggestions = _apply_places_enrichment_status(
+            suggestions,
+            status="not_configured",
+            reason="DataForSEO credentials unavailable.",
+        )
+        rows = [row.to_dict() for row in suggestions]
+        logger.info(
+            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s duration_ms=%d",
+            request_id,
+            len(rows),
+            "not_configured",
+            int((time.perf_counter() - started_at) * 1000),
+        )
+        return rows
+
+    try:
+        suggestions = await asyncio.wait_for(
+            bridge.enrich(suggestions),
+            timeout=_DFS_ENRICH_TIMEOUT_SECONDS,
+        )
+        for suggestion in suggestions:
+            if suggestion.dataforseo_location_code is not None:
+                suggestion.enrichment_status = "enriched"
+                suggestion.enrichment_reason = None
+            else:
+                suggestion.enrichment_status = "mapbox_only"
+                suggestion.enrichment_reason = "No confident DataForSEO match."
+    except TimeoutError:
+        logger.warning("DFS place enrichment timed out q=%r", q_norm)
+        suggestions = _apply_places_enrichment_status(
+            suggestions,
+            status="timeout",
+            reason="DataForSEO enrichment timed out.",
+        )
+    except Exception:
+        logger.warning("DFS place enrichment degraded unexpectedly", exc_info=True)
+        suggestions = _apply_places_enrichment_status(
+            suggestions,
+            status="degraded",
+            reason="DataForSEO enrichment failed unexpectedly.",
+        )
+
+    rows = [row.to_dict() for row in suggestions]
+    logger.info(
+        "[%s] PLACES_SUGGEST DONE rows=%d duration_ms=%d",
+        request_id,
+        len(rows),
+        int((time.perf_counter() - started_at) * 1000),
+    )
+    return rows
 
 
 RUNS_DIR = Path(os.environ.get("RESEARCH_RUNS_DIR", "research_runs"))
@@ -282,6 +360,7 @@ class NicheScoreRequest(BaseModel):
     state: str | None = None
     place_id: str | None = None
     dataforseo_location_code: int | None = None
+    metadata_source: str = "typed"
     strategy_profile: str = "balanced"
     dry_run: bool = False
     owner_account_id: str | None = None
@@ -319,6 +398,15 @@ class NicheScoreRequest(BaseModel):
         if v <= 0:
             raise ValueError("must be a positive integer")
         return v
+
+    @field_validator("metadata_source")
+    @classmethod
+    def _validate_metadata_source(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        allowed = {"typed", "mapbox_selected", "recent_history", "fallback_cbsa"}
+        if normalized not in allowed:
+            raise ValueError("metadata_source must be one of typed|mapbox_selected|recent_history|fallback_cbsa")
+        return normalized
 
     @field_validator("owner_account_id", "created_by_user_id")
     @classmethod
@@ -570,8 +658,18 @@ def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
 
 
 @app.post("/api/niches/score")
-async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
+async def niches_score(req: NicheScoreRequest, request: Request) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
+    request_id = request.headers.get("x-request-id")
+    started_at = time.perf_counter()
+    logger.info(
+        "[%s] NICHES_SCORE START niche=%r city=%r metadata_source=%s dry_run=%s",
+        request_id or "unknown",
+        req.niche,
+        req.city,
+        req.metadata_source,
+        req.dry_run,
+    )
     try:
         score_request = ScoreRequest(
             niche=req.niche,
@@ -579,18 +677,31 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
             state=req.state,
             place_id=req.place_id,
             dataforseo_location_code=req.dataforseo_location_code,
+            metadata_source=req.metadata_source,
+            request_id=request_id,
             strategy_profile=req.strategy_profile,
             dry_run=req.dry_run,
             owner_account_id=req.owner_account_id,
             created_by_user_id=req.created_by_user_id,
         )
         result = await _market_service().score(score_request)
+        logger.info(
+            "[%s] NICHES_SCORE DONE report_id=%s opportunity=%s duration_ms=%d",
+            request_id or "unknown",
+            result.report_id,
+            result.opportunity_score,
+            int((time.perf_counter() - started_at) * 1000),
+        )
         return result.to_api_response()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
         logger.exception(
-            "niches_score pipeline failed niche=%r city=%r", req.niche, req.city
+            "niches_score pipeline failed request_id=%s niche=%r city=%r metadata_source=%s",
+            request_id,
+            req.niche,
+            req.city,
+            req.metadata_source,
         )
         raise HTTPException(
             status_code=500, detail="Scoring pipeline failed unexpectedly"
