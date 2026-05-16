@@ -26,6 +26,8 @@ Status: design accepted; ready for implementation planning.
 
 Completed: canonical Explore Cities architecture now defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
 
+Latest audit slice: added `scripts/explore/audit_explore_sources.py`, a read-only PostgREST audit for Explore source table visibility and sparse `metros` demographic fields. Focused test `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py -v` passes. Live publishable-key and service-role audit commands currently report missing Supabase env in this worktree: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+
 Current implementation slice:
 
 - Build `src/domain/explore/` entities and pure metric functions for business density, establishment growth, freshness, and V2 presentation-score projection.
