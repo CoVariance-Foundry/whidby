@@ -117,18 +117,32 @@ def test_post_discover_rejects_reference_city():
     assert "not yet supported" in resp.json()["detail"].lower()
 
 
-def test_get_lenses_returns_all():
-    """/api/lenses returns all 9 lens definitions."""
+def test_post_discover_rejects_hidden_lens():
+    client = TestClient(app)
+    resp = client.post("/api/discover", json={"lens_id": "blue_ocean"})
+    assert resp.status_code == 400
+    assert "not available for discovery" in resp.json()["detail"].lower()
+
+
+def test_get_lenses_returns_launch_catalog():
+    """/api/lenses returns launch/default user-facing lens definitions."""
     client = TestClient(app)
     resp = client.get("/api/lenses")
     assert resp.status_code == 200
     data = resp.json()
     assert "lenses" in data
-    assert len(data["lenses"]) == 9
+    assert len(data["lenses"]) == 5
     ids = [lens["lens_id"] for lens in data["lenses"]]
     assert "balanced" in ids
     assert "easy_win" in ids
     assert "gbp_blitz" in ids
+    assert "keyword_hijack" in ids
+    assert "expand_conquer" in ids
+    assert "blue_ocean" not in ids
+    assert "portfolio_builder" not in ids
+    assert "seasonal_arbitrage" not in ids
+    assert "ai_proof" not in ids
+    assert "cash_cow" not in ids
 
 
 def test_get_lenses_shape():

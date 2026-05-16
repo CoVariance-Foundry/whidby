@@ -1270,8 +1270,13 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
             detail="reference_city_id not yet supported (Phase 7)",
         )
 
-    from src.domain.lenses import get_lens
+    from src.domain.lenses import get_lens, is_discoverable_lens
 
+    if not is_discoverable_lens(req.lens_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lens '{req.lens_id}' is not available for discovery",
+        )
     lens = get_lens(req.lens_id)
 
     query = MarketQuery(
