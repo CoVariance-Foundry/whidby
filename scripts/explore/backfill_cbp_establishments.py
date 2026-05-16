@@ -27,6 +27,7 @@ INTEGER_FIELDS = (
 )
 
 ALIASES = {
+    "cbsa_code": ("cbsa_code", "metropolitan statistical area/micropolitan statistical area"),
     "naics_code": ("naics_code", "naics", "NAICS2017", "NAICS2022"),
     "naics_label": ("naics_label", "label", "NAICS2017_LABEL", "NAICS2022_LABEL"),
     "est": ("est", "establishments", "ESTAB"),
@@ -58,7 +59,7 @@ def _require_value(row: dict[str, Any], keys: tuple[str, ...], field: str, row_n
 
 def build_cbp_payload(row: dict[str, Any], *, row_number: int = 1) -> dict[str, Any]:
     """Map an already-fetched CBP row to public.census_cbp_establishments."""
-    cbsa_code = _require_value(row, ("cbsa_code",), "cbsa_code", row_number)
+    cbsa_code = _require_value(row, ALIASES["cbsa_code"], "cbsa_code", row_number)
     naics_code = _require_value(row, ALIASES["naics_code"], "naics_code", row_number)
     year = _require_value(row, ("year",), "year", row_number)
 

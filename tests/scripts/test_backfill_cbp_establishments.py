@@ -69,6 +69,25 @@ def test_build_cbp_payload_maps_repo_and_census_aliases() -> None:
     assert payload["ap"] == 12345
 
 
+def test_build_cbp_payload_maps_raw_census_geography_alias() -> None:
+    payload = build_cbp_payload(
+        {
+            "metropolitan statistical area/micropolitan statistical area": "38060",
+            "NAICS2017": "238160",
+            "year": "2022",
+            "ESTAB": "123",
+            "EMP": "900",
+            "PAYANN": "12345",
+        }
+    )
+
+    assert payload["cbsa_code"] == "38060"
+    assert payload["naics_code"] == "238160"
+    assert payload["est"] == 123
+    assert payload["emp"] == 900
+    assert payload["ap"] == 12345
+
+
 @pytest.mark.parametrize(
     ("row", "message"),
     [
