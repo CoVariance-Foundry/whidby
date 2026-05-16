@@ -4,6 +4,7 @@ Given a MarketQuery (filters + lens), discovers and ranks markets.
 Powers: strategy pages, city browsing, service browsing, portfolio
 recommendations, expansion search — all through MarketQuery.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,6 +15,7 @@ from src.domain.queries import CityFilter, MarketQuery, ServiceFilter
 from src.domain.ports import CityDataProvider, MarketStore, ServiceDataProvider
 from src.domain.scoring import score_markets_batch
 from src.domain.strategy_projection import (
+    project_ai_resilience_warning,
     project_expand_conquer,
     project_easy_win,
     project_gbp_blitz,
@@ -48,15 +50,11 @@ class DiscoveryService:
         logger.info("Discovery: %d cached markets fetched", len(markets))
 
         if query.has_city_filters():
-            markets = [
-                m for m in markets
-                if _passes_city_filters(m.city, query.city_filters)
-            ]
+            markets = [m for m in markets if _passes_city_filters(m.city, query.city_filters)]
 
         if query.has_service_filters():
             markets = [
-                m for m in markets
-                if _passes_service_filters(m.service, query.service_filters)
+                m for m in markets if _passes_service_filters(m.service, query.service_filters)
             ]
 
         logger.info("Discovery: %d markets after filtering", len(markets))
@@ -65,7 +63,11 @@ class DiscoveryService:
             return []
 
         if query.lens.lens_id in _STRATEGY_PROJECTIONS:
-            scored = _score_strategy_markets(markets, query.lens.lens_id)
+            scored = _score_strategy_markets(
+                markets,
+                query.lens.lens_id,
+                ai_resilience_filter=query.ai_resilience_filter,
+            )
         else:
             scored = score_markets_batch(markets, query.lens)
 
@@ -98,14 +100,16 @@ class DiscoveryService:
                 bonus += 5.0
             if sm.market.service.service_id in portfolio_services:
                 bonus -= 10.0
-            adjusted.append(ScoredMarket(
-                market=sm.market,
-                opportunity_score=sm.opportunity_score + bonus,
-                lens_id=sm.lens_id,
-                score_breakdown=sm.score_breakdown,
-                strategy_evidence=sm.strategy_evidence,
-                warnings=sm.warnings,
-            ))
+            adjusted.append(
+                ScoredMarket(
+                    market=sm.market,
+                    opportunity_score=sm.opportunity_score + bonus,
+                    lens_id=sm.lens_id,
+                    score_breakdown=sm.score_breakdown,
+                    strategy_evidence=sm.strategy_evidence,
+                    warnings=sm.warnings,
+                )
+            )
 
         adjusted.sort(key=lambda s: s.opportunity_score, reverse=True)
         return [
@@ -122,12 +126,24 @@ class DiscoveryService:
         ]
 
 
-def _score_strategy_markets(markets: list[Market], lens_id: str) -> list[ScoredMarket]:
+def _score_strategy_markets(
+    markets: list[Market],
+    lens_id: str,
+    *,
+    ai_resilience_filter: bool = False,
+) -> list[ScoredMarket]:
     """Project, sort, and rank markets for launch strategy lenses."""
     scored = [
         projected
         for market in markets
-        if (projected := _project_strategy_market(market, lens_id)) is not None
+        if (
+            projected := _project_strategy_market(
+                market,
+                lens_id,
+                ai_resilience_filter=ai_resilience_filter,
+            )
+        )
+        is not None
     ]
     skipped = len(markets) - len(scored)
     if skipped:
@@ -151,7 +167,12 @@ def _score_strategy_markets(markets: list[Market], lens_id: str) -> list[ScoredM
     ]
 
 
-def _project_strategy_market(market: Market, lens_id: str) -> ScoredMarket | None:
+def _project_strategy_market(
+    market: Market,
+    lens_id: str,
+    *,
+    ai_resilience_filter: bool = False,
+) -> ScoredMarket | None:
     """Build a ScoredMarket from a cached strategy projection row."""
     projection_fn = _STRATEGY_PROJECTIONS.get(lens_id)
     if projection_fn is None:
@@ -172,13 +193,18 @@ def _project_strategy_market(market: Market, lens_id: str) -> ScoredMarket | Non
             exc,
         )
         return None
+    warnings = list(projection.warnings)
+    if ai_resilience_filter:
+        ai_warning = project_ai_resilience_warning(strategy_row)
+        if ai_warning:
+            warnings.append(ai_warning["code"])
     return ScoredMarket(
         market=market,
         opportunity_score=projection.score,
         lens_id=projection.strategy_id,
         score_breakdown={"projection_score": projection.score},
         strategy_evidence=projection.evidence,
-        warnings=projection.warnings,
+        warnings=warnings,
     )
 
 

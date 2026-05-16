@@ -179,7 +179,10 @@ _DISCOVERY_SERVICE: DiscoveryService | None = None
 def _get_discovery_service() -> DiscoveryService:
     global _DISCOVERY_SERVICE
     if _DISCOVERY_SERVICE is None:
-        _DISCOVERY_SERVICE = DiscoveryService(market_store=_NullMarketStore())
+        persistence = SupabasePersistence()
+        _DISCOVERY_SERVICE = DiscoveryService(
+            market_store=StrategyRepository(persistence._client)
+        )
     return _DISCOVERY_SERVICE
 
 
@@ -1393,11 +1396,6 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
             status_code=400,
             detail="portfolio_market_ids not yet supported (Phase 7)",
         )
-    if req.reference_city_id:
-        raise HTTPException(
-            status_code=400,
-            detail="reference_city_id not yet supported (Phase 7)",
-        )
 
     from src.domain.lenses import get_lens, is_discoverable_lens
 
@@ -1418,6 +1416,9 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
             for f in req.service_filters
         ],
         lens=lens,
+        reference_city_id=req.reference_city_id,
+        primary_keyword=req.primary_keyword,
+        ai_resilience_filter=req.ai_resilience_filter,
         limit=req.limit,
         offset=req.offset,
     )

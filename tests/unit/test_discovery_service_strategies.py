@@ -1,4 +1,5 @@
 """Strategy lens behavior for DiscoveryService."""
+
 from __future__ import annotations
 
 import asyncio
@@ -225,15 +226,32 @@ def test_strategy_scoring_logs_and_skips_missing_strategy_rows(caplog):
             "ai_resilience": 90,
         },
     )
-    svc = DiscoveryService(
-        FakeMarketStore([_market_without_strategy_row(TUCSON), hydrated])
-    )
+    svc = DiscoveryService(FakeMarketStore([_market_without_strategy_row(TUCSON), hydrated]))
 
     with caplog.at_level(logging.WARNING):
         results = asyncio.run(svc.discover(MarketQuery(lens=EASY_WIN)))
 
     assert [result.market.city.city_id for result in results] == ["boise-id"]
     assert "skipped 1 markets without usable easy_win strategy rows" in caplog.text
+
+
+def test_ai_resilience_filter_adds_warning_without_hiding_result():
+    market = _strategy_market(
+        BOISE,
+        {
+            "demand_strength": 140,
+            "organic_difficulty": 10,
+            "local_difficulty": 20,
+            "ai_resilience": 50,
+            "aio_trigger_rate": 0.2,
+        },
+    )
+    svc = DiscoveryService(FakeMarketStore([market]))
+
+    results = asyncio.run(svc.discover(MarketQuery(lens=EASY_WIN, ai_resilience_filter=True)))
+
+    assert len(results) == 1
+    assert results[0].warnings == ["ai_resilience_risk"]
 
 
 def test_strategy_scoring_skips_malformed_rows_without_failing(caplog):

@@ -1,12 +1,15 @@
 """Unit tests for /api/discover and /api/lenses endpoints."""
+
 from __future__ import annotations
 
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.domain.entities import City, Market, ScoredMarket, Service
+import src.research_agent.api as api_module
 from src.research_agent.api import app
 
 BOISE = City(city_id="boise-id", name="Boise", state="ID", population=235_000)
@@ -66,6 +69,46 @@ def test_post_discover_default_lens():
     assert resp.json()["markets"] == []
 
 
+def test_post_discover_uses_strategy_repository_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Production discovery wiring uses the Supabase-backed strategy repository."""
+
+    class FakePersistence:
+        _client = object()
+
+    class FakeStrategyRepository:
+        def __init__(self, client):
+            self.client = client
+
+        def query_markets(self, query):
+            return [
+                Market(
+                    city=BOISE,
+                    service=PLUMBING,
+                    signals={
+                        "strategy_row": {
+                            "demand_strength": 140,
+                            "organic_difficulty": 10,
+                            "local_difficulty": 20,
+                            "ai_resilience": 90,
+                        }
+                    },
+                )
+            ]
+
+    monkeypatch.setattr(api_module, "_DISCOVERY_SERVICE", None)
+    monkeypatch.setattr(api_module, "SupabasePersistence", FakePersistence)
+    monkeypatch.setattr(api_module, "StrategyRepository", FakeStrategyRepository)
+    client = TestClient(app)
+
+    resp = client.post("/api/discover", json={"lens_id": "easy_win"})
+
+    assert resp.status_code == 200
+    assert resp.json()["markets"][0]["lens_id"] == "easy_win"
+    monkeypatch.setattr(api_module, "_DISCOVERY_SERVICE", None)
+
+
 def test_post_discover_with_city_filters():
     """City filters are parsed and forwarded to query."""
 
@@ -82,9 +125,7 @@ def test_post_discover_with_city_filters():
         resp = client.post(
             "/api/discover",
             json={
-                "city_filters": [
-                    {"field": "population", "operator": ">", "value": 200_000}
-                ],
+                "city_filters": [{"field": "population", "operator": ">", "value": 200_000}],
             },
         )
 
@@ -104,17 +145,29 @@ def test_post_discover_rejects_portfolio_ids():
     assert "not yet supported" in resp.json()["detail"].lower()
 
 
-def test_post_discover_rejects_reference_city():
-    """reference_city_id returns 400 until Phase 7."""
-    client = TestClient(app)
-    resp = client.post(
-        "/api/discover",
-        json={
-            "reference_city_id": "some-city",
-        },
-    )
-    assert resp.status_code == 400
-    assert "not yet supported" in resp.json()["detail"].lower()
+def test_post_discover_forwards_reference_city_and_ai_resilience_filter():
+    """reference_city_id and ai_resilience_filter are forwarded to discovery."""
+
+    async def _fake_discover(query):
+        assert query.reference_city_id == "boise-id"
+        assert query.primary_keyword == "boise plumber"
+        assert query.ai_resilience_filter is True
+        return []
+
+    with patch("src.research_agent.api._get_discovery_service") as mock_svc:
+        mock_svc.return_value.discover = _fake_discover
+        client = TestClient(app)
+        resp = client.post(
+            "/api/discover",
+            json={
+                "lens_id": "expand_conquer",
+                "reference_city_id": "boise-id",
+                "primary_keyword": "boise plumber",
+                "ai_resilience_filter": True,
+            },
+        )
+
+    assert resp.status_code == 200
 
 
 def test_post_discover_rejects_hidden_lens():

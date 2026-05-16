@@ -92,7 +92,7 @@ function inputHint(strategy: StrategyCatalogEntry) {
     return "Send a city, service, and one primary keyword to rank matching markets.";
   }
   if (strategy.input_shape === "reference_city_service") {
-    return "Reference-city discovery is designed, but backend discovery still rejects reference_city_id.";
+    return "Send a reference city and service to search lookalike expansion markets.";
   }
   if (strategy.input_shape === "cached_scan") {
     return "This phase-2 cached scan is not part of the launch catalog.";
@@ -223,17 +223,19 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<StrategyResultCard[]>([]);
 
-  const isReferenceCityUnavailable = strategy.input_shape === "reference_city_service";
   const isPhase2Unavailable = strategy.status === "phase_2";
-  const isUnavailable = isReferenceCityUnavailable || isPhase2Unavailable;
+  const isUnavailable = isPhase2Unavailable;
 
   const canSubmit = useMemo(() => {
     if (isUnavailable || isLoading) return false;
+    if (strategy.input_shape === "reference_city_service") {
+      return referenceCityId.trim().length > 0 && service.trim().length > 0;
+    }
     if (strategy.input_shape === "city_service_keyword") {
       return city.trim().length > 0 && service.trim().length > 0 && primaryKeyword.trim().length > 0;
     }
     return city.trim().length > 0 && service.trim().length > 0;
-  }, [city, isLoading, isUnavailable, primaryKeyword, service, strategy.input_shape]);
+  }, [city, isLoading, isUnavailable, primaryKeyword, referenceCityId, service, strategy.input_shape]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -313,24 +315,6 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
           </p>
         </div>
 
-        {isReferenceCityUnavailable ? (
-          <div
-            role="status"
-            style={{
-              border: "1px solid var(--rule)",
-              borderRadius: 8,
-              background: "var(--warn-soft)",
-              color: "var(--warn)",
-              padding: 12,
-              fontSize: 13,
-              lineHeight: 1.5,
-              marginBottom: 16,
-            }}
-          >
-            Expand & Conquer is visible in the launch catalog, but reference-city discovery is pending backend support. This screen will not pretend the run works.
-          </div>
-        ) : null}
-
         {isPhase2Unavailable ? (
           <div
             role="status"
@@ -359,7 +343,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
                   value={referenceCityId}
                   onChange={(event) => setReferenceCityId(event.target.value)}
                   placeholder="austin-tx"
-                  disabled={isReferenceCityUnavailable}
+                  disabled={isUnavailable}
                   aria-label="Reference city id"
                 />
               </div>

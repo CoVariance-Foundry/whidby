@@ -15,7 +15,7 @@ Completed:
 
 Known follow-ups:
 
-- Expand & Conquer reference-city hydration is intentionally disabled in the UI until backend reference-city support is completed.
+- Expand & Conquer requests now pass `reference_city_id`; high-quality scoring still depends on populated feature-vector/reference competition inputs.
 - Fresh strategy runs currently persist queued run lineage; full async report fanout/status detail endpoints remain the next implementation slice.
 - Live Supabase/PostgREST validation is still required before production rollout.
 

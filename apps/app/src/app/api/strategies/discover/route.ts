@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { EntitlementError, resolveEntitlementContext } from "@/lib/account/entitlements";
+import { createClient } from "@/lib/supabase/server";
 import {
   proxyStrategyJsonResponse,
   proxyStrategyResponse,
@@ -18,12 +20,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const supabase = await createClient();
+    await resolveEntitlementContext(supabase);
+
     const upstream = await proxyStrategyResponse("/api/discover", {
       method: "POST",
       body: JSON.stringify(body),
     });
     return proxyStrategyJsonResponse(upstream);
   } catch (err) {
+    if (err instanceof EntitlementError) {
+      return NextResponse.json(
+        { status: "error", code: err.code, message: err.message },
+        { status: err.status },
+      );
+    }
+
     return strategyUpstreamUnavailable(
       err,
       "Strategy discovery service is unavailable.",

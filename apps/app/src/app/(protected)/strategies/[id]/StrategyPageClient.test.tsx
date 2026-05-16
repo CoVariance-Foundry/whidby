@@ -70,7 +70,7 @@ describe("StrategyPageClient", () => {
     expect(screen.getByLabelText("Strategy score")).toHaveTextContent("86");
   });
 
-  it("is honest that Expand & Conquer reference-city discovery is unavailable", () => {
+  it("sends reference_city_id for Expand & Conquer", async () => {
     const strategy: StrategyCatalogEntry = {
       strategy_id: "expand_conquer",
       name: "Expand & Conquer",
@@ -78,13 +78,25 @@ describe("StrategyPageClient", () => {
       status: "launch",
       input_shape: "reference_city_service",
     };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
 
     render(<StrategyPageClient strategy={strategy} />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "reference-city discovery is pending backend support",
-    );
-    expect(screen.getByLabelText("Reference city id")).toBeDisabled();
-    expect(screen.getByRole("button", { name: /run discovery/i })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reference city id"), {
+      target: { value: "boise-id" },
+    });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toMatchObject({
+      lens_id: "expand_conquer",
+      reference_city_id: "boise-id",
+    });
+    expect(body.service_filters).toEqual([{ field: "name", operator: "like", value: "plumbing" }]);
   });
 });

@@ -1,4 +1,6 @@
 from src.clients.strategy_repository import StrategyRepository
+from src.domain.lenses import EASY_WIN
+from src.domain.queries import CityFilter, MarketQuery, ServiceFilter
 
 
 class FakeError:
@@ -53,7 +55,7 @@ def test_fetch_cached_markets_reads_canonical_tables() -> None:
     assert "metro_score_v2" in client.tables
     calls = client.tables["metro_score_v2"].calls
     assert rows == [{"cbsa_code": "13820"}]
-    assert ("select", "*") in calls
+    assert ("select", "*, metros(*)") in calls
     assert ("eq", "niche_normalized", "roofing") in calls
     assert ("eq", "cbsa_code", "13820") in calls
     assert ("limit", 25) in calls
@@ -71,6 +73,55 @@ def test_fetch_local_pack_facts_filters_keyword_and_niche() -> None:
     assert ("eq", "keyword", "boise roofing") in calls
     assert ("order", "snapshot_date", {"desc": True}) in calls
     assert ("order", "listing_rank", {}) in calls
+
+
+def test_query_markets_maps_v2_rows_to_domain_markets() -> None:
+    client = FakeClient(
+        rows_by_table={
+            "metro_score_v2": [
+                {
+                    "report_id": "report-1",
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "demand_strength": 140,
+                    "organic_difficulty": 20,
+                    "local_difficulty": 30,
+                    "monetization_signal": 120,
+                    "ai_resilience": 55,
+                    "benchmark_confidence": "high",
+                    "no_local_pack_detected": False,
+                    "metros": {
+                        "cbsa_code": "13820",
+                        "cbsa_name": "Boise City, ID",
+                        "state": "ID",
+                        "population": 750000,
+                    },
+                }
+            ]
+        }
+    )
+    repo = StrategyRepository(client)
+
+    markets = repo.query_markets(
+        MarketQuery(
+            lens=EASY_WIN,
+            city_filters=[CityFilter("cbsa_code", "=", "13820")],
+            service_filters=[ServiceFilter("name", "like", "roofing")],
+            ai_resilience_filter=True,
+        )
+    )
+
+    assert len(markets) == 1
+    market = markets[0]
+    assert market.city.name == "Boise City, ID"
+    assert market.city.cbsa_code == "13820"
+    assert market.service.name == "Roofing"
+    assert market.report_id == "report-1"
+    assert market.signals["demand"]["score"] == 140.0
+    assert market.signals["strategy_row"]["local_pack_present"] is True
+    calls = client.tables["metro_score_v2"].calls
+    assert ("eq", "niche_normalized", "roofing") in calls
+    assert ("eq", "cbsa_code", "13820") in calls
 
 
 def test_create_run_inserts_strategy_run_payload() -> None:
