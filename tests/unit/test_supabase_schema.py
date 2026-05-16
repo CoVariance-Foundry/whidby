@@ -24,6 +24,7 @@ class TestMigrationFiles:
             "008_kb_rls_and_lifecycle.sql",
             "014_user_management_billing.sql",
             "015_explore_refresh_control.sql",
+            "016_consumer_onboarding.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -226,3 +227,66 @@ class TestUserManagementBillingSchema:
         assert "FUNCTION public.refund_report_quota(p_account_id UUID)" in sql
         assert "ON CONFLICT (account_id, metric_key, period_start, period_end)" in sql
         assert "WHERE usage_counters.used_count < v_limit" in sql
+
+
+class TestConsumerOnboardingSchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "016_consumer_onboarding.sql").read_text()
+
+    def test_onboarding_tables_created(self, sql: str):
+        assert "CREATE TABLE IF NOT EXISTS onboarding_profiles" in sql
+        assert "CREATE TABLE IF NOT EXISTS onboarding_targets" in sql
+
+    def test_rls_enabled_on_onboarding_tables(self, sql: str):
+        for table in ["onboarding_profiles", "onboarding_targets"]:
+            assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+                f"RLS not enabled for {table}"
+            )
+
+    def test_account_member_policies_exist(self, sql: str):
+        assert "public.is_account_member(account_id)" in sql
+        assert "public.is_account_member(op.account_id)" in sql
+
+    def test_policy_creation_is_idempotent(self, sql: str):
+        policies = [
+            ("Account members can read onboarding profiles", "onboarding_profiles"),
+            ("Users can update own onboarding profile", "onboarding_profiles"),
+            ("Users can insert own onboarding profile", "onboarding_profiles"),
+            ("Account members can read onboarding targets", "onboarding_targets"),
+            ("Users can upsert own onboarding targets", "onboarding_targets"),
+            ("Service role full access on onboarding_profiles", "onboarding_profiles"),
+            ("Service role full access on onboarding_targets", "onboarding_targets"),
+        ]
+        for name, table in policies:
+            assert f'DROP POLICY IF EXISTS "{name}"\n    ON {table};' in sql
+            assert f'CREATE POLICY "{name}"' in sql
+
+    def test_updated_at_triggers_exist(self, sql: str):
+        for table in ["onboarding_profiles", "onboarding_targets"]:
+            assert f"DROP TRIGGER IF EXISTS {table}_set_updated_at ON {table};" in sql
+            assert f"CREATE TRIGGER {table}_set_updated_at" in sql
+            assert f"BEFORE UPDATE ON {table}" in sql
+        assert "EXECUTE FUNCTION public.set_updated_at();" in sql
+
+    def test_own_user_write_checks_exist(self, sql: str):
+        assert "USING (user_id = (SELECT auth.uid())" in sql
+        assert "WITH CHECK (user_id = (SELECT auth.uid())" in sql
+        assert "AND op.user_id = (SELECT auth.uid())" in sql
+
+    def test_expected_status_values_exist(self, sql: str):
+        for status in [
+            "profile_started",
+            "profile_completed",
+            "strategy_recommended",
+            "target_selected",
+            "report_queued",
+            "cached_route_selected",
+            "upgrade_required",
+            "report_ready",
+        ]:
+            assert f"'{status}'" in sql
+
+    def test_expected_geo_scope_values_exist(self, sql: str):
+        for geo_scope in ["city", "state", "region", "nationwide"]:
+            assert f"'{geo_scope}'" in sql

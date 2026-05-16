@@ -14,6 +14,7 @@ import {
 const DEFAULT_DEBOUNCE_MS = 250;
 
 interface CityAutocompleteProps {
+  id?: string;
   value: string;
   onChange: (city: string, suggestion?: PlaceSuggestion) => void;
   disabled?: boolean;
@@ -29,6 +30,7 @@ interface CityAutocompleteProps {
 }
 
 export default function CityAutocomplete({
+  id,
   value,
   onChange,
   disabled = false,
@@ -162,6 +164,7 @@ export default function CityAutocomplete({
     <div style={{ position: "relative", width: "100%" }}>
       <div className="input-wrap">
         <input
+          id={id}
           ref={inputRef}
           data-testid={testId}
           type="text"

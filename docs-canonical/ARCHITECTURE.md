@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.4.0` |
-| **Last Updated** | 2026-05-14 |
+| **Version** | `1.5.0` |
+| **Last Updated** | 2026-05-16 |
 | **Owner** | @widby-team |
 
 ---
@@ -45,6 +45,57 @@ The consumer product uses Supabase Auth plus account-scoped authorization. Every
 Fresh report generation is gated in `apps/app` route handlers before the Render/FastAPI scoring bridge is called. The route resolves the Supabase session, account entitlement, PostHog rollout flags, and monthly usage, then atomically consumes one `fresh_report` credit before forwarding the request. Generated reports are persisted with `owner_account_id` and `created_by_user_id`; existing ownerless reports remain shared cached reports. Stripe Checkout and the Stripe Customer Portal are the billing UI; Stripe webhooks update Supabase subscription state.
 
 RLS is the durable isolation boundary. PostHog flags may hide UI, stage quota enforcement, or disable fresh report generation, but they must never weaken account-scoped report policies.
+
+### Consumer Onboarding and First Report Flow
+
+Consumer onboarding is the bridge from signup intent to the first useful product surface. It must not become a separate scoring path or a local-only demo state. The production flow persists user intent, recommends a starting strategy, captures a service + geography target, then hands fresh report generation to the existing quota-protected consumer scoring proxy.
+
+The UX prototype source is the reference for screen sequencing and component behavior:
+
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/app/signup/page.tsx` — identity, intent, focus, and referral capture.
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/app/onboarding/page.tsx` — first service + region report builder.
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/lib/strategies.ts` — intent-to-strategy routing.
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/components/LocationCombobox.tsx`, `StateMultiselect.tsx`, and strategy components — interaction patterns to port into `apps/app`.
+
+Onboarding state belongs in Supabase, scoped to the authenticated user and account. `onboarding_profiles` records durable profile answers and the recommended next route. `onboarding_targets` records the selected strategy, service, and resolved geography for resume and report-start handoff. Generated reports still use `reports`, `usage_counters`, and the existing M4 → M9 persistence path.
+
+Data flow:
+
+```text
+Signup/Auth ──→ onboarding_profiles ──→ strategy routing
+                                      ├──→ /explore for researching users
+                                      ├──→ /agency for agency-focused users
+                                      └──→ strategies/onboarding target capture
+
+Target capture ──→ onboarding_targets ──→ entitlement check
+                                      ├──→ cached Explore/report route for free users
+                                      └──→ apps/app /api/agent/scoring for fresh paid runs
+
+Scoring proxy ──→ Render FastAPI /api/niches/score ──→ reports + child score tables
+```
+
+Onboarding API contracts:
+
+| API | Responsibility |
+| --- | --- |
+| `GET /api/onboarding/profile` | Return the current user's onboarding status, persisted answers, recommended strategy, selected target, and resume route. |
+| `POST /api/onboarding/profile` | Upsert profile answers (`intent`, `focus`, `coach_or_agency`, `referral_source`), compute `recommended_strategy_id`, and store `next_route`. |
+| `POST /api/onboarding/target` | Upsert selected strategy + service + geography, including `place_id`, `dataforseo_location_code`, `cbsa_code`, `state`, `geo_scope`, and `resolved_label` when available. |
+| `POST /api/onboarding/start-report` | Validate the saved target, apply the existing entitlement/quota rules, then invoke the existing scoring proxy contract and return a report redirect. |
+
+State machine:
+
+```text
+anonymous
+  → profile_started
+  → profile_completed
+  → strategy_recommended
+  → target_selected
+  → report_queued | cached_route_selected | upgrade_required
+  → report_ready
+```
+
+Free users can complete onboarding and browse cached opportunities, but they cannot generate fresh reports. Plus and Pro users with remaining monthly quota can start a fresh report from onboarding. Researching users skip fresh-report prompts and land in `/explore`.
 
 ### Niche Finder (both apps)
 
@@ -125,6 +176,7 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments | `apps/admin/` | Admin vitest + Playwright |
 | Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
 | Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags | `apps/app/src/lib/account/`, `apps/app/src/app/api/billing/` | Consumer vitest |
+| Consumer Onboarding | Signup intent, strategy recommendation, target capture, resume state, and first-report handoff | `apps/app/src/app/(auth)/`, `apps/app/src/app/onboarding/`, `apps/app/src/app/api/onboarding/`, `apps/app/src/lib/onboarding/` | Consumer vitest + Playwright smoke |
 | Consumer Explore Refresh | Cached Explore refresh orchestration, Next.js proxy routes, and refresh UI | `src/domain/services/explore_refresh_service.py`, `apps/app/src/app/api/explore/refresh/`, `apps/app/src/components/explore/` | Pytest, consumer vitest, Playwright smoke |
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
 | Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores`, including report ownership when supplied | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
