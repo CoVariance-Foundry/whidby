@@ -1,5 +1,5 @@
 from src.clients.strategy_repository import StrategyRepository
-from src.domain.lenses import EASY_WIN
+from src.domain.lenses import EASY_WIN, EXPAND_CONQUER
 from src.domain.queries import CityFilter, MarketQuery, ServiceFilter
 
 
@@ -12,6 +12,8 @@ class FakeTable:
         self.calls = []
         self.rows = rows or []
         self.error = error
+        self.filters = []
+        self.limit_value = None
 
     def select(self, value):
         self.calls.append(("select", value))
@@ -19,10 +21,12 @@ class FakeTable:
 
     def eq(self, key, value):
         self.calls.append(("eq", key, value))
+        self.filters.append((key, value))
         return self
 
     def limit(self, value):
         self.calls.append(("limit", value))
+        self.limit_value = value
         return self
 
     def order(self, key, **kwargs):
@@ -34,7 +38,12 @@ class FakeTable:
         return self
 
     def execute(self):
-        return type("Response", (), {"data": self.rows, "error": self.error})()
+        rows = list(self.rows)
+        for key, value in self.filters:
+            rows = [row for row in rows if row.get(key) == value]
+        if self.limit_value is not None:
+            rows = rows[: self.limit_value]
+        return type("Response", (), {"data": rows, "error": self.error})()
 
 
 class FakeClient:
@@ -49,12 +58,16 @@ class FakeClient:
 
 
 def test_fetch_cached_markets_reads_canonical_tables() -> None:
-    client = FakeClient(rows_by_table={"metro_score_v2": [{"cbsa_code": "13820"}]})
+    client = FakeClient(
+        rows_by_table={
+            "metro_score_v2": [{"cbsa_code": "13820", "niche_normalized": "roofing"}]
+        }
+    )
     repo = StrategyRepository(client)
     rows = repo.fetch_cached_markets(niche_normalized="roofing", cbsa_code="13820", limit=25)
     assert "metro_score_v2" in client.tables
     calls = client.tables["metro_score_v2"].calls
-    assert rows == [{"cbsa_code": "13820"}]
+    assert rows == [{"cbsa_code": "13820", "niche_normalized": "roofing"}]
     assert ("select", "*, metros(*)") in calls
     assert ("eq", "niche_normalized", "roofing") in calls
     assert ("eq", "cbsa_code", "13820") in calls
@@ -122,6 +135,75 @@ def test_query_markets_maps_v2_rows_to_domain_markets() -> None:
     calls = client.tables["metro_score_v2"].calls
     assert ("eq", "niche_normalized", "roofing") in calls
     assert ("eq", "cbsa_code", "13820") in calls
+
+
+def test_query_markets_hydrates_expand_conquer_reference_inputs() -> None:
+    client = FakeClient(
+        rows_by_table={
+            "metro_score_v2": [
+                {
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "organic_difficulty": 25,
+                    "local_difficulty": 30,
+                    "demand_strength": 120,
+                },
+                {
+                    "cbsa_code": "11111",
+                    "niche_normalized": "roofing",
+                    "organic_difficulty": 45,
+                    "local_difficulty": 50,
+                    "demand_strength": 120,
+                },
+            ],
+            "metro_feature_vectors": [
+                {
+                    "cbsa_code": "13820",
+                    "feature_version": "strategy_v1",
+                    "feature_vector": [1.0, 0.0],
+                },
+                {
+                    "cbsa_code": "11111",
+                    "feature_version": "strategy_v1",
+                    "feature_vector": [1.0, 0.0],
+                },
+            ],
+        }
+    )
+    repo = StrategyRepository(client)
+
+    markets = repo.query_markets(
+        MarketQuery(
+            lens=EXPAND_CONQUER,
+            service_filters=[ServiceFilter("name", "like", "roofing")],
+            reference_city_id="11111",
+        )
+    )
+
+    candidate = next(m for m in markets if m.city.cbsa_code == "13820")
+    row = candidate.signals["strategy_row"]
+    assert row["similarity_score"] == 1.0
+    assert row["reference_organic_difficulty"] == 45
+    assert row["reference_local_difficulty"] == 50
+
+
+def test_query_markets_maps_ai_exposure_to_aio_trigger_rate() -> None:
+    client = FakeClient(
+        rows_by_table={
+            "metro_score_v2": [
+                {
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "ai_exposure": "AI_EXPOSED",
+                }
+            ]
+        }
+    )
+    repo = StrategyRepository(client)
+
+    markets = repo.query_markets(MarketQuery(lens=EASY_WIN))
+
+    assert markets[0].signals["strategy_row"]["aio_trigger_rate"] == 0.2
 
 
 def test_create_run_inserts_strategy_run_payload() -> None:

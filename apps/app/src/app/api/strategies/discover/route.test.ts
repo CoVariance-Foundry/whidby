@@ -30,6 +30,7 @@ import { POST } from "./route";
 
 const originalFetch = global.fetch;
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
+const originalInternalToken = process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
 
 afterEach(() => {
   global.fetch = originalFetch;
@@ -37,6 +38,11 @@ afterEach(() => {
     delete process.env.NEXT_PUBLIC_API_URL;
   } else {
     process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
+  }
+  if (originalInternalToken === undefined) {
+    delete process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
+  } else {
+    process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN = originalInternalToken;
   }
   vi.restoreAllMocks();
   mocks.createClient.mockReset();
@@ -110,6 +116,30 @@ describe("POST /api/strategies/discover", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       detail: "reference_city_id not yet supported",
+    });
+  });
+
+  it("forwards the internal discovery token when configured", async () => {
+    mockAuthenticatedUser();
+    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
+    process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN = "secret-token";
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+    const req = new Request("http://localhost/api/strategies/discover", {
+      method: "POST",
+      body: JSON.stringify({ lens_id: "easy_win" }),
+    });
+
+    const res = await POST(req as never);
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer secret-token",
+      },
     });
   });
 

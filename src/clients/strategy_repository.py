@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from src.domain.entities import City, Market, Service
@@ -54,7 +55,45 @@ class StrategyRepository:
             cbsa_code=str(cbsa_code) if cbsa_code else None,
             limit=limit,
         )
+        if query.lens.lens_id == "expand_conquer" and query.reference_city_id:
+            rows = self._hydrate_expand_conquer_rows(
+                rows,
+                reference_city_id=query.reference_city_id,
+                niche_normalized=_normalize_niche(niche),
+            )
         return [_market_from_cached_row(row, query) for row in rows]
+
+    def _hydrate_expand_conquer_rows(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        reference_city_id: str,
+        niche_normalized: str | None,
+    ) -> list[dict[str, Any]]:
+        reference_rows = self.fetch_cached_markets(
+            niche_normalized=niche_normalized,
+            cbsa_code=reference_city_id,
+            limit=1,
+        )
+        reference_row = reference_rows[0] if reference_rows else {}
+        reference_vector = _feature_vector_values(
+            self.fetch_feature_vector(cbsa_code=reference_city_id)
+        )
+        hydrated: list[dict[str, Any]] = []
+        for row in rows:
+            candidate_vector = _feature_vector_values(
+                self.fetch_feature_vector(cbsa_code=str(row.get("cbsa_code") or ""))
+            )
+            similarity = _cosine_similarity(reference_vector, candidate_vector)
+            hydrated.append(
+                {
+                    **row,
+                    "similarity_score": similarity,
+                    "reference_organic_difficulty": reference_row.get("organic_difficulty"),
+                    "reference_local_difficulty": reference_row.get("local_difficulty"),
+                }
+            )
+        return hydrated
 
     def fetch_local_pack_facts(
         self,
@@ -136,6 +175,19 @@ def _score_signal(row: dict[str, Any], key: str) -> dict[str, Any]:
     return {"score": value} if value is not None else {}
 
 
+def _ai_overview_rate_from_exposure(value: Any) -> float | None:
+    if value is None:
+        return None
+    exposure = str(value).strip().lower()
+    if exposure in {"high", "elevated", "strong", "ai_exposed"}:
+        return 0.2
+    if exposure in {"medium", "moderate", "ai_moderate"}:
+        return 0.1
+    if exposure in {"low", "minimal", "none", "ai_minimal", "ai_shielded"}:
+        return 0.0
+    return None
+
+
 def _strategy_row_from_cached_row(row: dict[str, Any], query: MarketQuery) -> dict[str, Any]:
     local_pack_present = not bool(row.get("no_local_pack_detected", False))
     primary_keyword = (
@@ -149,8 +201,43 @@ def _strategy_row_from_cached_row(row: dict[str, Any], query: MarketQuery) -> di
         "benchmark_confidence": row.get("benchmark_confidence"),
         "search_volume_monthly": row.get("search_volume_monthly"),
         "exact_match_name_taken": row.get("exact_match_name_taken"),
-        "aio_trigger_rate": row.get("aio_trigger_rate"),
+        "aio_trigger_rate": row.get("aio_trigger_rate")
+        if row.get("aio_trigger_rate") is not None
+        else _ai_overview_rate_from_exposure(row.get("ai_exposure")),
     }
+
+
+def _feature_vector_values(row: dict[str, Any] | None) -> list[float] | None:
+    if not row:
+        return None
+    raw = row.get("feature_vector")
+    if isinstance(raw, dict):
+        values = list(raw.values())
+    elif isinstance(raw, list):
+        values = raw
+    else:
+        return None
+    vector: list[float] = []
+    for value in values:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(number):
+            return None
+        vector.append(number)
+    return vector or None
+
+
+def _cosine_similarity(a: list[float] | None, b: list[float] | None) -> float | None:
+    if not a or not b or len(a) != len(b):
+        return None
+    dot = sum(left * right for left, right in zip(a, b, strict=True))
+    a_norm = math.sqrt(sum(value * value for value in a))
+    b_norm = math.sqrt(sum(value * value for value in b))
+    if a_norm == 0 or b_norm == 0:
+        return None
+    return dot / (a_norm * b_norm)
 
 
 def _market_from_cached_row(row: dict[str, Any], query: MarketQuery) -> Market:

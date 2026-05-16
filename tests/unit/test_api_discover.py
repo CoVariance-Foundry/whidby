@@ -170,6 +170,39 @@ def test_post_discover_forwards_reference_city_and_ai_resilience_filter():
     assert resp.status_code == 200
 
 
+def test_post_discover_requires_internal_token_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("STRATEGY_DISCOVERY_INTERNAL_TOKEN", "secret-token")
+    client = TestClient(app)
+
+    resp = client.post("/api/discover", json={"lens_id": "easy_win"})
+
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Strategy discovery access denied."
+
+
+def test_post_discover_accepts_internal_token_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_discover(query):
+        return []
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("STRATEGY_DISCOVERY_INTERNAL_TOKEN", "secret-token")
+    with patch("src.research_agent.api._get_discovery_service") as mock_svc:
+        mock_svc.return_value.discover = _fake_discover
+        client = TestClient(app)
+        resp = client.post(
+            "/api/discover",
+            json={"lens_id": "easy_win"},
+            headers={"authorization": "Bearer secret-token"},
+        )
+
+    assert resp.status_code == 200
+
+
 def test_post_discover_rejects_hidden_lens():
     client = TestClient(app)
     resp = client.post("/api/discover", json={"lens_id": "blue_ocean"})

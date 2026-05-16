@@ -102,6 +102,7 @@ app.add_middleware(
 _METRO_DB: MetroDB | None = None
 _PLACES_DATAFORSEO_BRIDGE: DataForSEOLocationBridge | None = None
 _SHARED_DFS_CLIENT: DataForSEOClient | None = None
+_STRATEGY_DISCOVERY_INTERNAL_TOKEN_ENV = "STRATEGY_DISCOVERY_INTERNAL_TOKEN"
 
 
 def _metro_db() -> MetroDB:
@@ -184,6 +185,24 @@ def _get_discovery_service() -> DiscoveryService:
             market_store=StrategyRepository(persistence._client)
         )
     return _DISCOVERY_SERVICE
+
+
+def _require_strategy_discovery_internal_access(request: Request) -> None:
+    token = os.environ.get(_STRATEGY_DISCOVERY_INTERNAL_TOKEN_ENV)
+    if not token:
+        if os.environ.get("ENVIRONMENT") == "production":
+            raise HTTPException(
+                status_code=503,
+                detail="Strategy discovery internal token is not configured.",
+            )
+        return
+
+    authorization = request.headers.get("authorization", "")
+    internal_token = request.headers.get("x-strategy-discovery-token", "")
+    if authorization == f"Bearer {token}" or internal_token == token:
+        return
+
+    raise HTTPException(status_code=401, detail="Strategy discovery access denied.")
 
 
 @app.get("/health")
@@ -1389,8 +1408,10 @@ async def create_strategy_run(req: StrategyRunRequest) -> dict[str, Any]:
 
 
 @app.post("/api/discover")
-async def discover(req: DiscoverRequest) -> dict[str, Any]:
+async def discover(req: DiscoverRequest, request: Request) -> dict[str, Any]:
     """Multi-market discovery — filters, lenses, ranking."""
+    _require_strategy_discovery_internal_access(request)
+
     if req.portfolio_market_ids:
         raise HTTPException(
             status_code=400,

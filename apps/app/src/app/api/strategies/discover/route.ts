@@ -23,9 +23,11 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     await resolveEntitlementContext(supabase);
 
+    const internalToken = process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
     const upstream = await proxyStrategyResponse("/api/discover", {
       method: "POST",
       body: JSON.stringify(body),
+      headers: internalToken ? { Authorization: `Bearer ${internalToken}` } : undefined,
     });
     return proxyStrategyJsonResponse(upstream);
   } catch (err) {
