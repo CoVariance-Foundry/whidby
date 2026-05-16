@@ -14,6 +14,9 @@ const SCORE_REPORT_BATCH_SIZE = 100;
 const FRESHNESS_REPORT_BATCH_SIZE = 100;
 const FRESHNESS_TARGET_BATCH_SIZE = 100;
 const DEFAULT_STALE_AFTER_DAYS = 30;
+const BASE_METRO_SELECT =
+  "cbsa_code, cbsa_name, state, population, population_class, owner_occupancy_rate, median_household_income_usd, median_age_years, principal_cities";
+const COMPLETE_METRO_SELECT = `${BASE_METRO_SELECT}, business_density_per_1k, establishment_growth_yoy`;
 
 interface MetroRow {
   cbsa_code: string;
@@ -24,6 +27,8 @@ interface MetroRow {
   owner_occupancy_rate: number | string | null;
   median_household_income_usd: number | string | null;
   median_age_years: number | string | null;
+  business_density_per_1k?: number | string | null;
+  establishment_growth_yoy?: number | string | null;
   principal_cities?: unknown;
 }
 
@@ -102,6 +107,22 @@ function isMissingRefreshSource(
   if (normalized.includes("not found")) return true;
 
   return normalized.includes("does not exist");
+}
+
+function isMissingOptionalMetroMetricColumn(message: string | undefined): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  const mentionsOptionalMetric =
+    normalized.includes("business_density_per_1k") ||
+    normalized.includes("establishment_growth_yoy");
+  if (!mentionsOptionalMetric) return false;
+
+  return (
+    normalized.includes("schema cache") ||
+    normalized.includes("does not exist") ||
+    normalized.includes("not found") ||
+    normalized.includes("could not find")
+  );
 }
 
 function asNumber(value: number | string | null | undefined): number | null {
@@ -198,6 +219,28 @@ async function loadReports(client: SupabaseClient): Promise<ReportRow[]> {
   }
 
   return (data ?? []) as ReportRow[];
+}
+
+async function loadMetros(client: SupabaseClient): Promise<MetroRow[]> {
+  let { data, error } = await client
+    .from("metros")
+    .select(COMPLETE_METRO_SELECT)
+    .order("population", { ascending: false, nullsFirst: false })
+    .limit(METRO_LIMIT);
+
+  if (isMissingOptionalMetroMetricColumn(error?.message)) {
+    ({ data, error } = await client
+      .from("metros")
+      .select(BASE_METRO_SELECT)
+      .order("population", { ascending: false, nullsFirst: false })
+      .limit(METRO_LIMIT));
+  }
+
+  if (error) {
+    throw new Error(`loadExploreData metros: ${error.message}`);
+  }
+
+  return (data ?? []) as MetroRow[];
 }
 
 async function loadMetroScores(
@@ -515,8 +558,8 @@ function summarizeMetro(
     median_household_income_usd: asNumber(metro.median_household_income_usd),
     owner_occupancy_rate: asNumber(metro.owner_occupancy_rate),
     median_age_years: asNumber(metro.median_age_years),
-    business_density_per_1k: null,
-    establishment_growth_yoy: null,
+    business_density_per_1k: asNumber(metro.business_density_per_1k),
+    establishment_growth_yoy: asNumber(metro.establishment_growth_yoy),
     cached_services_count: sortedScores.length,
     best_opportunity_score: scores[0] ?? null,
     average_opportunity_score: average,
@@ -525,22 +568,10 @@ function summarizeMetro(
 }
 
 export async function loadExploreData(client: SupabaseClient): Promise<ExploreData> {
-  const [{ data: metroData, error: metroError }, reports] = await Promise.all([
-    client
-      .from("metros")
-      .select(
-        "cbsa_code, cbsa_name, state, population, population_class, owner_occupancy_rate, median_household_income_usd, median_age_years, principal_cities"
-      )
-      .order("population", { ascending: false, nullsFirst: false })
-      .limit(METRO_LIMIT),
+  const [metros, reports] = await Promise.all([
+    loadMetros(client),
     loadReports(client),
   ]);
-
-  if (metroError) {
-    throw new Error(`loadExploreData metros: ${metroError.message}`);
-  }
-
-  const metros = (metroData ?? []) as MetroRow[];
   const reportIds = Array.from(new Set(reports.map((report) => report.id)));
   const cbsaCodes = Array.from(new Set(metros.map((metro) => metro.cbsa_code)));
   const reportById = new Map(reports.map((report) => [report.id, report]));

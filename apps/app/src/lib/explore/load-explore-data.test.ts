@@ -114,6 +114,8 @@ describe("loadExploreData", () => {
             owner_occupancy_rate: "0.6412",
             median_household_income_usd: 82000,
             median_age_years: "37.4",
+            business_density_per_1k: 2.5,
+            establishment_growth_yoy: 0.1,
           },
           {
             cbsa_code: "12420",
@@ -175,8 +177,8 @@ describe("loadExploreData", () => {
       cached_services_count: 2,
       best_opportunity_score: 81,
       average_opportunity_score: 74,
-      business_density_per_1k: null,
-      establishment_growth_yoy: null,
+      business_density_per_1k: 2.5,
+      establishment_growth_yoy: 0.1,
     });
     expect(data.cities[0].cached_scores.map((score) => score.service)).toEqual([
       "roofing",
@@ -523,6 +525,54 @@ describe("loadExploreData", () => {
     expect(data.cities).toHaveLength(1);
     expect(calls.filter((call) => call.table === "reports" && call.method === "limit")).toHaveLength(2);
     expect(calls.some((call) => call.table === "metro_scores")).toBe(false);
+  });
+
+  it("retries metros with the base select when optional metric columns are missing", async () => {
+    const { client, calls } = makeClient({
+      metros: [
+        {
+          data: null,
+          error: {
+            message:
+              "Could not find the 'business_density_per_1k' column of 'metros' in the schema cache",
+          },
+        },
+        result([
+          {
+            cbsa_code: "38060",
+            cbsa_name: "Phoenix-Mesa-Chandler, AZ",
+            state: "AZ",
+            population: 4_900_000,
+            population_class: "metro_1m_5m",
+            owner_occupancy_rate: null,
+            median_household_income_usd: null,
+            median_age_years: null,
+          },
+        ]),
+      ],
+      reports: [result([])],
+    });
+
+    const data = await loadExploreData(client as never);
+
+    expect(data.cities[0]).toMatchObject({
+      cbsa_code: "38060",
+      business_density_per_1k: null,
+      establishment_growth_yoy: null,
+    });
+
+    const metroSelects = calls.filter(
+      (call) => call.table === "metros" && call.method === "select"
+    );
+    expect(metroSelects).toHaveLength(2);
+    expect(String(metroSelects[0].args[0])).toContain("business_density_per_1k");
+    expect(String(metroSelects[0].args[0])).toContain("establishment_growth_yoy");
+    expect(String(metroSelects[1].args[0])).not.toContain(
+      "business_density_per_1k"
+    );
+    expect(String(metroSelects[1].args[0])).not.toContain(
+      "establishment_growth_yoy"
+    );
   });
 
   it("normalizes backend archetype enum values to app archetype ids", async () => {

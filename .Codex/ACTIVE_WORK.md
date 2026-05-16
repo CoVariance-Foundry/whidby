@@ -34,6 +34,8 @@ Latest CBP establishment slice: added `scripts/explore/backfill_cbp_establishmen
 
 Latest benchmark readiness slice: added `scripts/explore/recompute_benchmark_readiness.py` and `tests/scripts/test_recompute_benchmark_readiness.py` as a read-only preflight before running the existing benchmark recompute path. The helper blocks recompute when `metros_with_population`, `seo_fact_count`, or `cbp_count` are zero or missing. No benchmark recompute ran in this worktree because live source checks/env were not part of this slice.
 
+Latest consumer loader slice: `apps/app/src/lib/explore/load-explore-data.ts` now selects optional `public.metros.business_density_per_1k` and `establishment_growth_yoy` metrics when the backend/read-model exposes them, maps them into Explore city summaries, and falls back to the base metros select if PostgREST reports either optional metric column missing from the schema cache. Focused Vitest coverage verifies metric mapping and the missing-column fallback. `METRO_LIMIT` remains in place; final backend pagination/API route work is still required before removing the 100-metro loader limit.
+
 Current implementation slice:
 
 - Build `src/domain/explore/` entities and pure metric functions for business density, establishment growth, freshness, and V2 presentation-score projection.
