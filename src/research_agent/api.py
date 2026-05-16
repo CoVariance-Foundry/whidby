@@ -1248,12 +1248,48 @@ class DiscoverRequest(BaseModel):
     """Request body for /api/discover."""
 
     lens_id: str = "balanced"
+    primary_keyword: str | None = None
     city_filters: list[dict[str, Any]] = Field(default_factory=list)
     service_filters: list[dict[str, Any]] = Field(default_factory=list)
     portfolio_market_ids: list[str] | None = None
     reference_city_id: str | None = None
+    ai_resilience_filter: bool = False
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
+
+
+@app.get("/api/strategies")
+async def list_strategies() -> dict[str, Any]:
+    """List strategy discovery catalog entries and global modifiers."""
+    from src.domain.lenses import get_lens
+
+    strategy_specs = [
+        ("easy_win", "launch", "city_service"),
+        ("gbp_blitz", "launch", "city_service"),
+        ("keyword_hijack", "launch", "city_service_keyword"),
+        ("expand_conquer", "launch", "reference_city_service"),
+        ("cash_cow", "phase_2", "cached_scan"),
+    ]
+
+    return {
+        "strategies": [
+            {
+                "strategy_id": strategy_id,
+                "name": get_lens(strategy_id).name,
+                "description": get_lens(strategy_id).description,
+                "status": phase,
+                "input_shape": input_shape,
+            }
+            for strategy_id, phase, input_shape in strategy_specs
+        ],
+        "global_modifiers": [
+            {
+                "modifier_id": "ai_resilience",
+                "name": "AI Resilience",
+                "behavior": "warn_not_hide",
+            }
+        ],
+    }
 
 
 @app.post("/api/discover")
@@ -1313,6 +1349,8 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
                     "name": r.market.service.name,
                 },
                 "score_breakdown": r.score_breakdown,
+                "strategy_evidence": r.strategy_evidence,
+                "warnings": r.warnings,
             }
             for r in results
         ],
@@ -1323,8 +1361,11 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
             "description": lens.description,
         },
         "query": {
+            "primary_keyword": req.primary_keyword,
             "city_filters": req.city_filters,
             "service_filters": req.service_filters,
+            "reference_city_id": req.reference_city_id,
+            "ai_resilience_filter": req.ai_resilience_filter,
             "limit": req.limit,
             "offset": req.offset,
         },
