@@ -26,6 +26,14 @@ INTEGER_FIELDS = (
     "ap",
 )
 
+ALIASES = {
+    "naics_code": ("naics_code", "naics", "NAICS2017", "NAICS2022"),
+    "naics_label": ("naics_label", "label", "NAICS2017_LABEL", "NAICS2022_LABEL"),
+    "est": ("est", "establishments", "ESTAB"),
+    "emp": ("emp", "employees", "EMP"),
+    "ap": ("ap", "payroll_thousands", "PAYANN"),
+}
+
 
 def _int_or_none(value: Any) -> int | None:
     if value is None or value == "":
@@ -33,17 +41,37 @@ def _int_or_none(value: Any) -> int | None:
     return int(value)
 
 
-def build_cbp_payload(row: dict[str, Any]) -> dict[str, Any]:
+def _first_value(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
+def _require_value(row: dict[str, Any], keys: tuple[str, ...], field: str, row_number: int) -> Any:
+    value = _first_value(row, keys)
+    if value is None:
+        raise ValueError(f"row {row_number} missing required {field}")
+    return value
+
+
+def build_cbp_payload(row: dict[str, Any], *, row_number: int = 1) -> dict[str, Any]:
     """Map an already-fetched CBP row to public.census_cbp_establishments."""
+    cbsa_code = _require_value(row, ("cbsa_code",), "cbsa_code", row_number)
+    naics_code = _require_value(row, ALIASES["naics_code"], "naics_code", row_number)
+    year = _require_value(row, ("year",), "year", row_number)
+
     payload: dict[str, Any] = {
-        "cbsa_code": str(row["cbsa_code"]),
-        "naics_code": str(row["naics_code"]),
-        "naics_label": row.get("naics_label"),
-        "year": _int_or_none(row["year"]),
+        "cbsa_code": str(cbsa_code),
+        "naics_code": str(naics_code),
+        "naics_label": _first_value(row, ALIASES["naics_label"]),
+        "year": _int_or_none(year),
         "empflag": row.get("empflag"),
     }
     for field in INTEGER_FIELDS:
-        payload[field] = _int_or_none(row.get(field))
+        keys = ALIASES.get(field, (field,))
+        payload[field] = _int_or_none(_first_value(row, keys))
 
     payload["suppressed"] = payload["est"] is None and payload["empflag"] is not None
     return payload
@@ -96,7 +124,10 @@ def postgrest_upsert(url: str, service_key: str, rows: list[dict[str, Any]]) -> 
 
 
 def _build_rows(path: Path) -> list[dict[str, Any]]:
-    return [build_cbp_payload(row) for row in load_rows(path)]
+    return [
+        build_cbp_payload(row, row_number=index)
+        for index, row in enumerate(load_rows(path), start=1)
+    ]
 
 
 def main() -> int:
