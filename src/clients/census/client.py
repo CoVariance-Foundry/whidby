@@ -29,6 +29,17 @@ DEMOGRAPHIC_VARIABLES = {
 SENTINEL_NULL = -666666666
 
 
+def _parse_demographic_value(field_name: str, raw: str | None) -> int | float | None:
+    if raw is None:
+        return None
+    if field_name == "median_age_years":
+        value = float(raw)
+        return None if value == SENTINEL_NULL else round(value, 1)
+
+    value = int(raw)
+    return None if value == SENTINEL_NULL else value
+
+
 class CensusClient:
     """Fetches demographic data from the Census ACS API."""
 
@@ -79,11 +90,10 @@ class CensusClient:
                 "name": record.get("NAME", ""),
             }
             for var_code, field_name in DEMOGRAPHIC_VARIABLES.items():
-                raw = record.get(var_code)
-                if raw is None or int(raw) == SENTINEL_NULL:
-                    normalized[field_name] = None
-                else:
-                    normalized[field_name] = int(raw)
+                normalized[field_name] = _parse_demographic_value(
+                    field_name,
+                    record.get(var_code),
+                )
 
             results.append(normalized)
 

@@ -41,6 +41,12 @@ def _int_or_none(value: Any) -> int | None:
     return int(value)
 
 
+def _float_or_none(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    return round(float(value), 1)
+
+
 def _rate(owner: Any, total: Any) -> float | None:
     owner_int = _int_or_none(owner)
     total_int = _int_or_none(total)
@@ -81,7 +87,7 @@ def build_metro_payload(
             acs.get("median_household_income"),
         ),
         "median_year_structure_built": _int_or_none(acs.get("median_year_built")),
-        "median_age_years": _int_or_none(acs.get("median_age_years")),
+        "median_age_years": _float_or_none(acs.get("median_age_years")),
         "acs_vintage": _int_or_none(acs.get("acs_vintage")),
         "acs_loaded_at": acs_loaded_at if acs else None,
         "population_class": derive_population_class(population),

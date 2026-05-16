@@ -59,6 +59,24 @@ def test_build_metro_payload_prefers_acs_values() -> None:
     assert payload["dataforseo_location_codes"] == [1012873]
 
 
+def test_build_metro_payload_preserves_decimal_median_age() -> None:
+    seed = {
+        "cbsa_code": "38060",
+        "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+        "state": "AZ",
+        "population": 4_946_145,
+    }
+    acs = {
+        "total_population": "5_015_678".replace("_", ""),
+        "median_age_years": "37.4",
+    }
+
+    payload = build_metro_payload(seed, acs)
+
+    assert payload["population"] == 5_015_678
+    assert payload["median_age_years"] == 37.4
+
+
 @pytest.mark.asyncio
 async def test_main_defaults_to_preview_without_live_write(monkeypatch, capsys) -> None:
     async def fake_load_acs_by_cbsa(year: int):
