@@ -11,7 +11,7 @@ import {
   type PlaceSuggestion,
 } from "@/lib/niche-finder/place-suggest";
 
-const DEFAULT_DEBOUNCE_MS = 250;
+const DEFAULT_DEBOUNCE_MS = 160;
 
 interface CityAutocompleteProps {
   value: string;

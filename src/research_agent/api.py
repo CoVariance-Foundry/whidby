@@ -256,6 +256,7 @@ async def places_suggest(
         )
 
     try:
+        mapbox_started = time.perf_counter()
         suggestions = await fetch_mapbox_place_suggestions(
             query=q_norm,
             limit=clamped,
@@ -263,11 +264,22 @@ async def places_suggest(
             country=country,
             language=language,
         )
+        mapbox_ms = int((time.perf_counter() - mapbox_started) * 1000)
     except MapboxPlacesError as exc:
-        logger.warning("[%s] PLACES_SUGGEST ERROR reason=mapbox_failure detail=%s", request_id, exc)
+        logger.warning(
+            "[%s] PLACES_SUGGEST ERROR reason=mapbox_failure detail=%s duration_ms=%d",
+            request_id,
+            exc,
+            int((time.perf_counter() - started_at) * 1000),
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception:
-        logger.error("[%s] PLACES_SUGGEST ERROR reason=mapbox_unexpected", request_id, exc_info=True)
+        logger.error(
+            "[%s] PLACES_SUGGEST ERROR reason=mapbox_unexpected duration_ms=%d",
+            request_id,
+            int((time.perf_counter() - started_at) * 1000),
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=502,
             detail="Mapbox autocomplete failed unexpectedly.",
@@ -282,10 +294,11 @@ async def places_suggest(
         )
         rows = [row.to_dict() for row in suggestions]
         logger.info(
-            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s duration_ms=%d",
+            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s mapbox_ms=%d duration_ms=%d",
             request_id,
             len(rows),
             "not_configured",
+            mapbox_ms,
             int((time.perf_counter() - started_at) * 1000),
         )
         return rows
@@ -319,9 +332,10 @@ async def places_suggest(
 
     rows = [row.to_dict() for row in suggestions]
     logger.info(
-        "[%s] PLACES_SUGGEST DONE rows=%d duration_ms=%d",
+        "[%s] PLACES_SUGGEST DONE rows=%d mapbox_ms=%d duration_ms=%d",
         request_id,
         len(rows),
+        mapbox_ms,
         int((time.perf_counter() - started_at) * 1000),
     )
     return rows

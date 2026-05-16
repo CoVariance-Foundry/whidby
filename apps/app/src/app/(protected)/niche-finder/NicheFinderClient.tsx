@@ -220,6 +220,16 @@ export default function NicheFinderClient() {
         latency_ms: Date.now() - scoringStart,
         request_id: json.request_id ?? null,
       });
+      if (json.report_id && json.report) {
+        try {
+          sessionStorage.setItem(
+            `widby:report:${json.report_id}`,
+            JSON.stringify(json.report),
+          );
+        } catch {
+          // Best-effort cache only; report can still be loaded from persistence.
+        }
+      }
       setPageState({ kind: "success", data: json });
       pushRecent({
         city: city.trim(),
