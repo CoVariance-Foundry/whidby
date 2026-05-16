@@ -3,6 +3,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def _raise_on_error(result: Any) -> None:
+    error = getattr(result, "error", None)
+    if error:
+        message = getattr(error, "message", None) or str(error)
+        raise RuntimeError(f"Supabase request failed: {message}")
+
+
+def _result_rows(result: Any) -> list[dict[str, Any]]:
+    _raise_on_error(result)
+    return list(getattr(result, "data", None) or [])
+
+
 class StrategyRepository:
     """Supabase adapter for strategy discovery read models and run lineage."""
 
@@ -57,3 +69,19 @@ class StrategyRepository:
         )
         rows = list(response.data or [])
         return rows[0] if rows else None
+
+    def create_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self._client.table("strategy_runs").insert(payload).execute()
+        rows = _result_rows(response)
+        if not rows or not rows[0].get("id"):
+            raise RuntimeError("Supabase create_run returned no run id")
+        return rows[0]
+
+    def insert_run_items(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not rows:
+            return []
+        response = self._client.table("strategy_run_items").insert(rows).execute()
+        inserted = _result_rows(response)
+        if not inserted:
+            raise RuntimeError("Supabase insert_run_items returned no rows")
+        return inserted

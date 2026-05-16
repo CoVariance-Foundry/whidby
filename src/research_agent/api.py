@@ -21,12 +21,13 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
 from src.clients.llm.client import LLMClient
+from src.clients.strategy_repository import StrategyRepository
 from src.clients.supabase_adapter import SupabaseMarketStore
 from src.clients.supabase_persistence import SupabaseExploreRefreshStore, SupabasePersistence
 from src.data.metro_db import Metro, MetroDB
@@ -439,12 +440,46 @@ class ExploreRefreshRunRequest(BaseModel):
     flags: ExploreRefreshFlagsPayload = Field(default_factory=ExploreRefreshFlagsPayload)
 
 
+StrategyId = Literal["easy_win", "gbp_blitz", "keyword_hijack", "expand_conquer", "cash_cow"]
+
+
+class StrategyRunTarget(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    cbsa_code: str = Field(min_length=1)
+    niche_normalized: str = Field(min_length=1)
+    niche_keyword: str | None = Field(default=None, min_length=1)
+    primary_keyword: str | None = Field(default=None, min_length=1)
+
+
+class StrategyRunRequest(BaseModel):
+    strategy_id: StrategyId
+    mode: Literal["cached", "fresh"] = "cached"
+    targets: list[StrategyRunTarget] = Field(default_factory=list)
+    account_id: uuid.UUID | None = None
+    created_by_user_id: uuid.UUID | None = None
+    city: str | None = None
+    state: str | None = None
+    service: str | None = None
+    primary_keyword: str | None = None
+    reference_city_id: str | None = None
+    ai_resilience_filter: bool = False
+    limit: int = Field(default=50, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def _fresh_runs_need_targets(self) -> "StrategyRunRequest":
+        if self.mode == "fresh" and not self.targets:
+            raise ValueError("Fresh strategy runs require at least one target.")
+        return self
+
+
 # ---------------------------------------------------------------------------
 # MarketService singleton (replaces per-request client construction)
 # ---------------------------------------------------------------------------
 
 _MARKET_SERVICE: MarketService | None = None
 _EXPLORE_REFRESH_SERVICE: ExploreRefreshService | None = None
+_STRATEGY_REPOSITORY: StrategyRepository | None = None
 
 
 def _build_market_service() -> MarketService:
@@ -492,6 +527,14 @@ def _get_explore_refresh_service() -> ExploreRefreshService:
             market_service=_market_service(),
         )
     return _EXPLORE_REFRESH_SERVICE
+
+
+def _get_strategy_repository() -> StrategyRepository:
+    global _STRATEGY_REPOSITORY
+    if _STRATEGY_REPOSITORY is None:
+        persistence = SupabasePersistence()
+        _STRATEGY_REPOSITORY = StrategyRepository(persistence._client)
+    return _STRATEGY_REPOSITORY
 
 
 def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
@@ -1289,6 +1332,56 @@ async def list_strategies() -> dict[str, Any]:
                 "behavior": "warn_not_hide",
             }
         ],
+    }
+
+
+@app.post("/api/strategy-runs")
+async def create_strategy_run(req: StrategyRunRequest) -> dict[str, Any]:
+    """Create a strategy discovery run and queue fresh target fanout."""
+    target_count = len(req.targets)
+    if req.mode == "fresh" and target_count > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Fresh strategy runs are capped at 100 city-service pairs.",
+        )
+
+    run_id = str(uuid.uuid4())
+    status = "queued" if req.mode == "fresh" else "succeeded"
+    payload = {
+        "id": run_id,
+        "account_id": str(req.account_id) if req.account_id else None,
+        "created_by_user_id": str(req.created_by_user_id) if req.created_by_user_id else None,
+        "strategy_id": req.strategy_id,
+        "mode": req.mode,
+        "status": status,
+        "input_payload": {
+            "targets": [target.model_dump() for target in req.targets],
+            "city": req.city,
+            "state": req.state,
+            "service": req.service,
+            "primary_keyword": req.primary_keyword,
+            "reference_city_id": req.reference_city_id,
+            "ai_resilience_filter": req.ai_resilience_filter,
+            "limit": req.limit,
+        },
+        "result_count": target_count if req.mode == "cached" else 0,
+        "quota_consumed": 1 if req.mode == "fresh" else 0,
+    }
+    try:
+        created = _get_strategy_repository().create_run(payload)
+    except Exception as exc:
+        logger.warning("Strategy run store unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Strategy run store unavailable.",
+        ) from exc
+
+    return {
+        "run_id": str(created.get("id") or run_id),
+        "strategy_id": req.strategy_id,
+        "mode": req.mode,
+        "status": str(created.get("status") or status),
+        "target_count": target_count,
     }
 
 
