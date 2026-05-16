@@ -19,7 +19,9 @@ DEMOGRAPHIC_VARIABLES = {
     "B19013_001E": "median_household_income",
     "B25003_001E": "total_housing_units",
     "B25003_002E": "owner_occupied_units",
+    "B25003_003E": "renter_occupied_units",
     "B25035_001E": "median_year_built",
+    "B01002_001E": "median_age_years",
     "B28002_004E": "broadband_subscriptions",
     "B28002_001E": "total_internet_universe",
 }
