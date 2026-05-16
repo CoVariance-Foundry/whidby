@@ -1,6 +1,7 @@
 from src.domain.strategy_projection import (
     project_ai_resilience_warning,
     project_easy_win,
+    project_expand_conquer,
     project_gbp_blitz,
     project_keyword_hijack,
 )
@@ -112,6 +113,51 @@ def test_keyword_hijack_does_not_default_zero_commercial_intent() -> None:
         }
     )
     assert result.score < 70
+
+
+def test_expand_conquer_rewards_similarity_with_lower_competition() -> None:
+    result = project_expand_conquer(
+        {
+            "similarity_score": 0.92,
+            "organic_difficulty": 30,
+            "reference_organic_difficulty": 45,
+            "local_difficulty": 25,
+            "reference_local_difficulty": 35,
+        }
+    )
+    assert result.score >= 70
+    assert result.evidence["similarity_score"] == 0.92
+
+
+def test_expand_conquer_blocks_higher_competition() -> None:
+    result = project_expand_conquer(
+        {
+            "similarity_score": 0.92,
+            "organic_difficulty": 55,
+            "reference_organic_difficulty": 45,
+            "local_difficulty": 25,
+            "reference_local_difficulty": 35,
+        }
+    )
+    assert result.score == 0
+    assert "competition_higher_than_reference" in result.warnings
+
+
+def test_expand_conquer_rejects_non_finite_similarity() -> None:
+    try:
+        project_expand_conquer(
+            {
+                "similarity_score": "nan",
+                "organic_difficulty": 30,
+                "reference_organic_difficulty": 45,
+                "local_difficulty": 25,
+                "reference_local_difficulty": 35,
+            }
+        )
+    except ValueError as exc:
+        assert "similarity_score must be finite" in str(exc)
+    else:
+        raise AssertionError("Expected non-finite similarity to raise ValueError")
 
 
 def test_ai_resilience_warning_flags_not_hides() -> None:

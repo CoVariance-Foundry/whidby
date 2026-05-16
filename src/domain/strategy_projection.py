@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from src.domain.strategy_entities import StrategyProjection
@@ -14,6 +15,13 @@ def _number_or_default(row: dict[str, Any], key: str, default: float) -> float:
     if value is None:
         return default
     return float(value)
+
+
+def _finite_number(row: dict[str, Any], key: str) -> float:
+    value = float(row[key])
+    if not math.isfinite(value):
+        raise ValueError(f"{key} must be finite")
+    return value
 
 
 def project_easy_win(row: dict[str, Any]) -> StrategyProjection:
@@ -132,6 +140,67 @@ def project_keyword_hijack(row: dict[str, Any]) -> StrategyProjection:
             "cpc_usd": row.get("cpc_usd"),
             "local_pack_present": True,
             "exact_match_name_available": True,
+        },
+    )
+
+
+def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
+    similarity_raw = row.get("similarity_score")
+    if similarity_raw is None:
+        return StrategyProjection(
+            strategy_id="expand_conquer",
+            score=0.0,
+            evidence={"similarity_score": None},
+            warnings=["feature_vector_similarity_missing"],
+        )
+
+    competition_keys = (
+        "organic_difficulty",
+        "reference_organic_difficulty",
+        "local_difficulty",
+        "reference_local_difficulty",
+    )
+    if any(row.get(key) is None for key in competition_keys):
+        return StrategyProjection(
+            strategy_id="expand_conquer",
+            score=0.0,
+            evidence={key: row.get(key) for key in competition_keys},
+            warnings=["competition_baseline_missing"],
+        )
+
+    similarity = _finite_number(row, "similarity_score")
+    similarity_pct = _clamp(similarity * 100.0 if similarity <= 1 else similarity)
+    organic = _finite_number(row, "organic_difficulty")
+    reference_organic = _finite_number(row, "reference_organic_difficulty")
+    local = _finite_number(row, "local_difficulty")
+    reference_local = _finite_number(row, "reference_local_difficulty")
+    if organic > reference_organic or local > reference_local:
+        return StrategyProjection(
+            strategy_id="expand_conquer",
+            score=0.0,
+            evidence={
+                "similarity_score": similarity_raw,
+                "organic_difficulty": organic,
+                "reference_organic_difficulty": reference_organic,
+                "local_difficulty": local,
+                "reference_local_difficulty": reference_local,
+            },
+            warnings=["competition_higher_than_reference"],
+        )
+
+    competition_margin = _clamp(
+        ((reference_organic - organic) + (reference_local - local)) / 2.0
+    )
+    score = _clamp((similarity_pct * 0.75) + (competition_margin * 0.25))
+    return StrategyProjection(
+        strategy_id="expand_conquer",
+        score=round(score, 2),
+        evidence={
+            "similarity_score": similarity_raw,
+            "organic_difficulty": organic,
+            "reference_organic_difficulty": reference_organic,
+            "local_difficulty": local,
+            "reference_local_difficulty": reference_local,
         },
     )
 
