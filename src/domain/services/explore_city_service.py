@@ -70,13 +70,10 @@ class ExploreCityService:
     ) -> ExploreCitySummary:
         cbsa_code = str(metro["cbsa_code"])
         unique_scores = _latest_unique_scores(cached_scores)
-        sorted_scores = sorted(
-            unique_scores,
-            key=lambda score: (
-                -_presentation_score(score),
-                _timestamp_key(score),
-                str(score.get("niche_keyword") or score.get("niche_normalized") or ""),
-            ),
+        sorted_scores = _sort_cached_scores(unique_scores)
+        summary_freshness = _summary_freshness(
+            metro=metro,
+            scores=sorted_scores,
         )
         best_score_row = sorted_scores[0] if sorted_scores else None
         metrics = _city_metrics(
@@ -104,8 +101,8 @@ class ExploreCityService:
                 if best_score_row
                 else "none"
             ),
-            "last_scored_at": _summary_last_scored_at(metro, sorted_scores),
-            "stale": _summary_stale(metro, best_score_row),
+            "last_scored_at": summary_freshness["last_scored_at"],
+            "stale": summary_freshness["stale"],
             "cached_scores": sorted_scores,
         }
 
@@ -168,6 +165,18 @@ def _score_service_key(score: Mapping[str, Any]) -> str:
 
 def _score_system(score: Mapping[str, Any]) -> str:
     return str(score.get("score_system") or "").strip().lower()
+
+
+def _sort_cached_scores(scores: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    sorted_scores = [dict(score) for score in scores]
+    sorted_scores.sort(
+        key=lambda score: str(
+            score.get("niche_keyword") or score.get("niche_normalized") or ""
+        )
+    )
+    sorted_scores.sort(key=_timestamp_key, reverse=True)
+    sorted_scores.sort(key=_presentation_score, reverse=True)
+    return sorted_scores
 
 
 def _city_metrics(
@@ -239,41 +248,30 @@ def _timestamp_key(score: Mapping[str, Any]) -> str:
     return str(timestamp or "")
 
 
-def _summary_last_scored_at(
+def _summary_freshness(
     metro: Mapping[str, Any],
     scores: Sequence[Mapping[str, Any]],
-) -> Any | None:
+) -> dict[str, Any | bool | None]:
     metro_timestamp = metro.get("last_scored_at") or metro.get("latest_scored_at")
-    if metro_timestamp is not None:
-        return metro_timestamp
+    metro_stale = _stale_value(metro)
+    if metro_timestamp is not None and metro_stale is not None:
+        return {"last_scored_at": metro_timestamp, "stale": metro_stale}
 
     latest_score = max(scores, key=_timestamp_key, default=None)
     if latest_score is None:
-        return None
-    return latest_score.get("last_scored_at") or latest_score.get("latest_scored_at")
+        return {"last_scored_at": None, "stale": None}
+
+    return {
+        "last_scored_at": (
+            latest_score.get("last_scored_at") or latest_score.get("latest_scored_at")
+        ),
+        "stale": _stale_value(latest_score),
+    }
 
 
-def _summary_stale(
-    metro: Mapping[str, Any],
-    best_score_row: Mapping[str, Any] | None,
-) -> bool | None:
-    if "stale" in metro:
-        return bool(metro["stale"]) if metro["stale"] is not None else None
-    if "is_stale" in metro:
-        return bool(metro["is_stale"]) if metro["is_stale"] is not None else None
-
-    if best_score_row is None:
-        return None
-    if "stale" in best_score_row:
-        return (
-            bool(best_score_row["stale"])
-            if best_score_row["stale"] is not None
-            else None
-        )
-    if "is_stale" in best_score_row:
-        return (
-            bool(best_score_row["is_stale"])
-            if best_score_row["is_stale"] is not None
-            else None
-        )
+def _stale_value(row: Mapping[str, Any]) -> bool | None:
+    if "stale" in row:
+        return bool(row["stale"]) if row["stale"] is not None else None
+    if "is_stale" in row:
+        return bool(row["is_stale"]) if row["is_stale"] is not None else None
     return None

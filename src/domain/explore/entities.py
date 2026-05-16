@@ -19,5 +19,5 @@ class ExploreCitySummary(TypedDict):
     best_score: int | None
     score_system: str
     last_scored_at: NotRequired[Any | None]
-    stale: NotRequired[bool | None]
+    stale: bool | None
     cached_scores: list[dict[str, Any]]

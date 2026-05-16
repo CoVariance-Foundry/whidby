@@ -108,6 +108,76 @@ def test_city_service_collapses_report_scores_to_latest_unique_services() -> Non
     assert city["last_scored_at"] == "2026-05-03T12:00:00Z"
 
 
+def test_city_service_summary_freshness_uses_latest_score_row() -> None:
+    class Repository(FakeExploreRepository):
+        def load_scores(self, cbsa_codes: list[str]) -> list[dict]:
+            return [
+                {
+                    "cbsa_code": "38060",
+                    "niche_normalized": "roofing",
+                    "niche_keyword": "roofing",
+                    "presentation_score": 97,
+                    "score_system": "legacy",
+                    "last_scored_at": "2026-04-01T12:00:00Z",
+                    "stale": True,
+                },
+                {
+                    "cbsa_code": "38060",
+                    "niche_normalized": "plumbing",
+                    "niche_keyword": "plumbing",
+                    "presentation_score": 71,
+                    "score_system": "legacy",
+                    "last_scored_at": "2026-05-05T12:00:00Z",
+                    "stale": False,
+                },
+            ]
+
+    city = ExploreCityService(Repository()).list_cities()[0]
+
+    assert city["best_score"] == 97
+    assert city["last_scored_at"] == "2026-05-05T12:00:00Z"
+    assert city["stale"] is False
+
+
+def test_city_service_orders_equal_cached_scores_newest_first() -> None:
+    class Repository(FakeExploreRepository):
+        def load_scores(self, cbsa_codes: list[str]) -> list[dict]:
+            return [
+                {
+                    "cbsa_code": "38060",
+                    "niche_normalized": "roofing",
+                    "niche_keyword": "roofing",
+                    "presentation_score": 88,
+                    "score_system": "legacy",
+                    "last_scored_at": "2026-05-01T12:00:00Z",
+                },
+                {
+                    "cbsa_code": "38060",
+                    "niche_normalized": "plumbing",
+                    "niche_keyword": "plumbing",
+                    "presentation_score": 88,
+                    "score_system": "legacy",
+                    "last_scored_at": "2026-05-04T12:00:00Z",
+                },
+                {
+                    "cbsa_code": "38060",
+                    "niche_normalized": "hvac",
+                    "niche_keyword": "hvac",
+                    "presentation_score": 82,
+                    "score_system": "legacy",
+                    "last_scored_at": "2026-05-06T12:00:00Z",
+                },
+            ]
+
+    city = ExploreCityService(Repository()).list_cities()[0]
+
+    assert [score["niche_normalized"] for score in city["cached_scores"]] == [
+        "plumbing",
+        "roofing",
+        "hvac",
+    ]
+
+
 def test_city_service_prefers_v2_over_legacy_for_same_service() -> None:
     class Repository(FakeExploreRepository):
         def load_scores(self, cbsa_codes: list[str]) -> list[dict]:
