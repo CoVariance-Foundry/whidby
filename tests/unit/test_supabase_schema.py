@@ -24,6 +24,7 @@ class TestMigrationFiles:
             "008_kb_rls_and_lifecycle.sql",
             "014_user_management_billing.sql",
             "015_explore_refresh_control.sql",
+            "016_strategy_discovery_system.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -226,3 +227,82 @@ class TestUserManagementBillingSchema:
         assert "FUNCTION public.refund_report_quota(p_account_id UUID)" in sql
         assert "ON CONFLICT (account_id, metric_key, period_start, period_end)" in sql
         assert "WHERE usage_counters.used_count < v_limit" in sql
+
+
+class TestStrategyDiscoverySchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "016_strategy_discovery_system.sql").read_text()
+
+    def test_strategy_discovery_run_tables(self, sql: str):
+        assert "CREATE TABLE IF NOT EXISTS public.strategy_runs" in sql
+        assert "CREATE TABLE IF NOT EXISTS public.strategy_run_items" in sql
+        assert "account_id UUID" in sql
+        assert "strategy_id TEXT NOT NULL" in sql
+        assert "result_count INTEGER NOT NULL DEFAULT 0" in sql
+
+    def test_strategy_discovery_evidence_tables(self, sql: str):
+        assert "CREATE TABLE IF NOT EXISTS public.local_pack_listing_facts" in sql
+        assert "CREATE TABLE IF NOT EXISTS public.metro_feature_vectors" in sql
+        assert "CREATE TABLE IF NOT EXISTS public.strategy_score_cache" in sql
+        assert "exact_match_name BOOLEAN NOT NULL DEFAULT FALSE" in sql
+        assert "feature_vector JSONB NOT NULL" in sql
+
+    def test_strategy_discovery_rls_enabled_on_all_tables(self, sql: str):
+        for table in [
+            "strategy_runs",
+            "strategy_run_items",
+            "local_pack_listing_facts",
+            "metro_feature_vectors",
+            "strategy_score_cache",
+        ]:
+            assert f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY" in sql
+
+    def test_strategy_discovery_service_role_policies_exist(self, sql: str):
+        for policy in [
+            "Service role manages strategy runs",
+            "Service role manages strategy run items",
+            "Service role manages local pack listing facts",
+            "Service role manages metro feature vectors",
+            "Service role manages strategy score cache",
+        ]:
+            assert policy in sql
+
+    def test_strategy_discovery_account_member_read_policies(self, sql: str):
+        assert "Account members can read strategy runs" in sql
+        assert "ON public.strategy_runs FOR SELECT TO authenticated" in sql
+        assert "public.is_account_member(account_id)" in sql
+        assert "Account members can read strategy run items" in sql
+        assert "ON public.strategy_run_items FOR SELECT TO authenticated" in sql
+        assert "EXISTS (" in sql
+        assert "FROM public.strategy_runs sr" in sql
+        assert "WHERE sr.id = strategy_run_items.run_id" in sql
+        assert "public.is_account_member(sr.account_id)" in sql
+
+    def test_strategy_discovery_report_linked_reads_respect_report_visibility(
+        self, sql: str
+    ):
+        assert "Authenticated users can read local pack listing facts" in sql
+        assert "report_id IS NULL" in sql
+        assert "WHERE r.id = local_pack_listing_facts.report_id" in sql
+        assert "Authenticated users can read strategy score cache" in sql
+        assert "source_report_id IS NULL" in sql
+        assert "WHERE r.id = strategy_score_cache.source_report_id" in sql
+        assert "r.access_scope = 'cached'" in sql
+        assert "public.is_account_member(r.owner_account_id)" in sql
+        assert (
+            "ON public.local_pack_listing_facts FOR SELECT TO authenticated "
+            "USING (true)"
+        ) not in sql
+        assert (
+            "ON public.strategy_score_cache FOR SELECT TO authenticated "
+            "USING (true)"
+        ) not in sql
+
+    def test_strategy_discovery_strategy_checks_apply_to_result_tables(
+        self, sql: str
+    ):
+        assert sql.count("strategy_id TEXT NOT NULL CHECK (strategy_id IN (") == 3
+        assert "UNIQUE (run_id, rank)" in sql
+        assert "CREATE INDEX IF NOT EXISTS idx_strategy_score_cache_scored_at" in sql
+        assert "ON public.strategy_score_cache(strategy_id, scored_at DESC)" in sql
