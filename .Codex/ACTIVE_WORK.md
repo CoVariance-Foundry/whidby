@@ -32,6 +32,8 @@ Latest backfill slice: added and hardened `scripts/explore/backfill_metros.py`, 
 
 Latest CBP establishment slice: added `scripts/explore/backfill_cbp_establishments.py` and `tests/scripts/test_backfill_cbp_establishments.py` for import-file payload preparation targeting `public.census_cbp_establishments`. The CLI accepts already-fetched `.json` or `.csv` CBP rows, defaults to dry-run preview, and only performs PostgREST upserts when `--apply` is passed with Supabase URL/service-role env present. No live CBP fetch/write ran. Fetch-path blocker: `src/clients/census/cbp_client.py` currently verifies only a narrow `ESTAB`, `EMP`, `PAYANN`, `NAICS2017` MSA cache path and does not provide the size-bucket, `empflag`, `naics_label`, or suppression contract required for the Explore CBP table.
 
+Latest benchmark readiness slice: added `scripts/explore/recompute_benchmark_readiness.py` and `tests/scripts/test_recompute_benchmark_readiness.py` as a read-only preflight before running the existing benchmark recompute path. The helper blocks recompute when `metros_with_population`, `seo_fact_count`, or `cbp_count` are zero or missing. No benchmark recompute ran in this worktree because live source checks/env were not part of this slice.
+
 Current implementation slice:
 
 - Build `src/domain/explore/` entities and pure metric functions for business density, establishment growth, freshness, and V2 presentation-score projection.
