@@ -80,77 +80,79 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby/whidby] recent context, 2026-05-13 10:15pm PDT
+# [whidby/whidby] recent context, 2026-05-16 5:32pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (22,609t read) | 468,046t work | 95% savings
+Stats: 50 obs (23,609t read) | 506,580t work | 95% savings
 
-### Apr 26, 2026
-S188 Run pilot benchmark (scripts.benchmarks.run_pilot) against DataForSEO and Anthropic APIs for two niches across 200 metro slots (Apr 26 at 7:11 PM)
-S203 Phase 6 CI Enforcement — implement domain layer import guardrails via lint script, CI job, pre-push hook, and pytest architecture tests (Apr 26 at 7:30 PM)
 ### Apr 29, 2026
 S205 Phase 6 CI Enforcement Branch Entering Finishing Workflow (Apr 29 at 2:57 PM)
 S213 vitest Fix Verified Stable After Root package.json Cleanup (Apr 29 at 2:59 PM)
-252 3:04p 🔵 vitest Missing from Root node_modules After npm install in Monorepo
-253 3:05p 🔵 vitest Listed in package-lock.json but Not Installed in node_modules
-254 " 🔵 Root node_modules Has 304 Packages but No vitest; No .npmrc Present
-255 3:06p 🔴 Clean Root npm Install Attempted to Resolve Missing vitest Module
-256 " 🔵 vitest Installed Only in Worktree node_modules, Not in Main Project
-257 3:07p 🔵 Root node_modules Has 312 Packages But vitest Is Not Among Them
-258 " 🔵 Root Cause: NODE_ENV=production Caused npm to Omit devDependencies
-259 " 🔴 Fixed "Cannot find module 'vitest'" — Tests Now Passing
-260 " ✅ vitest Removed from Monorepo Root package.json devDependencies
-261 " 🔴 vitest Fix Verified Stable After Root package.json Cleanup
 S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/agent/health/route.test.ts (Apr 29 at 3:07 PM)
 S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 3:07 PM)
-262 3:11p ✅ Phase 7 Data Providers — Plan Execution Initiated
-263 4:19p 🔵 Phase 6 Already Committed to Dev Branch
-264 " 🟣 DataForSEO Google Trends API Research Initiated for Phase 7
-266 " 🔵 DataForSEO Google Trends Explore Live API Contract Documented
-267 " 🔵 DataForSEO Google Trends Explore Task POST API Contract Documented
-268 4:24p 🟣 Phase 7 Data Providers Implementation Plan Written
-270 " ✅ Phase 7 Plan Corrected: DataForSEO Trends Response Parsing Fixed
-271 4:25p ✅ Phase 7 Plan: FakeTrendsClient Test Fixture Corrected to Match Real API Structure
 S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
 ### May 13, 2026
-272 1:09p ✅ Phase 6 CI Enforcement Planning Session Initiated
 S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:09 PM)
 S268 V2 Scoring — Repository Boundary for seo_benchmarks Access Planned (May 13 at 1:10 PM)
-277 1:26p ⚖️ V2 Scoring — Repository Boundary for seo_benchmarks Access Planned
 S269 V2 scoring repository boundary plan — orientation phase for writing a formal implementation plan (May 13 at 1:26 PM)
-278 7:19p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
-279 7:20p ✅ Explore Refresh Control — Canonical Docs Update (Task 1)
-280 7:21p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
-281 " 🔵 Explore Refresh Control Doc Verification — git diff --check Clean, docguard-cli Hung
-283 7:22p 🔵 Whidby Sandbox Blocks `ps` Command — Operation Not Permitted
-284 " 🔵 docguard-cli Never Spawned — Not Found in Process List; Only MCP Servers Running via npx
-285 " 🔵 docguard-cli Fails with ENOTFOUND — npm Registry Unreachable in Whidby Sandbox
-287 7:23p 🔵 DocGuard v0.9.11 Full Guard Run — 124/191 Passed, All HIGH Checks Clean, 97 MEDIUM Warnings
-288 7:24p 🔵 Explore Refresh Control — Task 1 Spec-Compliance Review Findings
-289 " 🔵 Explore Refresh Control — Task 1 Doc Review: Diff and Schema Cross-Check
-290 7:25p ✅ Explore Refresh Control — Task 1 Spec-Compliance Review Initiated
-291 7:26p 🔵 Explore Refresh Control — Canonical Doc Review: Version Metadata and Placeholder Audit Results
-292 " 🔵 Whidby Explore Component and Test File Inventory (as of codex/explore-refresh-control)
-293 7:27p 🔵 docguard-cli Sandbox Hang Confirmed: Process Tracker Shows Running But No OS Process Exists
-294 7:28p 🔵 Explore Refresh Control — Planned API Route and Test File Structure Confirmed
-295 7:30p ✅ Explore Refresh Control — Canonical Docs Updated (Task 1)
-296 " 🔵 Whidby Sandbox Blocks npm Registry, ps Syscall, and pgrep Without Escalation
-297 7:31p 🔵 Primary Key Naming Discrepancy Between DATA-MODEL.md and Migration SQL Plan
-298 " ✅ DATA-MODEL.md Refresh Entity Schemas Reconciled with Migration SQL Plan
-299 " ✅ TEST-SPEC.md Explore Refresh Test Obligation Expanded with Two Additional Test Files
-300 7:32p 🔵 Supabase `reports` Table Uses `id` as PK, Not `report_id` — Application Layer Translates
-301 " ✅ Explore Refresh Control Task 1 Canonical Docs — Final Verified State
-302 " ✅ Explore Refresh Control Task 1 — Canonical Docs Complete at DONE_WITH_CONCERNS
-304 7:33p 🔵 docguard-cli Exact Failure: ENOTFOUND registry.npmjs.org + npm Log Write Blocked
-305 7:34p 🔵 Explore Refresh Control — Task 1 Spec-Compliance Review Criteria Established
-306 " ⚖️ Explore Refresh Control — Task 1 Doc-Quality Review Criteria Established
-307 7:35p 🔵 Explore Refresh Control Task 1 — Spec-Compliance Review Result: PASS
-308 " 🔵 Explore Refresh Control — Canonical Docs Verified Against SQL Contract
-309 " 🔵 Explore Refresh Control — Git Diff Confirms Prior Session Fixed Stale reports.report_id PK
-310 7:37p 🔵 Explore Refresh Control — DATA-MODEL.md Task 1 Spec Compliance Verified
+S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:26 PM)
+### May 14, 2026
+341 11:39a ✅ PR #34 All Checks Pass — Docs Sync Gate and Supabase Preview Both Green
+342 11:40a ✅ PR #34 Merged to Main — Consumer Billing and Entitlements Now on Main
+343 11:41a 🔵 PR #35 Contains 8 Unrelated phase-7-data-providers Commits Plus 3 Explore Refresh Commits
+344 11:42a ⚖️ PR #35 Repair Strategy — Cherry-Pick 3 Explore Commits onto Fresh Main, Not Rebase
+### May 15, 2026
+345 8:45p 🔵 Git Worktree Mental Model — Checkout Conflicts and Merge-Back Strategy
+346 8:46p 🔵 Git Worktree Dirty State — AGENTS.md Modified in Two Active Worktrees
+347 8:47p 🔵 Git Worktrees — User Confusion Around Checkout Locks and Merging Back to Main
+348 8:48p 🔵 niche-surface-hardening-v2 Worktree Branch Has Diverged from Remote
+349 " 🔵 Rebase Conflict in scoring/route.ts — account vs report Field in Response
+351 " 🔴 scoring/route.ts Rebase Conflict Resolved — Both account and report Fields Preserved
+352 8:49p ✅ PRs #38 and #39 Created — Account Billing and Niche Caching Branches
+353 8:50p 🔵 Git Worktree Workflow — Cannot Commit to Main Directly
+S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fetch/checkout/pull sequence (May 15 at 8:52 PM)
+354 8:55p 🔵 Explore Cities Table — Population, Income, Density, Growth Fields Missing from Data Flow
+355 8:56p 🔵 Explore Table — business_density_per_1k and establishment_growth_yoy Always Null
+356 8:57p 🔵 Supabase Environment Points to eoajvifhbmqmoluiokcj Instance in Both .env Files
+357 9:02p 🔵 Explore Cities Data Flow — Historical Context Retrieved from Memory
+358 9:05p 🔵 Whidby Repo — On Main Branch with Untracked AGENTS.md Change
+360 9:09p ⚖️ Explore Data Model Population — 8-Task Implementation Plan Written
+361 " ⚖️ Explore Data Model Fix — Working Directly on Main Branch
+362 " 🔵 Git Worktree Creation Blocked by Sandbox Permission Restriction
+363 9:10p ✅ Git Worktree Created for Explore Data Model Implementation
+364 " 🔵 Explore Worktree Has No node_modules or .venv — Dependencies Need Install
+365 9:11p 🔵 Python venv pip install -e .[dev] Fails in Worktree Due to Zsh Glob Expansion
+366 " 🔵 Sandbox Has No Network Access — pip Cannot Install Python Build Dependencies
+### May 16, 2026
+367 8:10a ⚖️ Strategy Discovery System — Canonical Design Formalized in Docs
+368 8:11a ✅ Strategy Discovery System — Canonical Docs Updated (Task 1)
+369 " ✅ Strategy Discovery System — Canonical Docs Updated (Task 1)
+373 8:13a 🔵 docguard-cli Does Not Exist on npm Registry
+374 " ✅ Strategy Discovery Canonical Docs Committed on codex/strategy-discovery-system
+375 8:14a 🔵 DocGuard v0.9.11 Repo-Wide Baseline — 118/185 Checks Pass, 97 MEDIUM Warnings
+376 " ✅ Strategy Discovery Canonical Docs — Exact Diff and Staging Confirmed
+377 " ✅ Task 1 Committed — SHA d6c45d8 on codex/strategy-discovery-system
+378 " ✅ Task 1 Spec Compliance Review — Strategy Discovery Canonical Docs
+379 8:15a ✅ Task 1: Strategy Discovery System — Canonical Design Docs Committed
+380 " ✅ Task 1 Spec Compliance Review — Strategy Discovery System Canonical Docs
+381 8:16a ✅ Task 1: Strategy Discovery System — Canonical Docs Committed on Branch codex/strategy-discovery-system
+382 " 🔵 docguard-cli Is a Phantom npm Package — Not Installable from Public Registry
+383 8:17a ✅ Strategy Discovery System — Task 1 Canonical Docs Code Review Initiated
+384 8:18a ✅ Strategy Discovery System — Canonical Docs Committed (Task 1) Under Code Review
+385 " ✅ Strategy Discovery System — Task 1 Code Review Initiated for Canonical Docs Commit d6c45d8
+386 8:19a ✅ Task 1: Canonical Design Update — Strategy Discovery System docs committed on branch codex/strategy-discovery-system
+387 8:20a ✅ ARCHITECTURE.md Strategy Discovery Section Refined — Entitlement Gate and Component Map Added
+388 8:21a ✅ Task 1 Strategy Discovery Docs — Re-Review After Implementer Fix (Commit 09e345a)
+389 " ✅ Strategy Discovery Task 1 — ARCHITECTURE.md Amended After Spec Review
+390 8:22a ⚖️ Strategy Discovery System — Task 1 Canonical Docs Re-Review Initiated After Amendments
+391 8:24a 🟣 Task 2: Strategy Discovery Schema Migration Initiated
+392 " ⚖️ Task 2: Strategy Schema Migration — Implementation Plan Initiated
+393 8:25a 🟣 Task 2: Strategy Discovery Schema Migration Created
+394 " 🔵 pytest Crashes on Import Due to NumPy 1.x/2.x Compiled Module Conflict
+395 " 🟣 Strategy Discovery Schema Migration 016 Written and Tests Passing
 
-Access 468k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 507k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
