@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExploreData } from "@/lib/explore/types";
 import ExplorePage, { dynamic } from "./page";
 import { loadExploreData } from "@/lib/explore/load-explore-data";
-import { createClient } from "@/lib/supabase/server";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -49,11 +48,12 @@ vi.mock("@/components/explore/ExplorePageClient", () => ({
   ),
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(),
-}));
-
 vi.mock("@/lib/explore/load-explore-data", () => ({
+  fromSearchParams: vi.fn((params: Record<string, string | string[] | undefined>) => ({
+    service: params.service,
+    states: params.state,
+    limit: Number(params.limit),
+  })),
   loadExploreData: vi.fn(),
 }));
 
@@ -70,6 +70,10 @@ const fixtureData: ExploreData = {
       median_age_years: 35.8,
       business_density_per_1k: null,
       establishment_growth_yoy: null,
+      growth_available: false,
+      score_system: "none",
+      best_score: null,
+      presentation_score: null,
       cached_services_count: 1,
       best_opportunity_score: 82,
       average_opportunity_score: 82,
@@ -84,16 +88,25 @@ afterEach(() => {
 });
 
 describe("ExplorePage", () => {
-  it("uses a dynamic Supabase-backed route shell", async () => {
-    const supabase = { from: vi.fn() };
-    vi.mocked(createClient).mockResolvedValue(supabase as never);
+  it("uses a dynamic backend-backed route shell", async () => {
     vi.mocked(loadExploreData).mockResolvedValue(fixtureData);
 
-    render(await ExplorePage());
+    render(
+      await ExplorePage({
+        searchParams: Promise.resolve({
+          service: "roofing",
+          state: ["AZ", "CO"],
+          limit: "25",
+        }),
+      }),
+    );
 
     expect(dynamic).toBe("force-dynamic");
-    expect(createClient).toHaveBeenCalledTimes(1);
-    expect(loadExploreData).toHaveBeenCalledWith(supabase);
+    expect(loadExploreData).toHaveBeenCalledWith({
+      service: "roofing",
+      states: ["AZ", "CO"],
+      limit: 25,
+    });
     expect(screen.getByTestId("sidebar").getAttribute("data-active")).toBe("explore");
     expect(screen.getByTestId("topbar").getAttribute("data-crumbs")).toBe("Explore");
     expect(screen.getByTestId("explore-client").getAttribute("data-city-count")).toBe("1");

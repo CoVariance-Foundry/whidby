@@ -3,14 +3,17 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import ExplorePageClient from "@/components/explore/ExplorePageClient";
 import { Icon, I } from "@/lib/icons";
-import { loadExploreData } from "@/lib/explore/load-explore-data";
-import { createClient } from "@/lib/supabase/server";
+import { fromSearchParams, loadExploreData } from "@/lib/explore/load-explore-data";
 
 export const dynamic = "force-dynamic";
 
-export default async function ExplorePage() {
-  const supabase = await createClient();
-  const data = await loadExploreData(supabase);
+export default async function ExplorePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedParams = searchParams ? await searchParams : {};
+  const data = await loadExploreData(fromSearchParams(resolvedParams));
 
   return (
     <div className="app density-roomy">
