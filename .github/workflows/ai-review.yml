@@ -1,0 +1,32 @@
+name: Greptile Review Policy
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  greptile-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Explain Greptile review policy
+        run: |
+          cat <<'POLICY' >> "$GITHUB_STEP_SUMMARY"
+          Greptile review is provided by the Greptile GitHub App.
+
+          Required local fix loop:
+          1. Open Cursor, Codex, or Claude Code with GREPTILE_API_KEY set.
+          2. Use Greptile MCP to fetch unaddressed comments.
+          3. Fix actionable issues.
+          4. Push updates.
+          5. Ask Greptile to re-review by label or @greptileai comment when needed.
+
+          CI does not require a Greptile token because the GitHub App owns PR review.
+          POLICY
