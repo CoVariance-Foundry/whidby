@@ -193,6 +193,28 @@ def test_list_city_rows_uses_offset_cursor_for_any_sort() -> None:
     assert not any(call[:2] == ("gt", "cbsa_code") for call in calls)
 
 
+def test_list_city_rows_maps_cached_services_sort() -> None:
+    client = FakeClient()
+    repo = SupabaseExploreRepository(client)
+
+    repo.list_city_rows(
+        service=None,
+        states=[],
+        population_min=None,
+        population_max=None,
+        income_min=None,
+        income_max=None,
+        growing_only=False,
+        sort="cached_services",
+        direction="desc",
+        limit=10,
+        cursor=None,
+    )
+
+    calls = client.tables["explore_market_cells"].calls
+    assert ("order", "cached_services_count", {"desc": True}) in calls
+
+
 def test_list_city_rows_raises_on_supabase_errors() -> None:
     client = FakeClient(errors_by_table={"explore_market_cells": FakeError()})
     repo = SupabaseExploreRepository(client)

@@ -16,6 +16,7 @@ SORT_COLUMNS = {
     "density": "business_density_per_1k",
     "business_density": "business_density_per_1k",
     "growth": "establishment_growth_yoy",
+    "cached_services": "cached_services_count",
     "last_scored_at": "latest_scored_at",
     "latest_scored_at": "latest_scored_at",
     "city": "cbsa_name",
