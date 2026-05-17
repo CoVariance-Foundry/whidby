@@ -1,0 +1,208 @@
+name: Visual QA
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "app or admin"
+        required: true
+        default: "app"
+      preview_url:
+        description: "Optional deployed preview URL to test directly"
+        required: false
+        default: ""
+      sha:
+        description: "Optional commit SHA for artifact id and Vercel lookup"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: visual-qa-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  visual-qa:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'visual-qa') }}
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Prepare visual QA inputs
+        id: qa-inputs
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          SELECTED_APP: ${{ github.event.inputs.app || 'app' }}
+          INPUT_PREVIEW_URL: ${{ github.event.inputs.preview_url || '' }}
+          INPUT_SHA: ${{ github.event.inputs.sha || '' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$SELECTED_APP" != "app" && "$SELECTED_APP" != "admin" ]]; then
+            echo "Invalid app input. Expected app or admin." >&2
+            exit 1
+          fi
+
+          sha="$WORKFLOW_SHA"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            sha="$PR_HEAD_SHA"
+          elif [[ -n "$INPUT_SHA" ]]; then
+            sha="$INPUT_SHA"
+          fi
+
+          echo "app=$SELECTED_APP" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "preview_url=$INPUT_PREVIEW_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Vercel preview
+        if: ${{ steps.qa-inputs.outputs.preview_url == '' }}
+        run: |
+          set -euo pipefail
+          check_name="${VERCEL_PREVIEW_CHECK_NAME:-Vercel}"
+          npm run ci:wait-check -- --repo "$GITHUB_REPOSITORY" --sha "$QA_SHA" --check-name "$check_name"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QA_SHA: ${{ steps.qa-inputs.outputs.sha }}
+          VERCEL_PREVIEW_CHECK_NAME: ${{ vars.VERCEL_PREVIEW_CHECK_NAME }}
+
+      - name: Resolve preview URL
+        id: preview
+        if: ${{ steps.qa-inputs.outputs.preview_url == '' }}
+        run: |
+          set -euo pipefail
+          project_id="$VERCEL_PROJECT_ID_APP"
+          if [[ "$QA_APP" == "admin" ]]; then
+            project_id="$VERCEL_PROJECT_ID_ADMIN"
+          fi
+
+          if [[ -z "$project_id" ]]; then
+            echo "Missing Vercel project id secret for selected app." >&2
+            exit 1
+          fi
+
+          url=$(npm run --silent ci:find-preview -- --sha "$QA_SHA" --project-id "$project_id" --team-id "$VERCEL_TEAM_ID")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+        env:
+          QA_APP: ${{ steps.qa-inputs.outputs.app }}
+          QA_SHA: ${{ steps.qa-inputs.outputs.sha }}
+          VERCEL_PROJECT_ID_ADMIN: ${{ secrets.VERCEL_PROJECT_ID_ADMIN }}
+          VERCEL_PROJECT_ID_APP: ${{ secrets.VERCEL_PROJECT_ID_APP }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run Playwright visual QA
+        run: |
+          set -euo pipefail
+          preview_url="$INPUT_PREVIEW_URL"
+          if [[ -z "$preview_url" ]]; then
+            preview_url="$RESOLVED_PREVIEW_URL"
+          fi
+          if [[ -z "$preview_url" ]]; then
+            echo "Missing preview URL for visual QA." >&2
+            exit 1
+          fi
+          npm run qa:run -- --app "$QA_APP" --base-url "$preview_url" --sha "$QA_SHA"
+        env:
+          QA_APP: ${{ steps.qa-inputs.outputs.app }}
+          QA_SHA: ${{ steps.qa-inputs.outputs.sha }}
+          INPUT_PREVIEW_URL: ${{ steps.qa-inputs.outputs.preview_url }}
+          RESOLVED_PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          E2E_AUTH_EMAIL: ${{ secrets.E2E_AUTH_EMAIL }}
+          E2E_AUTH_PASSWORD: ${{ secrets.E2E_AUTH_PASSWORD }}
+
+      - name: Agent review
+        id: agent-review
+        if: ${{ vars.AI_QA_PROVIDER != '' }}
+        continue-on-error: true
+        run: npm run qa:agent -- --provider "$AI_QA_PROVIDER" --artifacts artifacts/visual-qa
+        env:
+          AI_QA_PROVIDER: ${{ vars.AI_QA_PROVIDER }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODEX_QA_COMMAND: ${{ vars.CODEX_QA_COMMAND }}
+          CLAUDE_QA_COMMAND: ${{ vars.CLAUDE_QA_COMMAND }}
+
+      - name: Ensure review JSON
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          agent_configured="false"
+          if [[ -n "$AI_QA_PROVIDER" ]]; then
+            agent_configured="true"
+          fi
+
+          if [[ "$agent_configured" == "true" && "$AGENT_REVIEW_OUTCOME" == "failure" ]]; then
+            {
+              echo "### Visual QA agent review"
+              echo
+              echo "Agent review was configured but failed. Posting deterministic visual QA artifacts with a failure summary."
+            } >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' \
+              '{' \
+              '  "summary": "Visual QA artifacts were generated, but configured agent review failed. Inspect the Agent review step logs before treating this run as fully reviewed.",' \
+              '  "findings": []' \
+              '}' > visual-qa-review.json
+            exit 0
+          fi
+
+          if [[ ! -f visual-qa-review.json ]]; then
+            if [[ "$agent_configured" == "true" ]]; then
+              summary="Visual QA artifacts were generated. Configured agent review completed without producing review JSON."
+            else
+              summary="Visual QA artifacts were generated. Agent review was not configured for this run."
+            fi
+            printf '%s\n' \
+              '{' \
+              "  \"summary\": \"$summary\"," \
+              '  "findings": []' \
+              '}' > visual-qa-review.json
+          fi
+        env:
+          AI_QA_PROVIDER: ${{ vars.AI_QA_PROVIDER }}
+          AGENT_REVIEW_OUTCOME: ${{ steps.agent-review.outcome }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: visual-qa
+          path: |
+            artifacts/visual-qa
+            playwright-report
+            test-results
+            apps/app/playwright-report
+            apps/app/test-results
+            apps/admin/playwright-report
+            apps/admin/test-results
+            visual-qa-review.json
+          retention-days: 14
+
+      - name: Post PR feedback
+        if: ${{ github.event_name == 'pull_request' && !cancelled() }}
+        run: npm run qa:post -- --review-json visual-qa-review.json --artifact-url "$ACTION_RUN_URL" --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
