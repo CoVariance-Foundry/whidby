@@ -13,9 +13,10 @@ import os
 import re
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, AsyncIterator, Literal
 
 import anthropic
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath, Request
@@ -49,6 +50,7 @@ from src.research_agent.places import (
     DataForSEOLocationBridge,
     MapboxPlacesError,
     PlaceSuggestion,
+    close_mapbox_http_client,
     fetch_mapbox_place_suggestions,
 )
 from src.research_agent.recipes.registry_builder import build_recipe_registry
@@ -58,7 +60,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 _DFS_ENRICH_TIMEOUT_SECONDS = 1.5
 
-app = FastAPI(title="Widby Research Agent API", version="0.1.0")
+
+@asynccontextmanager
+async def _api_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        await close_mapbox_http_client()
+
+
+app = FastAPI(title="Widby Research Agent API", version="0.1.0", lifespan=_api_lifespan)
 
 
 @app.exception_handler(RequestValidationError)
@@ -282,6 +293,7 @@ async def places_suggest(
         )
 
     try:
+        mapbox_started = time.perf_counter()
         suggestions = await fetch_mapbox_place_suggestions(
             query=q_norm,
             limit=clamped,
@@ -289,11 +301,22 @@ async def places_suggest(
             country=country,
             language=language,
         )
+        mapbox_ms = int((time.perf_counter() - mapbox_started) * 1000)
     except MapboxPlacesError as exc:
-        logger.warning("[%s] PLACES_SUGGEST ERROR reason=mapbox_failure detail=%s", request_id, exc)
+        logger.warning(
+            "[%s] PLACES_SUGGEST ERROR reason=mapbox_failure detail=%s duration_ms=%d",
+            request_id,
+            exc,
+            int((time.perf_counter() - started_at) * 1000),
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception:
-        logger.error("[%s] PLACES_SUGGEST ERROR reason=mapbox_unexpected", request_id, exc_info=True)
+        logger.error(
+            "[%s] PLACES_SUGGEST ERROR reason=mapbox_unexpected duration_ms=%d",
+            request_id,
+            int((time.perf_counter() - started_at) * 1000),
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=502,
             detail="Mapbox autocomplete failed unexpectedly.",
@@ -308,10 +331,11 @@ async def places_suggest(
         )
         rows = [row.to_dict() for row in suggestions]
         logger.info(
-            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s duration_ms=%d",
+            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s mapbox_ms=%d duration_ms=%d",
             request_id,
             len(rows),
             "not_configured",
+            mapbox_ms,
             int((time.perf_counter() - started_at) * 1000),
         )
         return rows
@@ -345,9 +369,10 @@ async def places_suggest(
 
     rows = [row.to_dict() for row in suggestions]
     logger.info(
-        "[%s] PLACES_SUGGEST DONE rows=%d duration_ms=%d",
+        "[%s] PLACES_SUGGEST DONE rows=%d mapbox_ms=%d duration_ms=%d",
         request_id,
         len(rows),
+        mapbox_ms,
         int((time.perf_counter() - started_at) * 1000),
     )
     return rows

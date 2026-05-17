@@ -30,6 +30,31 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
   const openReport = useCallback(async (reportId: string) => {
     setModal({ kind: "loading" });
     try {
+      const routeResponse = await fetch(`/api/agent/reports/${encodeURIComponent(reportId)}`);
+      if (routeResponse.ok) {
+        const routeJson = (await routeResponse.json()) as {
+          status: string;
+          message?: string;
+          report?: FullReportData;
+        };
+        if (routeJson.status === "success" && routeJson.report) {
+          setModal({
+            kind: "open",
+            report: {
+              ...routeJson.report,
+              metros: Array.isArray(routeJson.report.metros) ? routeJson.report.metros : [],
+              keyword_expansion:
+                routeJson.report.keyword_expansion as FullReportData["keyword_expansion"],
+              resolved_weights:
+                routeJson.report.resolved_weights as Record<string, number> | null,
+              meta: routeJson.report.meta as Record<string, unknown> | null,
+            },
+          });
+          return;
+        }
+      }
+
+      // Fallback path for environments without reachable API bridge.
       const supabase = createClient();
       const { data, error } = await supabase
         .from("reports")
@@ -37,7 +62,7 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
           "id, created_at, spec_version, niche_keyword, geo_scope, geo_target, report_depth, strategy_profile, resolved_weights, keyword_expansion, metros, meta",
         )
         .eq("id", reportId)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         setModal({ kind: "error", message: error?.message ?? "Report not found." });

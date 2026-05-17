@@ -53,6 +53,7 @@ export interface StandardSurfaceResponse {
   entity_id?: string | null;
   snapshot_id?: string | null;
   persist_warning?: string | null;
+  report?: FullReportData;
 }
 
 export interface MetroScores {

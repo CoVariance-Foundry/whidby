@@ -242,6 +242,7 @@ export async function POST(req: NextRequest) {
         tier: entitlement.plan_key,
         monthly_report_limit: entitlement.monthly_report_limit,
       },
+      report: data.report ?? null,
       status: "success",
     });
   } catch (err) {
