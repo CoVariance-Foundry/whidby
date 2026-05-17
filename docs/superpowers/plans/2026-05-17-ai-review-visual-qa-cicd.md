@@ -191,7 +191,7 @@ git commit -m "docs: define ai review preview qa topology"
 - Create: `.cursor/rules/visual-qa.mdc`
 - Test: `GREPTILE_API_KEY=redacted codex mcp list`
 
-- [ ] **Step 1: Extend `.mcp.json`**
+- [x] **Step 1: Extend `.mcp.json`**
 
 Add `greptile` under `mcpServers`:
 
@@ -207,7 +207,7 @@ Add `greptile` under `mcpServers`:
 
 Keep the existing `activecampaign` and `render` entries unchanged.
 
-- [ ] **Step 2: Extend `.codex/config.toml`**
+- [x] **Step 2: Extend `.codex/config.toml`**
 
 Append:
 
@@ -217,9 +217,9 @@ url = "https://api.greptile.com/mcp"
 bearer_token_env_var = "GREPTILE_API_KEY"
 ```
 
-- [ ] **Step 3: Create `.cursor/mcp.json`**
+- [x] **Step 3: Create `.cursor/mcp.json`**
 
-Create:
+Create with Cursor-specific environment interpolation in headers:
 
 ```json
 {
@@ -228,21 +228,23 @@ Create:
       "type": "http",
       "url": "https://api.greptile.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${GREPTILE_API_KEY}"
+        "Authorization": "Bearer ${env:GREPTILE_API_KEY}"
       }
     },
     "render": {
       "type": "http",
       "url": "https://mcp.render.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${RENDER_API_TOKEN}"
+        "Authorization": "Bearer ${env:RENDER_API_TOKEN}"
       }
     }
   }
 }
 ```
 
-- [ ] **Step 4: Create `.cursor/rules/visual-qa.mdc`**
+Quality-review fix: `.cursor/mcp.json` uses Cursor's `${env:NAME}` syntax for MCP header environment interpolation. Do not change `.mcp.json` or `.codex/config.toml` for this finding; those files use their own supported environment-variable syntax.
+
+- [x] **Step 4: Create `.cursor/rules/visual-qa.mdc`**
 
 Create:
 
@@ -258,7 +260,7 @@ globs:
 When reviewing visual QA artifacts, separate functional defects from design suggestions. Do not change production credentials, Vercel settings, Supabase projects, or Render services from Cursor. For UI suggestions, cite the screenshot file, viewport, route, and visible symptom.
 ```
 
-- [ ] **Step 5: Verify config shape**
+- [x] **Step 5: Verify config shape**
 
 Run:
 
@@ -272,12 +274,18 @@ Expected:
 mcp json ok
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .mcp.json .codex/config.toml .cursor/mcp.json .cursor/rules/visual-qa.mdc
 git commit -m "chore: configure ai review mcp clients"
 ```
+
+Task 2 verification result:
+
+- `node -e 'JSON.parse(require("fs").readFileSync(".mcp.json","utf8")); JSON.parse(require("fs").readFileSync(".cursor/mcp.json","utf8")); console.log("mcp json ok")'`: passed with `mcp json ok`.
+- `git diff --check`: passed.
+- Quality-review fix verification: Cursor MCP headers now use `Bearer ${env:GREPTILE_API_KEY}` and `Bearer ${env:RENDER_API_TOKEN}`; `.mcp.json` and `.codex/config.toml` were intentionally left unchanged.
 
 ---
 
