@@ -16,6 +16,16 @@ def test_weighted_establishments_uses_mapping_weights() -> None:
     assert weighted_establishments(cbp_rows, weights) == 120.0
 
 
+def test_weighted_establishments_coerces_naics_codes_to_strings() -> None:
+    cbp_rows = [
+        {"naics_code": 238160, "est": 100},
+        {"naics_code": "238220", "est": 40},
+    ]
+    weights = {"238160": 1.0, "238220": 0.5}
+
+    assert weighted_establishments(cbp_rows, weights) == 120.0
+
+
 def test_business_density_per_1k_returns_null_without_population() -> None:
     assert business_density_per_1k(100, None) is None
     assert business_density_per_1k(100, 0) is None

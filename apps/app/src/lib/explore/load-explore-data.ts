@@ -16,7 +16,11 @@ const FRESHNESS_TARGET_BATCH_SIZE = 100;
 const DEFAULT_STALE_AFTER_DAYS = 30;
 const BASE_METRO_SELECT =
   "cbsa_code, cbsa_name, state, population, population_class, owner_occupancy_rate, median_household_income_usd, median_age_years, principal_cities";
-const COMPLETE_METRO_SELECT = `${BASE_METRO_SELECT}, business_density_per_1k, establishment_growth_yoy`;
+const OPTIONAL_METRO_METRIC_COLUMNS = [
+  "business_density_per_1k",
+  "establishment_growth_yoy",
+] as const;
+const COMPLETE_METRO_SELECT = `${BASE_METRO_SELECT}, ${OPTIONAL_METRO_METRIC_COLUMNS.join(", ")}`;
 
 interface MetroRow {
   cbsa_code: string;
@@ -112,9 +116,9 @@ function isMissingRefreshSource(
 function isMissingOptionalMetroMetricColumn(message: string | undefined): boolean {
   if (!message) return false;
   const normalized = message.toLowerCase();
-  const mentionsOptionalMetric =
-    normalized.includes("business_density_per_1k") ||
-    normalized.includes("establishment_growth_yoy");
+  const mentionsOptionalMetric = OPTIONAL_METRO_METRIC_COLUMNS.some((column) =>
+    normalized.includes(column)
+  );
   if (!mentionsOptionalMetric) return false;
 
   return (

@@ -115,8 +115,6 @@ def postgrest_upsert(url: str, service_key: str, rows: list[dict[str, Any]]) -> 
     try:
         with request.urlopen(req, timeout=30) as response:
             response.read()
-            if response.status < 200 or response.status >= 300:
-                raise RuntimeError(f"PostgREST upsert failed with HTTP {response.status}")
     except error.HTTPError as exc:
         body = exc.read().decode("utf-8")
         raise RuntimeError(

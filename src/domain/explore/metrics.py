@@ -12,7 +12,7 @@ def weighted_establishments(
     total = 0.0
 
     for row in cbp_rows:
-        naics_code = row.get("naics_code")
+        naics_code = str(row.get("naics_code", ""))
         if naics_code not in weights_by_naics:
             continue
 
