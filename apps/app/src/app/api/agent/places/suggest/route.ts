@@ -35,8 +35,17 @@ function getCachedValue(key: string): unknown | null {
 
 function setCachedValue(key: string, data: unknown): void {
   if (placesSuggestCache.size >= MAX_CACHE_ENTRIES) {
-    const oldestKey = placesSuggestCache.keys().next().value;
-    if (oldestKey) placesSuggestCache.delete(oldestKey);
+    let earliestExpiringKey: string | null = null;
+    let earliestExpiresAt = Number.POSITIVE_INFINITY;
+
+    for (const [cachedKey, cachedValue] of placesSuggestCache.entries()) {
+      if (cachedValue.expiresAt < earliestExpiresAt) {
+        earliestExpiringKey = cachedKey;
+        earliestExpiresAt = cachedValue.expiresAt;
+      }
+    }
+
+    if (earliestExpiringKey) placesSuggestCache.delete(earliestExpiringKey);
   }
   placesSuggestCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
 }

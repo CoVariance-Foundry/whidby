@@ -33,6 +33,14 @@ def _get_mapbox_http_client() -> httpx.AsyncClient:
     return _MAPBOX_HTTP_CLIENT
 
 
+async def close_mapbox_http_client() -> None:
+    """Close the shared Mapbox HTTP client during API shutdown."""
+    global _MAPBOX_HTTP_CLIENT
+    if _MAPBOX_HTTP_CLIENT is not None:
+        await _MAPBOX_HTTP_CLIENT.aclose()
+        _MAPBOX_HTTP_CLIENT = None
+
+
 @dataclass(slots=True)
 class PlaceSuggestion:
     """Compact suggestion model returned by `/api/places/suggest`."""

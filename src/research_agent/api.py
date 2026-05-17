@@ -12,9 +12,10 @@ import os
 import re
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, AsyncIterator, Literal
 
 import anthropic
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath, Request
@@ -47,6 +48,7 @@ from src.research_agent.places import (
     DataForSEOLocationBridge,
     MapboxPlacesError,
     PlaceSuggestion,
+    close_mapbox_http_client,
     fetch_mapbox_place_suggestions,
 )
 from src.research_agent.recipes.registry_builder import build_recipe_registry
@@ -56,7 +58,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 _DFS_ENRICH_TIMEOUT_SECONDS = 1.5
 
-app = FastAPI(title="Widby Research Agent API", version="0.1.0")
+
+@asynccontextmanager
+async def _api_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        await close_mapbox_http_client()
+
+
+app = FastAPI(title="Widby Research Agent API", version="0.1.0", lifespan=_api_lifespan)
 
 
 @app.exception_handler(RequestValidationError)
