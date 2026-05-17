@@ -21,6 +21,9 @@
     "env:sync:dry-run": "npm run env:sync:vercel -- --dry-run",
     "ci:wait-check": "node scripts/ci/wait_for_github_check.mjs",
     "ci:find-preview": "node scripts/ci/find_vercel_deployment.mjs",
+    "qa:run": "node scripts/qa/run_visual_qa.mjs",
+    "qa:agent": "node scripts/qa/agent_review.mjs",
+    "qa:post": "node scripts/qa/post_pr_feedback.mjs",
     "qa:visual:app": "playwright test --config=apps/app/playwright.config.ts apps/app/e2e/visual-qa.spec.ts --project=chromium",
     "qa:visual:admin": "playwright test --config=apps/admin/playwright.config.ts apps/admin/e2e/visual-qa.spec.ts --project=chromium"
   },

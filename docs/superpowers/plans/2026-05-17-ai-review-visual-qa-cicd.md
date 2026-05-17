@@ -832,7 +832,7 @@ git commit -m "test: add visual qa playwright flows"
 - Modify: `package.json`
 - Test: `npm run qa:agent -- --dry-run --artifacts apps/app/playwright-report`
 
-- [ ] **Step 1: Create `scripts/qa/prompts/visual-designer-review.md`**
+- [x] **Step 1: Create `scripts/qa/prompts/visual-designer-review.md`**
 
 ```markdown
 You are reviewing Whidby as a product-minded frontend designer and QA observer.
@@ -863,7 +863,7 @@ Return JSON:
 }
 ```
 
-- [ ] **Step 2: Create `scripts/qa/run_visual_qa.mjs`**
+- [x] **Step 2: Create `scripts/qa/run_visual_qa.mjs`**
 
 Behavior:
 
@@ -873,7 +873,7 @@ Behavior:
 - Save artifacts under `artifacts/visual-qa/<app>/<sha-or-local>/`.
 - Print the artifact directory.
 
-- [ ] **Step 3: Create `scripts/qa/agent_review.mjs`**
+- [x] **Step 3: Create `scripts/qa/agent_review.mjs`**
 
 Behavior:
 
@@ -886,7 +886,7 @@ Behavior:
 - Write `visual-qa-review.json`.
 - In dry-run mode, write a valid JSON file with an empty findings array.
 
-- [ ] **Step 4: Create `scripts/qa/post_pr_feedback.mjs`**
+- [x] **Step 4: Create `scripts/qa/post_pr_feedback.mjs`**
 
 Behavior:
 
@@ -898,7 +898,7 @@ Behavior:
 - Post or update a single PR comment headed `<!-- whidby-visual-qa -->`.
 - Include severity counts, finding list, and artifact links.
 
-- [ ] **Step 5: Add package scripts**
+- [x] **Step 5: Add package scripts**
 
 Modify `package.json`:
 
@@ -908,7 +908,7 @@ Modify `package.json`:
 "qa:post": "node scripts/qa/post_pr_feedback.mjs"
 ```
 
-- [ ] **Step 6: Verify dry-run**
+- [x] **Step 6: Verify dry-run**
 
 Run:
 
@@ -922,7 +922,30 @@ Expected: `visual-qa-review.json` exists and contains:
 { "summary": "dry run", "findings": [] }
 ```
 
-- [ ] **Step 7: Commit**
+Verification completed:
+
+- `npm run qa:agent -- --dry-run --artifacts apps/app/playwright-report` passed and wrote `visual-qa-review.json`.
+- `visual-qa-review.json` contained `summary: "dry run"` and an empty `findings` array.
+- `node --check scripts/qa/run_visual_qa.mjs` passed.
+- `node --check scripts/qa/agent_review.mjs` passed.
+- `node --check scripts/qa/post_pr_feedback.mjs` passed.
+- `node scripts/qa/post_pr_feedback.mjs --dry-run --review-json visual-qa-review.json --artifact-url https://example.com/artifacts --repo owner/name --pr 1` passed and printed the PR comment markdown without requiring `GITHUB_TOKEN`.
+- `git diff --check` passed.
+
+Spec review fix:
+
+- `scripts/qa/run_visual_qa.mjs` now requires `--base-url <url>` and always passes that value as `PLAYWRIGHT_BASE_URL` to Playwright.
+- `scripts/qa/agent_review.mjs` now runs the Codex/Claude provider subprocess with an explicit sanitized env: `PATH`, `HOME`, temp directory variables, and only the selected provider API key when present.
+- Re-ran missing-base-url failure, agent dry-run, `node --check` for both scripts, and `git diff --check`.
+
+Code quality fix:
+
+- `scripts/qa/run_visual_qa.mjs` now validates `--sha` as a safe artifact id and checks the resolved artifact directory remains under `artifacts/visual-qa/<app>`.
+- `scripts/qa/post_pr_feedback.mjs` now paginates issue comments while searching for the `<!-- whidby-visual-qa -->` marker.
+- `scripts/qa/agent_review.mjs` now rejects malformed provider JSON before writing `visual-qa-review.json`; the validation probe uses `--mock-provider-json` and does not affect normal provider mode or dry-run mode.
+- Verification passed: unsafe `--sha ../../tmp/out` failed non-zero, agent dry-run passed, malformed provider JSON failed clearly, all three `node --check` commands passed, and `git diff --check` passed.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/qa/prompts/visual-designer-review.md scripts/qa/run_visual_qa.mjs scripts/qa/agent_review.mjs scripts/qa/post_pr_feedback.mjs package.json
