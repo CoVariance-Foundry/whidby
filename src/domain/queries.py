@@ -28,6 +28,9 @@ class MarketQuery:
     lens: ScoringLens = field(default_factory=lambda: BALANCED)
     portfolio_context: list[Market] | None = None
     reference_city: City | None = None
+    reference_city_id: str | None = None
+    primary_keyword: str | None = None
+    ai_resilience_filter: bool = False
     limit: int = 50
     offset: int = 0
 
@@ -41,4 +44,4 @@ class MarketQuery:
         return self.portfolio_context is not None
 
     def is_expansion_query(self) -> bool:
-        return self.reference_city is not None
+        return self.reference_city is not None or self.reference_city_id is not None

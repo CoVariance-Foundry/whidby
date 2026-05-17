@@ -107,7 +107,16 @@ describe("/api/onboarding/profile", () => {
       next_route: "/strategies",
     });
     expect(supabase.profileUpsert).toHaveBeenCalledOnce();
-    expect(supabase.profileUpsert.mock.calls[0][0]).toMatchObject({
+    const [profileUpsertPayload, profileUpsertOptions] = supabase.profileUpsert.mock
+      .calls[0] as unknown as [
+      {
+        available_strategy_ids: string[];
+        completed_at: string;
+        [key: string]: unknown;
+      },
+      { onConflict: string },
+    ];
+    expect(profileUpsertPayload).toMatchObject({
       user_id: user.id,
       account_id: entitlement.account_id,
       intent: "scale",
@@ -118,9 +127,9 @@ describe("/api/onboarding/profile", () => {
       next_route: "/strategies",
       status: "strategy_recommended",
     });
-    expect(supabase.profileUpsert.mock.calls[0][0].available_strategy_ids).toContain("cash_cow");
-    expect(supabase.profileUpsert.mock.calls[0][0].completed_at).toEqual(expect.any(String));
-    expect(supabase.profileUpsert.mock.calls[0][1]).toEqual({ onConflict: "user_id" });
+    expect(profileUpsertPayload.available_strategy_ids).toContain("cash_cow");
+    expect(profileUpsertPayload.completed_at).toEqual(expect.any(String));
+    expect(profileUpsertOptions).toEqual({ onConflict: "user_id" });
   });
 
   it("returns 400 for invalid intent and does not upsert", async () => {

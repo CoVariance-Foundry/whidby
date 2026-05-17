@@ -105,6 +105,10 @@ def _check_filters(market: Market, lens: ScoringLens) -> None:
     for f in lens.filters:
         value = _extract_filter_value(market, f.signal)
         if value is None:
+            if f.required:
+                raise FilterNotMetError(
+                    f"Lens '{lens.lens_id}' required filter missing: {f.signal}"
+                )
             continue
         if not _evaluate_filter(value, f.operator, f.value):
             raise FilterNotMetError(
@@ -113,29 +117,38 @@ def _check_filters(market: Market, lens: ScoringLens) -> None:
             )
 
 
-def _extract_filter_value(market: Market, signal_name: str) -> float | None:
+def _extract_filter_value(market: Market, signal_name: str) -> Any | None:
     """Search market signals and attributes for a filter value."""
     for bundle in market.signals.values():
         if isinstance(bundle, dict) and signal_name in bundle:
             val = bundle[signal_name]
+            if isinstance(val, bool):
+                return val
             if isinstance(val, (int, float)):
                 return float(val)
 
     if hasattr(market.service, signal_name):
         val = getattr(market.service, signal_name)
         if val is not None:
+            if isinstance(val, bool):
+                return val
             return float(val)
 
     direct = market.signals.get(signal_name)
+    if isinstance(direct, bool):
+        return direct
     if isinstance(direct, (int, float)):
         return float(direct)
     if isinstance(direct, dict) and "value" in direct:
-        return float(direct["value"])
+        value = direct["value"]
+        if isinstance(value, bool):
+            return value
+        return float(value)
 
     return None
 
 
-def _evaluate_filter(value: float, operator: str, threshold: Any) -> bool:
+def _evaluate_filter(value: Any, operator: str, threshold: Any) -> bool:
     ops = {
         ">": lambda v, t: v > t,
         "<": lambda v, t: v < t,

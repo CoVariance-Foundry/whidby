@@ -171,6 +171,29 @@ ExploreRefreshService
 
 Manual refresh requests select existing cached city/service targets by selected IDs, visible filters, stale targets, or all targets. Scheduled due checks call the same FastAPI service through the app-scoped Vercel cron route and require the configured cron secret. Successful refreshes update target freshness, record run-item before/after opportunity scores, and insert normalized report snapshots for latest-score and trend views.
 
+## Strategy Discovery Flow
+
+Strategy discovery is a read-model projection over existing market intelligence, not a separate scoring engine:
+
+```
+Cached reports + metro scores + SEO facts + local-pack facts + metro feature vectors
+     │
+     ▼
+StrategyRepository
+     │
+     ▼
+DiscoveryService strategy projection
+     │
+     ├──→ FastAPI /api/strategies
+     ├──→ FastAPI /api/discover
+     └──→ FastAPI /api/strategy-runs
+             │
+             ▼
+        strategy_runs + strategy_run_items lineage
+```
+
+The consumer app proxies strategy reads and run creation through `apps/app/src/app/api/strategies/*`. Free users remain cached-only; plus/pro users can create fresh strategy runs within the configured caps. Migration `017_strategy_discovery_system.sql` owns strategy run lineage, local-pack listing facts, metro feature vectors, and the optional strategy score cache after onboarding migration `016_consumer_onboarding.sql`.
+
 ## Experiment Pipeline (M10 → M15)
 
 ```

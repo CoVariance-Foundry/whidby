@@ -151,6 +151,27 @@ Filtering rules:
 - Stale filters compare latest cached score timestamps against the active freshness policy.
 - The frontend must not limit the search universe to the first 100 metros; pagination/cursors belong in the backend contract.
 
+### Strategy Discovery System
+
+The consumer strategy system applies strategy-specific ranking lenses over the existing cached market intelligence read model. Launch strategies are `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; `cash_cow` is a phase-2/flagged strategy; AI resilience is a global modifier and warning, not a standalone strategy route.
+
+The backend boundary is `DiscoveryService` plus a Supabase-backed `StrategyRepository`. Cached discovery reads from `metros`, `census_cbp_establishments`, `niche_naics_mapping`, `seo_facts`, `seo_benchmarks`, `metro_score_v2`, `reports`, `explore_report_snapshots`, `local_pack_listing_facts`, and `metro_feature_vectors`. Consumer strategy run creation enters through `apps/app /api/strategies/runs`, where account entitlements enforce free cached-only access, plus/pro fresh-run access, and batch caps before proxying to FastAPI `/api/discover`, `/api/strategy-runs`, or the existing scoring bridge.
+
+Data flow:
+
+```text
+DataForSEO / Census / CBP / BLS
+  -> canonical facts and benchmarks
+  -> strategy repository read model
+  -> DiscoveryService strategy projection
+
+apps/app strategy gallery and detail screens
+  -> apps/app /api/strategies/runs entitlement gate
+  -> FastAPI /api/discover, /api/strategy-runs, or scoring bridge
+  -> DiscoveryService + StrategyRepository
+  -> StrategyResult rows
+```
+
 ## Component Map
 
 V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_facts, ACS-backed metros, and CBP-backed census_cbp_establishments. Scoring code should consume them through a repository boundary so tests can use fixtures without network access.
@@ -177,6 +198,7 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
 | Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags | `apps/app/src/lib/account/`, `apps/app/src/app/api/billing/` | Consumer vitest |
 | Consumer Onboarding | Signup intent, strategy recommendation, target capture, resume state, and first-report handoff | `apps/app/src/app/(auth)/`, `apps/app/src/app/onboarding/`, `apps/app/src/app/api/onboarding/`, `apps/app/src/lib/onboarding/` | Consumer vitest + Playwright smoke |
+| Strategy Discovery | Strategy projections over cached market intelligence, account-gated strategy run creation, and FastAPI discovery proxying | `src/domain/services/discovery_service.py`, `src/clients/strategy_repository.py`, `apps/app/src/app/api/strategies/runs/` | `tests/unit/test_strategy_projection.py`, `tests/unit/test_discovery_service_strategies.py`, `tests/unit/test_api_strategy_discovery.py`, `apps/app/src/app/api/strategies/runs/route.test.ts` |
 | Consumer Explore Refresh | Cached Explore refresh orchestration, Next.js proxy routes, and refresh UI | `src/domain/services/explore_refresh_service.py`, `apps/app/src/app/api/explore/refresh/`, `apps/app/src/components/explore/` | Pytest, consumer vitest, Playwright smoke |
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
 | Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores`, including report ownership when supplied | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
@@ -361,3 +383,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.2.0 | 2026-04-23 | DFS bridge fix + E2E scoring suite | Fixed DFS locations endpoint to use GET (was POST), added state-aware city disambiguation in bridge matcher, added state-level fallback in orchestrator for unseeded cities, added observability logging to bridge, added Playwright E2E scoring regression/matrix/lifecycle/quality-gate test suite |
 | 1.3.0 | 2026-05-14 | Explore Cities system design | Added backend-backed Explore Cities architecture, canonical source tables, server-side filtering contract, metric ownership, and run report/refresh boundaries |
 | 1.4.0 | 2026-05-14 | Explore refresh control | Documented refresh policy storage, FastAPI scoring bridge queueing, app proxy routes, and report snapshots for Explore trend analysis |
+| 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy discovery architecture, repository boundary, source tables, and consumer data flow |
