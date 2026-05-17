@@ -72,14 +72,14 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
 
   const handleDelete = useCallback(async (reportId: string) => {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("reports")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("id", reportId);
-    if (error?.message?.includes("archived_at")) {
-      console.warn("archived_at column not available — archive skipped");
-    } else if (error) {
+    const { data: archived, error } = await supabase.rpc("archive_account_report", {
+      p_report_id: reportId,
+    });
+    if (error) {
       throw new Error(error.message);
+    }
+    if (!archived) {
+      throw new Error("Report not found.");
     }
     setRows((prev) => prev.filter((r) => r.id !== reportId));
     setModal({ kind: "closed" });
