@@ -771,9 +771,11 @@ Expected: snapshot files are created under each app's Playwright snapshot direct
 
 Task 6 implementation note: snapshot baselines were intentionally not generated
 or committed in this pass because local rendering/browser state was not proven
-stable. The specs keep `expect(page).toHaveScreenshot(..., { fullPage: true,
-maxDiffPixelRatio: 0.02 })` so baselines can be generated later with
-`--update-snapshots` on a stable runner.
+stable. The final specs are artifact-capture smoke tests: they explicitly save
+full-page pass-review screenshots through `testInfo.outputPath(...)` and do not
+run `toHaveScreenshot(...)` baseline assertions yet. Baseline assertions should
+be enabled only after stable snapshots are generated and committed on a stable
+runner.
 
 - [x] **Step 8: Verify discovery without launching browsers**
 
@@ -799,9 +801,8 @@ Code quality review fix:
   only for local runs without a hosted base URL.
 - `apps/app/e2e/visual-qa.spec.ts` and `apps/admin/e2e/visual-qa.spec.ts` now
   save explicit full-page pass-review screenshots through
-  `testInfo.outputPath(...)` before the `toHaveScreenshot(..., { fullPage:
-  true, maxDiffPixelRatio: 0.02 })` assertion. Artifact filenames include app,
-  route, and viewport with route separators sanitized.
+  `testInfo.outputPath(...)` without requiring baseline snapshots. Artifact
+  filenames include app, route, and viewport with route separators sanitized.
 - Verification passed: `npm run qa:visual:app -- --list`,
   `npm run qa:visual:admin -- --list`,
   `PLAYWRIGHT_BASE_URL=https://example.com npm run qa:visual:app -- --list`,
@@ -1074,6 +1075,10 @@ Concern recorded: `gh workflow view "Visual QA"` cannot validate this new workfl
 Task 8 code quality fix:
 
 - `workflow_dispatch` now keeps the `app` input and adds optional `preview_url` and `sha` inputs.
+- Secret-bearing Visual QA runs only through maintainer-dispatched
+  `workflow_dispatch`. PR `visual-qa` label runs emit a no-secret request
+  summary and do not check out or execute PR-controlled code with Vercel, E2E
+  auth, GitHub, or agent credentials.
 - Supplying `preview_url` skips Vercel check waiting and deployment lookup, then runs visual QA directly against that URL.
 - Supplying `sha` on manual runs uses that value for artifact id and Vercel lookup when `preview_url` is not supplied; PR runs still use the PR head SHA.
 - The Vercel preview check name now comes from `VERCEL_PREVIEW_CHECK_NAME` GitHub environment/repo variable with a shell fallback to `Vercel`, so configured repos are not hard-coded to one check name.
@@ -1312,7 +1317,7 @@ Expected hosted checks:
 - Greptile Review Policy
 - Vercel Preview
 - Supabase Preview on schema-changing PRs
-- Visual QA when `visual-qa` label is present
+- Visual QA request summary when `visual-qa` label is present; secret-bearing Visual QA through maintainer `workflow_dispatch` with `preview_url`
 
 - [x] **Step 5: Update `.codex/project_context.md`**
 
