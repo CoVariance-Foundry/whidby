@@ -7,12 +7,28 @@ import { fromSearchParams, loadExploreData } from "@/lib/explore/load-explore-da
 
 export const dynamic = "force-dynamic";
 
+function searchParamsKey(
+  params: Record<string, string | string[] | undefined>,
+): string {
+  const keyParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => keyParams.append(key, item));
+    } else if (value != null) {
+      keyParams.set(key, value);
+    }
+  });
+  keyParams.sort();
+  return keyParams.toString();
+}
+
 export default async function ExplorePage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedParams = searchParams ? await searchParams : {};
+  const exploreKey = searchParamsKey(resolvedParams);
   const data = await loadExploreData(fromSearchParams(resolvedParams));
 
   return (
@@ -35,7 +51,7 @@ export default async function ExplorePage({
             width: "100%",
           }}
         >
-          <ExplorePageClient data={data} />
+          <ExplorePageClient key={exploreKey} data={data} />
         </main>
       </div>
     </div>

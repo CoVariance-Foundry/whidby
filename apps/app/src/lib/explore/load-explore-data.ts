@@ -149,7 +149,7 @@ export function fromSearchParams(params: SearchParamRecord): ExploreQueryParams 
     growing_only:
       first(params.growing_only) === undefined
         ? undefined
-        : first(params.growing_only) === "true",
+        : first(params.growing_only) === "true" || first(params.growing_only) === "1",
   };
 }
 

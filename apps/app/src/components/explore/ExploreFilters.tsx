@@ -16,6 +16,7 @@ interface ExploreFiltersProps {
   filters: ExploreFilterState;
   states: string[];
   services: string[];
+  growthAvailable: boolean;
   onChange: (filters: ExploreFilterState) => void;
   onReset: () => void;
 }
@@ -31,6 +32,7 @@ export default function ExploreFilters({
   filters,
   states,
   services,
+  growthAvailable,
   onChange,
   onReset,
 }: ExploreFiltersProps) {
@@ -206,12 +208,14 @@ export default function ExploreFilters({
               fontFamily: "var(--sans)",
               fontSize: 13,
               minHeight: 34,
+              opacity: growthAvailable ? 1 : 0.48,
             }}
           >
             <input
               type="checkbox"
               aria-label="Show growing markets only"
-              checked={filters.growingOnly}
+              checked={growthAvailable && filters.growingOnly}
+              disabled={!growthAvailable}
               onChange={(event) =>
                 onChange(updateFilter(filters, { growingOnly: event.target.checked }))
               }

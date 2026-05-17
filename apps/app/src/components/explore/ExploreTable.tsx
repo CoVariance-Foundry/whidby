@@ -19,6 +19,7 @@ interface ExploreTableProps {
   cities: ExploreCitySummary[];
   sortKey: ExploreSortKey;
   sortDirection: SortDirection;
+  activeService?: string;
   onSortChange: (key: ExploreSortKey) => void;
   onCityOpen: (city: ExploreCitySummary) => void;
   onReset: () => void;
@@ -26,12 +27,12 @@ interface ExploreTableProps {
 
 const COLUMNS: Array<{ key: ExploreSortKey; label: string; align?: "right" }> = [
   { key: "city", label: "City" },
-  { key: "population", label: "Population", align: "right" },
-  { key: "income", label: "Income", align: "right" },
-  { key: "business_density", label: "Density", align: "right" },
-  { key: "growth", label: "Growth", align: "right" },
-  { key: "cached_services", label: "Cached", align: "right" },
-  { key: "best_opportunity", label: "Best", align: "right" },
+  { key: "population", label: "Pop.", align: "right" },
+  { key: "income", label: "Median HH income", align: "right" },
+  { key: "business_density", label: "Biz density", align: "right" },
+  { key: "growth", label: "Growth YoY", align: "right" },
+  { key: "cached_services", label: "Services cached", align: "right" },
+  { key: "best_opportunity", label: "Best opportunity", align: "right" },
 ];
 
 function SortIcon({
@@ -91,10 +92,46 @@ export default function ExploreTable({
   cities,
   sortKey,
   sortDirection,
+  activeService = "",
   onSortChange,
   onCityOpen,
   onReset,
 }: ExploreTableProps) {
+  const showMetricLineage = !activeService;
+
+  function metricCell(value: string, city: ExploreCitySummary) {
+    const lineage = showMetricLineage ? city.metric_service : null;
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 2,
+        }}
+      >
+        <span>{value}</span>
+        {lineage && (
+          <span
+            className="metric-lineage"
+            style={{
+              maxWidth: 120,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: "var(--ink-3)",
+              fontFamily: "var(--sans)",
+              fontSize: 10.5,
+              fontWeight: 600,
+            }}
+          >
+            {lineage}
+          </span>
+        )}
+      </span>
+    );
+  }
+
   if (cities.length === 0) {
     return (
       <div
@@ -257,10 +294,10 @@ export default function ExploreTable({
               {formatCurrency(city.median_household_income_usd)}
             </span>
             <span role="cell" style={{ textAlign: "right", fontFamily: "var(--mono)" }}>
-              {formatDecimal(city.business_density_per_1k)}
+              {metricCell(formatDecimal(city.business_density_per_1k), city)}
             </span>
             <span role="cell" style={{ textAlign: "right", fontFamily: "var(--mono)" }}>
-              {formatPercent(city.establishment_growth_yoy)}
+              {metricCell(formatPercent(city.establishment_growth_yoy), city)}
             </span>
             <span role="cell" style={{ textAlign: "right", fontFamily: "var(--mono)" }}>
               {city.cached_services_count}

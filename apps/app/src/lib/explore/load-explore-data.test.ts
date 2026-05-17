@@ -60,7 +60,7 @@ describe("fromSearchParams", () => {
         limit: "25",
         population_min: "50000",
         income_max: "140000",
-        growing_only: "true",
+        growing_only: "1",
         direction: "asc",
       }),
     ).toMatchObject({

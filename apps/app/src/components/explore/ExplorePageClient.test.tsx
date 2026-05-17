@@ -4,12 +4,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExploreData } from "@/lib/explore/types";
 import ExplorePageClient from "./ExplorePageClient";
 
+const navigationMock = vi.hoisted(() => ({
+  replace: vi.fn(),
+  searchParams: new URLSearchParams(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/explore",
+  useRouter: () => ({ replace: navigationMock.replace }),
+  useSearchParams: () => navigationMock.searchParams,
+}));
+
 const originalFetch = global.fetch;
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   global.fetch = originalFetch;
+  navigationMock.replace.mockClear();
+  navigationMock.searchParams = new URLSearchParams();
 });
 
 const fixtureData: ExploreData = {
@@ -140,24 +153,46 @@ function pressTab(shiftKey = false) {
 }
 
 describe("ExplorePageClient", () => {
-  it("filters by service and sorts city rows", () => {
+  it("writes service filters and sort changes to the URL", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
-    expect(cityRows()[0].textContent).toContain("Phoenix-Mesa-Chandler");
+    expect(cityRows()[0].textContent).toContain("Austin-Round Rock");
 
     fireEvent.change(screen.getByLabelText("Filter by cached service"), {
       target: { value: "plumbing" },
     });
-    expect(screen.getByRole("row", { name: /open austin/i })).toBeTruthy();
-    expect(screen.queryByRole("row", { name: /open phoenix/i })).toBeNull();
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?service=plumbing",
+      { scroll: false },
+    );
 
-    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
-      target: { value: "" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Sort by Population" }));
-    expect(cityRows()[0].textContent).toContain("Phoenix-Mesa-Chandler");
-    fireEvent.click(screen.getByRole("button", { name: "Sort by Population" }));
-    expect(cityRows()[0].textContent).toContain("Reno");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Pop." }));
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?service=plumbing&sort=population&direction=desc",
+      { scroll: false },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Pop." }));
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?service=plumbing&sort=population&direction=asc",
+      { scroll: false },
+    );
+  });
+
+  it("disables the growing-only filter when growth is unavailable", () => {
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          growth_available: false,
+          cities: fixtureData.cities.map((city) => ({
+            ...city,
+            growth_available: false,
+          })),
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Show growing markets only")).toBeDisabled();
   });
 
   it("opens the city drawer with row keyboard activation", () => {
@@ -547,17 +582,21 @@ describe("ExplorePageClient", () => {
     expect(document.activeElement).toBe(closeButton);
   });
 
-  it("shows empty state and reset restores results", () => {
+  it("writes demographic filters and reset actions to the URL", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
     fireEvent.change(screen.getByLabelText("Minimum population"), {
       target: { value: "99999999" },
     });
 
-    expect(screen.getByText(/no cities match/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?population_min=99999999",
+      { scroll: false },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset explore filters" }));
 
-    expect(screen.getByRole("row", { name: /open phoenix/i })).toBeTruthy();
-    expect(screen.getByRole("row", { name: /open austin/i })).toBeTruthy();
+    expect(navigationMock.replace).toHaveBeenLastCalledWith("/explore", {
+      scroll: false,
+    });
   });
 });

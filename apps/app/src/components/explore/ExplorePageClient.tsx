@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type {
   ExploreCachedScore,
@@ -43,84 +44,11 @@ const DEFAULT_FILTERS: ExploreFilterState = {
 
 const REFRESH_BATCH_CAP = 50;
 
-const NUMERIC_SORTS: Record<ExploreSortKey, (city: ExploreCitySummary) => number | null> = {
-  city: () => null,
-  population: (city) => city.population,
-  income: (city) => city.median_household_income_usd,
-  business_density: (city) => city.business_density_per_1k,
-  growth: (city) => city.establishment_growth_yoy,
-  cached_services: (city) => city.cached_services_count,
-  best_opportunity: (city) => city.best_opportunity_score,
-};
-
 function parseNumber(value: string): number | null {
   const cleaned = value.replace(/,/g, "").trim();
   if (!cleaned) return null;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function passesRange(value: number | null, min: number | null, max: number | null): boolean {
-  if (min == null && max == null) return true;
-  if (value == null) return false;
-  if (min != null && value < min) return false;
-  if (max != null && value > max) return false;
-  return true;
-}
-
-function sortCities(
-  cities: ExploreCitySummary[],
-  sortKey: ExploreSortKey,
-  direction: SortDirection,
-): ExploreCitySummary[] {
-  const multiplier = direction === "asc" ? 1 : -1;
-  return [...cities].sort((a, b) => {
-    if (sortKey === "city") {
-      return a.cbsa_name.localeCompare(b.cbsa_name) * multiplier;
-    }
-
-    const getter = NUMERIC_SORTS[sortKey];
-    const aValue = getter(a);
-    const bValue = getter(b);
-    if (aValue == null && bValue == null) {
-      return a.cbsa_name.localeCompare(b.cbsa_name);
-    }
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
-    if (aValue === bValue) return a.cbsa_name.localeCompare(b.cbsa_name);
-    return (aValue - bValue) * multiplier;
-  });
-}
-
-function filterCities(
-  cities: ExploreCitySummary[],
-  filters: ExploreFilterState,
-): ExploreCitySummary[] {
-  const populationMin = parseNumber(filters.populationMin);
-  const populationMax = parseNumber(filters.populationMax);
-  const incomeMin = parseNumber(filters.incomeMin);
-  const incomeMax = parseNumber(filters.incomeMax);
-
-  return cities.filter((city) => {
-    if (!passesRange(city.population, populationMin, populationMax)) return false;
-    if (!passesRange(city.median_household_income_usd, incomeMin, incomeMax)) return false;
-    if (filters.selectedStates.length > 0 && !filters.selectedStates.includes(city.state)) {
-      return false;
-    }
-    if (
-      filters.service &&
-      !city.cached_scores.some((score) => score.service === filters.service)
-    ) {
-      return false;
-    }
-    if (
-      filters.growingOnly &&
-      (city.establishment_growth_yoy == null || city.establishment_growth_yoy < 3)
-    ) {
-      return false;
-    }
-    return true;
-  });
 }
 
 function cityNameForScoring(city: ExploreCitySummary): string {
@@ -134,6 +62,73 @@ function cityNameForScoring(city: ExploreCitySummary): string {
   }
 
   return cityName;
+}
+
+type SearchParamsLike = Pick<URLSearchParams, "get" | "getAll" | "toString">;
+
+const FILTER_QUERY_KEYS = [
+  "service",
+  "state",
+  "population_min",
+  "population_max",
+  "income_min",
+  "income_max",
+  "growing_only",
+  "cursor",
+];
+
+function enabledParam(value: string | null): boolean {
+  return value === "1" || value === "true";
+}
+
+function filtersFromSearchParams(searchParams: SearchParamsLike): ExploreFilterState {
+  return {
+    populationMin: searchParams.get("population_min") ?? "",
+    populationMax: searchParams.get("population_max") ?? "",
+    incomeMin: searchParams.get("income_min") ?? "",
+    incomeMax: searchParams.get("income_max") ?? "",
+    selectedStates: searchParams.getAll("state"),
+    service: searchParams.get("service") ?? "",
+    growingOnly: enabledParam(searchParams.get("growing_only")),
+  };
+}
+
+function sortKeyFromSearchParams(searchParams: SearchParamsLike): ExploreSortKey {
+  const raw = searchParams.get("sort");
+  if (raw === "presentation_score") return "best_opportunity";
+  if (
+    raw === "city" ||
+    raw === "population" ||
+    raw === "income" ||
+    raw === "business_density" ||
+    raw === "growth" ||
+    raw === "cached_services" ||
+    raw === "best_opportunity"
+  ) {
+    return raw;
+  }
+  return "best_opportunity";
+}
+
+function sortDirectionFromSearchParams(searchParams: SearchParamsLike): SortDirection {
+  return searchParams.get("direction") === "asc" ? "asc" : "desc";
+}
+
+function writeNumberParam(params: URLSearchParams, key: string, raw: string) {
+  const value = parseNumber(raw);
+  if (value == null) return;
+  params.set(key, String(value));
+}
+
+function writeExploreFilters(params: URLSearchParams, filters: ExploreFilterState) {
+  for (const key of FILTER_QUERY_KEYS) params.delete(key);
+  if (filters.service) params.set("service", filters.service);
+  for (const state of filters.selectedStates) params.append("state", state);
+  writeNumberParam(params, "population_min", filters.populationMin);
+  writeNumberParam(params, "population_max", filters.populationMax);
+  writeNumberParam(params, "income_min", filters.incomeMin);
+  writeNumberParam(params, "income_max", filters.incomeMax);
+  if (filters.growingOnly) params.set("growing_only", "1");
 }
 
 function serializeFilters(filters: ExploreFilterState): Record<string, unknown> {
@@ -227,13 +222,29 @@ export default function ExplorePageClient({
   data,
   onRunFreshScan,
 }: ExplorePageClientProps) {
+  const router = useRouter();
+  const pathname = usePathname() || "/explore";
+  const searchParams = useSearchParams();
+  const queryRef = useRef(searchParams.toString());
   const freshScanButtonRef = useRef<HTMLButtonElement>(null);
   const freshScanRequestIdRef = useRef(0);
   const freshScanInFlightRef = useRef(false);
   const refreshInFlightRef = useRef(false);
-  const [filters, setFilters] = useState<ExploreFilterState>(DEFAULT_FILTERS);
-  const [sortKey, setSortKey] = useState<ExploreSortKey>("best_opportunity");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const urlFilters = useMemo(
+    () => filtersFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const urlSortKey = useMemo(
+    () => sortKeyFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const urlSortDirection = useMemo(
+    () => sortDirectionFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const [filters, setFilters] = useState<ExploreFilterState>(urlFilters);
+  const [sortKey, setSortKey] = useState<ExploreSortKey>(urlSortKey);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(urlSortDirection);
   const [openCity, setOpenCity] = useState<ExploreCitySummary | null>(null);
   const [selectedScores, setSelectedScores] = useState<ExploreCachedScore[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -257,10 +268,9 @@ export default function ExplorePageClient({
     [data.cities],
   );
 
-  const visibleCities = useMemo(
-    () => sortCities(filterCities(data.cities, filters), sortKey, sortDirection),
-    [data.cities, filters, sortDirection, sortKey],
-  );
+  const growthAvailable =
+    data.growth_available ?? data.cities.some((city) => city.growth_available);
+  const visibleCities = data.cities;
   const visibleScores = useMemo(
     () => visibleCities.flatMap((city) => city.cached_scores),
     [visibleCities],
@@ -278,17 +288,46 @@ export default function ExplorePageClient({
     [visibleScores],
   );
 
+  function currentParams() {
+    return new URLSearchParams(queryRef.current);
+  }
+
+  function replaceWithParams(params: URLSearchParams) {
+    const query = params.toString();
+    queryRef.current = query;
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  function applyFilters(nextFilters: ExploreFilterState) {
+    const nextParams = currentParams();
+    writeExploreFilters(nextParams, nextFilters);
+    setFilters(nextFilters);
+    replaceWithParams(nextParams);
+  }
+
   function resetFilters() {
+    const nextParams = currentParams();
+    for (const key of FILTER_QUERY_KEYS) nextParams.delete(key);
     setFilters(DEFAULT_FILTERS);
+    replaceWithParams(nextParams);
   }
 
   function changeSort(nextKey: ExploreSortKey) {
-    if (nextKey === sortKey) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
+    const nextParams = currentParams();
+    nextParams.delete("cursor");
+    const nextDirection =
+      nextKey === sortKey
+        ? sortDirection === "asc"
+          ? "desc"
+          : "asc"
+        : nextKey === "city"
+          ? "asc"
+          : "desc";
     setSortKey(nextKey);
-    setSortDirection(nextKey === "city" ? "asc" : "desc");
+    setSortDirection(nextDirection);
+    nextParams.set("sort", nextKey);
+    nextParams.set("direction", nextDirection);
+    replaceWithParams(nextParams);
   }
 
   function invalidateFreshScanRequest() {
@@ -445,12 +484,12 @@ export default function ExplorePageClient({
           }}
         >
           <div>
-            <div className="kicker">Consumer explore</div>
+            <div className="kicker">Explore</div>
             <h1 className="page-h1" style={{ margin: "4px 0 0" }}>
-              Explore cities
+              Cities & service data
             </h1>
             <p className="page-sub">
-              Compare cached market signals and open city-level service scores.
+              Browse the data layer for free. Narrow down by demographics, then spend scans on the markets that need fresh numbers.
             </p>
           </div>
           <div
@@ -502,7 +541,8 @@ export default function ExplorePageClient({
           filters={filters}
           states={states}
           services={services}
-          onChange={setFilters}
+          growthAvailable={growthAvailable}
+          onChange={applyFilters}
           onReset={resetFilters}
         />
 
@@ -523,6 +563,7 @@ export default function ExplorePageClient({
           cities={visibleCities}
           sortKey={sortKey}
           sortDirection={sortDirection}
+          activeService={filters.service}
           onSortChange={changeSort}
           onCityOpen={openDrawer}
           onReset={resetFilters}
