@@ -226,18 +226,22 @@ async function loadReports(client: SupabaseClient): Promise<ReportRow[]> {
 }
 
 async function loadMetros(client: SupabaseClient): Promise<MetroRow[]> {
-  let { data, error } = await client
+  const completeResponse = await client
     .from("metros")
     .select(COMPLETE_METRO_SELECT)
     .order("population", { ascending: false, nullsFirst: false })
     .limit(METRO_LIMIT);
+  let data = completeResponse.data as MetroRow[] | null;
+  let error = completeResponse.error;
 
   if (isMissingOptionalMetroMetricColumn(error?.message)) {
-    ({ data, error } = await client
+    const fallbackResponse = await client
       .from("metros")
       .select(BASE_METRO_SELECT)
       .order("population", { ascending: false, nullsFirst: false })
-      .limit(METRO_LIMIT));
+      .limit(METRO_LIMIT);
+    data = fallbackResponse.data as MetroRow[] | null;
+    error = fallbackResponse.error;
   }
 
   if (error) {
