@@ -1,5 +1,13 @@
 # Active Work
 
+## Active Work
+
+- CI/CD AI review and visual QA workflow implementation.
+- Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
+- Next: implement MCP config, env manifest, visual QA scripts, and GitHub workflows in separate reviewed commits.
+
+## Prior/Archived Context
+
 ## Phase 7 Benchmark Completion
 
 Status: closeout validation.
