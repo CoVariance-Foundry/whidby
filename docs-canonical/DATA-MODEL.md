@@ -46,6 +46,7 @@
 | SeoFact             | Supabase `seo_facts` table           | id (UUID); unique niche + cbsa + keyword + date | Keyword-grain observations used to build benchmarks             |
 | SeoBenchmark        | Supabase `seo_benchmarks` table      | niche + population_class | V2 benchmark cell used by scoring                              |
 | ServiceACVEstimate  | Supabase `service_acv_estimates` table | naics_code + cbsa_code | BLS-derived ACV estimates                                      |
+| ExploreMarketCell   | Derived Explore read model            | cbsa_code + niche_normalized | Materialized city-service market cell for Explore latency |
 | ExploreCitySummary  | DTO from Explore Cities service       | cbsa_code        | Filterable cached market row combining metro demographics, cached scores, density, growth, and freshness |
 | ExploreServiceMetric | DTO from Explore Cities service      | cbsa_code + niche_normalized | Cached service score, score-system provenance, density/growth lineage, and refresh/run-report target data |
 | UserProfile         | Supabase `user_profiles` table        | user_id (UUID)   | Consumer profile linked 1:1 to Supabase Auth user |
@@ -101,6 +102,24 @@ Source: `src/research_agent/places.py::PlaceSuggestion`. Returned by `GET /api/p
 | `metadata_source` | string | No | `typed`, `mapbox_selected`, `recent_history`, or `fallback_cbsa` |
 
 Source: `apps/app/src/lib/niche-finder/history-storage.ts`. Dedupe key prefers `place_id` when present.
+
+### ExploreMarketCell (derived read model)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cbsa_code` | text | Yes | Metro key from `public.metros` |
+| `niche_normalized` | text | Yes | Service key from `public.niche_naics_mapping` or cached score row |
+| `niche_keyword` | text | Yes | Display service label |
+| `presentation_score` | integer | No | V2 lens projection when present, else legacy opportunity score |
+| `score_system` | text | Yes | `v2`, `legacy`, or `none` |
+| `business_density_per_1k` | numeric | No | Weighted CBP establishments per 1,000 residents for this service |
+| `establishment_growth_yoy` | numeric | No | Annualized establishment growth for this service |
+| `growth_available` | boolean | Yes | False when no historical CBP prior year is loaded |
+| `latest_scored_at` | timestamptz | No | Latest cached score time |
+| `refresh_target_id` | uuid | No | Refresh target for cached rows |
+| `stale` | boolean | Yes | Freshness relative to active cadence |
+
+This is a derived read model for Explore latency. Canonical source tables remain `metros`, `census_cbp_establishments`, `niche_naics_mapping`, `reports`, `metro_scores`, `metro_score_v2`, and Explore refresh tables.
 
 ### ExploreCitySummary (service DTO)
 

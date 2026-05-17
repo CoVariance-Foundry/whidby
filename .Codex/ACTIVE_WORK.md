@@ -66,7 +66,7 @@ Implementation path:
 
 ## Explore Cities Refactor
 
-Status: implementation plan written; code refactor not started in this slice.
+Status: Task 1 canonical product/data/test contract locked; code refactor not started in this slice.
 
 Current plan: `docs/superpowers/plans/2026-05-17-explore-cities-refactor.md`.
 Linear: `WHI-1` Refactor Explore Cities into city-first market discovery surface.
@@ -74,6 +74,8 @@ Linear: `WHI-1` Refactor Explore Cities into city-first market discovery surface
 Product direction: keep `/explore` city-first like the UX prototype, add service-selected comparison for city-service metrics, and keep Strategies as guided ranking lenses over the same market-cell read model. Density and growth remain service-aware metrics; do not present them as unlabelled city-only facts.
 
 Completed foundation: canonical Explore Cities architecture defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
+
+Latest contract slice: updated canonical docs for the Explore vs. Strategies responsibility split, the `ExploreMarketCell` derived read model, and Explore market-cell/service-mode/default-lineage/pagination/growth-unavailable test obligations.
 
 Latest audit slice: added `scripts/explore/audit_explore_sources.py`, a read-only PostgREST audit for Explore source table visibility and sparse `metros` demographic fields. Focused test `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py -v` passes. Live publishable-key and service-role audit commands currently report missing Supabase env in this worktree: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 
@@ -89,7 +91,6 @@ Latest consumer loader slice: `apps/app/src/lib/explore/load-explore-data.ts` no
 
 Next implementation slice:
 
-- Update canonical docs for the Explore vs Strategies responsibility split and `ExploreMarketCell` derived read model.
 - Add `supabase/migrations/018_explore_market_cells.sql` as a derived read model, not a duplicate source table.
 - Add `src/clients/explore_repository.py` so `ExploreCityService` reads from Supabase through a concrete adapter.
 - Add backend/API routes for `GET /api/explore/cities` and `GET /api/explore/cities/{cbsa_code}`.

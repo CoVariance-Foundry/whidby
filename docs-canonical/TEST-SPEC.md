@@ -75,6 +75,11 @@ tests/
 
 | Test | Scope | Expected |
 |------|-------|----------|
+| Explore market-cell read model | Materialized read model over canonical tables | Exposes service-aware density/growth without creating duplicate source tables |
+| Explore service-selected mode | `/api/explore/cities?service=roofing` | Returns rows where density, growth, score, and freshness belong to roofing |
+| Explore default mode lineage | `/api/explore/cities` with no service | Does not present density/growth as city-only facts unless row includes `metric_service` lineage |
+| Explore frontend pagination | Next loader and page controls | Does not filter or sort only the first 100 metros in React |
+| Explore growth unavailable | CBP only has one year | API returns `growth_available=false`; UI disables growth-only filtering |
 | Business density formula | Weighted CBP rows + population | Returns establishments per 1,000 residents using `niche_naics_mapping.weight`; missing population returns null with a quality flag |
 | Establishment growth formula | Prior/latest weighted CBP rows | Returns annualized growth; missing historical CBP year returns `growth_available=false` |
 | Freshness calculation | Latest score timestamp + cadence | Marks stale when older than cadence; null score timestamp is stale only for cached-service targets |

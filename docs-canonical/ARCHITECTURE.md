@@ -114,6 +114,8 @@ Both apps share request validation, score shape, and the `CityAutocomplete` comp
 
 ### Explore Cities System
 
+Explore is the flexible market data browser. It supports city-first browsing, service-selected city comparison, city detail inspection, cached target refresh, and fresh report starts.
+
 Explore Cities is a read-optimized backend system over canonical scoring/reference tables. It must not create duplicate `cities`, `business_patterns`, `_simplified`, or `_v2` source tables. Its source-of-truth inputs are:
 
 1. `public.metros` — ACS-backed CBSA identity, demographics, population class, principal cities, and DataForSEO location codes.
@@ -152,6 +154,8 @@ Filtering rules:
 - The frontend must not limit the search universe to the first 100 metros; pagination/cursors belong in the backend contract.
 
 ### Strategy Discovery System
+
+Strategies are guided ranking lenses over the same city-service market-cell read model. They should not duplicate the Explore table; they package opinionated scoring, ordering, and explanation around strategy intent.
 
 The consumer strategy system applies strategy-specific ranking lenses over the existing cached market intelligence read model. Launch strategies are `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; `cash_cow` is a phase-2/flagged strategy; AI resilience is a global modifier and warning, not a standalone strategy route.
 
