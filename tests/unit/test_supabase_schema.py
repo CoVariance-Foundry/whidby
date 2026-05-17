@@ -25,7 +25,7 @@ class TestMigrationFiles:
             "014_user_management_billing.sql",
             "015_explore_refresh_control.sql",
             "016_consumer_onboarding.sql",
-            "016_strategy_discovery_system.sql",
+            "017_strategy_discovery_system.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -296,7 +296,7 @@ class TestConsumerOnboardingSchema:
 class TestStrategyDiscoverySchema:
     @pytest.fixture
     def sql(self) -> str:
-        return (MIGRATIONS_DIR / "016_strategy_discovery_system.sql").read_text()
+        return (MIGRATIONS_DIR / "017_strategy_discovery_system.sql").read_text()
 
     def test_strategy_discovery_run_tables(self, sql: str):
         assert "CREATE TABLE IF NOT EXISTS public.strategy_runs" in sql

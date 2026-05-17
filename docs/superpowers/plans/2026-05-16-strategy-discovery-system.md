@@ -40,7 +40,7 @@ Phase 2 concepts from the playbook (`cash_cow`) are represented behind flags/cat
 
 ### Database
 
-- Create: `supabase/migrations/016_strategy_discovery_system.sql`
+- Create: `supabase/migrations/017_strategy_discovery_system.sql`
   - Adds run lineage, local pack facts, feature vectors, optional cache projection, RLS.
 - Modify: `tests/unit/test_supabase_schema.py`
   - Add schema assertions for strategy tables and policy-sensitive columns.
@@ -188,7 +188,7 @@ git commit -m "docs: design strategy discovery system"
 ## Task 2: Strategy Schema Migration
 
 **Files:**
-- Create: `supabase/migrations/016_strategy_discovery_system.sql`
+- Create: `supabase/migrations/017_strategy_discovery_system.sql`
 - Modify: `tests/unit/test_supabase_schema.py`
 
 - [ ] **Step 1: Write failing schema tests**
@@ -200,7 +200,7 @@ from pathlib import Path
 
 
 def test_strategy_discovery_migration_defines_run_tables() -> None:
-    sql = Path("supabase/migrations/016_strategy_discovery_system.sql").read_text()
+    sql = Path("supabase/migrations/017_strategy_discovery_system.sql").read_text()
     assert "CREATE TABLE IF NOT EXISTS public.strategy_runs" in sql
     assert "CREATE TABLE IF NOT EXISTS public.strategy_run_items" in sql
     assert "account_id UUID" in sql
@@ -209,7 +209,7 @@ def test_strategy_discovery_migration_defines_run_tables() -> None:
 
 
 def test_strategy_discovery_migration_defines_evidence_tables() -> None:
-    sql = Path("supabase/migrations/016_strategy_discovery_system.sql").read_text()
+    sql = Path("supabase/migrations/017_strategy_discovery_system.sql").read_text()
     assert "CREATE TABLE IF NOT EXISTS public.local_pack_listing_facts" in sql
     assert "CREATE TABLE IF NOT EXISTS public.metro_feature_vectors" in sql
     assert "exact_match_name BOOLEAN NOT NULL DEFAULT FALSE" in sql
@@ -224,14 +224,14 @@ Run:
 python -m pytest tests/unit/test_supabase_schema.py -k strategy_discovery -v
 ```
 
-Expected: FAIL because `016_strategy_discovery_system.sql` does not exist.
+Expected: FAIL because `017_strategy_discovery_system.sql` does not exist.
 
 - [ ] **Step 3: Create migration**
 
-Create `supabase/migrations/016_strategy_discovery_system.sql`:
+Create `supabase/migrations/017_strategy_discovery_system.sql`:
 
 ```sql
--- 016_strategy_discovery_system.sql
+-- 017_strategy_discovery_system.sql
 -- Strategy run lineage and strategy-specific evidence tables.
 
 CREATE TABLE IF NOT EXISTS public.strategy_runs (
@@ -366,7 +366,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/016_strategy_discovery_system.sql tests/unit/test_supabase_schema.py
+git add supabase/migrations/017_strategy_discovery_system.sql tests/unit/test_supabase_schema.py
 git commit -m "feat: add strategy discovery schema"
 ```
 

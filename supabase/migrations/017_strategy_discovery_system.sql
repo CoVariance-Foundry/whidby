@@ -1,4 +1,4 @@
--- 016_strategy_discovery_system.sql
+-- 017_strategy_discovery_system.sql
 -- Strategy run lineage and strategy-specific evidence tables.
 
 CREATE TABLE IF NOT EXISTS public.strategy_runs (
