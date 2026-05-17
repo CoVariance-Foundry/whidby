@@ -14,11 +14,16 @@ export interface ExploreQueryParams {
   limit?: number;
   cursor?: string;
   sort?: string;
-  population_class?: string;
+  direction?: string;
+  population_min?: number;
+  population_max?: number;
+  income_min?: number;
+  income_max?: number;
+  growing_only?: boolean;
+  // Backward-compatible aliases accepted from older callers; serialized as backend names.
   min_population?: number;
   max_population?: number;
   min_income?: number;
-  growth_available?: boolean;
 }
 
 type SearchParamRecord = Record<string, string | string[] | undefined>;
@@ -65,9 +70,12 @@ const BACKEND_ARCHETYPE_MAP: Record<string, ArchetypeId> = {
 };
 
 function getBaseUrl() {
+  if (process.env.NEXT_PUBLIC_APP_FRONTEND_URL) {
+    return process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
+  }
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3001";
+  return "http://localhost:3002";
 }
 
 function appendIfPresent(
@@ -92,12 +100,21 @@ export function toExploreSearchParams(params: ExploreQueryParams = {}) {
 
   appendIfPresent(searchParams, "limit", params.limit);
   appendIfPresent(searchParams, "cursor", params.cursor);
-  appendIfPresent(searchParams, "sort", params.sort);
-  appendIfPresent(searchParams, "population_class", params.population_class);
-  appendIfPresent(searchParams, "min_population", params.min_population);
-  appendIfPresent(searchParams, "max_population", params.max_population);
-  appendIfPresent(searchParams, "min_income", params.min_income);
-  appendIfPresent(searchParams, "growth_available", params.growth_available);
+  appendIfPresent(searchParams, "sort", backendSort(params.sort));
+  appendIfPresent(searchParams, "direction", params.direction);
+  appendIfPresent(
+    searchParams,
+    "population_min",
+    params.population_min ?? params.min_population,
+  );
+  appendIfPresent(
+    searchParams,
+    "population_max",
+    params.population_max ?? params.max_population,
+  );
+  appendIfPresent(searchParams, "income_min", params.income_min ?? params.min_income);
+  appendIfPresent(searchParams, "income_max", params.income_max);
+  appendIfPresent(searchParams, "growing_only", params.growing_only);
   return searchParams;
 }
 
@@ -124,15 +141,21 @@ export function fromSearchParams(params: SearchParamRecord): ExploreQueryParams 
     limit: numberFrom(params.limit),
     cursor: first(params.cursor),
     sort: first(params.sort),
-    population_class: first(params.population_class),
-    min_population: numberFrom(params.min_population),
-    max_population: numberFrom(params.max_population),
-    min_income: numberFrom(params.min_income),
-    growth_available:
-      first(params.growth_available) === undefined
+    direction: first(params.direction),
+    population_min: numberFrom(params.population_min) ?? numberFrom(params.min_population),
+    population_max: numberFrom(params.population_max) ?? numberFrom(params.max_population),
+    income_min: numberFrom(params.income_min) ?? numberFrom(params.min_income),
+    income_max: numberFrom(params.income_max),
+    growing_only:
+      first(params.growing_only) === undefined
         ? undefined
-        : first(params.growth_available) === "true",
+        : first(params.growing_only) === "true",
   };
+}
+
+function backendSort(sort: string | undefined) {
+  if (sort === "best_opportunity") return "presentation_score";
+  return sort;
 }
 
 function asNumber(value: number | string | null | undefined): number | null {
@@ -160,7 +183,10 @@ function archetypeFromScore(score: BackendCachedScore): ArchetypeId {
     if (mapped) return mapped;
     if (ARCHETYPES.some((a) => a.id === raw)) return raw as ArchetypeId;
   }
-  return deriveArchetype({ opportunity_score: asNumber(score.opportunity_score) });
+  return deriveArchetype({
+    opportunity_score:
+      asNumber(score.opportunity_score) ?? asNumber(score.presentation_score),
+  });
 }
 
 function normalizeCachedScore(score: BackendCachedScore): ExploreCachedScore {
@@ -185,6 +211,9 @@ function normalizeCachedScore(score: BackendCachedScore): ExploreCachedScore {
     presentation_score: presentationScore,
     latest_scored_at: score.latest_scored_at ?? null,
     stale: score.stale ?? score.is_stale ?? null,
+    last_refreshed_at: score.last_refreshed_at ?? (latestScoredAt || undefined),
+    refresh_target_id: score.refresh_target_id,
+    next_refresh_at: score.next_refresh_at,
     business_density_per_1k: asNumber(score.business_density_per_1k),
     establishment_growth_yoy: asNumber(score.establishment_growth_yoy),
     growth_available: score.growth_available ?? false,

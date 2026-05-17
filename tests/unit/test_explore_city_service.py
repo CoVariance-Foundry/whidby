@@ -271,6 +271,8 @@ class FakePagedExploreRepository:
                 "presentation_score": 88,
                 "score_system": "v2",
                 "latest_scored_at": "2026-05-01T12:00:00Z",
+                "refresh_target_id": "target-38060-roofing",
+                "next_refresh_at": "2026-06-01T12:00:00Z",
                 "business_density_per_1k": 3.2,
                 "establishment_growth_yoy": 0.08,
                 "growth_available": True,
@@ -319,6 +321,9 @@ def test_city_service_returns_paged_result_for_new_repository() -> None:
     assert city["cached_services_count"] == 4
     assert city["metric_service"] == "roofing"
     assert city["cached_scores"][0]["niche_normalized"] == "roofing"
+    assert city["cached_scores"][0]["refresh_target_id"] == "target-38060-roofing"
+    assert city["cached_scores"][0]["last_refreshed_at"] == "2026-05-01T12:00:00Z"
+    assert city["cached_scores"][0]["next_refresh_at"] == "2026-06-01T12:00:00Z"
     assert city["cached_scores"][0]["growth_available"] is True
 
 

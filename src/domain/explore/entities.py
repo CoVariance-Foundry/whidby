@@ -11,6 +11,9 @@ class ExploreServiceMetric(TypedDict):
     presentation_score: int | None
     score_system: str | None
     latest_scored_at: Any | None
+    last_refreshed_at: NotRequired[Any | None]
+    refresh_target_id: NotRequired[str | None]
+    next_refresh_at: NotRequired[Any | None]
     stale: NotRequired[bool | None]
     business_density_per_1k: NotRequired[float | None]
     establishment_growth_yoy: NotRequired[float | None]

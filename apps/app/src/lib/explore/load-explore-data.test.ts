@@ -6,15 +6,21 @@ import {
 } from "./load-explore-data";
 
 const originalFetch = global.fetch;
-const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const originalFrontendUrl = process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
+const originalLegacyAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 const originalVercelUrl = process.env.VERCEL_URL;
 
 afterEach(() => {
   global.fetch = originalFetch;
-  if (originalAppUrl === undefined) {
+  if (originalFrontendUrl === undefined) {
+    delete process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
+  } else {
+    process.env.NEXT_PUBLIC_APP_FRONTEND_URL = originalFrontendUrl;
+  }
+  if (originalLegacyAppUrl === undefined) {
     delete process.env.NEXT_PUBLIC_APP_URL;
   } else {
-    process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+    process.env.NEXT_PUBLIC_APP_URL = originalLegacyAppUrl;
   }
   if (originalVercelUrl === undefined) {
     delete process.env.VERCEL_URL;
@@ -31,8 +37,17 @@ describe("toExploreSearchParams", () => {
         service: "roofing",
         states: ["AZ", "CO"],
         limit: 25,
+        population_min: 50_000,
+        population_max: 500_000,
+        income_min: 60_000,
+        income_max: 140_000,
+        growing_only: true,
+        sort: "best_opportunity",
+        direction: "asc",
       }).toString(),
-    ).toBe("service=roofing&state=AZ&state=CO&limit=25");
+    ).toBe(
+      "service=roofing&state=AZ&state=CO&limit=25&sort=presentation_score&direction=asc&population_min=50000&population_max=500000&income_min=60000&income_max=140000&growing_only=true",
+    );
   });
 });
 
@@ -43,18 +58,26 @@ describe("fromSearchParams", () => {
         service: "roofing",
         state: ["AZ", "CO"],
         limit: "25",
+        population_min: "50000",
+        income_max: "140000",
+        growing_only: "true",
+        direction: "asc",
       }),
     ).toMatchObject({
       service: "roofing",
       states: ["AZ", "CO"],
       limit: 25,
+      population_min: 50000,
+      income_max: 140000,
+      growing_only: true,
+      direction: "asc",
     });
   });
 });
 
 describe("loadExploreData", () => {
   it("fetches the explore cities proxy with no-store caching", async () => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.test";
+    process.env.NEXT_PUBLIC_APP_FRONTEND_URL = "https://app.example.test";
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ cities: [] }), { status: 200 }),
     );
@@ -68,8 +91,25 @@ describe("loadExploreData", () => {
     );
   });
 
+  it("defaults server-side fetches to the consumer app local port", async () => {
+    delete process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    delete process.env.VERCEL_URL;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ cities: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    await loadExploreData();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3002/api/explore/cities",
+      { cache: "no-store" },
+    );
+  });
+
   it("maps backend rows to compatibility aliases for existing components", async () => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://app.example.test";
+    process.env.NEXT_PUBLIC_APP_FRONTEND_URL = "https://app.example.test";
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -104,7 +144,8 @@ describe("loadExploreData", () => {
                   presentation_score: "88",
                   opportunity_score: null,
                   latest_scored_at: "2026-05-17T12:00:00Z",
-                  serp_archetype: "LOCAL_PACK_VULNERABLE",
+                  refresh_target_id: "target-1",
+                  next_refresh_at: "2026-06-17T12:00:00Z",
                   stale: false,
                   business_density_per_1k: "2.4",
                   establishment_growth_yoy: "0.031",
@@ -148,6 +189,9 @@ describe("loadExploreData", () => {
       archetype_id: "PACK_VULN",
       archetype_label: "Pack, vulnerable",
       last_scored_at: "2026-05-17T12:00:00Z",
+      last_refreshed_at: "2026-05-17T12:00:00Z",
+      refresh_target_id: "target-1",
+      next_refresh_at: "2026-06-17T12:00:00Z",
       stale: false,
     });
   });

@@ -272,6 +272,8 @@ def test_load_city_detail_returns_city_with_cached_scores() -> None:
             "presentation_score": 88,
             "score_system": "v2",
             "latest_scored_at": "2026-05-01T12:00:00Z",
+            "refresh_target_id": "target-roofing",
+            "next_refresh_at": "2026-06-01T12:00:00Z",
         },
         {
             "cbsa_code": "38060",
@@ -298,6 +300,9 @@ def test_load_city_detail_returns_city_with_cached_scores() -> None:
         "roofing",
         "plumbing",
     ]
+    assert detail["cached_scores"][0]["refresh_target_id"] == "target-roofing"
+    assert detail["cached_scores"][0]["last_refreshed_at"] == "2026-05-01T12:00:00Z"
+    assert detail["cached_scores"][0]["next_refresh_at"] == "2026-06-01T12:00:00Z"
     calls = client.tables["explore_market_cells"].calls
     assert ("eq", "cbsa_code", "38060") in calls
     assert ("order", "presentation_score", {"desc": True}) in calls
