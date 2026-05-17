@@ -49,6 +49,7 @@ describe("POST /api/strategies/runs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.NEXT_PUBLIC_API_URL;
+    delete process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
     mocks.createClient.mockResolvedValue({ rpc: vi.fn() });
     mocks.resolveEntitlementContext.mockResolvedValue({ user, entitlement });
     mocks.consumeReportQuota.mockResolvedValue(true);
@@ -111,6 +112,7 @@ describe("POST /api/strategies/runs", () => {
 
   it("allows paid fresh requests and injects account and user ids", async () => {
     process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
+    process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN = "secret-token";
     const req = new Request("http://localhost/api/strategies/runs", {
       method: "POST",
       body: JSON.stringify({
@@ -134,7 +136,10 @@ describe("POST /api/strategies/runs", () => {
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
     });
-    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(init.headers).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer secret-token",
+    });
     expect(init.cache).toBe("no-store");
     expect(mocks.consumeReportQuota).toHaveBeenCalledWith(
       expect.anything(),

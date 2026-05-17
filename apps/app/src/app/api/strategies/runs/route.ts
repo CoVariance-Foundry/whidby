@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       quotaConsumedForAccount = entitlement.account_id;
     }
 
+    const internalToken = process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
     const upstream = await proxyStrategyResponse("/api/strategy-runs", {
       method: "POST",
       body: JSON.stringify({
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
         account_id: entitlement.account_id,
         created_by_user_id: user.id,
       }),
+      headers: internalToken ? { Authorization: `Bearer ${internalToken}` } : undefined,
     });
 
     if (!upstream.ok && quotaConsumedForAccount) {
