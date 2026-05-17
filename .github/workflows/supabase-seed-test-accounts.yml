@@ -1,0 +1,34 @@
+name: Supabase Seed Test Accounts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed-staging:
+    name: Seed staging test accounts
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      SUPABASE_URL: https://wuybidpvqhhgkukpyyhq.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      WHIDBY_TEST_ADMIN_PASSWORD: ${{ secrets.WHIDBY_TEST_ADMIN_PASSWORD }}
+      WHIDBY_TEST_USER_PASSWORD: ${{ secrets.WHIDBY_TEST_USER_PASSWORD }}
+      WHIDBY_BETA_HENOCK_PASSWORD: ${{ secrets.WHIDBY_BETA_HENOCK_PASSWORD }}
+      WHIDBY_BETA_LUKE_PASSWORD: ${{ secrets.WHIDBY_BETA_LUKE_PASSWORD }}
+      WHIDBY_TEST_ADMIN_EMAIL: admin-test@widby.dev
+      WHIDBY_TEST_USER_EMAIL: user-test@widby.dev
+      WHIDBY_BETA_HENOCK_EMAIL: henock@covariance.studio
+      WHIDBY_BETA_LUKE_EMAIL: lm13vand@gmail.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Seed staging test accounts
+        run: python scripts/supabase/seed_test_accounts.py
