@@ -4,7 +4,7 @@
 
 - CI/CD AI review and visual QA workflow implementation is complete on `codex/ai-review-visual-qa-cicd` and in closeout review.
 - Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
-- Next: configure external GitHub/Vercel/Supabase/Greptile secrets and run hosted workflow verification after the PR is opened.
+- Next: merge after Greptile follow-up fixes land and hosted checks pass; then dispatch Visual QA from `dev` or `main` with `preview_url` and `pr_number`.
 
 ## Prior/Archived Context
 

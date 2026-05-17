@@ -1389,3 +1389,16 @@ Recommended initial choices:
 - Spec coverage: covers Greptile code review, Playwright visual QA, agent critique, Cursor/Codex/Claude MCP setup, Vercel preview links, Supabase preview/persistent branch strategy, GitHub environments, Render staging/prod split, and programmatic credential coordination.
 - Red-flag scan: no secret values are required for committed files; secret values are referenced only through environment variable names.
 - Type consistency: script names, package script names, workflow references, and artifact paths are consistent across tasks.
+
+---
+
+## Greptile Follow-Up Closeout
+
+Greptile reviewed PR #43 after the branch was marked ready. The actionable items were addressed in the follow-up patch:
+
+- Agent review is capped with a workflow `timeout-minutes` and an `AI_QA_PROVIDER_TIMEOUT_MS` subprocess timeout.
+- Visual QA can post review JSON back to a PR when the maintainer supplies `pr_number` during trusted `workflow_dispatch`.
+- Consumer post-login landing expectations now come from `scripts/qa/flows/consumer.json` via `authLandingPattern`.
+- Environment sync package scripts were renamed to `env:plan:*` to communicate that provider write paths are dry-run/planning scaffolds only.
+
+Dry run before the patch verified `npm run env:check -- --offline`, preview URL validation, Playwright visual QA test discovery, `qa:agent --dry-run`, and the current PR check state.

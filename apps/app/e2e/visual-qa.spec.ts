@@ -2,6 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 import flow from "../../../scripts/qa/flows/consumer.json";
 import { signIn } from "./helpers/auth";
 
+const consumerFlow = flow as typeof flow & { authLandingPattern?: string };
+const authLandingPattern = new RegExp(
+  consumerFlow.authLandingPattern ?? "/(reports|$)",
+);
+
 function artifactName(routePath: string, viewportName: string): string {
   const routeSlug =
     routePath === "/"
@@ -34,7 +39,7 @@ for (const viewport of flow.viewports) {
         });
 
         if (route.requiresAuth) {
-          await signIn(page, { expectLandOn: /\/(reports|$)/ });
+          await signIn(page, { expectLandOn: authLandingPattern });
         }
 
         await page.goto(route.path);

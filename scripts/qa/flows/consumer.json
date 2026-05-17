@@ -1,5 +1,6 @@
 {
   "app": "consumer",
+  "authLandingPattern": "/(reports|$)",
   "baseUrlEnv": "PLAYWRIGHT_BASE_URL",
   "viewports": [
     { "name": "desktop", "width": 1440, "height": 1000 },
