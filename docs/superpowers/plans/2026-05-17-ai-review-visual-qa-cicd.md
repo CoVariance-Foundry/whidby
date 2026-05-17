@@ -960,7 +960,7 @@ git commit -m "feat: add agent visual qa review"
 - Create: `.github/workflows/visual-qa.yml`
 - Test: `gh workflow view visual-qa.yml`
 
-- [ ] **Step 1: Create `.github/workflows/visual-qa.yml`**
+- [x] **Step 1: Create `.github/workflows/visual-qa.yml`**
 
 ```yaml
 name: Visual QA
@@ -1050,7 +1050,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-- [ ] **Step 2: Validate workflow syntax**
+- [x] **Step 2: Validate workflow syntax**
 
 Run:
 
@@ -1060,7 +1060,27 @@ gh workflow view "Visual QA"
 
 Expected: GitHub can parse the workflow after the branch is pushed.
 
-- [ ] **Step 3: Commit**
+Local verification completed before push:
+
+- `gh workflow view "Visual QA"`: reached GitHub, but failed with `could not find any workflows named Visual QA` because the new workflow is not pushed/indexed yet.
+- `python3 -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path(".github/workflows/visual-qa.yml").read_text())'`: attempted; failed because `PyYAML` is not installed in this environment.
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/visual-qa.yml"); puts "ok"'`: passed.
+- `grep -n "pull_request.head.sha" .github/workflows/visual-qa.yml`: confirmed the PR SHA expression has an empty-string fallback before shell selection.
+- `sed -n '1,180p' .github/workflows/visual-qa.yml`: inspected trigger, permissions, concurrency, label gate, preview wait/resolve, default review JSON, artifact upload, and PR feedback wiring.
+- `git diff --check`: passed.
+
+Concern recorded: `gh workflow view "Visual QA"` cannot validate this new workflow until the branch is pushed and GitHub indexes it, so local YAML parsing and shell/text inspection were used before commit.
+
+Task 8 code quality fix:
+
+- `workflow_dispatch` now keeps the `app` input and adds optional `preview_url` and `sha` inputs.
+- Supplying `preview_url` skips Vercel check waiting and deployment lookup, then runs visual QA directly against that URL.
+- Supplying `sha` on manual runs uses that value for artifact id and Vercel lookup when `preview_url` is not supplied; PR runs still use the PR head SHA.
+- The Vercel preview check name now comes from `VERCEL_PREVIEW_CHECK_NAME` GitHub environment/repo variable with a shell fallback to `Vercel`, so configured repos are not hard-coded to one check name.
+- Agent review remains optional, but fallback JSON now distinguishes unconfigured runs from configured review failures. Configured agent failures continue to artifact upload and PR feedback with a failure summary instead of silently reporting "not configured."
+- Verification requested for this fix: Ruby YAML parse, workflow line inspection for `preview_url`, `sha`, configurable Vercel check name, and fallback review JSON status, plus `git diff --check`.
+
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/visual-qa.yml
