@@ -9,6 +9,7 @@ class SignalFilter:
     signal: str
     operator: str
     value: Any
+    required: bool = False
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class ScoringLens:
     required_signals: frozenset[str] = field(default_factory=frozenset)
     sort_key: str = "opportunity"
     sort_descending: bool = True
+    phase: str = "legacy"
 
 
 BALANCED = ScoringLens(
@@ -35,6 +37,7 @@ BALANCED = ScoringLens(
         "ai_resilience": 0.15,
     },
     required_signals=frozenset({"demand", "organic_competition"}),
+    phase="launch",
 )
 
 EASY_WIN = ScoringLens(
@@ -51,6 +54,7 @@ EASY_WIN = ScoringLens(
     },
     required_signals=frozenset({"demand", "organic_competition"}),
     sort_key="opportunity",
+    phase="launch",
 )
 
 CASH_COW = ScoringLens(
@@ -68,6 +72,7 @@ CASH_COW = ScoringLens(
     filters=[SignalFilter("acv_estimate", ">", 3000)],
     required_signals=frozenset({"monetization"}),
     sort_key="revenue_potential",
+    phase="phase_2",
 )
 
 GBP_BLITZ = ScoringLens(
@@ -85,6 +90,7 @@ GBP_BLITZ = ScoringLens(
     filters=[SignalFilter("avg_reviews", "<", 30)],
     required_signals=frozenset({"local_competition", "gbp"}),
     sort_key="opportunity",
+    phase="launch",
 )
 
 AI_PROOF = ScoringLens(
@@ -102,6 +108,26 @@ AI_PROOF = ScoringLens(
     filters=[SignalFilter("aio_trigger_rate", "<", 0.10)],
     required_signals=frozenset({"ai_resilience"}),
     sort_key="opportunity",
+    phase="global_modifier",
+)
+
+KEYWORD_HIJACK = ScoringLens(
+    lens_id="keyword_hijack",
+    name="Keyword Hijack",
+    description="Primary-keyword opportunities with local pack demand and available exact-match naming.",
+    weights={
+        "demand": 0.45,
+        "monetization": 0.30,
+        "commercial_intent": 0.25,
+    },
+    filters=[
+        SignalFilter("search_volume_monthly", ">=", 200, required=True),
+        SignalFilter("local_pack_present", "=", True, required=True),
+        SignalFilter("exact_match_name_taken", "=", False, required=True),
+    ],
+    required_signals=frozenset({"demand", "monetization", "gbp"}),
+    sort_key="opportunity",
+    phase="launch",
 )
 
 BLUE_OCEAN = ScoringLens(
@@ -152,6 +178,7 @@ EXPAND_CONQUER = ScoringLens(
     },
     required_signals=frozenset({"demand", "organic_competition"}),
     sort_key="similarity",
+    phase="launch",
 )
 
 SEASONAL_ARBITRAGE = ScoringLens(
@@ -175,7 +202,7 @@ SEASONAL_ARBITRAGE = ScoringLens(
 LENS_REGISTRY: dict[str, ScoringLens] = {
     lens.lens_id: lens
     for lens in [
-        BALANCED, EASY_WIN, CASH_COW, GBP_BLITZ, AI_PROOF,
+        BALANCED, EASY_WIN, CASH_COW, GBP_BLITZ, AI_PROOF, KEYWORD_HIJACK,
         BLUE_OCEAN, PORTFOLIO_BUILDER, EXPAND_CONQUER, SEASONAL_ARBITRAGE,
     ]
 }
@@ -186,4 +213,9 @@ def get_lens(lens_id: str) -> ScoringLens:
 
 
 def available_lenses() -> list[ScoringLens]:
-    return list(LENS_REGISTRY.values())
+    return [lens for lens in LENS_REGISTRY.values() if lens.phase == "launch"]
+
+
+def is_discoverable_lens(lens_id: str) -> bool:
+    lens = LENS_REGISTRY.get(lens_id)
+    return lens is not None and lens.phase == "launch"

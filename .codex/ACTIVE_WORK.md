@@ -25,6 +25,25 @@ Known constraint:
 
 - `npx docguard-cli guard` is blocked in the sandbox by `ENOTFOUND registry.npmjs.org`; escalation to fetch/execute npm code was rejected by the safety reviewer.
 
+## Strategy Discovery System
+
+Status: implementation complete on `codex/strategy-discovery-system`; ready for integration review and live-environment validation.
+
+Completed:
+
+- Canonical architecture, data model, and test-spec updates define strategies as lenses over existing market intelligence, not separate scoring engines.
+- Supabase migration `016_strategy_discovery_system.sql` adds strategy run lineage, local-pack listing facts, metro feature vectors, and optional strategy score cache tables.
+- Python domain logic projects launch strategies `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; `cash_cow` remains phase-2/catalog-only.
+- `StrategyRepository` reads cached market rows, local-pack facts, feature vectors, and persists strategy run lineage.
+- FastAPI exposes `/api/strategies`, strategy-aware `/api/discover`, and `/api/strategy-runs` with validation, fresh-run caps, and storage-failure handling.
+- The consumer app exposes protected `/strategies` gallery/detail screens plus Next.js proxy routes for catalog, discovery, and run creation with existing entitlement/quota behavior.
+
+Known follow-ups:
+
+- Expand & Conquer requests now pass `reference_city_id`; high-quality scoring still depends on populated feature-vector/reference competition inputs.
+- Fresh strategy runs currently persist queued run lineage; full async report fanout/status detail endpoints remain the next implementation slice.
+- Live Supabase/PostgREST validation is still required before production rollout.
+
 ## Consumer User Management, Billing, and Report Quotas
 
 Status: implementation in progress.

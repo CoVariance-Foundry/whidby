@@ -30,6 +30,11 @@
 | ExploreRefreshRun | Supabase `explore_refresh_runs` table | id (UUID) | Manual or scheduled refresh execution envelope |
 | ExploreRefreshRunItem | Supabase `explore_refresh_run_items` table | id (UUID) | Per-target refresh result linking old report to new report and errors |
 | ExploreReportSnapshot | Supabase `explore_report_snapshots` table | id (UUID) | Normalized historical score row per report + CBSA for trend analysis |
+| StrategyRun | Supabase `strategy_runs` table | id (UUID) | Cached/fresh strategy run envelope for account-scoped lineage |
+| StrategyRunItem | Supabase `strategy_run_items` table | id (UUID) | Ranked strategy result row for a city/service/keyword |
+| LocalPackListingFact | Supabase `local_pack_listing_facts` table | id (UUID) | Keyword + CBSA local pack listing evidence used by GBP Blitz and Keyword Hijack |
+| MetroFeatureVector | Supabase `metro_feature_vectors` table | cbsa_code + feature_version | Derived metro similarity vector used by Expand & Conquer |
+| StrategyScoreCache | Supabase `strategy_score_cache` table | strategy_id + cbsa_code + niche + keyword | Optional read-optimized strategy projection cache |
 | FeedbackLog         | Supabase `feedback_log` table        | log_id (UUID)    | Input context + scores for future optimization (legacy)            |
 | KBEntity            | Supabase `kb_entities` table         | entity_id (UUID) | Canonical niche+geo identity for knowledge base lineage            |
 | KBSnapshot          | Supabase `kb_snapshots` table        | snapshot_id (UUID) | Versioned derived-state snapshot with supersedence chain         |
@@ -141,6 +146,19 @@ Source: `src/domain/services/explore_city_service.py`. The frontend must treat t
 | `stale` | boolean | Yes | Whether this cached service exceeds the active freshness cadence |
 
 Source: `src/domain/explore/entities.py` and `src/domain/services/explore_city_service.py`.
+
+### StrategyResult (service DTO)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `strategy_id` | string | Yes | `easy_win`, `gbp_blitz`, `keyword_hijack`, `expand_conquer`, or `cash_cow` |
+| `rank` | integer | Yes | Rank within the returned result set |
+| `score` | number | Yes | Strategy projection score, 0-100 |
+| `cbsa_code` | string | Yes | Metro key |
+| `niche_normalized` | string | Yes | Stable service key |
+| `primary_keyword` | string | No | Required for Keyword Hijack rows |
+| `evidence` | object | Yes | Strategy-specific signal facts used to explain the score |
+| `warnings` | array | Yes | AI resilience, benchmark confidence, stale data, missing local pack, and entitlement warnings |
 
 ### Explore Metric Formulas
 
@@ -513,3 +531,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.1.0   | 2026-04-22 | Mapbox autocomplete | Added PlaceSuggestion and HistoryEntry schemas for global autocomplete + canonical place targeting |
 | 1.2.0   | 2026-05-14 | Explore Cities system design | Added Explore service DTOs, density/growth/freshness formulas, and backend filtering expectations |
 | 1.3.0   | 2026-05-14 | Explore refresh control | Added refresh policy, target, run, run item, and report snapshot entities for cached Explore refreshes |
+| 1.4.0   | 2026-05-16 | Strategy Discovery system design | Added strategy run/cache entities, local pack and metro vector facts, and StrategyResult DTO |
