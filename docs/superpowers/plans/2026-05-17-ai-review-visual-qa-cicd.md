@@ -298,7 +298,7 @@ Task 2 verification result:
 - Modify: `package.json`
 - Test: `npm run env:check -- --offline`
 
-- [ ] **Step 1: Create `config/environments/manifest.json`**
+- [x] **Step 1: Create `config/environments/manifest.json`**
 
 ```json
 {
@@ -345,7 +345,7 @@ Task 2 verification result:
 }
 ```
 
-- [ ] **Step 2: Create `scripts/ci/env_manifest_check.mjs`**
+- [x] **Step 2: Create `scripts/ci/env_manifest_check.mjs`**
 
 Implement a read-only checker that:
 
@@ -390,7 +390,7 @@ if (args.has("--offline")) {
 console.log("live platform checks are enabled by provider flags; no provider flag was selected");
 ```
 
-- [ ] **Step 3: Add root package script**
+- [x] **Step 3: Add root package script**
 
 Modify `package.json`:
 
@@ -398,7 +398,7 @@ Modify `package.json`:
 "env:check": "node scripts/ci/env_manifest_check.mjs"
 ```
 
-- [ ] **Step 4: Create `.github/workflows/env-audit.yml`**
+- [x] **Step 4: Create `.github/workflows/env-audit.yml`**
 
 ```yaml
 name: Environment Audit
@@ -429,7 +429,7 @@ jobs:
       - run: npm run env:check -- --offline
 ```
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -439,7 +439,12 @@ npm run env:check -- --offline
 
 Expected: prints variable names and platforms only; no secret values.
 
-- [ ] **Step 6: Commit**
+Verification results:
+
+- `npm run env:check -- --offline` passed; output listed required variable names, kinds, platforms, and environments only.
+- `git diff --check` passed.
+
+- [x] **Step 6: Commit**
 
 ```bash
 git add config/environments/manifest.json scripts/ci/env_manifest_check.mjs .github/workflows/env-audit.yml package.json
