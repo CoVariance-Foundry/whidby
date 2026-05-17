@@ -59,6 +59,18 @@ CREATE TABLE IF NOT EXISTS account_memberships (
 CREATE INDEX IF NOT EXISTS idx_account_memberships_user
     ON account_memberships (user_id);
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM account_memberships
+        GROUP BY user_id
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'cannot add one-account-per-user constraint: duplicate account_memberships.user_id rows exist';
+    END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_account_memberships_one_account_per_user
     ON account_memberships (user_id);
 
@@ -233,7 +245,10 @@ BEGIN
         RAISE EXCEPTION 'authenticated user required';
     END IF;
 
-    PERFORM pg_advisory_xact_lock(hashtext(v_user_id::TEXT));
+    PERFORM pg_advisory_xact_lock(
+        ('x' || substr(replace(v_user_id::TEXT, '-', ''), 1, 8))::bit(32)::int,
+        ('x' || substr(replace(v_user_id::TEXT, '-', ''), 9, 8))::bit(32)::int
+    );
 
     SELECT account_id
     INTO v_account_id
@@ -285,7 +300,8 @@ BEGIN
     WHERE id = p_report_id
       AND access_scope = 'account'
       AND owner_account_id IS NOT NULL
-      AND public.is_account_member(owner_account_id);
+      AND public.is_account_member(owner_account_id)
+      AND archived_at IS NULL;
 
     GET DIAGNOSTICS v_archived_count = ROW_COUNT;
     RETURN v_archived_count > 0;

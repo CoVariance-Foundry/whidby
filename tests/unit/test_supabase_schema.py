@@ -213,12 +213,17 @@ class TestUserManagementBillingSchema:
 
     def test_account_bootstrap_is_serialized_per_user(self, sql: str):
         assert "idx_account_memberships_one_account_per_user" in sql
-        assert "pg_advisory_xact_lock(hashtext(v_user_id::TEXT))" in sql
+        assert "cannot add one-account-per-user constraint" in sql
+        assert "GROUP BY user_id" in sql
+        assert "HAVING count(*) > 1" in sql
+        assert "pg_advisory_xact_lock(" in sql
+        assert "replace(v_user_id::TEXT, '-', '')" in sql
 
     def test_report_archive_uses_scoped_rpc(self, sql: str):
         assert "public.archive_account_report" in sql
         assert "GRANT EXECUTE ON FUNCTION public.archive_account_report(UUID)" in sql
         assert "SET archived_at = now()" in sql
+        assert "AND archived_at IS NULL" in sql
 
     def test_child_report_tables_inherit_parent_visibility(self, sql: str):
         for policy in [
