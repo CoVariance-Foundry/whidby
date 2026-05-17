@@ -35,6 +35,9 @@ class ExploreCityRepository(Protocol):
     ) -> dict[str, Any]:
         ...
 
+    def load_city_detail(self, cbsa_code: str) -> dict[str, Any] | None:
+        ...
+
 
 class ExploreCityService:
     """Build Explore city summaries from repository read inputs."""
@@ -181,6 +184,11 @@ class ExploreCityService:
             "stale": summary_freshness["stale"],
             "cached_scores": sorted_scores,
         }
+
+    def load_city_detail(self, cbsa_code: str) -> dict[str, Any] | None:
+        if not hasattr(self._repository, "load_city_detail"):
+            raise RuntimeError("Explore city detail repository is not configured")
+        return self._repository.load_city_detail(cbsa_code)
 
 
 def _normalize_service(service_filter: str | None) -> str | None:

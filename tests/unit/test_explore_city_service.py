@@ -372,3 +372,28 @@ def test_city_service_uses_offset_cursor_for_next_page() -> None:
     assert not isinstance(result, list)
     assert len(result["cities"]) == 10
     assert result["next_cursor"] == "35"
+
+
+def test_city_service_load_city_detail_delegates_to_repository() -> None:
+    class Repository(FakePagedExploreRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.detail_calls: list[str] = []
+
+        def load_city_detail(self, cbsa_code: str) -> dict:
+            self.detail_calls.append(cbsa_code)
+            return {
+                "cbsa_code": cbsa_code,
+                "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+                "cached_scores": [],
+            }
+
+    repository = Repository()
+    detail = ExploreCityService(repository).load_city_detail("38060")
+
+    assert detail == {
+        "cbsa_code": "38060",
+        "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+        "cached_scores": [],
+    }
+    assert repository.detail_calls == ["38060"]
