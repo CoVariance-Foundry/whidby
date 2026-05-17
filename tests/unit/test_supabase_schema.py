@@ -26,6 +26,7 @@ class TestMigrationFiles:
             "015_explore_refresh_control.sql",
             "016_consumer_onboarding.sql",
             "017_strategy_discovery_system.sql",
+            "018_internal_user_entitlements.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -243,6 +244,138 @@ class TestUserManagementBillingSchema:
         assert "FUNCTION public.refund_report_quota(p_account_id UUID)" in sql
         assert "ON CONFLICT (account_id, metric_key, period_start, period_end)" in sql
         assert "WHERE usage_counters.used_count < v_limit" in sql
+
+
+class TestInternalUserEntitlementsSchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (
+            MIGRATIONS_DIR / "018_internal_user_entitlements.sql"
+        ).read_text()
+
+    @pytest.fixture
+    def normalized_sql(self, sql: str) -> str:
+        return " ".join(sql.split())
+
+    def test_internal_user_entitlements_table(self, sql: str, normalized_sql: str):
+        assert "CREATE TABLE IF NOT EXISTS public.internal_user_entitlements" in sql
+        assert (
+            "user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE"
+            in normalized_sql
+        )
+        assert (
+            "fresh_report_quota_exempt BOOLEAN NOT NULL DEFAULT false"
+            in normalized_sql
+        )
+        assert "reason TEXT NOT NULL" in normalized_sql
+        assert (
+            "granted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL"
+            in normalized_sql
+        )
+        assert "expires_at TIMESTAMPTZ" in normalized_sql
+        assert "created_at TIMESTAMPTZ NOT NULL DEFAULT now()" in normalized_sql
+        assert "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()" in normalized_sql
+        assert "idx_internal_user_entitlements_active_quota_exempt" in sql
+        assert (
+            "ON public.internal_user_entitlements (user_id, expires_at)"
+            in normalized_sql
+        )
+        assert "WHERE fresh_report_quota_exempt = true" in normalized_sql
+
+    def test_internal_user_entitlements_rls_is_service_role_only(
+        self, sql: str, normalized_sql: str
+    ):
+        assert (
+            "ALTER TABLE public.internal_user_entitlements "
+            "ENABLE ROW LEVEL SECURITY"
+        ) in normalized_sql
+        assert "Service role full access on internal_user_entitlements" in sql
+        assert (
+            "ON public.internal_user_entitlements FOR ALL TO service_role"
+            in normalized_sql
+        )
+        assert (
+            "ON public.internal_user_entitlements FOR ALL TO authenticated"
+            not in normalized_sql
+        )
+        assert (
+            "ON public.internal_user_entitlements FOR SELECT TO authenticated"
+            not in normalized_sql
+        )
+        assert (
+            "ON public.internal_user_entitlements FOR INSERT TO authenticated"
+            not in normalized_sql
+        )
+        assert (
+            "ON public.internal_user_entitlements FOR UPDATE TO authenticated"
+            not in normalized_sql
+        )
+        assert (
+            "ON public.internal_user_entitlements FOR DELETE TO authenticated"
+            not in normalized_sql
+        )
+
+    def test_get_account_entitlement_includes_internal_override(
+        self, normalized_sql: str
+    ):
+        assert "DROP FUNCTION IF EXISTS public.get_account_entitlement()" in (
+            normalized_sql
+        )
+        assert "fresh_report_quota_exempt BOOLEAN" in normalized_sql
+        assert "public.internal_user_entitlements iue" in normalized_sql
+        assert "COALESCE(iue.fresh_report_quota_exempt, false)" in normalized_sql
+        assert (
+            "(iue.expires_at IS NULL OR iue.expires_at > now())"
+            in normalized_sql
+        )
+        assert (
+            "REVOKE EXECUTE ON FUNCTION public.get_account_entitlement() "
+            "FROM PUBLIC"
+        ) in normalized_sql
+        assert (
+            "REVOKE EXECUTE ON FUNCTION public.get_account_entitlement() "
+            "FROM anon"
+        ) in normalized_sql
+        assert (
+            "GRANT EXECUTE ON FUNCTION public.get_account_entitlement() "
+            "TO authenticated"
+        ) in normalized_sql
+
+    def test_admin_account_bootstrap_rpc(self, normalized_sql: str):
+        assert (
+            "DROP FUNCTION IF EXISTS public.ensure_account_for_user_admin("
+            "UUID, TEXT, TEXT, TEXT)"
+        ) in normalized_sql
+        assert "ensure_account_for_user_admin" in normalized_sql
+        assert "p_member_role TEXT DEFAULT 'admin'" in normalized_sql
+        assert "p_plan_key TEXT DEFAULT 'free'" in normalized_sql
+        assert "p_overwrite_existing BOOLEAN DEFAULT false" in normalized_sql
+        assert "role IN ('owner', 'member', 'admin')" in normalized_sql
+        assert "plan_key IN ('free', 'plus', 'pro')" in normalized_sql
+        assert "email = COALESCE(EXCLUDED.email, user_profiles.email)" in (
+            normalized_sql
+        )
+        assert normalized_sql.count("WHERE p_overwrite_existing") == 2
+
+    def test_admin_account_bootstrap_execute_is_service_role_only(
+        self, normalized_sql: str
+    ):
+        assert (
+            "REVOKE EXECUTE ON FUNCTION public.ensure_account_for_user_admin"
+            in normalized_sql
+        )
+        assert (
+            "GRANT EXECUTE ON FUNCTION public.ensure_account_for_user_admin("
+            "UUID, TEXT, TEXT, TEXT, BOOLEAN) TO service_role"
+        ) in normalized_sql
+        assert (
+            "GRANT EXECUTE ON FUNCTION public.ensure_account_for_user_admin("
+            "UUID, TEXT, TEXT, TEXT, BOOLEAN) TO authenticated"
+        ) not in normalized_sql
+        assert (
+            "GRANT EXECUTE ON FUNCTION public.ensure_account_for_user_admin("
+            "UUID, TEXT, TEXT, TEXT, BOOLEAN) TO anon"
+        ) not in normalized_sql
 
 
 class TestConsumerOnboardingSchema:
