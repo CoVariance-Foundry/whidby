@@ -22,7 +22,7 @@ Implementation path:
 
 ## Explore Cities Backend Design
 
-Status: local data-model/backfill/read-model slice implemented; live backfill blocked by missing/invalid Supabase env; backend API route and pagination still pending.
+Status: local data-model/backfill/read-model slice implemented; live backfill blocked by invalid Supabase API keys in this worktree; backend API route and pagination still pending.
 
 Completed: canonical Explore Cities architecture now defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
 
@@ -57,7 +57,7 @@ Not verified live:
 - `scripts/explore/backfill_metros.py --apply`
 - `scripts/explore/backfill_cbp_establishments.py --apply`
 - benchmark recompute after fresh source data
-- `python scripts/explore/audit_explore_sources.py` against a valid Supabase service-role environment
+- `python scripts/explore/audit_explore_sources.py` against a valid Supabase service-role environment. The 2026-05-16 service-role and publishable-key audits reached the configured Supabase project URL but returned `HTTP 401 Invalid API key` for all checked tables, so no source counts or non-null coverage were verified live.
 
 Known constraints:
 
