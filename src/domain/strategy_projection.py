@@ -145,6 +145,21 @@ def project_keyword_hijack(row: dict[str, Any]) -> StrategyProjection:
 
 
 def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
+    if (
+        row.get("reference_city_id")
+        and row.get("cbsa_code")
+        and str(row.get("reference_city_id")) == str(row.get("cbsa_code"))
+    ):
+        return StrategyProjection(
+            strategy_id="expand_conquer",
+            score=0.0,
+            evidence={
+                "cbsa_code": row.get("cbsa_code"),
+                "reference_city_id": row.get("reference_city_id"),
+            },
+            warnings=["reference_city_not_candidate"],
+        )
+
     similarity_raw = row.get("similarity_score")
     if similarity_raw is None:
         return StrategyProjection(

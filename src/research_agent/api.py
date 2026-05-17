@@ -6,6 +6,7 @@ Run with: uvicorn src.research_agent.api:app --reload --port 8000
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -199,7 +200,9 @@ def _require_strategy_discovery_internal_access(request: Request) -> None:
 
     authorization = request.headers.get("authorization", "")
     internal_token = request.headers.get("x-strategy-discovery-token", "")
-    if authorization == f"Bearer {token}" or internal_token == token:
+    if hmac.compare_digest(authorization, f"Bearer {token}") or hmac.compare_digest(
+        internal_token, token
+    ):
         return
 
     raise HTTPException(status_code=401, detail="Strategy discovery access denied.")

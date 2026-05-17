@@ -70,24 +70,37 @@ class StrategyRepository:
         reference_city_id: str,
         niche_normalized: str | None,
     ) -> list[dict[str, Any]]:
+        candidate_rows = [
+            row for row in rows if str(row.get("cbsa_code") or "") != reference_city_id
+        ]
         reference_rows = self.fetch_cached_markets(
             niche_normalized=niche_normalized,
             cbsa_code=reference_city_id,
             limit=1,
         )
         reference_row = reference_rows[0] if reference_rows else {}
-        reference_vector = _feature_vector_values(
-            self.fetch_feature_vector(cbsa_code=reference_city_id)
-        )
+        cbsa_codes = [
+            reference_city_id,
+            *[
+                str(row.get("cbsa_code") or "")
+                for row in candidate_rows
+                if row.get("cbsa_code")
+            ],
+        ]
+        feature_vectors = {
+            str(row.get("cbsa_code")): _feature_vector_values(row)
+            for row in self.fetch_feature_vectors(cbsa_codes=cbsa_codes)
+            if row.get("cbsa_code")
+        }
+        reference_vector = feature_vectors.get(reference_city_id)
         hydrated: list[dict[str, Any]] = []
-        for row in rows:
-            candidate_vector = _feature_vector_values(
-                self.fetch_feature_vector(cbsa_code=str(row.get("cbsa_code") or ""))
-            )
+        for row in candidate_rows:
+            candidate_vector = feature_vectors.get(str(row.get("cbsa_code") or ""))
             similarity = _cosine_similarity(reference_vector, candidate_vector)
             hydrated.append(
                 {
                     **row,
+                    "reference_city_id": reference_city_id,
                     "similarity_score": similarity,
                     "reference_organic_difficulty": reference_row.get("organic_difficulty"),
                     "reference_local_difficulty": reference_row.get("local_difficulty"),
@@ -128,6 +141,21 @@ class StrategyRepository:
         )
         rows = _result_rows(response)
         return rows[0] if rows else None
+
+    def fetch_feature_vectors(
+        self, *, cbsa_codes: list[str], feature_version: str = "strategy_v1"
+    ) -> list[dict[str, Any]]:
+        cleaned_codes = sorted({code for code in cbsa_codes if code})
+        if not cleaned_codes:
+            return []
+        response = (
+            self._client.table("metro_feature_vectors")
+            .select("*")
+            .in_("cbsa_code", cleaned_codes)
+            .eq("feature_version", feature_version)
+            .execute()
+        )
+        return _result_rows(response)
 
     def create_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = self._client.table("strategy_runs").insert(payload).execute()

@@ -13,6 +13,7 @@ class FakeTable:
         self.rows = rows or []
         self.error = error
         self.filters = []
+        self.in_filters = []
         self.limit_value = None
 
     def select(self, value):
@@ -22,6 +23,12 @@ class FakeTable:
     def eq(self, key, value):
         self.calls.append(("eq", key, value))
         self.filters.append((key, value))
+        return self
+
+    def in_(self, key, values):
+        values = list(values)
+        self.calls.append(("in_", key, values))
+        self.in_filters.append((key, values))
         return self
 
     def limit(self, value):
@@ -41,6 +48,8 @@ class FakeTable:
         rows = list(self.rows)
         for key, value in self.filters:
             rows = [row for row in rows if row.get(key) == value]
+        for key, values in self.in_filters:
+            rows = [row for row in rows if row.get(key) in values]
         if self.limit_value is not None:
             rows = rows[: self.limit_value]
         return type("Response", (), {"data": rows, "error": self.error})()
@@ -49,12 +58,15 @@ class FakeTable:
 class FakeClient:
     def __init__(self, rows_by_table=None, errors_by_table=None):
         self.tables = {}
+        self.table_calls = {}
         self.rows_by_table = rows_by_table or {}
         self.errors_by_table = errors_by_table or {}
 
     def table(self, name):
-        self.tables[name] = FakeTable(self.rows_by_table.get(name), self.errors_by_table.get(name))
-        return self.tables[name]
+        table = FakeTable(self.rows_by_table.get(name), self.errors_by_table.get(name))
+        self.tables[name] = table
+        self.table_calls.setdefault(name, []).append(table)
+        return table
 
 
 def test_fetch_cached_markets_reads_canonical_tables() -> None:
@@ -185,6 +197,29 @@ def test_query_markets_hydrates_expand_conquer_reference_inputs() -> None:
     assert row["similarity_score"] == 1.0
     assert row["reference_organic_difficulty"] == 45
     assert row["reference_local_difficulty"] == 50
+    assert [m.city.cbsa_code for m in markets] == ["13820"]
+    feature_vector_calls = client.table_calls["metro_feature_vectors"]
+    assert len(feature_vector_calls) == 1
+    assert ("in_", "cbsa_code", ["11111", "13820"]) in feature_vector_calls[0].calls
+
+
+def test_fetch_feature_vectors_batches_cbsa_codes() -> None:
+    client = FakeClient(
+        rows_by_table={
+            "metro_feature_vectors": [
+                {"cbsa_code": "13820", "feature_version": "strategy_v1"},
+                {"cbsa_code": "11111", "feature_version": "strategy_v1"},
+            ],
+        }
+    )
+    repo = StrategyRepository(client)
+
+    rows = repo.fetch_feature_vectors(cbsa_codes=["13820", "11111", "13820", ""])
+
+    assert {row["cbsa_code"] for row in rows} == {"13820", "11111"}
+    calls = client.tables["metro_feature_vectors"].calls
+    assert ("in_", "cbsa_code", ["11111", "13820"]) in calls
+    assert ("eq", "feature_version", "strategy_v1") in calls
 
 
 def test_query_markets_maps_ai_exposure_to_aio_trigger_rate() -> None:
