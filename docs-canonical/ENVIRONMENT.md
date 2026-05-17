@@ -164,6 +164,8 @@ Supabase preview branches are data-less by default. Preview seed data must be de
 
 Secret-bearing Visual QA runs only from trusted `dev` or `main` workflow dispatches. Use the `visual-qa` PR label to request review, wait for the Vercel preview URL, then dispatch the workflow from `dev` or `main` with that URL. Manual preview URLs must be HTTPS and must match `VISUAL_QA_ALLOWED_HOSTS` or `VISUAL_QA_ALLOWED_HOST_SUFFIXES`; if no allowlist vars are set, only `*.vercel.app` previews are accepted.
 
+Environment sync scripts are dry-run planners in this branch. Use `npm run env:plan:preview`, `npm run env:plan:vercel -- --environment <env>`, `npm run env:plan:github -- --environment <env>`, or `npm run env:plan:supabase -- --environment <env> --branch <name>` to audit required names without applying provider changes.
+
 ### PR AI Review Policy
 
 Greptile is the code-review AI for PR-level source review. It runs through the GitHub App and is accessed locally through Greptile MCP in Cursor, Codex, or Claude Code. Visual QA is separate: Playwright captures user-flow artifacts and an optional local/CI agent reviews the rendered experience for product and design issues.

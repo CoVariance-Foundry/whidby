@@ -18,6 +18,10 @@ on:
         description: "Optional commit SHA for artifact id and Vercel lookup"
         required: false
         default: ""
+      pr_number:
+        description: "Optional PR number for posting Visual QA feedback"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -43,7 +47,8 @@ jobs:
           Secret-bearing Visual QA is intentionally not executed in `pull_request`,
           because that would run PR-controlled code with preview, auth, and agent
           credentials. After the Vercel preview is ready, run this workflow manually
-          from `dev` or `main` with `workflow_dispatch` and provide `preview_url`.
+          from `dev` or `main` with `workflow_dispatch` and provide `preview_url`
+          plus `pr_number` when PR feedback should be posted.
           SUMMARY
 
   visual-qa:
@@ -53,6 +58,8 @@ jobs:
       contents: read
       checks: read
       statuses: read
+      issues: write
+      pull-requests: write
     # Secrets are only available on the manual maintainer-dispatched job.
     environment: preview
     steps:
@@ -77,12 +84,18 @@ jobs:
           WORKFLOW_SHA: ${{ github.sha }}
           SELECTED_APP: ${{ github.event.inputs.app || 'app' }}
           INPUT_PREVIEW_URL: ${{ github.event.inputs.preview_url || '' }}
+          INPUT_PR_NUMBER: ${{ github.event.inputs.pr_number || '' }}
           INPUT_SHA: ${{ github.event.inputs.sha || '' }}
         run: |
           set -euo pipefail
 
           if [[ "$SELECTED_APP" != "app" && "$SELECTED_APP" != "admin" ]]; then
             echo "Invalid app input. Expected app or admin." >&2
+            exit 1
+          fi
+
+          if [[ -n "$INPUT_PR_NUMBER" && ! "$INPUT_PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Invalid pr_number input. Expected a positive integer." >&2
             exit 1
           fi
 
@@ -96,6 +109,7 @@ jobs:
           fi
 
           echo "app=$SELECTED_APP" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$INPUT_PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Vercel preview
@@ -169,6 +183,7 @@ jobs:
         id: agent-review
         if: ${{ vars.AI_QA_PROVIDER != '' }}
         continue-on-error: true
+        timeout-minutes: 10
         run: npm run qa:agent -- --provider "$AI_QA_PROVIDER" --artifacts artifacts/visual-qa
         env:
           AI_QA_PROVIDER: ${{ vars.AI_QA_PROVIDER }}
@@ -215,6 +230,20 @@ jobs:
         env:
           AI_QA_PROVIDER: ${{ vars.AI_QA_PROVIDER }}
           AGENT_REVIEW_OUTCOME: ${{ steps.agent-review.outcome }}
+
+      - name: Post PR feedback
+        if: ${{ !cancelled() && steps.qa-inputs.outputs.pr_number != '' }}
+        run: |
+          set -euo pipefail
+          artifact_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          npm run qa:post -- \
+            --review-json visual-qa-review.json \
+            --artifact-url "$artifact_url" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr "$PR_NUMBER"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.qa-inputs.outputs.pr_number }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

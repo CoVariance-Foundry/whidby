@@ -8,6 +8,7 @@ const VALID_PROVIDERS = new Set(["codex", "claude"]);
 const VALID_SEVERITIES = new Set(["blocker", "major", "minor", "polish"]);
 const REVIEW_OUTPUT = "visual-qa-review.json";
 const PROMPT_PATH = resolve("scripts", "qa", "prompts", "visual-designer-review.md");
+const DEFAULT_PROVIDER_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_MANIFEST_ENTRIES = 250;
 
 function readFlagValue(argv, index, flagName) {
@@ -114,6 +115,25 @@ function tokenizeCommand(command) {
   }
 
   return tokens;
+}
+
+function providerTimeoutMs() {
+  const value = process.env.AI_QA_PROVIDER_TIMEOUT_MS;
+
+  if (!value) {
+    return DEFAULT_PROVIDER_TIMEOUT_MS;
+  }
+
+  if (!/^\d+$/.test(value)) {
+    throw new Error("AI_QA_PROVIDER_TIMEOUT_MS must be a positive integer");
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error("AI_QA_PROVIDER_TIMEOUT_MS must be a positive integer");
+  }
+
+  return parsed;
 }
 
 function providerCommand(provider) {
@@ -326,6 +346,7 @@ try {
     encoding: "utf8",
     env: providerEnv(options.provider),
     maxBuffer: 10 * 1024 * 1024,
+    timeout: providerTimeoutMs(),
   });
 
   if (result.error) {
