@@ -49,4 +49,5 @@ export interface StrategyRunRequest {
   ai_resilience_filter?: boolean;
   limit?: number;
   targets?: Record<string, unknown>[];
+  quota_consumed?: number;
 }

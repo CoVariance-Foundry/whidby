@@ -33,9 +33,11 @@ export async function POST(req: NextRequest) {
     supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     const mode = body.mode ?? "cached";
+    let quotaConsumed = 0;
     const strategy_id = body.strategy_id ?? body.lens_id;
     const bodyWithoutLensId = { ...body };
     delete bodyWithoutLensId.lens_id;
+    delete bodyWithoutLensId.quota_consumed;
 
     if (mode === "fresh") {
       if (
@@ -79,6 +81,7 @@ export async function POST(req: NextRequest) {
           );
         }
         quotaConsumedForAccount = entitlement.account_id;
+        quotaConsumed = 1;
       }
     }
 
@@ -89,6 +92,7 @@ export async function POST(req: NextRequest) {
         ...bodyWithoutLensId,
         ...(strategy_id ? { strategy_id } : {}),
         mode,
+        quota_consumed: quotaConsumed,
         account_id: entitlement.account_id,
         created_by_user_id: user.id,
       }),

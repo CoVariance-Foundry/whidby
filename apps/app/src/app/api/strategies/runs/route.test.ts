@@ -109,6 +109,7 @@ describe("POST /api/strategies/runs", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({
       mode: "fresh",
       strategy_id: "easy_win",
+      quota_consumed: 0,
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
     });
@@ -135,6 +136,7 @@ describe("POST /api/strategies/runs", () => {
       strategy_id: "gbp_blitz",
       limit: 25,
       mode: "cached",
+      quota_consumed: 0,
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
     });
@@ -164,6 +166,7 @@ describe("POST /api/strategies/runs", () => {
       mode: "fresh",
       strategy_id: "keyword_hijack",
       primary_keyword: "boise plumber",
+      quota_consumed: 1,
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
     });
@@ -190,6 +193,7 @@ describe("POST /api/strategies/runs", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({
       strategy_id: "easy_win",
       mode: "cached",
+      quota_consumed: 0,
     });
     expect(JSON.parse(init.body as string)).not.toHaveProperty("lens_id");
   });

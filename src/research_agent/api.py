@@ -506,6 +506,7 @@ class StrategyRunRequest(BaseModel):
     strategy_id: StrategyId
     mode: Literal["cached", "fresh"] = "cached"
     targets: list[StrategyRunTarget] = Field(default_factory=list)
+    quota_consumed: int = Field(default=0, ge=0, le=1)
     account_id: uuid.UUID | None = None
     created_by_user_id: uuid.UUID | None = None
     city: str | None = None
@@ -1420,7 +1421,7 @@ async def create_strategy_run(req: StrategyRunRequest, request: Request) -> dict
             "limit": req.limit,
         },
         "result_count": target_count if req.mode == "cached" else 0,
-        "quota_consumed": 1 if req.mode == "fresh" else 0,
+        "quota_consumed": req.quota_consumed if req.mode == "fresh" else 0,
     }
     try:
         created = _get_strategy_repository().create_run(payload)
