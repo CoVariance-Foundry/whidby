@@ -134,4 +134,4 @@ class SeoBenchmarkRepository(Protocol):
         population_class: str,
     ) -> SeoBenchmarkCell | None:
         """Return the benchmark cell for one `(niche, population_class)` key."""
-        ...
+        raise NotImplementedError
