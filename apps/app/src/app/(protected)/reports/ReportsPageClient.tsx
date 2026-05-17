@@ -19,32 +19,6 @@ interface Props {
   rows: TableRow[];
 }
 
-function loadCachedReport(reportId: string): FullReportData | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(`widby:report:${reportId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as FullReportData;
-    if (!parsed || typeof parsed !== "object") return null;
-    return {
-      ...parsed,
-      id: typeof parsed.id === "string" ? parsed.id : reportId,
-      metros: Array.isArray(parsed.metros) ? parsed.metros : [],
-      keyword_expansion:
-        parsed.keyword_expansion && typeof parsed.keyword_expansion === "object"
-          ? parsed.keyword_expansion
-          : null,
-      resolved_weights:
-        parsed.resolved_weights && typeof parsed.resolved_weights === "object"
-          ? parsed.resolved_weights
-          : null,
-      meta: parsed.meta && typeof parsed.meta === "object" ? parsed.meta : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export default function ReportsPageClient({ rows: initialRows }: Props) {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState(initialRows);
@@ -91,11 +65,6 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
         .maybeSingle();
 
       if (error || !data) {
-        const cached = loadCachedReport(reportId);
-        if (cached) {
-          setModal({ kind: "open", report: cached });
-          return;
-        }
         setModal({ kind: "error", message: error?.message ?? "Report not found." });
         return;
       }

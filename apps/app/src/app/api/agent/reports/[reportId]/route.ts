@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  EntitlementError,
+  resolveEntitlementContext,
+} from "@/lib/account/entitlements";
+import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+type RouteContext = {
+  params: Promise<{ reportId: string }>;
+};
 
 function normalizeReportPayload(payload: Record<string, unknown>) {
   const reportId = payload.report_id;
@@ -34,9 +43,9 @@ function normalizeReportPayload(payload: Record<string, unknown>) {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { reportId: string } },
+  { params }: RouteContext,
 ) {
-  const { reportId } = params;
+  const { reportId } = await params;
   const startedAt = Date.now();
 
   if (!reportId) {
@@ -47,6 +56,55 @@ export async function GET(
   }
 
   try {
+    const supabase = await createClient();
+    const { entitlement } = await resolveEntitlementContext(supabase);
+    const { data: reportAccess, error: reportError } = await supabase
+      .from("reports")
+      .select("id, access_scope, owner_account_id")
+      .eq("id", reportId)
+      .maybeSingle();
+
+    if (reportError) {
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          message: "Unable to verify report access.",
+          duration_ms: Date.now() - startedAt,
+        },
+        { status: 502 },
+      );
+    }
+
+    if (!reportAccess) {
+      return NextResponse.json(
+        {
+          status: "not_found",
+          message: "Report not found.",
+          duration_ms: Date.now() - startedAt,
+        },
+        { status: 404 },
+      );
+    }
+
+    const accessScope = String(reportAccess.access_scope ?? "account");
+    const ownerAccountId =
+      typeof reportAccess.owner_account_id === "string"
+        ? reportAccess.owner_account_id
+        : null;
+    const canReadReport =
+      accessScope === "cached" || ownerAccountId === entitlement.account_id;
+
+    if (!canReadReport) {
+      return NextResponse.json(
+        {
+          status: "not_found",
+          message: "Report not found.",
+          duration_ms: Date.now() - startedAt,
+        },
+        { status: 404 },
+      );
+    }
+
     const upstream = await fetch(`${API_BASE}/api/niches/${encodeURIComponent(reportId)}`);
     if (!upstream.ok) {
       return NextResponse.json(
@@ -64,6 +122,18 @@ export async function GET(
     const report = normalizeReportPayload(json);
     return NextResponse.json({ status: "success", report, duration_ms: Date.now() - startedAt });
   } catch (error) {
+    if (error instanceof EntitlementError) {
+      return NextResponse.json(
+        {
+          status: "auth_error",
+          code: error.code,
+          message: error.message,
+          duration_ms: Date.now() - startedAt,
+        },
+        { status: error.status },
+      );
+    }
+
     return NextResponse.json(
       {
         status: "unavailable",
