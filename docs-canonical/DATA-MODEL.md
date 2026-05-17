@@ -133,6 +133,7 @@ This is a derived read model for Explore latency. Canonical source tables remain
 | `median_household_income_usd` | integer | No | ACS median household income |
 | `owner_occupancy_rate` | float | No | ACS owner-occupied housing units / households |
 | `median_age_years` | float | No | ACS median age |
+| `metric_service` | string | No | Service label for density/growth when no active service filter is selected and metrics come from a representative cached service |
 | `business_density_per_1k` | float | No | Weighted CBP establishments per 1,000 residents for the active service filter |
 | `establishment_growth_yoy` | float | No | Annualized CBP establishment growth for the active service filter |
 | `growth_available` | boolean | Yes | False when historical CBP years needed for growth are not loaded |
