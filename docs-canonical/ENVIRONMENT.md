@@ -161,6 +161,16 @@ The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which e
 
 The staging Supabase project needs the same auth accounts as production (see E2E test accounts below). Redirect URL pattern `https://*.vercel.app/**` must be added to the staging project's Auth settings.
 
+## AI Review, Preview, and Visual QA Environments
+
+| Stage | Git branch | Frontend | API | Database | Review gates |
+|-------|------------|----------|-----|----------|--------------|
+| Feature Preview | `codex/*`, `feature/*`, `fix/*` PRs into `dev` | Vercel Preview | Render staging API by default | Supabase preview branch for schema-changing PRs, otherwise staging Supabase | Quality Gates, Greptile, Playwright smoke, optional visual QA |
+| Integration | `dev` | Vercel staging custom environment or branch-scoped Preview | `whidby-staging` Render service | persistent staging Supabase project or persistent Supabase branch | Full Quality Gates, visual QA, staging smoke |
+| Production | `main` | Vercel Production | `whidby-1` Render service | production Supabase project | protected merge from `dev`, production migration approval |
+
+Feature branches must not receive production service-role credentials. Schema-changing PRs should use Supabase preview branches seeded with deterministic test data. UI-only PRs may use staging Supabase with E2E test accounts.
+
 ## Setup Steps
 
 1. Clone the repository
