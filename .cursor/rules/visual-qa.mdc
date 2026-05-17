@@ -1,0 +1,9 @@
+---
+description: Visual QA review workflow for Whidby previews
+globs:
+  - "scripts/qa/**"
+  - "apps/**/e2e/**"
+  - "apps/**/src/**/*.{tsx,ts,css}"
+---
+
+When reviewing visual QA artifacts, separate functional defects from design suggestions. Do not change production credentials, Vercel settings, Supabase projects, or Render services from Cursor. For UI suggestions, cite the screenshot file, viewport, route, and visible symptom.

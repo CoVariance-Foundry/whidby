@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 import path from "path";
 
 const appDir = path.resolve(__dirname);
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3002";
 
 export default defineConfig({
   testDir: path.join(appDir, "e2e"),
@@ -11,8 +12,10 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:3002",
+    baseURL,
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
   },
   projects: [
     {
@@ -27,10 +30,12 @@ export default defineConfig({
       timeout: 180_000,
     },
   ],
-  webServer: {
-    command: `npm run dev --workspace=widby-app`,
-    url: "http://localhost:3002/login",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined
+    : {
+        command: `npm run dev --workspace=widby-app`,
+        url: "http://localhost:3002/login",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

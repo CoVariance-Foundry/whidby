@@ -1,0 +1,44 @@
+{
+  "environments": {
+    "preview": {
+      "githubEnvironment": "preview",
+      "vercelTarget": "preview",
+      "renderService": "whidby-staging",
+      "supabaseMode": "preview-branch"
+    },
+    "staging": {
+      "githubEnvironment": "staging",
+      "vercelTarget": "staging",
+      "renderService": "whidby-staging",
+      "supabaseMode": "persistent-staging"
+    },
+    "production": {
+      "githubEnvironment": "production",
+      "vercelTarget": "production",
+      "renderService": "whidby-1",
+      "supabaseMode": "production"
+    }
+  },
+  "variables": [
+    { "name": "NEXT_PUBLIC_SUPABASE_URL", "kind": "public", "platforms": ["vercel"], "environments": ["preview", "staging", "production"] },
+    { "name": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY", "kind": "public", "platforms": ["vercel"], "environments": ["preview", "staging", "production"] },
+    { "name": "SUPABASE_SERVICE_ROLE_KEY", "kind": "secret", "platforms": ["github", "render"], "environments": ["preview", "staging", "production"] },
+    { "name": "NEXT_PUBLIC_API_URL", "kind": "public", "platforms": ["vercel"], "environments": ["preview", "staging", "production"] },
+    { "name": "STRATEGY_DISCOVERY_INTERNAL_TOKEN", "kind": "secret", "platforms": ["vercel", "render", "github"], "environments": ["preview", "staging", "production"] },
+    { "name": "GREPTILE_API_KEY", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "VERCEL_TOKEN", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging", "production"] },
+    { "name": "VERCEL_ORG_ID", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging", "production"] },
+    { "name": "VERCEL_PROJECT_ID_APP", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging", "production"] },
+    { "name": "VERCEL_PROJECT_ID_ADMIN", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging", "production"] },
+    { "name": "SUPABASE_ACCESS_TOKEN", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging", "production"] },
+    { "name": "SUPABASE_PROJECT_ID", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging", "production"] },
+    { "name": "RENDER_API_TOKEN", "kind": "secret", "platforms": ["github"], "environments": ["staging", "production"] },
+    { "name": "E2E_AUTH_EMAIL", "kind": "secret", "platforms": ["github", "vercel"], "environments": ["preview", "staging"] },
+    { "name": "E2E_AUTH_PASSWORD", "kind": "secret", "platforms": ["github", "vercel"], "environments": ["preview", "staging"] },
+    { "name": "AI_QA_PROVIDER", "kind": "public", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "VISUAL_QA_ALLOWED_HOSTS", "kind": "public", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "VISUAL_QA_ALLOWED_HOST_SUFFIXES", "kind": "public", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "ANTHROPIC_API_KEY", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "OPENAI_API_KEY", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging"] }
+  ]
+}

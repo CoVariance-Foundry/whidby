@@ -1,5 +1,13 @@
 # Active Work
 
+## Active Work
+
+- CI/CD AI review and visual QA workflow implementation is complete on `codex/ai-review-visual-qa-cicd` and in closeout review.
+- Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
+- Next: merge after Greptile follow-up fixes land and hosted checks pass; then dispatch Visual QA from `dev` or `main` with `preview_url` and `pr_number`.
+
+## Prior/Archived Context
+
 ## Phase 7 Benchmark Completion
 
 Status: closeout validation.

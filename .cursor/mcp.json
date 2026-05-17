@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "greptile": {
+      "type": "http",
+      "url": "https://api.greptile.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:GREPTILE_API_KEY}"
+      }
+    },
+    "render": {
+      "type": "http",
+      "url": "https://mcp.render.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:RENDER_API_TOKEN}"
+      }
+    }
+  }
+}
