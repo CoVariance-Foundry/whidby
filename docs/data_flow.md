@@ -171,6 +171,30 @@ ExploreRefreshService
 
 Manual refresh requests select existing cached city/service targets by selected IDs, visible filters, stale targets, or all targets. Scheduled due checks call the same FastAPI service through the app-scoped Vercel cron route and require the configured cron secret. Successful refreshes update target freshness, record run-item before/after opportunity scores, and insert normalized report snapshots for latest-score and trend views.
 
+## Explore Data Model Population Flow
+
+Explore city population and benchmark-readiness helpers are staged before live writes:
+
+```
+ACS/CBP source files + PostgREST reads
+     │
+     ├──→ scripts/explore/audit_explore_sources.py
+     ├──→ scripts/explore/backfill_metros.py
+     ├──→ scripts/explore/backfill_cbp_establishments.py
+     └──→ scripts/explore/recompute_benchmark_readiness.py
+             │
+             ▼
+        public.metros + public.census_cbp_establishments readiness
+             │
+             ▼
+        src/domain/explore metrics and ExploreCityService DTOs
+             │
+             ▼
+        apps/app Explore loader optional density/growth fields
+```
+
+Backfill scripts default to preview mode and only write through PostgREST when `--apply` and service-role Supabase env are present. Optional `public.metros` fields such as `business_density_per_1k` and `establishment_growth_yoy` are read when present; the consumer loader falls back to the base metro select when PostgREST reports those optional columns missing.
+
 ## Strategy Discovery Flow
 
 Strategy discovery is a read-model projection over existing market intelligence, not a separate scoring engine:

@@ -66,17 +66,42 @@ Implementation path:
 
 ## Explore Cities Backend Design
 
-Status: design accepted; ready for implementation planning.
+Status: local data-model/backfill/read-model slice implemented; live backfill blocked by invalid Supabase API keys in this worktree; backend API route and pagination still pending.
 
 Completed: canonical Explore Cities architecture now defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
 
+Latest audit slice: added `scripts/explore/audit_explore_sources.py`, a read-only PostgREST audit for Explore source table visibility and sparse `metros` demographic fields. Focused test `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py -v` passes. Live publishable-key and service-role audit commands currently report missing Supabase env in this worktree: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+
+Latest backfill slice: added and hardened `scripts/explore/backfill_metros.py`, which builds `public.metros` payloads from `src/data/seed/cbsa_seed.json` plus ACS demographics, derives `population_class`, includes `cbsa_type`, renter units, median age, and ACS load metadata, and only performs PostgREST upserts when `--apply` is explicitly passed with `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` present. Default and `--dry-run` mode are non-mutating previews. Focused tests `./.venv/bin/pytest tests/scripts/test_backfill_metros.py -v` and `./.venv/bin/pytest tests/clients/census/test_client.py -v` pass. Required dry-run command `python scripts/explore/backfill_metros.py --dry-run` still cannot complete in this worktree because Census fetch is blocked/missing credentials, but it now exits nonzero with sanitized output only: `ACS fetch failed: ConnectError: ACS demographic request failed`. No live mutation ran; this worktree has no root `.env`, `NEXT_PUBLIC_SUPABASE_URL` is unset, and `SUPABASE_SERVICE_ROLE_KEY` is unset.
+
+Latest CBP establishment slice: added `scripts/explore/backfill_cbp_establishments.py` and `tests/scripts/test_backfill_cbp_establishments.py` for import-file payload preparation targeting `public.census_cbp_establishments`. The CLI accepts already-fetched `.json` or `.csv` CBP rows, defaults to dry-run preview, and only performs PostgREST upserts when `--apply` is passed with Supabase URL/service-role env present. No live CBP fetch/write ran. Fetch-path blocker: `src/clients/census/cbp_client.py` currently verifies only a narrow `ESTAB`, `EMP`, `PAYANN`, `NAICS2017` MSA cache path and does not provide the size-bucket, `empflag`, `naics_label`, or suppression contract required for the Explore CBP table.
+
+Latest benchmark readiness slice: added `scripts/explore/recompute_benchmark_readiness.py` and `tests/scripts/test_recompute_benchmark_readiness.py` as a read-only preflight before running the existing benchmark recompute path. The helper blocks recompute when `metros_with_population`, `seo_fact_count`, or `cbp_count` are zero or missing. No benchmark recompute ran in this worktree because live source checks/env were not part of this slice.
+
+Latest read-model slice: added `src/domain/explore/metrics.py`, `src/domain/explore/entities.py`, and `src/domain/services/explore_city_service.py`. The service combines metros, score rows, and service-scoped CBP metric inputs through a repository protocol with no direct Supabase I/O; canonical service normalization, latest unique cached service collapse, V2-over-legacy preference, coherent latest-score freshness, business density, and annualized growth are covered by focused unit tests.
+
+Latest consumer loader slice: `apps/app/src/lib/explore/load-explore-data.ts` now selects optional `public.metros.business_density_per_1k` and `establishment_growth_yoy` metrics when the backend/read-model exposes them, maps them into Explore city summaries, and falls back to the base metros select if PostgREST reports either optional metric column missing from the schema cache. Focused Vitest coverage verifies metric mapping and the missing-column fallback. `METRO_LIMIT` remains in place; final backend pagination/API route work is still required before removing the 100-metro loader limit.
+
 Current implementation slice:
 
-- Build `src/domain/explore/` entities and pure metric functions for business density, establishment growth, freshness, and V2 presentation-score projection.
-- Build `src/domain/services/explore_city_service.py` plus `src/clients/explore_repository.py` so filters, sorting, pagination, density/growth, V2/legacy score selection, and refresh/run-report target resolution happen backend-side.
+- Add `src/clients/explore_repository.py` so `ExploreCityService` reads from Supabase through a concrete adapter.
 - Add backend/API routes for `GET /api/explore/cities`, city detail, run report for any city + service, and refresh runs for cached city + service targets.
 - Update `/explore` to consume backend DTOs instead of loading the first 100 metros and filtering in React.
 - Add readiness checks for `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, `public.metro_score_v2`, PostgREST schema visibility, and null density/growth coverage.
+
+Verified locally:
+
+- `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py tests/scripts/test_backfill_metros.py tests/scripts/test_backfill_cbp_establishments.py tests/scripts/test_recompute_benchmark_readiness.py tests/unit/test_explore_metrics.py tests/unit/test_explore_city_service.py tests/clients/census/test_client.py -v`
+- `npm --workspace apps/app test -- load-explore-data`
+- `git diff --check`
+- `npx docguard-cli guard` ran with network approval and completed at `119/188 passed` with warning-only MEDIUM findings; HIGH categories passed.
+
+Not verified live:
+
+- `scripts/explore/backfill_metros.py --apply`
+- `scripts/explore/backfill_cbp_establishments.py --apply`
+- benchmark recompute after fresh source data
+- `python scripts/explore/audit_explore_sources.py` against a valid Supabase service-role environment. The 2026-05-16 service-role and publishable-key audits reached the configured Supabase project URL but returned `HTTP 401 Invalid API key` for all checked tables, so no source counts or non-null coverage were verified live.
 
 Known constraints:
 

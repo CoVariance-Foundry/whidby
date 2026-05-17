@@ -19,12 +19,25 @@ DEMOGRAPHIC_VARIABLES = {
     "B19013_001E": "median_household_income",
     "B25003_001E": "total_housing_units",
     "B25003_002E": "owner_occupied_units",
+    "B25003_003E": "renter_occupied_units",
     "B25035_001E": "median_year_built",
+    "B01002_001E": "median_age_years",
     "B28002_004E": "broadband_subscriptions",
     "B28002_001E": "total_internet_universe",
 }
 
 SENTINEL_NULL = -666666666
+
+
+def _parse_demographic_value(field_name: str, raw: str | None) -> int | float | None:
+    if raw is None:
+        return None
+    if field_name == "median_age_years":
+        value = float(raw)
+        return None if value == SENTINEL_NULL else round(value, 1)
+
+    value = int(raw)
+    return None if value == SENTINEL_NULL else value
 
 
 class CensusClient:
@@ -77,11 +90,10 @@ class CensusClient:
                 "name": record.get("NAME", ""),
             }
             for var_code, field_name in DEMOGRAPHIC_VARIABLES.items():
-                raw = record.get(var_code)
-                if raw is None or int(raw) == SENTINEL_NULL:
-                    normalized[field_name] = None
-                else:
-                    normalized[field_name] = int(raw)
+                normalized[field_name] = _parse_demographic_value(
+                    field_name,
+                    record.get(var_code),
+                )
 
             results.append(normalized)
 
