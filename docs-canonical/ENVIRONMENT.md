@@ -37,8 +37,15 @@
 | `VERCEL_PROJECT_ID` | No | — | Vercel project ID for deployments | Vercel Dashboard |
 | `VERCEL_ORG_ID` | No | — | Vercel organization ID | Vercel Dashboard |
 | `NEXT_PUBLIC_API_URL` | Yes (both UI apps in production) | `http://localhost:8000` | Base URL of the FastAPI research agent bridge used by `/api/agent/*` Route Handlers in both `apps/admin` and `apps/app`. **Not** used for auth redirects. | Render web service URL, e.g. `https://whidby-1.onrender.com` |
+| `STRATEGY_DISCOVERY_INTERNAL_TOKEN` | Yes for production strategy discovery | — | Shared server-to-server token. Consumer app `/api/strategies/discover` forwards it to FastAPI; FastAPI requires it when `ENVIRONMENT=production` before reading service-role cached strategy data. | Generate a long random secret and set the same value in Vercel and Render |
 | `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (both UI apps in production) | `http://localhost:3001` (admin) / `http://localhost:3002` (consumer) | Frontend origin used for Supabase email/password sign-in callback redirects. Must point to the Vercel-hosted app, **not** the API. | Vercel project URL (e.g. `https://app.thewidby.com` for admin; separate consumer project URL). |
 | `NEXT_PUBLIC_NICHE_DRY_RUN` | No | — | When set to `"1"`, the admin and consumer `/api/agent/scoring` + `/api/agent/exploration` proxies forward `dry_run: true` to FastAPI so the orchestrator loads from fixtures instead of calling DataForSEO / Anthropic. Used by Playwright E2E. | Local or Playwright webServer env only |
+| `STRIPE_SECRET_KEY` | Yes (consumer billing) | — | Server-side Stripe API key for Checkout, Customer Portal, and webhook subscription retrieval | Stripe Dashboard |
+| `STRIPE_WEBHOOK_SECRET` | Yes (consumer billing) | — | Stripe webhook signing secret for `/api/billing/webhook` | Stripe Dashboard webhook endpoint |
+| `STRIPE_PLUS_PRICE_ID` | Yes (consumer billing) | — | Recurring monthly Stripe Price for Plus ($49/mo) | Stripe Dashboard product catalog |
+| `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | — | Recurring monthly Stripe Price for Pro ($100/mo) | Stripe Dashboard product catalog |
+| `NEXT_PUBLIC_POSTHOG_KEY` | No | — | PostHog project key for consumer feature flags. If absent, secure defaults are used. | PostHog project settings |
+| `NEXT_PUBLIC_POSTHOG_HOST` | No | `https://us.i.posthog.com` | PostHog ingestion/feature flag host | PostHog project settings |
 
 ### Research agent API (Render)
 
@@ -51,6 +58,7 @@
 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Yes | DataForSEO when plugins call live SEO APIs. |
 | `MAPBOX_ACCESS_TOKEN` | Yes | Mapbox Geocoding for `/api/places/suggest` global autocomplete. |
 | `ENVIRONMENT` | Recommended | `production` or `staging`. Controls CORS: staging allows `*.vercel.app` preview origins. |
+| `STRATEGY_DISCOVERY_INTERNAL_TOKEN` | Required in production | Shared token required by `/api/discover` when `ENVIRONMENT=production`; must match the consumer app server route env value. |
 | `CORS_EXTRA_ORIGINS` | No | Comma-separated extra CORS origins (e.g. custom staging domains). |
 
 ### Operational notes
@@ -83,6 +91,9 @@ The admin research-agent dashboard (`apps/admin/`, port 3001 locally) deploys to
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Yes | Publishable (anon) key from Supabase Dashboard |
 | `NEXT_PUBLIC_API_URL` | Yes (production) | Render API URL, e.g. `https://whidby-1.onrender.com` |
 | `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (production) | App frontend origin for auth redirects, e.g. `https://app.thewidby.com` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Yes (consumer billing) | Required only on the consumer app project |
+| `STRIPE_PLUS_PRICE_ID` / `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | Plus and Pro monthly recurring price IDs |
+| `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` | No | Consumer feature flags; server handlers fall back to secure defaults when unset |
 
 ### E2E test accounts (Supabase `whidby` project)
 
@@ -232,6 +243,8 @@ Run in order from `supabase/migrations/`:
 | 005 | `005_authenticated_read_reports.sql` | Grants `authenticated` users SELECT on the four report-facing tables so the consumer `/reports` page can read via the publishable key. Writes remain `service_role`. Added in PR #25. |
 | 007 | `007_kb_schema.sql` | Knowledge base tables: `kb_entities`, `kb_snapshots`, `kb_evidence_artifacts`, `api_response_cache`, `feedback_events` — canonical geo+industry entities, versioned snapshots with supersedence, raw evidence persistence, persistent API cache, and runtime feedback |
 | 008 | `008_kb_rls_and_lifecycle.sql` | RLS on KB tables, authenticated SELECT on entities/snapshots/feedback, soft-delete governance (`archived_at` + `entity_id` + `snapshot_id` columns on `reports`) |
+| 014 | `014_user_management_billing.sql` | Consumer accounts, memberships, subscriptions, usage counters, billing customer mapping, report ownership columns, account-scoped report RLS, and quota RPCs |
+| 015 | `015_explore_refresh_control.sql` | Explore refresh policies, targets, runs, run items, report snapshots, latest/trend views, and read/service-role RLS policies |
 
 ## Revision History
 

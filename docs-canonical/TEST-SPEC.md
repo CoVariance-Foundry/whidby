@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.0.0 -->
+<!-- docguard:version 1.4.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-05 -->
+<!-- docguard:last-reviewed 2026-05-16 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
@@ -28,6 +28,11 @@
 | `src/classification/**/*.py` | `tests/unit/test_*.py` | Unit |
 | `src/experiment/**/*.py` | `tests/unit/test_*.py` | Unit |
 | `src/research_agent/**/*.py` | `tests/unit/test_*.py` | Unit |
+| `src/domain/explore/**/*.py` | `tests/unit/test_explore_*.py` | Unit |
+| `src/domain/services/explore_city_service.py` | `tests/unit/test_explore_city_service.py` | Unit |
+| `apps/app/src/app/api/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
+| `apps/app/src/lib/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
+| `apps/app/src/app/onboarding/**/*.tsx` | colocated `*.test.tsx` | Component |
 
 ## Test Rules (Constitution-Mandated)
 
@@ -66,6 +71,21 @@ tests/
 | `src/research_agent/places.py` | `tests/unit/test_places_bridge.py`, `tests/unit/test_api_places_suggest.py` | — | ✅ |
 | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` | — | ✅ |
 
+## Explore Cities Test Obligations
+
+| Test | Scope | Expected |
+|------|-------|----------|
+| Business density formula | Weighted CBP rows + population | Returns establishments per 1,000 residents using `niche_naics_mapping.weight`; missing population returns null with a quality flag |
+| Establishment growth formula | Prior/latest weighted CBP rows | Returns annualized growth; missing historical CBP year returns `growth_available=false` |
+| Freshness calculation | Latest score timestamp + cadence | Marks stale when older than cadence; null score timestamp is stale only for cached-service targets |
+| V2 score preference | V2 and legacy rows for same city/service | Uses `metro_score_v2` for presentation score and marks `score_system=v2` |
+| Legacy fallback | Legacy row with no V2 row | Returns legacy opportunity with `score_system=legacy` |
+| Server-side filters | State, population, income, service, density, growth, stale | Repository receives filters; frontend does not filter the first 100 rows as the source universe |
+| Run report availability | City with no cached services | API accepts city + service and returns queued/started report response through scoring bridge |
+| Refresh target resolution | Selected, visible, stale, all scopes | Resolves existing cached city + service targets without browser-side scoring loops |
+| Readiness audit | `metros`, CBP, NAICS mapping, scores | Fails clearly when canonical tables are missing, empty, or hidden from PostgREST schema cache |
+| Explore E2E smoke | Explore table, filters, drawer, run-report control | Loads from backend API and exposes run report even when a city has no cached services |
+
 ## E2E Scoring Tests (Playwright)
 
 | Spec File | Scope | Requires Backend? |
@@ -75,6 +95,40 @@ tests/
 | `apps/app/e2e/scoring-matrix.spec.ts` | 10-combo parameterized matrix (5 Tier 1 + 5 Tier 2), JSONL metrics output | Yes (FastAPI + DFS) |
 | `apps/app/e2e/scoring-lifecycle.spec.ts` | Full UI lifecycle: submit → result → reports list → recent searches | Yes (FastAPI) |
 | `apps/app/e2e/scoring-quality-gates.spec.ts` | Pass rate, flake rate, latency, cost gates (reads matrix JSONL) | No (post-run analysis) |
+
+Additional contract checks for scoring/autocomplete:
+- `apps/app/src/app/api/agent/scoring/route.test.ts`: verifies `metadata_source` passthrough, `fallback_path` derivation, and `request_id` propagation.
+- `tests/unit/test_api_niches.py`: validates `metadata_source` request contract on FastAPI boundary.
+- `tests/unit/test_api_places_suggest.py`: verifies `enrichment_status` semantics for `enriched`, `mapbox_only`, and `not_configured`.
+
+## Explore Refresh Control Tests
+
+| Scope | Required Coverage | Required Tests |
+|-------|-------------------|----------------|
+| Explore refresh control | 30-day refresh policy defaults, loader freshness mapping, refresh store persistence, stale target selection, run status transitions, snapshot lineage, score/trend deltas, API behavior, bounded Next proxy behavior, and cron auth enforcement | `tests/unit/test_explore_refresh_service.py`, `tests/unit/test_explore_refresh_schema.py`, `tests/unit/test_api_explore_refresh.py`, `apps/app/src/lib/explore/load-explore-data.test.ts`, `apps/app/src/lib/explore/load-score-trends.test.ts`, `apps/app/src/app/api/explore/refresh/runs/route.test.ts`, `apps/app/src/app/api/explore/refresh/runs/[runId]/route.test.ts`, `apps/app/src/app/api/explore/refresh/due/route.test.ts`, `apps/app/src/components/explore/ExplorePageClient.test.tsx`, `apps/app/e2e/reports-smoke.spec.ts` |
+
+## Consumer Onboarding Tests
+
+| Scope | Required Coverage | Required Tests |
+|-------|-------------------|----------------|
+| Onboarding schema | Profile/target table creation, status/geo checks, RLS enablement, account membership policies, service-role policies, and timestamp triggers | `tests/unit/test_supabase_schema.py` |
+| Strategy routing | Deterministic mapping from intent/focus/coach-or-agency answers to starter strategy, available strategy ids, and snake_case next route | `apps/app/src/lib/onboarding/strategy-routing.test.ts` |
+| Profile API | Auth requirement, account entitlement resolution, profile upsert validation, existing profile reads, latest target reads, and entitlement error mapping | `apps/app/src/app/api/onboarding/profile/route.test.ts` |
+| Target API | Target validation, strategy id validation, city metadata preservation, broad geography persistence, and profile status transition to `target_selected` | `apps/app/src/app/api/onboarding/target/route.test.ts` |
+| First-report handoff | Saved target lookup, free-tier cached-route handling, city target delegation to `/api/agent/scoring`, broad target cached Explore routing, and quota/upgrade responses | `apps/app/src/app/api/onboarding/start-report/route.test.ts`, `apps/app/src/app/api/agent/scoring/route.test.ts` |
+| Onboarding UI | Resume load, profile defaults, service selection, city/state target selection, confirmation state, CTA behavior, and accessible production location input labels | `apps/app/src/app/onboarding/OnboardingClient.test.tsx`, `apps/app/src/components/niche-finder/CityAutocomplete.test.tsx` |
+| Auth resume | Supabase auth callback redirects new/incomplete users to onboarding, respects safe explicit `next`, ignores unsafe `next`, and routes terminal onboarding states to reports | `apps/app/src/app/auth/callback/route.test.ts` |
+
+## Strategy Discovery Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Strategy catalog | Launch strategies, phase-2 status, AI modifier behavior | `tests/unit/test_strategy_projection.py` |
+| Easy Win | Weak organic/local competition projection from V2 vector and facts | `tests/unit/test_strategy_projection.py` |
+| GBP Blitz | Review barrier, review velocity, profile completeness, map-pack presence | `tests/unit/test_strategy_projection.py` |
+| Keyword Hijack | Primary keyword volume floor, map-pack presence, exact-match GBP name availability | `tests/unit/test_strategy_projection.py`, `tests/unit/test_api_strategy_discovery.py` |
+| Expand & Conquer | Feature-vector similarity plus equal-or-lower competition filter | `tests/unit/test_discovery_service_strategies.py` |
+| Consumer entitlements | Free cached-only, plus/pro fresh strategy run allowed, batch cap enforced | `apps/app/src/app/api/strategies/runs/route.test.ts` |
 
 ## Unit Test Obligations (Algo Spec §12.1)
 
@@ -138,3 +192,7 @@ npm run lint
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md` §12, `docs/product_breakdown.md`, `.specify/memory/constitution.md` |
 | 1.1.0 | 2026-04-23 | E2E scoring suite | Added places bridge + orchestrator to service-test map, added E2E scoring tests section (regression, autocomplete flow, matrix, lifecycle, quality gates) |
+| 1.2.0 | 2026-05-14 | Explore Cities system design | Added domain metric, service, repository, API, and E2E obligations for backend-backed Explore Cities |
+| 1.3.0 | 2026-05-14 | Explore refresh control | Added refresh policy, target selection, run status, snapshot lineage, trend delta, and cron auth test obligations |
+| 1.4.0 | 2026-05-16 | Consumer onboarding flow | Added schema, routing, API, UI, first-report handoff, and auth-resume test obligations |
+| 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |

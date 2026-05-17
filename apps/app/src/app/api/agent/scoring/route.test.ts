@@ -1,9 +1,68 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  createClient: vi.fn(),
+  resolveEntitlementContext: vi.fn(),
+  consumeReportQuota: vi.fn(),
+  refundReportQuota: vi.fn(),
+  getServerFeatureFlag: vi.fn(),
+  captureServerEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: mocks.createClient,
+}));
+
+vi.mock("@/lib/account/entitlements", () => {
+  class EntitlementError extends Error {
+    constructor(
+      message: string,
+      public readonly status: number,
+      public readonly code: string,
+    ) {
+      super(message);
+    }
+  }
+  return {
+    EntitlementError,
+    resolveEntitlementContext: mocks.resolveEntitlementContext,
+    consumeReportQuota: mocks.consumeReportQuota,
+    refundReportQuota: mocks.refundReportQuota,
+  };
+});
+
+vi.mock("@/lib/flags/server", () => ({
+  getServerFeatureFlag: mocks.getServerFeatureFlag,
+  captureServerEvent: mocks.captureServerEvent,
+}));
+
 import { POST } from "./route";
 
 describe("POST /api/agent/scoring", () => {
+  const entitlement = {
+    account_id: "33333333-3333-3333-3333-333333333333",
+    member_role: "owner",
+    plan_key: "plus",
+    monthly_report_limit: 10,
+    subscription_status: "active",
+    current_period_start: "2026-05-01T00:00:00.000Z",
+    current_period_end: "2026-06-01T00:00:00.000Z",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.createClient.mockResolvedValue({ rpc: vi.fn() });
+    mocks.resolveEntitlementContext.mockResolvedValue({
+      user: { id: "44444444-4444-4444-4444-444444444444", email: "user@example.com" },
+      entitlement,
+    });
+    mocks.consumeReportQuota.mockResolvedValue(true);
+    mocks.refundReportQuota.mockResolvedValue(undefined);
+    mocks.getServerFeatureFlag.mockResolvedValue(true);
+  });
+
   it("proxies to FastAPI and maps the response", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    const spy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({
         report_id: "r1",
         opportunity_score: 72,
@@ -12,6 +71,7 @@ describe("POST /api/agent/scoring", () => {
         report: { input: { niche_keyword: "roofing" } },
       }), { status: 200 }),
     );
+    global.fetch = spy;
     const req = new Request("http://localhost/api/agent/scoring", {
       method: "POST",
       body: JSON.stringify({ city: "Phoenix", service: "roofing", state: "AZ" }),
@@ -22,6 +82,46 @@ describe("POST /api/agent/scoring", () => {
     expect(body.score_result.opportunity_score).toBe(72);
     expect(body.score_result.classification_label).toBe("Medium");
     expect(body.report_id).toBe("r1");
+    expect(body.query.metadata_source).toBe("typed");
+    expect(body.fallback_path).toBe("city_state");
+    expect(typeof body.request_id).toBe("string");
+    const init = spy.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Record<string, string>)["x-request-id"]).toBeTruthy();
+    expect(body.account.tier).toBe("plus");
+    const sent = JSON.parse((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).body as string);
+    expect(sent.owner_account_id).toBe("33333333-3333-3333-3333-333333333333");
+    expect(sent.created_by_user_id).toBe("44444444-4444-4444-4444-444444444444");
+  });
+
+  it("blocks free users before calling FastAPI", async () => {
+    mocks.resolveEntitlementContext.mockResolvedValueOnce({
+      user: { id: "44444444-4444-4444-4444-444444444444", email: "user@example.com" },
+      entitlement: { ...entitlement, plan_key: "free", monthly_report_limit: 0 },
+    });
+    global.fetch = vi.fn();
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({ city: "Phoenix", service: "roofing", state: "AZ" }),
+    });
+    const res = await POST(req as never);
+    const body = await res.json();
+    expect(res.status).toBe(403);
+    expect(body.code).toBe("fresh_reports_not_included");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("blocks users who have exhausted monthly quota", async () => {
+    mocks.consumeReportQuota.mockResolvedValueOnce(false);
+    global.fetch = vi.fn();
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({ city: "Phoenix", service: "roofing", state: "AZ" }),
+    });
+    const res = await POST(req as never);
+    const body = await res.json();
+    expect(res.status).toBe(429);
+    expect(body.code).toBe("monthly_report_quota_exceeded");
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("passes dry_run=true when NEXT_PUBLIC_NICHE_DRY_RUN=1", async () => {
@@ -66,5 +166,31 @@ describe("POST /api/agent/scoring", () => {
     const sent = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string);
     expect(sent.place_id).toBe("place.123");
     expect(sent.dataforseo_location_code).toBe(12345);
+    expect(sent.metadata_source).toBe("typed");
+  });
+
+  it("forwards metadata_source when provided", async () => {
+    const spy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        report_id: "r4",
+        opportunity_score: 88,
+        classification_label: "High",
+        evidence: [],
+        report: { input: { niche_keyword: "roofing" } },
+      }), { status: 200 }),
+    );
+    global.fetch = spy;
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({
+        city: "Phoenix",
+        service: "roofing",
+        metadata_source: "mapbox_selected",
+      }),
+    });
+    await POST(req as never);
+
+    const sent = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string);
+    expect(sent.metadata_source).toBe("mapbox_selected");
   });
 });

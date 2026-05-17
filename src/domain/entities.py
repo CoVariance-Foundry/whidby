@@ -61,3 +61,5 @@ class ScoredMarket:
     lens_id: str
     rank: int | None = None
     score_breakdown: dict[str, float] = field(default_factory=dict)
+    strategy_evidence: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)

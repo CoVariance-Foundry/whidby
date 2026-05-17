@@ -9,7 +9,20 @@ export interface NicheQueryInput {
   place_id?: string;
   /** DataForSEO location code bridged from selected place (optional). */
   dataforseo_location_code?: number;
+  /** Provenance of structured metadata in the request. */
+  metadata_source?: MetadataSource;
 }
+
+export type MetadataSource =
+  | "typed"
+  | "mapbox_selected"
+  | "recent_history"
+  | "fallback_cbsa";
+
+export type FallbackPath =
+  | "canonical_targeting"
+  | "city_state"
+  | "city_only";
 
 export interface NormalizedNicheQuery {
   cityInput: string;
@@ -34,10 +47,13 @@ export interface StandardSurfaceResponse {
   score_result: ScoreResult;
   status: StandardResponseStatus;
   message?: string;
+  fallback_path?: FallbackPath;
+  request_id?: string;
   report_id?: string;
   entity_id?: string | null;
   snapshot_id?: string | null;
   persist_warning?: string | null;
+  report?: FullReportData;
 }
 
 export interface MetroScores {

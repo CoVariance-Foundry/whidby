@@ -7,10 +7,15 @@ import CityAutocomplete from "@/components/niche-finder/CityAutocomplete";
 import NicheFinderTabs, { type TabKey } from "@/components/niche-finder/NicheFinderTabs";
 import StrategyPresetRail from "@/components/niche-finder/StrategyPresetRail";
 import type { PlaceSuggestion } from "@/lib/niche-finder/place-suggest";
-import type { StandardSurfaceResponse } from "@/lib/niche-finder/types";
+import type {
+  FallbackPath,
+  MetadataSource,
+  StandardSurfaceResponse,
+} from "@/lib/niche-finder/types";
 import type { HistoryEntry } from "@/lib/niche-finder/history-storage";
 import { validateNicheQueryInput } from "@/lib/niche-finder/request-validation";
 import { loadRecent, pushRecent } from "@/lib/niche-finder/history-storage";
+import { trackEvent } from "@/lib/analytics/track";
 
 type PageState =
   | { kind: "idle" }
@@ -86,17 +91,28 @@ export default function NicheFinderClient() {
     undefined,
   );
   const [service, setService] = useState(searchParams.get("service") ?? "");
+  const [metadataSource, setMetadataSource] = useState<MetadataSource>("typed");
   const [pageState, setPageState] = useState<PageState>({ kind: "idle" });
   const [activeTab, setActiveTab] = useState<TabKey>("niche");
-  const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [recent, setRecent] = useState<HistoryEntry[]>(() => loadRecent());
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    setRecent(loadRecent());
-  }, []);
 
   const showToast = useCallback((msg: string) => setToast(msg), []);
   const dismissToast = useCallback(() => setToast(null), []);
+
+  function inferFallbackPath(payload: {
+    state?: string;
+    place_id?: string;
+    dataforseo_location_code?: number;
+  }): FallbackPath {
+    if (payload.place_id && typeof payload.dataforseo_location_code === "number") {
+      return "canonical_targeting";
+    }
+    if (payload.state) {
+      return "city_state";
+    }
+    return "city_only";
+  }
 
   const handleCityChange = (newCity: string, suggestion?: PlaceSuggestion) => {
     if (suggestion) {
@@ -109,11 +125,23 @@ export default function NicheFinderClient() {
           ? suggestion.dataforseo_location_code
           : undefined,
       );
+      const source: MetadataSource =
+        suggestion.enrichment_status === "fallback_cbsa"
+          ? "fallback_cbsa"
+          : "mapbox_selected";
+      setMetadataSource(source);
+      trackEvent("autocomplete_suggestion_selected", {
+        metadata_source: source,
+        has_place_id: Boolean(suggestion.place_id),
+        has_dfs_code: typeof suggestion.dataforseo_location_code === "number",
+        enrichment_status: suggestion.enrichment_status ?? "unknown",
+      });
     } else {
       setCity(newCity);
       setState(undefined);
       setPlaceId(undefined);
       setDataforseoLocationCode(undefined);
+      setMetadataSource("typed");
     }
   };
 
@@ -129,12 +157,29 @@ export default function NicheFinderClient() {
     setPageState({ kind: "loading" });
 
     try {
-      const body: Record<string, unknown> = { city: city.trim(), service: service.trim() };
+      const body: Record<string, unknown> = {
+        city: city.trim(),
+        service: service.trim(),
+        metadata_source: metadataSource,
+      };
       if (state) body.state = state;
       if (placeId) body.place_id = placeId;
       if (typeof dataforseoLocationCode === "number") {
         body.dataforseo_location_code = dataforseoLocationCode;
       }
+
+      const expectedFallbackPath = inferFallbackPath({
+        state,
+        place_id: placeId,
+        dataforseo_location_code: dataforseoLocationCode,
+      });
+      const scoringStart = Date.now();
+      trackEvent("niche_scoring_started", {
+        metadata_source: metadataSource,
+        has_place_id: Boolean(placeId),
+        has_dfs_code: typeof dataforseoLocationCode === "number",
+        fallback_path: expectedFallbackPath,
+      });
 
       const res = await fetch("/api/agent/scoring", {
         method: "POST",
@@ -150,6 +195,14 @@ export default function NicheFinderClient() {
       }
 
       if (!res.ok || !json || json.status !== "success") {
+        trackEvent("niche_scoring_failed", {
+          metadata_source: metadataSource,
+          fallback_path: expectedFallbackPath,
+          has_place_id: Boolean(placeId),
+          has_dfs_code: typeof dataforseoLocationCode === "number",
+          status_code: res.status,
+          latency_ms: Date.now() - scoringStart,
+        });
         setPageState({
           kind: "error",
           message:
@@ -158,11 +211,21 @@ export default function NicheFinderClient() {
         return;
       }
 
+      const fallbackPath = json.fallback_path ?? expectedFallbackPath;
+      trackEvent("niche_scoring_succeeded", {
+        metadata_source: metadataSource,
+        fallback_path: fallbackPath,
+        has_place_id: Boolean(placeId),
+        has_dfs_code: typeof dataforseoLocationCode === "number",
+        latency_ms: Date.now() - scoringStart,
+        request_id: json.request_id ?? null,
+      });
       setPageState({ kind: "success", data: json });
       pushRecent({
         city: city.trim(),
         service: service.trim(),
         at: Date.now(),
+        metadata_source: metadataSource,
         ...(state ? { state } : {}),
         ...(placeId ? { place_id: placeId } : {}),
         ...(typeof dataforseoLocationCode === "number"
@@ -175,6 +238,17 @@ export default function NicheFinderClient() {
         kind: "error",
         message: err instanceof Error ? err.message : "An unexpected error occurred.",
       });
+      trackEvent("niche_scoring_failed", {
+        metadata_source: metadataSource,
+        has_place_id: Boolean(placeId),
+        has_dfs_code: typeof dataforseoLocationCode === "number",
+        fallback_path: inferFallbackPath({
+          state,
+          place_id: placeId,
+          dataforseo_location_code: dataforseoLocationCode,
+        }),
+        error_message: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 
@@ -184,6 +258,7 @@ export default function NicheFinderClient() {
     setState(entry.state);
     setPlaceId(entry.place_id);
     setDataforseoLocationCode(entry.dataforseo_location_code);
+    setMetadataSource(entry.metadata_source ?? "recent_history");
     setActiveTab("niche");
   };
 
@@ -465,6 +540,7 @@ export default function NicheFinderClient() {
                         setState(undefined);
                         setPlaceId(undefined);
                         setDataforseoLocationCode(undefined);
+                        setMetadataSource("typed");
                       }}
                     >
                       {ex.service} in {ex.city}

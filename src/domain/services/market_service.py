@@ -26,8 +26,12 @@ class ScoreRequest:
     state: str | None = None
     place_id: str | None = None
     dataforseo_location_code: int | None = None
+    metadata_source: str = "typed"
+    request_id: str | None = None
     strategy_profile: str = "balanced"
     dry_run: bool = False
+    owner_account_id: str | None = None
+    created_by_user_id: str | None = None
 
 
 @dataclass
@@ -81,14 +85,15 @@ class MarketService:
         self._kb = knowledge_store
 
     async def score(self, request: ScoreRequest) -> ScoreResult:
-        request_id = str(uuid4())
+        request_id = request.request_id or str(uuid4())
         handler_start = time.monotonic()
         logger.info(
-            "MarketService.score START request_id=%s niche=%r city=%r state=%r dry_run=%s",
+            "MarketService.score START request_id=%s niche=%r city=%r state=%r metadata_source=%s dry_run=%s",
             request_id,
             request.niche,
             request.city,
             request.state,
+            request.metadata_source,
             request.dry_run,
         )
 
@@ -129,6 +134,11 @@ class MarketService:
             )
 
         pipeline_ms = int((time.monotonic() - handler_start) * 1000)
+
+        if request.owner_account_id and request.created_by_user_id:
+            result.report["owner_account_id"] = request.owner_account_id
+            result.report["created_by_user_id"] = request.created_by_user_id
+            result.report["access_scope"] = "account"
 
         # --- Persist report ---
         report_id: str | None = None
@@ -200,11 +210,12 @@ class MarketService:
         total_ms = int((time.monotonic() - handler_start) * 1000)
         logger.info(
             "MarketService.score DONE request_id=%s report_id=%s entity_id=%s "
-            "snapshot_id=%s opportunity=%s persist_ok=%s pipeline_ms=%d total_ms=%d",
+            "snapshot_id=%s metadata_source=%s opportunity=%s persist_ok=%s pipeline_ms=%d total_ms=%d",
             request_id,
             report_id,
             entity_id,
             snapshot_id,
+            request.metadata_source,
             result.opportunity_score,
             not persist_failed,
             pipeline_ms,

@@ -59,20 +59,26 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
         assert kwargs["dry_run"] is True
         assert kwargs["place_id"] == "place.123"
         assert kwargs["dataforseo_location_code"] == 12345
+        assert kwargs["request_id"] == "req-123"
         return _FakeScoreResult()
 
     svc = _make_test_market_service(pipeline_fn=_fake_orchestrator)
     monkeypatch.setattr(api_module, "_MARKET_SERVICE", svc)
 
     client = TestClient(app)
-    res = client.post("/api/niches/score", json={
-        "niche": "roofing",
-        "city": "Phoenix",
-        "state": "AZ",
-        "place_id": "place.123",
-        "dataforseo_location_code": 12345,
-        "dry_run": True,
-    })
+    res = client.post(
+        "/api/niches/score",
+        headers={"x-request-id": "req-123"},
+        json={
+            "niche": "roofing",
+            "city": "Phoenix",
+            "state": "AZ",
+            "place_id": "place.123",
+            "dataforseo_location_code": 12345,
+            "metadata_source": "mapbox_selected",
+            "dry_run": True,
+        },
+    )
     assert res.status_code == 200
     body = res.json()
     assert body["report_id"] is None  # dry_run skips persistence
@@ -91,6 +97,15 @@ def test_post_niches_score_validation_error_on_nonpositive_dfs_location_code() -
     res = client.post(
         "/api/niches/score",
         json={"niche": "roofing", "city": "Phoenix", "dataforseo_location_code": 0},
+    )
+    assert res.status_code == 400
+
+
+def test_post_niches_score_validation_error_on_invalid_metadata_source() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/api/niches/score",
+        json={"niche": "roofing", "city": "Phoenix", "metadata_source": "unknown"},
     )
     assert res.status_code == 400
 

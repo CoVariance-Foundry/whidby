@@ -13,10 +13,23 @@ interface CbsaRow {
 }
 
 const rows: CbsaRow[] = seed as CbsaRow[];
+const rowsByPopulation = [...rows].sort((a, b) => b.population - a.population);
+
+function toSuggestion(row: CbsaRow, city?: string): MetroSuggestion {
+  return {
+    cbsa_code: row.cbsa_code,
+    city: city ?? row.principal_cities[0] ?? row.cbsa_name,
+    state: row.state,
+    cbsa_name: row.cbsa_name,
+    population: row.population,
+  };
+}
 
 export function searchMetros(query: string, limit: number): MetroSuggestion[] {
   const q = query.trim().toLowerCase();
-  if (q.length < 2) return [];
+  if (q.length < 2) {
+    return rowsByPopulation.slice(0, limit).map((row) => toSuggestion(row));
+  }
 
   const matches: { row: CbsaRow; city: string }[] = [];
 
@@ -33,11 +46,5 @@ export function searchMetros(query: string, limit: number): MetroSuggestion[] {
 
   matches.sort((a, b) => b.row.population - a.row.population);
 
-  return matches.slice(0, limit).map(({ row, city }) => ({
-    cbsa_code: row.cbsa_code,
-    city,
-    state: row.state,
-    cbsa_name: row.cbsa_name,
-    population: row.population,
-  }));
+  return matches.slice(0, limit).map(({ row, city }) => toSuggestion(row, city));
 }

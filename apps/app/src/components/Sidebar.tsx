@@ -3,11 +3,13 @@ import { Icon, I } from "@/lib/icons";
 import { createClient } from "@/lib/supabase/server";
 import UserMenu from "./UserMenu";
 
-type NavId = "home" | "finder" | "recs" | "reports";
+type NavId = "home" | "finder" | "explore" | "strategies" | "recs" | "reports";
 
 const NAV: { id: NavId; label: string; d: string; href: string }[] = [
   { id: "home", label: "Home", d: I.home, href: "/" },
   { id: "finder", label: "Niche finder", d: I.search, href: "/niche-finder" },
+  { id: "explore", label: "Explore", d: I.map, href: "/explore" },
+  { id: "strategies", label: "Strategies", d: I.sliders, href: "/strategies" },
   { id: "recs", label: "Recommendations", d: I.target, href: "/recommendations" },
   { id: "reports", label: "Reports", d: I.list, href: "/reports" },
 ];
@@ -39,9 +41,15 @@ export default async function Sidebar({ active }: { active: NavId }) {
       </div>
 
       {NAV.map((item) => {
-        const cls = "sidebar-item" + (active === item.id ? " active" : "");
+        const isActive = active === item.id;
+        const cls = "sidebar-item" + (isActive ? " active" : "");
         return (
-          <Link key={item.id} href={item.href} className={cls}>
+          <Link
+            key={item.id}
+            href={item.href}
+            className={cls}
+            aria-current={isActive ? "page" : undefined}
+          >
             <Icon d={item.d} /> {item.label}
           </Link>
         );

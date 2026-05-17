@@ -15,12 +15,30 @@ from src.clients.dataforseo.client import DataForSEOClient
 logger = logging.getLogger(__name__)
 
 MAPBOX_GEOCODE_V6_FORWARD_URL = "https://api.mapbox.com/search/geocode/v6/forward"
+MAPBOX_AUTOCOMPLETE_TIMEOUT_SECONDS = 5.0
 _DFS_LOCATION_CACHE_TTL_SECONDS = 60 * 60
 _CITY_LOCATION_TYPES = frozenset({"city"})
+_MAPBOX_HTTP_CLIENT: httpx.AsyncClient | None = None
 
 
 class MapboxPlacesError(RuntimeError):
     """Raised when Mapbox autocomplete requests fail."""
+
+
+def _get_mapbox_http_client() -> httpx.AsyncClient:
+    """Return a shared AsyncClient for Mapbox autocomplete requests."""
+    global _MAPBOX_HTTP_CLIENT
+    if _MAPBOX_HTTP_CLIENT is None:
+        _MAPBOX_HTTP_CLIENT = httpx.AsyncClient(timeout=MAPBOX_AUTOCOMPLETE_TIMEOUT_SECONDS)
+    return _MAPBOX_HTTP_CLIENT
+
+
+async def close_mapbox_http_client() -> None:
+    """Close the shared Mapbox HTTP client during API shutdown."""
+    global _MAPBOX_HTTP_CLIENT
+    if _MAPBOX_HTTP_CLIENT is not None:
+        await _MAPBOX_HTTP_CLIENT.aclose()
+        _MAPBOX_HTTP_CLIENT = None
 
 
 @dataclass(slots=True)
@@ -37,6 +55,8 @@ class PlaceSuggestion:
     longitude: float | None
     dataforseo_location_code: int | None = None
     dataforseo_match_confidence: str | None = None
+    enrichment_status: str | None = None
+    enrichment_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +70,8 @@ class PlaceSuggestion:
             "longitude": self.longitude,
             "dataforseo_location_code": self.dataforseo_location_code,
             "dataforseo_match_confidence": self.dataforseo_match_confidence,
+            "enrichment_status": self.enrichment_status,
+            "enrichment_reason": self.enrichment_reason,
         }
 
 
@@ -216,6 +238,7 @@ async def fetch_mapbox_place_suggestions(
     language: str | None = None,
 ) -> list[PlaceSuggestion]:
     """Fetch place-level autocomplete suggestions from Mapbox Geocoding v6."""
+    started_at = time.perf_counter()
     params: dict[str, Any] = {
         "q": query,
         "access_token": access_token,
@@ -229,28 +252,47 @@ async def fetch_mapbox_place_suggestions(
     if language:
         params["language"] = language
 
+    client = _get_mapbox_http_client()
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(MAPBOX_GEOCODE_V6_FORWARD_URL, params=params)
-            response.raise_for_status()
-            payload = response.json()
+        response = await client.get(MAPBOX_GEOCODE_V6_FORWARD_URL, params=params)
+        response.raise_for_status()
+        payload = response.json()
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else "unknown"
-        logger.error("Mapbox places request failed status=%s", status, exc_info=True)
+        logger.error(
+            "Mapbox places request failed status=%s query=%r duration_ms=%d",
+            status,
+            query,
+            int((time.perf_counter() - started_at) * 1000),
+            exc_info=True,
+        )
         raise MapboxPlacesError(f"Mapbox request failed with status {status}") from exc
     except (httpx.HTTPError, ValueError):
-        logger.error("Mapbox places request failed unexpectedly", exc_info=True)
+        logger.error(
+            "Mapbox places request failed unexpectedly query=%r duration_ms=%d",
+            query,
+            int((time.perf_counter() - started_at) * 1000),
+            exc_info=True,
+        )
         raise MapboxPlacesError("Mapbox request failed") from None
 
     features = payload.get("features")
     if not isinstance(features, list):
         return []
 
-    return [
+    suggestions = [
         normalize_mapbox_feature(feature)
         for feature in features
         if isinstance(feature, dict)
     ]
+    logger.info(
+        "Mapbox places suggest DONE query=%r limit=%d rows=%d duration_ms=%d",
+        query,
+        limit,
+        len(suggestions),
+        int((time.perf_counter() - started_at) * 1000),
+    )
+    return suggestions
 
 
 class DataForSEOLocationBridge:

@@ -22,6 +22,10 @@ class TestMigrationFiles:
             "004_rls_policies.sql",
             "007_kb_schema.sql",
             "008_kb_rls_and_lifecycle.sql",
+            "014_user_management_billing.sql",
+            "015_explore_refresh_control.sql",
+            "016_consumer_onboarding.sql",
+            "017_strategy_discovery_system.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name
@@ -172,3 +176,212 @@ class TestKBRLSAndLifecycle:
     def test_reports_entity_and_snapshot_fk(self, sql: str):
         assert "entity_id" in sql
         assert "snapshot_id" in sql
+
+
+class TestUserManagementBillingSchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "014_user_management_billing.sql").read_text()
+
+    def test_account_and_billing_tables(self, sql: str):
+        for table in [
+            "user_profiles",
+            "accounts",
+            "account_memberships",
+            "subscriptions",
+            "billing_customers",
+            "usage_counters",
+        ]:
+            assert f"CREATE TABLE IF NOT EXISTS {table}" in sql
+
+    def test_plan_catalog_seed_matches_tiers(self, sql: str):
+        assert "('free', 'Free', 0, 0, NULL)" in sql
+        assert "('plus', 'Plus', 4900, 10, 'STRIPE_PLUS_PRICE_ID')" in sql
+        assert "('pro', 'Pro', 10000, 50, 'STRIPE_PRO_PRICE_ID')" in sql
+
+    def test_reports_get_ownership_columns(self, sql: str):
+        assert "owner_account_id" in sql
+        assert "created_by_user_id" in sql
+        assert "access_scope TEXT NOT NULL DEFAULT 'cached'" in sql
+        assert "reports_scope_owner_consistency" in sql
+
+    def test_broad_authenticated_report_policies_are_removed(self, sql: str):
+        assert 'DROP POLICY IF EXISTS "Authenticated users can read reports"' in sql
+        assert 'DROP POLICY IF EXISTS "Authenticated users can delete reports"' in sql
+        assert "Authenticated users can read visible reports" in sql
+        assert "public.is_account_member(owner_account_id)" in sql
+        assert "Account members can update own reports" not in sql
+
+    def test_account_bootstrap_is_serialized_per_user(self, sql: str):
+        assert "idx_account_memberships_one_account_per_user" in sql
+        assert "cannot add one-account-per-user constraint" in sql
+        assert "GROUP BY user_id" in sql
+        assert "HAVING count(*) > 1" in sql
+        assert "pg_advisory_xact_lock(" in sql
+        assert "replace(v_user_id::TEXT, '-', '')" in sql
+
+    def test_report_archive_uses_scoped_rpc(self, sql: str):
+        assert "public.archive_account_report" in sql
+        assert "GRANT EXECUTE ON FUNCTION public.archive_account_report(UUID)" in sql
+        assert "SET archived_at = now()" in sql
+        assert "AND archived_at IS NULL" in sql
+
+    def test_child_report_tables_inherit_parent_visibility(self, sql: str):
+        for policy in [
+            "Authenticated users can read visible report_keywords",
+            "Authenticated users can read visible metro_signals",
+            "Authenticated users can read visible metro_scores",
+        ]:
+            assert policy in sql
+        assert "WHERE r.id = report_keywords.report_id" in sql
+        assert "WHERE r.id = metro_signals.report_id" in sql
+        assert "WHERE r.id = metro_scores.report_id" in sql
+
+    def test_quota_functions_exist(self, sql: str):
+        assert "FUNCTION public.get_account_entitlement()" in sql
+        assert "FUNCTION public.consume_report_quota(p_account_id UUID)" in sql
+        assert "FUNCTION public.refund_report_quota(p_account_id UUID)" in sql
+        assert "ON CONFLICT (account_id, metric_key, period_start, period_end)" in sql
+        assert "WHERE usage_counters.used_count < v_limit" in sql
+
+
+class TestConsumerOnboardingSchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "016_consumer_onboarding.sql").read_text()
+
+    def test_onboarding_tables_created(self, sql: str):
+        assert "CREATE TABLE IF NOT EXISTS onboarding_profiles" in sql
+        assert "CREATE TABLE IF NOT EXISTS onboarding_targets" in sql
+
+    def test_rls_enabled_on_onboarding_tables(self, sql: str):
+        for table in ["onboarding_profiles", "onboarding_targets"]:
+            assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql, (
+                f"RLS not enabled for {table}"
+            )
+
+    def test_account_member_policies_exist(self, sql: str):
+        assert "public.is_account_member(account_id)" in sql
+        assert "public.is_account_member(op.account_id)" in sql
+
+    def test_policy_creation_is_idempotent(self, sql: str):
+        policies = [
+            ("Account members can read onboarding profiles", "onboarding_profiles"),
+            ("Users can update own onboarding profile", "onboarding_profiles"),
+            ("Users can insert own onboarding profile", "onboarding_profiles"),
+            ("Account members can read onboarding targets", "onboarding_targets"),
+            ("Users can upsert own onboarding targets", "onboarding_targets"),
+            ("Service role full access on onboarding_profiles", "onboarding_profiles"),
+            ("Service role full access on onboarding_targets", "onboarding_targets"),
+        ]
+        for name, table in policies:
+            assert f'DROP POLICY IF EXISTS "{name}"\n    ON {table};' in sql
+            assert f'CREATE POLICY "{name}"' in sql
+
+    def test_updated_at_triggers_exist(self, sql: str):
+        for table in ["onboarding_profiles", "onboarding_targets"]:
+            assert f"DROP TRIGGER IF EXISTS {table}_set_updated_at ON {table};" in sql
+            assert f"CREATE TRIGGER {table}_set_updated_at" in sql
+            assert f"BEFORE UPDATE ON {table}" in sql
+        assert "EXECUTE FUNCTION public.set_updated_at();" in sql
+
+    def test_own_user_write_checks_exist(self, sql: str):
+        assert "USING (user_id = (SELECT auth.uid())" in sql
+        assert "WITH CHECK (user_id = (SELECT auth.uid())" in sql
+        assert "AND op.user_id = (SELECT auth.uid())" in sql
+
+    def test_expected_status_values_exist(self, sql: str):
+        for status in [
+            "profile_started",
+            "profile_completed",
+            "strategy_recommended",
+            "target_selected",
+            "report_queued",
+            "cached_route_selected",
+            "upgrade_required",
+            "report_ready",
+        ]:
+            assert f"'{status}'" in sql
+
+    def test_expected_geo_scope_values_exist(self, sql: str):
+        for geo_scope in ["city", "state", "region", "nationwide"]:
+            assert f"'{geo_scope}'" in sql
+
+
+class TestStrategyDiscoverySchema:
+    @pytest.fixture
+    def sql(self) -> str:
+        return (MIGRATIONS_DIR / "017_strategy_discovery_system.sql").read_text()
+
+    def test_strategy_discovery_run_tables(self, sql: str):
+        assert "CREATE TABLE IF NOT EXISTS public.strategy_runs" in sql
+        assert "CREATE TABLE IF NOT EXISTS public.strategy_run_items" in sql
+        assert "account_id UUID" in sql
+        assert "strategy_id TEXT NOT NULL" in sql
+        assert "result_count INTEGER NOT NULL DEFAULT 0" in sql
+
+    def test_strategy_discovery_evidence_tables(self, sql: str):
+        assert "CREATE TABLE IF NOT EXISTS public.local_pack_listing_facts" in sql
+        assert "CREATE TABLE IF NOT EXISTS public.metro_feature_vectors" in sql
+        assert "CREATE TABLE IF NOT EXISTS public.strategy_score_cache" in sql
+        assert "exact_match_name BOOLEAN NOT NULL DEFAULT FALSE" in sql
+        assert "feature_vector JSONB NOT NULL" in sql
+
+    def test_strategy_discovery_rls_enabled_on_all_tables(self, sql: str):
+        for table in [
+            "strategy_runs",
+            "strategy_run_items",
+            "local_pack_listing_facts",
+            "metro_feature_vectors",
+            "strategy_score_cache",
+        ]:
+            assert f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY" in sql
+
+    def test_strategy_discovery_service_role_policies_exist(self, sql: str):
+        for policy in [
+            "Service role manages strategy runs",
+            "Service role manages strategy run items",
+            "Service role manages local pack listing facts",
+            "Service role manages metro feature vectors",
+            "Service role manages strategy score cache",
+        ]:
+            assert policy in sql
+
+    def test_strategy_discovery_account_member_read_policies(self, sql: str):
+        assert "Account members can read strategy runs" in sql
+        assert "ON public.strategy_runs FOR SELECT TO authenticated" in sql
+        assert "public.is_account_member(account_id)" in sql
+        assert "Account members can read strategy run items" in sql
+        assert "ON public.strategy_run_items FOR SELECT TO authenticated" in sql
+        assert "EXISTS (" in sql
+        assert "FROM public.strategy_runs sr" in sql
+        assert "WHERE sr.id = strategy_run_items.run_id" in sql
+        assert "public.is_account_member(sr.account_id)" in sql
+
+    def test_strategy_discovery_report_linked_reads_respect_report_visibility(
+        self, sql: str
+    ):
+        assert "Authenticated users can read local pack listing facts" in sql
+        assert "report_id IS NULL" in sql
+        assert "WHERE r.id = local_pack_listing_facts.report_id" in sql
+        assert "Authenticated users can read strategy score cache" in sql
+        assert "source_report_id IS NULL" in sql
+        assert "WHERE r.id = strategy_score_cache.source_report_id" in sql
+        assert "r.access_scope = 'cached'" in sql
+        assert "public.is_account_member(r.owner_account_id)" in sql
+        assert (
+            "ON public.local_pack_listing_facts FOR SELECT TO authenticated "
+            "USING (true)"
+        ) not in sql
+        assert (
+            "ON public.strategy_score_cache FOR SELECT TO authenticated "
+            "USING (true)"
+        ) not in sql
+
+    def test_strategy_discovery_strategy_checks_apply_to_result_tables(
+        self, sql: str
+    ):
+        assert sql.count("strategy_id TEXT NOT NULL CHECK (strategy_id IN (") == 3
+        assert "UNIQUE (run_id, rank)" in sql
+        assert "CREATE INDEX IF NOT EXISTS idx_strategy_score_cache_scored_at" in sql
+        assert "ON public.strategy_score_cache(strategy_id, scored_at DESC)" in sql

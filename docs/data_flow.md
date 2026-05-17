@@ -118,6 +118,106 @@ Consumer /reports read path (not shown above):
 
 The write path above is triggered by the FastAPI `POST /api/niches/score` handler after `score_niche_for_metro` returns a report. The read path is a direct SSR Supabase fetch from the consumer app — no FastAPI round-trip for the list view. Per-report detail retrieval goes through FastAPI `GET /api/niches/{report_id}`.
 
+## Consumer Account, Billing, and Quota Flow
+
+```
+Supabase Auth user
+     │
+     ▼
+ensure_account_for_current_user()
+     │
+     ├──→ user_profiles
+     ├──→ accounts
+     ├──→ account_memberships
+     └──→ subscriptions
+             ▲
+             │
+Stripe Checkout / Portal / Webhook
+             │
+             ▼
+syncSubscriptionToAccount()
+```
+
+Consumer fresh-report generation is account-scoped. `apps/app/src/app/api/agent/scoring/route.ts` resolves the authenticated Supabase user, account entitlement, and server feature flags before calling the Render/FastAPI scoring bridge. If quota enforcement is enabled, the route calls `consume_report_quota(account_id)` before forwarding the scoring request and calls `refund_report_quota(account_id)` when validation or upstream scoring fails.
+
+The route forwards `owner_account_id` and `created_by_user_id` to `POST /api/niches/score`. FastAPI validates those UUIDs, `MarketService` attaches them to the generated report, and `SupabasePersistence.persist_report()` writes them to `reports`. Reports with `access_scope = 'account'` are readable only by account members; ownerless reports remain shared cached reports with `access_scope = 'cached'`.
+
+## Explore Refresh Control Flow
+
+```
+apps/app /explore refresh control
+     │
+     ▼
+Next.js /api/explore/refresh/* proxy routes
+     │
+     ▼
+FastAPI /api/explore/refresh/* endpoints
+     │
+     ▼
+ExploreRefreshService
+     │
+     ├──→ SupabaseExploreRefreshStore
+     │       ├──→ explore_refresh_policies
+     │       ├──→ explore_refresh_targets
+     │       ├──→ explore_refresh_runs
+     │       ├──→ explore_refresh_run_items
+     │       └──→ explore_report_snapshots
+     │
+     └──→ MarketService.score()
+             │
+             ▼
+        reports + score tables
+```
+
+Manual refresh requests select existing cached city/service targets by selected IDs, visible filters, stale targets, or all targets. Scheduled due checks call the same FastAPI service through the app-scoped Vercel cron route and require the configured cron secret. Successful refreshes update target freshness, record run-item before/after opportunity scores, and insert normalized report snapshots for latest-score and trend views.
+
+## Explore Data Model Population Flow
+
+Explore city population and benchmark-readiness helpers are staged before live writes:
+
+```
+ACS/CBP source files + PostgREST reads
+     │
+     ├──→ scripts/explore/audit_explore_sources.py
+     ├──→ scripts/explore/backfill_metros.py
+     ├──→ scripts/explore/backfill_cbp_establishments.py
+     └──→ scripts/explore/recompute_benchmark_readiness.py
+             │
+             ▼
+        public.metros + public.census_cbp_establishments readiness
+             │
+             ▼
+        src/domain/explore metrics and ExploreCityService DTOs
+             │
+             ▼
+        apps/app Explore loader optional density/growth fields
+```
+
+Backfill scripts default to preview mode and only write through PostgREST when `--apply` and service-role Supabase env are present. Optional `public.metros` fields such as `business_density_per_1k` and `establishment_growth_yoy` are read when present; the consumer loader falls back to the base metro select when PostgREST reports those optional columns missing.
+
+## Strategy Discovery Flow
+
+Strategy discovery is a read-model projection over existing market intelligence, not a separate scoring engine:
+
+```
+Cached reports + metro scores + SEO facts + local-pack facts + metro feature vectors
+     │
+     ▼
+StrategyRepository
+     │
+     ▼
+DiscoveryService strategy projection
+     │
+     ├──→ FastAPI /api/strategies
+     ├──→ FastAPI /api/discover
+     └──→ FastAPI /api/strategy-runs
+             │
+             ▼
+        strategy_runs + strategy_run_items lineage
+```
+
+The consumer app proxies strategy reads and run creation through `apps/app/src/app/api/strategies/*`. Free users remain cached-only; plus/pro users can create fresh strategy runs within the configured caps. Migration `017_strategy_discovery_system.sql` owns strategy run lineage, local-pack listing facts, metro feature vectors, and the optional strategy score cache after onboarding migration `016_consumer_onboarding.sql`.
+
 ## Experiment Pipeline (M10 → M15)
 
 ```

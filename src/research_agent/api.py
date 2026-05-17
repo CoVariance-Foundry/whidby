@@ -5,29 +5,39 @@ Run with: uvicorn src.research_agent.api:app --reload --port 8000
 
 from __future__ import annotations
 
+import asyncio
+import hmac
 import json
 import logging
 import os
 import re
+import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator, Literal
 
 import anthropic
-from fastapi import FastAPI, HTTPException, Path as FastAPIPath, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
 from src.clients.llm.client import LLMClient
+from src.clients.strategy_repository import StrategyRepository
 from src.clients.supabase_adapter import SupabaseMarketStore
-from src.clients.supabase_persistence import SupabasePersistence
+from src.clients.supabase_persistence import SupabaseExploreRefreshStore, SupabasePersistence
 from src.data.metro_db import Metro, MetroDB
+from src.domain.services.explore_refresh_service import (
+    ExploreRefreshFlags,
+    ExploreRefreshService,
+    QueuedExploreRefreshRun,
+)
 from src.domain.services.market_service import MarketService, ScoreRequest
 from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
@@ -39,6 +49,8 @@ from src.research_agent.plugins.report_plugin import REPORT_TIMESTAMP_FORMAT
 from src.research_agent.places import (
     DataForSEOLocationBridge,
     MapboxPlacesError,
+    PlaceSuggestion,
+    close_mapbox_http_client,
     fetch_mapbox_place_suggestions,
 )
 from src.research_agent.recipes.registry_builder import build_recipe_registry
@@ -46,8 +58,18 @@ from src.research_agent.recipes.runner import RecipeRunner, RecipeRunnerError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+_DFS_ENRICH_TIMEOUT_SECONDS = 1.5
 
-app = FastAPI(title="Widby Research Agent API", version="0.1.0")
+
+@asynccontextmanager
+async def _api_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        await close_mapbox_http_client()
+
+
+app = FastAPI(title="Widby Research Agent API", version="0.1.0", lifespan=_api_lifespan)
 
 
 @app.exception_handler(RequestValidationError)
@@ -92,6 +114,7 @@ app.add_middleware(
 _METRO_DB: MetroDB | None = None
 _PLACES_DATAFORSEO_BRIDGE: DataForSEOLocationBridge | None = None
 _SHARED_DFS_CLIENT: DataForSEOClient | None = None
+_STRATEGY_DISCOVERY_INTERNAL_TOKEN_ENV = "STRATEGY_DISCOVERY_INTERNAL_TOKEN"
 
 
 def _metro_db() -> MetroDB:
@@ -130,6 +153,18 @@ def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
     return _PLACES_DATAFORSEO_BRIDGE
 
 
+def _apply_places_enrichment_status(
+    suggestions: list[PlaceSuggestion],
+    *,
+    status: str,
+    reason: str | None = None,
+) -> list[PlaceSuggestion]:
+    for suggestion in suggestions:
+        suggestion.enrichment_status = status
+        suggestion.enrichment_reason = reason
+    return suggestions
+
+
 # ---------------------------------------------------------------------------
 # Discovery service DI wiring
 # ---------------------------------------------------------------------------
@@ -157,8 +192,31 @@ _DISCOVERY_SERVICE: DiscoveryService | None = None
 def _get_discovery_service() -> DiscoveryService:
     global _DISCOVERY_SERVICE
     if _DISCOVERY_SERVICE is None:
-        _DISCOVERY_SERVICE = DiscoveryService(market_store=_NullMarketStore())
+        persistence = SupabasePersistence()
+        _DISCOVERY_SERVICE = DiscoveryService(
+            market_store=StrategyRepository(persistence._client)
+        )
     return _DISCOVERY_SERVICE
+
+
+def _require_strategy_discovery_internal_access(request: Request) -> None:
+    token = os.environ.get(_STRATEGY_DISCOVERY_INTERNAL_TOKEN_ENV)
+    if not token:
+        if os.environ.get("ENVIRONMENT") == "production":
+            raise HTTPException(
+                status_code=503,
+                detail="Strategy discovery internal token is not configured.",
+            )
+        return
+
+    authorization = request.headers.get("authorization", "")
+    internal_token = request.headers.get("x-strategy-discovery-token", "")
+    if hmac.compare_digest(authorization, f"Bearer {token}") or hmac.compare_digest(
+        internal_token, token
+    ):
+        return
+
+    raise HTTPException(status_code=401, detail="Strategy discovery access denied.")
 
 
 @app.get("/health")
@@ -206,25 +264,36 @@ def metros_suggest(q: str, limit: int = 10) -> list[dict[str, Any]]:
 
 @app.get("/api/places/suggest")
 async def places_suggest(
+    request: Request,
     q: str,
     limit: int = 10,
     country: str | None = None,
     language: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Autocomplete places via Mapbox and bridge best-effort DataForSEO location codes."""
+    """Autocomplete places with bounded, best-effort DFS enrichment."""
+    request_id = request.headers.get("x-request-id", "unknown")
+    started_at = time.perf_counter()
     q_norm = q.strip()
     if len(q_norm) < 2:
         return []
     clamped = max(1, min(limit, 20))
+    logger.info(
+        "[%s] PLACES_SUGGEST START query=%r limit=%d",
+        request_id,
+        q_norm,
+        clamped,
+    )
 
     mapbox_access_token = os.environ.get("MAPBOX_ACCESS_TOKEN")
     if not mapbox_access_token:
+        logger.warning("[%s] PLACES_SUGGEST ERROR reason=missing_mapbox_token", request_id)
         raise HTTPException(
             status_code=503,
             detail="Mapbox autocomplete unavailable: MAPBOX_ACCESS_TOKEN is not configured.",
         )
 
     try:
+        mapbox_started = time.perf_counter()
         suggestions = await fetch_mapbox_place_suggestions(
             query=q_norm,
             limit=clamped,
@@ -232,16 +301,81 @@ async def places_suggest(
             country=country,
             language=language,
         )
+        mapbox_ms = int((time.perf_counter() - mapbox_started) * 1000)
     except MapboxPlacesError as exc:
+        logger.warning(
+            "[%s] PLACES_SUGGEST ERROR reason=mapbox_failure detail=%s duration_ms=%d",
+            request_id,
+            exc,
+            int((time.perf_counter() - started_at) * 1000),
+        )
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception:
-        logger.error("Unexpected Mapbox places autocomplete failure", exc_info=True)
+        logger.error(
+            "[%s] PLACES_SUGGEST ERROR reason=mapbox_unexpected duration_ms=%d",
+            request_id,
+            int((time.perf_counter() - started_at) * 1000),
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=502,
             detail="Mapbox autocomplete failed unexpectedly.",
         ) from None
 
-    return [row.to_dict() for row in suggestions]
+    bridge = _places_dataforseo_bridge()
+    if bridge is None:
+        suggestions = _apply_places_enrichment_status(
+            suggestions,
+            status="not_configured",
+            reason="DataForSEO credentials unavailable.",
+        )
+        rows = [row.to_dict() for row in suggestions]
+        logger.info(
+            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s mapbox_ms=%d duration_ms=%d",
+            request_id,
+            len(rows),
+            "not_configured",
+            mapbox_ms,
+            int((time.perf_counter() - started_at) * 1000),
+        )
+        return rows
+
+    try:
+        suggestions = await asyncio.wait_for(
+            bridge.enrich(suggestions),
+            timeout=_DFS_ENRICH_TIMEOUT_SECONDS,
+        )
+        for suggestion in suggestions:
+            if suggestion.dataforseo_location_code is not None:
+                suggestion.enrichment_status = "enriched"
+                suggestion.enrichment_reason = None
+            else:
+                suggestion.enrichment_status = "mapbox_only"
+                suggestion.enrichment_reason = "No confident DataForSEO match."
+    except TimeoutError:
+        logger.warning("DFS place enrichment timed out q=%r", q_norm)
+        suggestions = _apply_places_enrichment_status(
+            suggestions,
+            status="timeout",
+            reason="DataForSEO enrichment timed out.",
+        )
+    except Exception:
+        logger.warning("DFS place enrichment degraded unexpectedly", exc_info=True)
+        suggestions = _apply_places_enrichment_status(
+            suggestions,
+            status="degraded",
+            reason="DataForSEO enrichment failed unexpectedly.",
+        )
+
+    rows = [row.to_dict() for row in suggestions]
+    logger.info(
+        "[%s] PLACES_SUGGEST DONE rows=%d mapbox_ms=%d duration_ms=%d",
+        request_id,
+        len(rows),
+        mapbox_ms,
+        int((time.perf_counter() - started_at) * 1000),
+    )
+    return rows
 
 
 RUNS_DIR = Path(os.environ.get("RESEARCH_RUNS_DIR", "research_runs"))
@@ -277,8 +411,11 @@ class NicheScoreRequest(BaseModel):
     state: str | None = None
     place_id: str | None = None
     dataforseo_location_code: int | None = None
+    metadata_source: str = "typed"
     strategy_profile: str = "balanced"
     dry_run: bool = False
+    owner_account_id: str | None = None
+    created_by_user_id: str | None = None
 
     @field_validator("niche", "city")
     @classmethod
@@ -313,12 +450,90 @@ class NicheScoreRequest(BaseModel):
             raise ValueError("must be a positive integer")
         return v
 
+    @field_validator("metadata_source")
+    @classmethod
+    def _validate_metadata_source(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        allowed = {"typed", "mapbox_selected", "recent_history", "fallback_cbsa"}
+        if normalized not in allowed:
+            raise ValueError("metadata_source must be one of typed|mapbox_selected|recent_history|fallback_cbsa")
+        return normalized
+
+    @field_validator("owner_account_id", "created_by_user_id")
+    @classmethod
+    def _normalize_uuid_context(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            return None
+        try:
+            uuid.UUID(trimmed)
+        except ValueError as exc:
+            raise ValueError("must be a valid UUID") from exc
+        return trimmed
+
+
+class ExploreRefreshFlagsPayload(BaseModel):
+    force: bool = False
+    dry_run: bool = False
+    strategy_profile: Literal["balanced", "growth", "defensive"] = "balanced"
+    max_items: int = Field(default=50, ge=1, le=500)
+    concurrency: int = Field(default=2, ge=1, le=5)
+
+
+class ExploreRefreshRunRequest(BaseModel):
+    scope: Literal["selected", "visible", "stale", "all"]
+    target_ids: list[str] = Field(default_factory=list)
+    report_ids: list[str] = Field(default_factory=list)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    flags: ExploreRefreshFlagsPayload = Field(default_factory=ExploreRefreshFlagsPayload)
+
+
+StrategyId = Literal["easy_win", "gbp_blitz", "keyword_hijack", "expand_conquer", "cash_cow"]
+
+
+class StrategyRunTarget(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    cbsa_code: str = Field(min_length=1)
+    niche_normalized: str = Field(min_length=1)
+    niche_keyword: str | None = Field(default=None, min_length=1)
+    primary_keyword: str | None = Field(default=None, min_length=1)
+
+
+class StrategyRunRequest(BaseModel):
+    strategy_id: StrategyId
+    mode: Literal["cached", "fresh"] = "cached"
+    targets: list[StrategyRunTarget] = Field(default_factory=list)
+    account_id: uuid.UUID | None = None
+    created_by_user_id: uuid.UUID | None = None
+    city: str | None = None
+    state: str | None = None
+    service: str | None = None
+    primary_keyword: str | None = None
+    reference_city_id: str | None = None
+    ai_resilience_filter: bool = False
+    limit: int = Field(default=50, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def _fresh_runs_need_targets(self) -> "StrategyRunRequest":
+        if (
+            self.mode == "fresh"
+            and not self.targets
+            and not (self.city and self.service)
+        ):
+            raise ValueError("Fresh strategy runs require at least one target.")
+        return self
+
 
 # ---------------------------------------------------------------------------
 # MarketService singleton (replaces per-request client construction)
 # ---------------------------------------------------------------------------
 
 _MARKET_SERVICE: MarketService | None = None
+_EXPLORE_REFRESH_SERVICE: ExploreRefreshService | None = None
+_STRATEGY_REPOSITORY: StrategyRepository | None = None
 
 
 def _build_market_service() -> MarketService:
@@ -354,6 +569,26 @@ def _market_service() -> MarketService:
     if _MARKET_SERVICE is None:
         _MARKET_SERVICE = _build_market_service()
     return _MARKET_SERVICE
+
+
+def _get_explore_refresh_service() -> ExploreRefreshService:
+    global _EXPLORE_REFRESH_SERVICE
+    if _EXPLORE_REFRESH_SERVICE is None:
+        persistence = SupabasePersistence()
+        store = SupabaseExploreRefreshStore(client=persistence._client)
+        _EXPLORE_REFRESH_SERVICE = ExploreRefreshService(
+            store=store,
+            market_service=_market_service(),
+        )
+    return _EXPLORE_REFRESH_SERVICE
+
+
+def _get_strategy_repository() -> StrategyRepository:
+    global _STRATEGY_REPOSITORY
+    if _STRATEGY_REPOSITORY is None:
+        persistence = SupabasePersistence()
+        _STRATEGY_REPOSITORY = StrategyRepository(persistence._client)
+    return _STRATEGY_REPOSITORY
 
 
 def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
@@ -520,8 +755,18 @@ def exploration_followup(req: ExplorationFollowupRequest) -> dict[str, Any]:
 
 
 @app.post("/api/niches/score")
-async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
+async def niches_score(req: NicheScoreRequest, request: Request) -> dict[str, Any]:
     """Run M4-M9 pipeline for a (niche, city, state) pair and persist the report."""
+    request_id = request.headers.get("x-request-id")
+    started_at = time.perf_counter()
+    logger.info(
+        "[%s] NICHES_SCORE START niche=%r city=%r metadata_source=%s dry_run=%s",
+        request_id or "unknown",
+        req.niche,
+        req.city,
+        req.metadata_source,
+        req.dry_run,
+    )
     try:
         score_request = ScoreRequest(
             niche=req.niche,
@@ -529,16 +774,31 @@ async def niches_score(req: NicheScoreRequest) -> dict[str, Any]:
             state=req.state,
             place_id=req.place_id,
             dataforseo_location_code=req.dataforseo_location_code,
+            metadata_source=req.metadata_source,
+            request_id=request_id,
             strategy_profile=req.strategy_profile,
             dry_run=req.dry_run,
+            owner_account_id=req.owner_account_id,
+            created_by_user_id=req.created_by_user_id,
         )
         result = await _market_service().score(score_request)
+        logger.info(
+            "[%s] NICHES_SCORE DONE report_id=%s opportunity=%s duration_ms=%d",
+            request_id or "unknown",
+            result.report_id,
+            result.opportunity_score,
+            int((time.perf_counter() - started_at) * 1000),
+        )
         return result.to_api_response()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
         logger.exception(
-            "niches_score pipeline failed niche=%r city=%r", req.niche, req.city
+            "niches_score pipeline failed request_id=%s niche=%r city=%r metadata_source=%s",
+            request_id,
+            req.niche,
+            req.city,
+            req.metadata_source,
         )
         raise HTTPException(
             status_code=500, detail="Scoring pipeline failed unexpectedly"
@@ -566,6 +826,156 @@ def niches_read(report_id: str) -> dict[str, Any]:
         "metros": row["metros"],
         "meta": row["meta"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Explore refresh endpoints
+# ---------------------------------------------------------------------------
+
+
+def _explore_refresh_service_or_503() -> ExploreRefreshService:
+    try:
+        return _get_explore_refresh_service()
+    except RuntimeError as exc:
+        logger.warning("Explore refresh service unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Explore refresh service unavailable: {exc}",
+        ) from exc
+
+
+def _explore_refresh_flags(payload: ExploreRefreshFlagsPayload) -> ExploreRefreshFlags:
+    return ExploreRefreshFlags(
+        force=payload.force,
+        dry_run=payload.dry_run,
+        strategy_profile=payload.strategy_profile,
+        max_items=payload.max_items,
+        concurrency=payload.concurrency,
+    )
+
+
+def _queued_refresh_response(result: str | dict[str, Any] | QueuedExploreRefreshRun) -> dict[str, str]:
+    if isinstance(result, QueuedExploreRefreshRun):
+        run_id = result.run_id
+    elif isinstance(result, dict):
+        run_id = result.get("run_id")
+    else:
+        run_id = result
+    if not run_id:
+        raise RuntimeError("Explore refresh service returned no run_id")
+    return {"run_id": str(run_id), "status": "queued"}
+
+
+async def _execute_explore_refresh_run(
+    service: ExploreRefreshService,
+    queued_run: QueuedExploreRefreshRun,
+) -> None:
+    try:
+        await service.execute_queued_run(queued_run)
+    except Exception:
+        logger.exception("Explore refresh background run failed run_id=%s", queued_run.run_id)
+
+
+@app.post("/api/explore/refresh/runs")
+async def create_explore_refresh_run(
+    payload: ExploreRefreshRunRequest,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """Queue a manual Explore cache refresh run."""
+    service = _explore_refresh_service_or_503()
+    flags = _explore_refresh_flags(payload.flags)
+    try:
+        targets = service.resolve_manual_targets(
+            scope=payload.scope,
+            target_ids=payload.target_ids,
+            report_ids=payload.report_ids,
+            filters=payload.filters,
+            flags=flags,
+        )
+        queued_run = service.queue_selected_targets(
+            targets,
+            flags=flags,
+            requested_by=None,
+            now=datetime.now(timezone.utc),
+            scope=payload.scope,
+        )
+        background_tasks.add_task(_execute_explore_refresh_run, service, queued_run)
+        return _queued_refresh_response(queued_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Explore refresh run failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Explore refresh run failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Explore refresh run failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Explore refresh run failed unexpectedly",
+        ) from exc
+
+
+@app.post("/api/explore/refresh/due")
+async def refresh_due_explore_targets(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """Queue refreshes for due Explore cache targets."""
+    expected_secret = os.environ.get("EXPLORE_REFRESH_CRON_SECRET")
+    if not expected_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Explore refresh cron secret is not configured",
+        )
+    if request.headers.get("x-cron-secret") != expected_secret:
+        raise HTTPException(status_code=401, detail="Invalid cron secret")
+
+    service = _explore_refresh_service_or_503()
+    try:
+        queued_run = service.queue_due_targets(
+            now=datetime.now(timezone.utc),
+            flags=ExploreRefreshFlags(),
+        )
+        background_tasks.add_task(_execute_explore_refresh_run, service, queued_run)
+        return _queued_refresh_response(queued_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Explore due refresh failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Explore due refresh failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Explore due refresh failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Explore due refresh failed unexpectedly",
+        ) from exc
+
+
+@app.get("/api/explore/refresh/runs/{run_id}")
+def get_explore_refresh_run(run_id: str) -> dict[str, Any]:
+    """Return Explore refresh run status and items."""
+    service = _explore_refresh_service_or_503()
+    try:
+        return service.get_run_status(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("Explore refresh status lookup failed run_id=%s", run_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Explore refresh status lookup failed: {exc}",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Explore refresh status lookup failed unexpectedly")
+        raise HTTPException(
+            status_code=500,
+            detail="Explore refresh status lookup failed unexpectedly",
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -935,30 +1345,119 @@ class DiscoverRequest(BaseModel):
     """Request body for /api/discover."""
 
     lens_id: str = "balanced"
+    primary_keyword: str | None = None
     city_filters: list[dict[str, Any]] = Field(default_factory=list)
     service_filters: list[dict[str, Any]] = Field(default_factory=list)
     portfolio_market_ids: list[str] | None = None
     reference_city_id: str | None = None
+    ai_resilience_filter: bool = False
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
 
 
+@app.get("/api/strategies")
+async def list_strategies() -> dict[str, Any]:
+    """List strategy discovery catalog entries and global modifiers."""
+    from src.domain.lenses import get_lens
+
+    strategy_specs = [
+        ("easy_win", "launch", "city_service"),
+        ("gbp_blitz", "launch", "city_service"),
+        ("keyword_hijack", "launch", "city_service_keyword"),
+        ("expand_conquer", "launch", "reference_city_service"),
+        ("cash_cow", "phase_2", "cached_scan"),
+    ]
+
+    return {
+        "strategies": [
+            {
+                "strategy_id": strategy_id,
+                "name": get_lens(strategy_id).name,
+                "description": get_lens(strategy_id).description,
+                "status": phase,
+                "input_shape": input_shape,
+            }
+            for strategy_id, phase, input_shape in strategy_specs
+        ],
+        "global_modifiers": [
+            {
+                "modifier_id": "ai_resilience",
+                "name": "AI Resilience",
+                "behavior": "warn_not_hide",
+            }
+        ],
+    }
+
+
+@app.post("/api/strategy-runs")
+async def create_strategy_run(req: StrategyRunRequest, request: Request) -> dict[str, Any]:
+    """Create a strategy discovery run and queue fresh target fanout."""
+    _require_strategy_discovery_internal_access(request)
+    target_count = len(req.targets)
+    if req.mode == "fresh" and target_count > 100:
+        raise HTTPException(
+            status_code=400,
+            detail="Fresh strategy runs are capped at 100 city-service pairs.",
+        )
+
+    run_id = str(uuid.uuid4())
+    status = "queued" if req.mode == "fresh" else "succeeded"
+    payload = {
+        "id": run_id,
+        "account_id": str(req.account_id) if req.account_id else None,
+        "created_by_user_id": str(req.created_by_user_id) if req.created_by_user_id else None,
+        "strategy_id": req.strategy_id,
+        "mode": req.mode,
+        "status": status,
+        "input_payload": {
+            "targets": [target.model_dump() for target in req.targets],
+            "city": req.city,
+            "state": req.state,
+            "service": req.service,
+            "primary_keyword": req.primary_keyword,
+            "reference_city_id": req.reference_city_id,
+            "ai_resilience_filter": req.ai_resilience_filter,
+            "limit": req.limit,
+        },
+        "result_count": target_count if req.mode == "cached" else 0,
+        "quota_consumed": 1 if req.mode == "fresh" else 0,
+    }
+    try:
+        created = _get_strategy_repository().create_run(payload)
+    except Exception as exc:
+        logger.warning("Strategy run store unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Strategy run store unavailable.",
+        ) from exc
+
+    return {
+        "run_id": str(created.get("id") or run_id),
+        "strategy_id": req.strategy_id,
+        "mode": req.mode,
+        "status": str(created.get("status") or status),
+        "target_count": target_count,
+    }
+
+
 @app.post("/api/discover")
-async def discover(req: DiscoverRequest) -> dict[str, Any]:
+async def discover(req: DiscoverRequest, request: Request) -> dict[str, Any]:
     """Multi-market discovery — filters, lenses, ranking."""
+    _require_strategy_discovery_internal_access(request)
+
     if req.portfolio_market_ids:
         raise HTTPException(
             status_code=400,
             detail="portfolio_market_ids not yet supported (Phase 7)",
         )
-    if req.reference_city_id:
+
+    from src.domain.lenses import get_lens, is_discoverable_lens
+
+    if not is_discoverable_lens(req.lens_id):
         raise HTTPException(
             status_code=400,
-            detail="reference_city_id not yet supported (Phase 7)",
+            detail=f"Lens '{req.lens_id}' is not available for discovery",
         )
-
-    from src.domain.lenses import get_lens
-
     lens = get_lens(req.lens_id)
 
     query = MarketQuery(
@@ -971,6 +1470,9 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
             for f in req.service_filters
         ],
         lens=lens,
+        reference_city_id=req.reference_city_id,
+        primary_keyword=req.primary_keyword,
+        ai_resilience_filter=req.ai_resilience_filter,
         limit=req.limit,
         offset=req.offset,
     )
@@ -995,6 +1497,8 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
                     "name": r.market.service.name,
                 },
                 "score_breakdown": r.score_breakdown,
+                "strategy_evidence": r.strategy_evidence,
+                "warnings": r.warnings,
             }
             for r in results
         ],
@@ -1005,8 +1509,11 @@ async def discover(req: DiscoverRequest) -> dict[str, Any]:
             "description": lens.description,
         },
         "query": {
+            "primary_keyword": req.primary_keyword,
             "city_filters": req.city_filters,
             "service_filters": req.service_filters,
+            "reference_city_id": req.reference_city_id,
+            "ai_resilience_filter": req.ai_resilience_filter,
             "limit": req.limit,
             "offset": req.offset,
         },

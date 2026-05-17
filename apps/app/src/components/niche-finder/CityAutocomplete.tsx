@@ -11,9 +11,10 @@ import {
   type PlaceSuggestion,
 } from "@/lib/niche-finder/place-suggest";
 
-const DEFAULT_DEBOUNCE_MS = 250;
+const DEFAULT_DEBOUNCE_MS = 160;
 
 interface CityAutocompleteProps {
+  id?: string;
   value: string;
   onChange: (city: string, suggestion?: PlaceSuggestion) => void;
   disabled?: boolean;
@@ -29,6 +30,7 @@ interface CityAutocompleteProps {
 }
 
 export default function CityAutocomplete({
+  id,
   value,
   onChange,
   disabled = false,
@@ -162,6 +164,7 @@ export default function CityAutocomplete({
     <div style={{ position: "relative", width: "100%" }}>
       <div className="input-wrap">
         <input
+          id={id}
           ref={inputRef}
           data-testid={testId}
           type="text"

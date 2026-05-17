@@ -35,6 +35,8 @@ describe("fetchPlaceSuggestions", () => {
         city: "Phoenix",
         region: "AZ",
         country: "US",
+        enrichment_status: "fallback_cbsa",
+        enrichment_reason: "Places API unavailable; used CBSA seed fallback.",
       },
     ]);
   });

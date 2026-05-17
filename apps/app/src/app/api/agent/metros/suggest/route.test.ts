@@ -1,37 +1,46 @@
 import { describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 import { NextRequest } from "next/server";
+import { searchMetros } from "@/lib/niche-finder/cbsa-search";
+
+vi.mock("@/lib/niche-finder/cbsa-search", () => ({
+  searchMetros: vi.fn(),
+}));
 
 describe("GET /api/agent/metros/suggest", () => {
-  it("forwards q + limit and returns the upstream list verbatim", async () => {
+  it("returns searchMetros results using q + clamped limit", async () => {
     const sample = [
       { cbsa_code: "38060", city: "Phoenix", state: "AZ", cbsa_name: "Phoenix-Mesa-Chandler, AZ", population: 4946145 },
     ];
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(sample), { status: 200 }),
-    );
-    global.fetch = fetchMock;
+    vi.mocked(searchMetros).mockReturnValue(sample);
 
     const req = new NextRequest("http://localhost/api/agent/metros/suggest?q=phoe&limit=5");
     const res = await GET(req);
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(sample);
-    const calledUrl = fetchMock.mock.calls[0][0] as string;
-    expect(calledUrl).toContain("/api/metros/suggest?q=phoe");
-    expect(calledUrl).toContain("limit=5");
+    expect(searchMetros).toHaveBeenCalledWith("phoe", 5);
   });
 
-  it("returns 502 with upstream details when FastAPI errors", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: "seed missing" }), { status: 500 }),
-    );
+  it("clamps limit into [1, 20] before search", async () => {
+    vi.mocked(searchMetros).mockReturnValue([]);
 
-    const req = new NextRequest("http://localhost/api/agent/metros/suggest?q=phoe");
+    const req = new NextRequest("http://localhost/api/agent/metros/suggest?q=phoe&limit=999");
     const res = await GET(req);
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body.status).toBe("unavailable");
-    expect(body.upstream_status).toBe(500);
+    expect(res.status).toBe(200);
+    expect(searchMetros).toHaveBeenCalledWith("phoe", 20);
+  });
+
+  it("returns fallback results when query is empty", async () => {
+    const fallback = [
+      { cbsa_code: "35620", city: "New York", state: "NY", cbsa_name: "New York-Newark-Jersey City, NY-NJ-PA", population: 19781200 },
+    ];
+    vi.mocked(searchMetros).mockReturnValue(fallback);
+
+    const req = new NextRequest("http://localhost/api/agent/metros/suggest?q=");
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(fallback);
+    expect(searchMetros).toHaveBeenCalledWith("", 10);
   });
 });

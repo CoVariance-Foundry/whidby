@@ -1,13 +1,19 @@
+import pytest
+
 from src.domain.lenses import (
     BALANCED, EASY_WIN, CASH_COW, GBP_BLITZ, AI_PROOF,
-    BLUE_OCEAN, PORTFOLIO_BUILDER, EXPAND_CONQUER, SEASONAL_ARBITRAGE,
+    KEYWORD_HIJACK, BLUE_OCEAN, PORTFOLIO_BUILDER, EXPAND_CONQUER,
+    SEASONAL_ARBITRAGE,
     LENS_REGISTRY, get_lens, available_lenses,
 )
+from src.domain.entities import City, Market, Service
+from src.domain.scoring import FilterNotMetError, score_market
 
 
 ALL_LENSES = [
     BALANCED, EASY_WIN, CASH_COW, GBP_BLITZ, AI_PROOF,
-    BLUE_OCEAN, PORTFOLIO_BUILDER, EXPAND_CONQUER, SEASONAL_ARBITRAGE,
+    KEYWORD_HIJACK, BLUE_OCEAN, PORTFOLIO_BUILDER, EXPAND_CONQUER,
+    SEASONAL_ARBITRAGE,
 ]
 
 
@@ -41,7 +47,7 @@ def test_balanced_lens_matches_legacy_profile_exactly():
 
 
 def test_registry_contains_all_lenses():
-    assert len(LENS_REGISTRY) == 9
+    assert len(LENS_REGISTRY) == 10
     for lens in ALL_LENSES:
         assert lens.lens_id in LENS_REGISTRY
 
@@ -56,7 +62,34 @@ def test_get_lens_falls_back_to_balanced():
 
 
 def test_available_lenses_returns_all():
-    assert len(available_lenses()) == 9
+    ids = [lens.lens_id for lens in available_lenses()]
+    assert ids == [
+        "balanced",
+        "easy_win",
+        "gbp_blitz",
+        "keyword_hijack",
+        "expand_conquer",
+    ]
+
+
+def test_cash_cow_stays_registered_as_phase_2():
+    assert LENS_REGISTRY["cash_cow"].phase == "phase_2"
+    assert get_lens("cash_cow").lens_id == "cash_cow"
+
+
+def test_keyword_hijack_requires_raw_gate_fields_to_score():
+    market = Market(
+        city=City(city_id="boise-id", name="Boise", state="ID"),
+        service=Service(service_id="plumbing", name="Plumbing"),
+        signals={
+            "demand": {"score": 90.0},
+            "monetization": {"score": 85.0},
+            "gbp": {"score": 80.0},
+            "commercial_intent": {"score": 90.0},
+        },
+    )
+    with pytest.raises(FilterNotMetError):
+        score_market(market, KEYWORD_HIJACK)
 
 
 def test_required_signals_are_frozenset():

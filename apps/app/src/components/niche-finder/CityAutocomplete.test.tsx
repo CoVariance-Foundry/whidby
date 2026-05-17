@@ -61,9 +61,10 @@ afterEach(() => {
 describe("CityAutocomplete (consumer)", () => {
   it("renders an input with the forwarded value", () => {
     const onChange = vi.fn();
-    render(<CityAutocomplete value="Dallas" onChange={onChange} />);
+    render(<CityAutocomplete id="market-city" value="Dallas" onChange={onChange} />);
     const input = screen.getByTestId("city-input");
     expect(input).toBeInTheDocument();
+    expect(input).toHaveAttribute("id", "market-city");
     expect(input).toHaveValue("Dallas");
     const combobox = screen.getByRole("combobox");
     expect(combobox.tagName.toLowerCase()).toBe("input");
@@ -105,7 +106,10 @@ describe("CityAutocomplete (consumer)", () => {
       fireEvent.mouseDown(phoenixOption);
     });
 
-    expect(onChange).toHaveBeenCalledWith("Phoenix, AZ", FIXTURE[0]);
+    expect(onChange).toHaveBeenNthCalledWith(2, "Phoenix, AZ", {
+      ...FIXTURE[0],
+      enrichment_status: "mapbox_only",
+    });
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
@@ -125,9 +129,10 @@ describe("CityAutocomplete (consumer)", () => {
       fireEvent.mouseDown(option);
     });
 
-    expect(onChange).toHaveBeenCalledWith("Paris, FR", {
+    expect(onChange).toHaveBeenNthCalledWith(2, "Paris, FR", {
       city: "Paris",
       country: "FR",
+      enrichment_status: "mapbox_only",
     });
   });
 
@@ -152,7 +157,10 @@ describe("CityAutocomplete (consumer)", () => {
     expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
 
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onChange).toHaveBeenCalledWith("Phoenix, AZ", FIXTURE[0]);
+    expect(onChange).toHaveBeenNthCalledWith(2, "Phoenix, AZ", {
+      ...FIXTURE[0],
+      enrichment_status: "mapbox_only",
+    });
   });
 
   it("closes the listbox on Escape", async () => {
