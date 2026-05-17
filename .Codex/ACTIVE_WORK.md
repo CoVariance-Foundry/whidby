@@ -64,11 +64,16 @@ Implementation path:
 - Add Stripe Checkout, Customer Portal, and webhook endpoints.
 - Thread `owner_account_id` and `created_by_user_id` through FastAPI and Supabase report persistence.
 
-## Explore Cities Backend Design
+## Explore Cities Refactor
 
-Status: local data-model/backfill/read-model slice implemented; live backfill blocked by invalid Supabase API keys in this worktree; backend API route and pagination still pending.
+Status: implementation plan written; code refactor not started in this slice.
 
-Completed: canonical Explore Cities architecture now defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
+Current plan: `docs/superpowers/plans/2026-05-17-explore-cities-refactor.md`.
+Linear: `WHI-1` Refactor Explore Cities into city-first market discovery surface.
+
+Product direction: keep `/explore` city-first like the UX prototype, add service-selected comparison for city-service metrics, and keep Strategies as guided ranking lenses over the same market-cell read model. Density and growth remain service-aware metrics; do not present them as unlabelled city-only facts.
+
+Completed foundation: canonical Explore Cities architecture defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
 
 Latest audit slice: added `scripts/explore/audit_explore_sources.py`, a read-only PostgREST audit for Explore source table visibility and sparse `metros` demographic fields. Focused test `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py -v` passes. Live publishable-key and service-role audit commands currently report missing Supabase env in this worktree: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 
@@ -82,12 +87,15 @@ Latest read-model slice: added `src/domain/explore/metrics.py`, `src/domain/expl
 
 Latest consumer loader slice: `apps/app/src/lib/explore/load-explore-data.ts` now selects optional `public.metros.business_density_per_1k` and `establishment_growth_yoy` metrics when the backend/read-model exposes them, maps them into Explore city summaries, and falls back to the base metros select if PostgREST reports either optional metric column missing from the schema cache. Focused Vitest coverage verifies metric mapping and the missing-column fallback. `METRO_LIMIT` remains in place; final backend pagination/API route work is still required before removing the 100-metro loader limit.
 
-Current implementation slice:
+Next implementation slice:
 
+- Update canonical docs for the Explore vs Strategies responsibility split and `ExploreMarketCell` derived read model.
+- Add `supabase/migrations/018_explore_market_cells.sql` as a derived read model, not a duplicate source table.
 - Add `src/clients/explore_repository.py` so `ExploreCityService` reads from Supabase through a concrete adapter.
-- Add backend/API routes for `GET /api/explore/cities`, city detail, run report for any city + service, and refresh runs for cached city + service targets.
+- Add backend/API routes for `GET /api/explore/cities` and `GET /api/explore/cities/{cbsa_code}`.
 - Update `/explore` to consume backend DTOs instead of loading the first 100 metros and filtering in React.
-- Add readiness checks for `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, `public.metro_score_v2`, PostgREST schema visibility, and null density/growth coverage.
+- Refactor filters/table/drawer to match the prototype while preserving service-aware metric lineage.
+- Add readiness checks for `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, `public.metro_score_v2`, PostgREST schema visibility, and density/growth availability.
 
 Verified locally:
 
