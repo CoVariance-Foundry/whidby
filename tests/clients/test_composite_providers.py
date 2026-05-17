@@ -1,5 +1,4 @@
 """Tests for composite data providers."""
-import pytest
 
 from src.domain.entities import City
 from src.clients.composite_providers import (

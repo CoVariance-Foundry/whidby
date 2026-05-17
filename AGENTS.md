@@ -80,13 +80,13 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby/whidby] recent context, 2026-05-13 10:15pm PDT
+# [whidby] recent context, 2026-05-16 5:33pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (22,609t read) | 468,046t work | 95% savings
+Stats: 50 obs (24,294t read) | 481,897t work | 95% savings
 
 ### Apr 26, 2026
 S188 Run pilot benchmark (scripts.benchmarks.run_pilot) against DataForSEO and Anthropic APIs for two niches across 200 metro slots (Apr 26 at 7:11 PM)
@@ -94,33 +94,12 @@ S203 Phase 6 CI Enforcement — implement domain layer import guardrails via lin
 ### Apr 29, 2026
 S205 Phase 6 CI Enforcement Branch Entering Finishing Workflow (Apr 29 at 2:57 PM)
 S213 vitest Fix Verified Stable After Root package.json Cleanup (Apr 29 at 2:59 PM)
-252 3:04p 🔵 vitest Missing from Root node_modules After npm install in Monorepo
-253 3:05p 🔵 vitest Listed in package-lock.json but Not Installed in node_modules
-254 " 🔵 Root node_modules Has 304 Packages but No vitest; No .npmrc Present
-255 3:06p 🔴 Clean Root npm Install Attempted to Resolve Missing vitest Module
-256 " 🔵 vitest Installed Only in Worktree node_modules, Not in Main Project
-257 3:07p 🔵 Root node_modules Has 312 Packages But vitest Is Not Among Them
-258 " 🔵 Root Cause: NODE_ENV=production Caused npm to Omit devDependencies
-259 " 🔴 Fixed "Cannot find module 'vitest'" — Tests Now Passing
-260 " ✅ vitest Removed from Monorepo Root package.json devDependencies
-261 " 🔴 vitest Fix Verified Stable After Root package.json Cleanup
 S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/agent/health/route.test.ts (Apr 29 at 3:07 PM)
 S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 3:07 PM)
-262 3:11p ✅ Phase 7 Data Providers — Plan Execution Initiated
-263 4:19p 🔵 Phase 6 Already Committed to Dev Branch
-264 " 🟣 DataForSEO Google Trends API Research Initiated for Phase 7
-266 " 🔵 DataForSEO Google Trends Explore Live API Contract Documented
-267 " 🔵 DataForSEO Google Trends Explore Task POST API Contract Documented
-268 4:24p 🟣 Phase 7 Data Providers Implementation Plan Written
-270 " ✅ Phase 7 Plan Corrected: DataForSEO Trends Response Parsing Fixed
-271 4:25p ✅ Phase 7 Plan: FakeTrendsClient Test Fixture Corrected to Match Real API Structure
 S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
 ### May 13, 2026
-272 1:09p ✅ Phase 6 CI Enforcement Planning Session Initiated
 S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:09 PM)
-S268 V2 Scoring — Repository Boundary for seo_benchmarks Access Planned (May 13 at 1:10 PM)
-277 1:26p ⚖️ V2 Scoring — Repository Boundary for seo_benchmarks Access Planned
-S269 V2 scoring repository boundary plan — orientation phase for writing a formal implementation plan (May 13 at 1:26 PM)
+S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:10 PM)
 278 7:19p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
 279 7:20p ✅ Explore Refresh Control — Canonical Docs Update (Task 1)
 280 7:21p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
@@ -151,6 +130,28 @@ S269 V2 scoring repository boundary plan — orientation phase for writing a for
 308 " 🔵 Explore Refresh Control — Canonical Docs Verified Against SQL Contract
 309 " 🔵 Explore Refresh Control — Git Diff Confirms Prior Session Fixed Stale reports.report_id PK
 310 7:37p 🔵 Explore Refresh Control — DATA-MODEL.md Task 1 Spec Compliance Verified
+### May 15, 2026
+345 8:45p 🔵 Git Worktree Mental Model — Checkout Conflicts and Merge-Back Strategy
+346 8:46p 🔵 Git Worktree Dirty State — AGENTS.md Modified in Two Active Worktrees
+347 8:47p 🔵 Git Worktrees — User Confusion Around Checkout Locks and Merging Back to Main
+348 8:48p 🔵 niche-surface-hardening-v2 Worktree Branch Has Diverged from Remote
+349 " 🔵 Rebase Conflict in scoring/route.ts — account vs report Field in Response
+351 " 🔴 scoring/route.ts Rebase Conflict Resolved — Both account and report Fields Preserved
+352 8:49p ✅ PRs #38 and #39 Created — Account Billing and Niche Caching Branches
+353 8:50p 🔵 Git Worktree Workflow — Cannot Commit to Main Directly
+S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fetch/checkout/pull sequence (May 15 at 8:52 PM)
+354 8:55p 🔵 Explore Cities Table — Population, Income, Density, Growth Fields Missing from Data Flow
+355 8:56p 🔵 Explore Table — business_density_per_1k and establishment_growth_yoy Always Null
+356 8:57p 🔵 Supabase Environment Points to eoajvifhbmqmoluiokcj Instance in Both .env Files
+357 9:02p 🔵 Explore Cities Data Flow — Historical Context Retrieved from Memory
+358 9:05p 🔵 Whidby Repo — On Main Branch with Untracked AGENTS.md Change
+360 9:09p ⚖️ Explore Data Model Population — 8-Task Implementation Plan Written
+361 " ⚖️ Explore Data Model Fix — Working Directly on Main Branch
+362 " 🔵 Git Worktree Creation Blocked by Sandbox Permission Restriction
+363 9:10p ✅ Git Worktree Created for Explore Data Model Implementation
+364 " 🔵 Explore Worktree Has No node_modules or .venv — Dependencies Need Install
+365 9:11p 🔵 Python venv pip install -e .[dev] Fails in Worktree Due to Zsh Glob Expansion
+366 " 🔵 Sandbox Has No Network Access — pip Cannot Install Python Build Dependencies
 
-Access 468k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 482k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

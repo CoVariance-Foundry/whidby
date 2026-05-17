@@ -70,10 +70,10 @@ SELECT
     owner_occupancy_rate
 FROM public.metros;
 
+-- Required extension for trigram fast prefix/substring matching
 CREATE INDEX IF NOT EXISTS idx_mlc_normalized
     ON public.metro_location_cache USING gin (normalized_label gin_trgm_ops);
 
--- Required extension for trigram fast prefix/substring matching
 -- ============================================================
 -- 3. niche_naics_mapping
 -- ============================================================

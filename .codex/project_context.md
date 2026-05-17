@@ -1,10 +1,24 @@
 # Project Context
 
+## Consumer Onboarding Flow
+
+Consumer onboarding now has a first production implementation in the consumer app. Supabase migration `016_consumer_onboarding.sql` defines `onboarding_profiles` and `onboarding_targets` for durable signup intent, starter strategy recommendation, selected service/geography target, resume state, and first-report handoff. The tables are account-scoped through existing account membership checks and preserve Mapbox/DataForSEO metadata when a city target is selected.
+
+The consumer app now owns deterministic strategy routing in `apps/app/src/lib/onboarding/`, plus `/api/onboarding/profile`, `/api/onboarding/target`, and `/api/onboarding/start-report` route handlers. Onboarding does not create a separate scoring path: city fresh-report starts delegate to the existing `/api/agent/scoring` route so entitlement, quota, request metadata, and report persistence behavior stay centralized. Free users and broad geography targets are routed toward cached Explore/report experiences instead of fresh generation.
+
+The `/onboarding` page is implemented as a production flow with starter intent capture, service selection, city/state target capture, and confirmation. It reuses the consumer `CityAutocomplete` and now passes a stable input id so labels bind correctly. The auth callback now routes new or incomplete users into onboarding, keeps selected-target users in onboarding so they can start the report, preserves explicit safe `next` redirects, and sends terminal onboarding states to `/reports`.
+
 ## Consumer User Management and Billing
 
 Consumer user management now has a first implementation slice in code and schema. Supabase migration `014_user_management_billing.sql` defines profiles, accounts, memberships, subscriptions, billing customer mappings, usage counters, report ownership columns, cached/account report visibility, account-scoped report RLS, account bootstrap RPCs, and atomic report quota RPCs. Existing ownerless reports are treated as shared cached reports; fresh generated reports should persist with `owner_account_id`, `created_by_user_id`, and `access_scope = account`.
 
 The consumer app scoring proxy now resolves the Supabase user/account entitlement before calling FastAPI, enforces PostHog-backed fresh-report and quota flags with secure defaults, denies free users fresh reports, consumes/refunds quota around upstream failures, and forwards report ownership context to the Render/FastAPI bridge. Stripe Checkout, Customer Portal, and webhook routes exist for Plus/Pro billing state, backed by `stripe` and `posthog-node` dependencies in `apps/app`.
+
+## Consumer Explore
+
+Consumer `/explore` is implemented as an authenticated Supabase-backed discovery surface in `apps/app`. It loads cached metro/service opportunities from `metros`, `reports`, and score tables, renders filterable city rows and city-level cached service scores, and sends fresh scans through the existing `/api/agent/scoring` proxy to the FastAPI scoring bridge.
+
+Explore refresh control is implemented for cached report upkeep. Migration `015_explore_refresh_control.sql` adds policy, target, run, run-item, and snapshot tables with a default 30-day cadence; `ExploreRefreshService` and `SupabaseExploreRefreshStore` resolve due/manual targets, queue FastAPI scoring runs, update target freshness, and preserve `explore_report_snapshots` for trends. FastAPI exposes manual run, due-run, and run-status endpoints under `/api/explore/refresh/*`; the consumer app proxies those through bounded Next route handlers, displays refresh controls/status plus freshness fields on `/explore`, reads deltas from `explore_latest_target_scores`/`explore_target_trends`, and schedules due checks from app-scoped `apps/app/vercel.json`.
 
 ## Phase 7 Benchmark and Sonar Slice-Lite
 

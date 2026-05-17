@@ -1,6 +1,6 @@
 # Architecture
 
-<!-- docguard:version 1.3.0 -->
+<!-- docguard:version 1.4.0 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-14 -->
 <!-- docguard:owner @widby-team -->
@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.3.0` |
-| **Last Updated** | 2026-05-14 |
+| **Version** | `1.5.0` |
+| **Last Updated** | 2026-05-16 |
 | **Owner** | @widby-team |
 
 ---
@@ -46,6 +46,57 @@ Fresh report generation is gated in `apps/app` route handlers before the Render/
 
 RLS is the durable isolation boundary. PostHog flags may hide UI, stage quota enforcement, or disable fresh report generation, but they must never weaken account-scoped report policies.
 
+### Consumer Onboarding and First Report Flow
+
+Consumer onboarding is the bridge from signup intent to the first useful product surface. It must not become a separate scoring path or a local-only demo state. The production flow persists user intent, recommends a starting strategy, captures a service + geography target, then hands fresh report generation to the existing quota-protected consumer scoring proxy.
+
+The UX prototype source is the reference for screen sequencing and component behavior:
+
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/app/signup/page.tsx` — identity, intent, focus, and referral capture.
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/app/onboarding/page.tsx` — first service + region report builder.
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/lib/strategies.ts` — intent-to-strategy routing.
+- `/Users/antwoineflowers/Desktop/development/covariance/whidby-ux-proto/src/components/LocationCombobox.tsx`, `StateMultiselect.tsx`, and strategy components — interaction patterns to port into `apps/app`.
+
+Onboarding state belongs in Supabase, scoped to the authenticated user and account. `onboarding_profiles` records durable profile answers and the recommended next route. `onboarding_targets` records the selected strategy, service, and resolved geography for resume and report-start handoff. Generated reports still use `reports`, `usage_counters`, and the existing M4 → M9 persistence path.
+
+Data flow:
+
+```text
+Signup/Auth ──→ onboarding_profiles ──→ strategy routing
+                                      ├──→ /explore for researching users
+                                      ├──→ /agency for agency-focused users
+                                      └──→ strategies/onboarding target capture
+
+Target capture ──→ onboarding_targets ──→ entitlement check
+                                      ├──→ cached Explore/report route for free users
+                                      └──→ apps/app /api/agent/scoring for fresh paid runs
+
+Scoring proxy ──→ Render FastAPI /api/niches/score ──→ reports + child score tables
+```
+
+Onboarding API contracts:
+
+| API | Responsibility |
+| --- | --- |
+| `GET /api/onboarding/profile` | Return the current user's onboarding status, persisted answers, recommended strategy, selected target, and resume route. |
+| `POST /api/onboarding/profile` | Upsert profile answers (`intent`, `focus`, `coach_or_agency`, `referral_source`), compute `recommended_strategy_id`, and store `next_route`. |
+| `POST /api/onboarding/target` | Upsert selected strategy + service + geography, including `place_id`, `dataforseo_location_code`, `cbsa_code`, `state`, `geo_scope`, and `resolved_label` when available. |
+| `POST /api/onboarding/start-report` | Validate the saved target, apply the existing entitlement/quota rules, then invoke the existing scoring proxy contract and return a report redirect. |
+
+State machine:
+
+```text
+anonymous
+  → profile_started
+  → profile_completed
+  → strategy_recommended
+  → target_selected
+  → report_queued | cached_route_selected | upgrade_required
+  → report_ready
+```
+
+Free users can complete onboarding and browse cached opportunities, but they cannot generate fresh reports. Plus and Pro users with remaining monthly quota can start a fresh report from onboarding. Researching users skip fresh-report prompts and land in `/explore`.
+
 ### Niche Finder (both apps)
 
 Admin (`apps/admin`) hosts a **dual-surface niche finder**:
@@ -55,8 +106,8 @@ Admin (`apps/admin`) hosts a **dual-surface niche finder**:
 
 Consumer (`apps/app`) hosts scoring and discovery surfaces:
 
-- **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by Mapbox Geocoding `/api/places/suggest` endpoint → autocompletes to `{city, region, country, place_id, dataforseo_location_code}` with global coverage; falls back to legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable). The DataForSEO location bridge (`src/research_agent/places.py::DataForSEOLocationBridge`) fetches the full ~95k location list via `GET /serp/google/locations`, caches it for 1 hour, and matches each Mapbox suggestion to a DFS location code using city-name matching with state-aware disambiguation (when multiple cities share a name, the state portion of the DFS `location_name` is compared against the Mapbox suggestion's `full_name`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label. When a canonical `place_id` + `dataforseo_location_code` are available from autocomplete, scoring bypasses MetroDB seed lookup and targets DataForSEO directly. When no DFS code is available but a `state` is known, the orchestrator falls back to borrowing a DFS location code from the highest-population seeded metro in the same state (degraded but functional geotargeting).
-- **Explore Cities (`/explore`)**: cached market-discovery surface backed by a backend Explore domain service, not by client-side table slicing. It lists all eligible metros from `public.metros`, joins cached service scores from `metro_score_v2` first and legacy `metro_scores` as a fallback, calculates density/growth from `census_cbp_establishments` and `niche_naics_mapping`, and applies filters server-side. Users can inspect cached service scores in a city drawer, run a new report for any city + service, or refresh an existing cached city + service target through the backend scoring bridge.
+- **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by Mapbox Geocoding `/api/places/suggest` endpoint → autocompletes to `{city, region, country, place_id, dataforseo_location_code}` with global coverage; falls back to legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable). The DataForSEO location bridge (`src/research_agent/places.py::DataForSEOLocationBridge`) fetches the full ~95k location list via `GET /serp/google/locations`, caches it for 1 hour, and matches each Mapbox suggestion to a DFS location code using city-name matching with state-aware disambiguation (when multiple cities share a name, the state portion of the DFS `location_name` is compared against the Mapbox suggestion's `full_name`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label. Requests now carry `metadata_source` (`typed`, `mapbox_selected`, `recent_history`, `fallback_cbsa`) and responses include `fallback_path` (`canonical_targeting`, `city_state`, `city_only`) plus `request_id` for cross-layer tracing. Place suggestions also expose `enrichment_status` (`enriched`, `mapbox_only`, `not_configured`, `timeout`, `degraded`) to make fallback behavior explicit. When a canonical `place_id` + `dataforseo_location_code` are available from autocomplete, scoring bypasses MetroDB seed lookup and targets DataForSEO directly. When no DFS code is available but a `state` is known, the orchestrator falls back to borrowing a DFS location code from the highest-population seeded metro in the same state (degraded but functional geotargeting).
+- **Explore Cities (`/explore`)**: cached market-discovery surface backed by a backend Explore domain service, not by client-side table slicing. It lists all eligible metros from `public.metros`, joins cached service scores from `metro_score_v2` first and legacy `metro_scores` as a fallback, calculates density/growth from `census_cbp_establishments` and `niche_naics_mapping`, and applies filters server-side. Users can inspect cached service scores in a city drawer, run a new report for any city + service, or refresh an existing cached city + service target through the backend scoring bridge. Refresh control stores the 30-day default freshness policy in `explore_refresh_policies`, queues refresh runs through FastAPI `/api/explore/refresh/*` endpoints backed by `ExploreRefreshService`, and records normalized `explore_report_snapshots` for trend analysis. Consumer Next routes proxy manual runs, due runs, and status reads to FastAPI with bounded upstream response/error handling; the scheduled due check is configured in app-scoped `apps/app/vercel.json`, not root Vercel config.
 - **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read shared cached reports plus reports owned by their account. Canonical report payload writes remain service-role only via the Python scoring engine; account-owned soft archive uses the scoped `archive_account_report(report_id)` RPC.
 
 Both apps share request validation, score shape, and the `CityAutocomplete` component (currently mirrored; extraction to `packages/niche-finder/` is a future PR). Admin's dual surface and consumer scoring/discovery surfaces are contractually bound to the same FastAPI `POST /api/niches/score` endpoint — scores are always from the same backend pipeline.
@@ -125,6 +176,8 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments | `apps/admin/` | Admin vitest + Playwright |
 | Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
 | Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags | `apps/app/src/lib/account/`, `apps/app/src/app/api/billing/` | Consumer vitest |
+| Consumer Onboarding | Signup intent, strategy recommendation, target capture, resume state, and first-report handoff | `apps/app/src/app/(auth)/`, `apps/app/src/app/onboarding/`, `apps/app/src/app/api/onboarding/`, `apps/app/src/lib/onboarding/` | Consumer vitest + Playwright smoke |
+| Consumer Explore Refresh | Cached Explore refresh orchestration, Next.js proxy routes, and refresh UI | `src/domain/services/explore_refresh_service.py`, `apps/app/src/app/api/explore/refresh/`, `apps/app/src/components/explore/` | Pytest, consumer vitest, Playwright smoke |
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
 | Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores`, including report ownership when supplied | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
 | KB persistence | Canonical entity, versioned snapshot, evidence artifact, and feedback event CRUD for the knowledge base | `src/clients/kb_persistence.py` | `tests/unit/test_kb_persistence.py` |
@@ -243,6 +296,7 @@ Teams can start this phase as soon as M0 + M1 + M3 are complete because it is in
 |------|------|
 | `.docguard.json` | DocGuard profile, required canonical files, and validator toggles |
 | `.mcp.json` | MCP server configuration used by local coding agents |
+| `apps/app/vercel.json` | Consumer app Vercel config; owns the `/api/explore/refresh/due` cron for cached Explore refresh checks |
 | `.githooks/` | Project-managed git hook scripts used by quality gates |
 | `.agent/` | Generated DocGuard/agent skills and local agent metadata |
 | `.claude/` | Claude plugin and local assistant configuration cache |
@@ -306,3 +360,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.1.0 | 2026-04-22 | Mapbox autocomplete migration | Added Mapbox places autocomplete + DataForSEO bridge component, updated niche finder flow to support global city coverage with canonical place targeting |
 | 1.2.0 | 2026-04-23 | DFS bridge fix + E2E scoring suite | Fixed DFS locations endpoint to use GET (was POST), added state-aware city disambiguation in bridge matcher, added state-level fallback in orchestrator for unseeded cities, added observability logging to bridge, added Playwright E2E scoring regression/matrix/lifecycle/quality-gate test suite |
 | 1.3.0 | 2026-05-14 | Explore Cities system design | Added backend-backed Explore Cities architecture, canonical source tables, server-side filtering contract, metric ownership, and run report/refresh boundaries |
+| 1.4.0 | 2026-05-14 | Explore refresh control | Documented refresh policy storage, FastAPI scoring bridge queueing, app proxy routes, and report snapshots for Explore trend analysis |
