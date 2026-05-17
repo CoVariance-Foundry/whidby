@@ -274,6 +274,7 @@ class FakePagedExploreRepository:
                 "business_density_per_1k": 3.2,
                 "establishment_growth_yoy": 0.08,
                 "growth_available": True,
+                "cached_services_count": 4,
                 "stale": False,
             }
         ]
@@ -315,7 +316,10 @@ def test_city_service_returns_paged_result_for_new_repository() -> None:
     city = result["cities"][0]
     assert city["cbsa_code"] == "38060"
     assert city["best_score"] == 88
+    assert city["cached_services_count"] == 4
+    assert city["metric_service"] == "roofing"
     assert city["cached_scores"][0]["niche_normalized"] == "roofing"
+    assert city["cached_scores"][0]["growth_available"] is True
 
 
 def test_city_service_trims_extra_cursor_row() -> None:
@@ -346,4 +350,25 @@ def test_city_service_trims_extra_cursor_row() -> None:
 
     assert not isinstance(result, list)
     assert [city["cbsa_code"] for city in result["cities"]] == ["38060", "12060"]
-    assert result["next_cursor"] == "12060"
+    assert result["next_cursor"] == "2"
+
+
+def test_city_service_uses_offset_cursor_for_next_page() -> None:
+    class Repository(FakePagedExploreRepository):
+        def list_city_rows(self, **kwargs) -> list[dict]:
+            rows = super().list_city_rows(**kwargs)
+            return [
+                {**rows[0], "cbsa_code": str(10000 + index)}
+                for index in range(kwargs["limit"] + 1)
+            ]
+
+    repository = Repository()
+    result = ExploreCityService(repository).list_cities(
+        service_filter="roofing",
+        limit=10,
+        cursor="25",
+    )
+
+    assert not isinstance(result, list)
+    assert len(result["cities"]) == 10
+    assert result["next_cursor"] == "35"

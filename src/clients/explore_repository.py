@@ -10,11 +10,14 @@ from src.pipeline.canonical_key import normalize_niche
 SORT_COLUMNS = {
     "score": "presentation_score",
     "best_score": "presentation_score",
+    "presentation_score": "presentation_score",
     "population": "population",
     "income": "median_household_income_usd",
     "density": "business_density_per_1k",
+    "business_density": "business_density_per_1k",
     "growth": "establishment_growth_yoy",
     "last_scored_at": "latest_scored_at",
+    "latest_scored_at": "latest_scored_at",
     "city": "cbsa_name",
 }
 
@@ -44,6 +47,8 @@ class SupabaseExploreRepository:
         normalized_service = _normalize_service(service)
         if normalized_service:
             query = query.eq("niche_normalized", normalized_service)
+        else:
+            query = query.eq("representative_service_rank", 1)
         if states:
             query = query.in_("state", states)
         if population_min is not None:
@@ -56,27 +61,33 @@ class SupabaseExploreRepository:
             query = query.lte("median_household_income_usd", income_max)
         if growing_only:
             query = query.gt("establishment_growth_yoy", 0)
-        if cursor:
-            query = query.gt("cbsa_code", cursor)
 
         order_column = SORT_COLUMNS.get(sort, "presentation_score")
-        ascending = direction.lower() == "asc"
-        response = (
-            query.order(order_column, ascending=ascending)
-            .order("cbsa_code", ascending=True)
-            .limit(limit + 1)
-            .execute()
-        )
+        descending = direction.lower() != "asc"
+        query = query.order(order_column, desc=descending).order("cbsa_code", desc=False)
+        offset = _cursor_offset(cursor)
+        if hasattr(query, "range"):
+            query = query.range(offset, offset + limit)
+        else:
+            query = query.limit(limit + 1)
+
+        try:
+            response = query.execute()
+        except Exception as exc:
+            raise RuntimeError(f"Supabase request failed: {exc}") from exc
         return _result_rows(response)
 
     def load_city_detail(self, cbsa_code: str) -> dict[str, Any] | None:
-        response = (
+        query = (
             self._client.table("explore_market_cells")
             .select("*")
             .eq("cbsa_code", cbsa_code)
-            .order("presentation_score", ascending=False)
-            .execute()
+            .order("presentation_score", desc=True)
         )
+        try:
+            response = query.execute()
+        except Exception as exc:
+            raise RuntimeError(f"Supabase request failed: {exc}") from exc
         rows = _result_rows(response)
         if not rows:
             return None
@@ -93,7 +104,9 @@ class SupabaseExploreRepository:
             ),
             "owner_occupancy_rate": city_row.get("owner_occupancy_rate"),
             "median_age_years": city_row.get("median_age_years"),
-            "cached_scores": [_cached_score(row) for row in rows],
+            "cached_scores": [
+                _cached_score(row) for row in rows if _has_cached_service(row)
+            ],
         }
 
 
@@ -114,6 +127,20 @@ def _raise_on_error(result: Any) -> None:
 def _result_rows(result: Any) -> list[dict[str, Any]]:
     _raise_on_error(result)
     return list(getattr(result, "data", None) or [])
+
+
+def _cursor_offset(cursor: str | None) -> int:
+    if cursor is None:
+        return 0
+    try:
+        offset = int(cursor)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, offset)
+
+
+def _has_cached_service(row: dict[str, Any]) -> bool:
+    return bool(row.get("niche_normalized"))
 
 
 def _cached_score(row: dict[str, Any]) -> dict[str, Any]:

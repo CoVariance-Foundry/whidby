@@ -37,10 +37,26 @@ def test_explore_market_cells_exposes_metric_contract() -> None:
         "establishment_growth_yoy",
         "growth_available",
         "latest_scored_at",
+        "representative_service_rank",
+        "cached_services_count",
         "refresh_target_id",
         "stale",
     ):
         assert column in sql
+
+
+def test_explore_market_cells_marks_representative_city_rows() -> None:
+    sql = _sql()
+
+    assert "ranked_scores AS (" in sql
+    assert "row_number() over (" in sql
+    assert "partition by cbsa_code" in sql
+    assert "presentation_score desc nulls last" in sql
+    assert "latest_scored_at desc nulls last" in sql
+    assert "niche_normalized asc" in sql
+    assert "AS representative_service_rank" in sql
+    assert "count(*) over (partition by cbsa_code) AS cached_services_count" in sql
+    assert "JOIN ranked_scores score ON score.cbsa_code = metro.cbsa_code" in sql
 
 
 def test_explore_market_cells_has_lookup_indexes() -> None:

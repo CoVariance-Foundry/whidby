@@ -3,6 +3,20 @@
 from typing import Any, NotRequired, TypedDict
 
 
+class ExploreServiceMetric(TypedDict):
+    cbsa_code: NotRequired[str]
+    niche_normalized: str | None
+    niche_keyword: str | None
+    report_id: Any | None
+    presentation_score: int | None
+    score_system: str | None
+    latest_scored_at: Any | None
+    stale: NotRequired[bool | None]
+    business_density_per_1k: NotRequired[float | None]
+    establishment_growth_yoy: NotRequired[float | None]
+    growth_available: NotRequired[bool | None]
+
+
 class ExploreCitySummary(TypedDict):
     cbsa_code: str
     cbsa_name: str
@@ -16,11 +30,12 @@ class ExploreCitySummary(TypedDict):
     establishment_growth_yoy: float | None
     growth_available: bool
     cached_services_count: int
+    metric_service: NotRequired[str | None]
     best_score: int | None
     score_system: str
     last_scored_at: NotRequired[Any | None]
     stale: bool | None
-    cached_scores: list[dict[str, Any]]
+    cached_scores: list[ExploreServiceMetric]
 
 
 class ExplorePageResult(TypedDict):

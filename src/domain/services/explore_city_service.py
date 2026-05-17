@@ -6,7 +6,11 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from src.domain.explore.entities import ExploreCitySummary, ExplorePageResult
+from src.domain.explore.entities import (
+    ExploreCitySummary,
+    ExplorePageResult,
+    ExploreServiceMetric,
+)
 from src.domain.explore.metrics import (
     annualized_growth,
     business_density_per_1k,
@@ -122,12 +126,11 @@ class ExploreCityService:
         )
         page_rows = rows[:safe_limit]
         cities = [_summary_from_cell_row(row) for row in page_rows]
+        offset = _cursor_offset(cursor)
         return {
             "cities": cities,
             "next_cursor": (
-                str(page_rows[-1]["cbsa_code"])
-                if len(rows) > safe_limit and page_rows
-                else None
+                str(offset + safe_limit) if len(rows) > safe_limit else None
             ),
             "growth_available": any(city["growth_available"] for city in cities),
             "service_filter": normalized_filter,
@@ -167,6 +170,7 @@ class ExploreCityService:
             "establishment_growth_yoy": metrics["establishment_growth_yoy"],
             "growth_available": metrics["establishment_growth_yoy"] is not None,
             "cached_services_count": len(sorted_scores),
+            "metric_service": None,
             "best_score": _best_score(best_score_row),
             "score_system": (
                 str(best_score_row.get("score_system") or "none")
@@ -187,9 +191,20 @@ def _normalize_service(service_filter: str | None) -> str | None:
     return normalized or None
 
 
+def _cursor_offset(cursor: str | None) -> int:
+    if cursor is None:
+        return 0
+    try:
+        offset = int(cursor)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, offset)
+
+
 def _summary_from_cell_row(row: Mapping[str, Any]) -> ExploreCitySummary:
     cached_score = _cached_score_from_cell_row(row)
     best_score = _best_score(cached_score)
+    has_service = bool(cached_score.get("niche_normalized"))
     return {
         "cbsa_code": str(row["cbsa_code"]),
         "cbsa_name": str(row["cbsa_name"]),
@@ -202,16 +217,17 @@ def _summary_from_cell_row(row: Mapping[str, Any]) -> ExploreCitySummary:
         "business_density_per_1k": row.get("business_density_per_1k"),
         "establishment_growth_yoy": row.get("establishment_growth_yoy"),
         "growth_available": bool(row.get("growth_available")),
-        "cached_services_count": 1 if cached_score.get("niche_normalized") else 0,
+        "cached_services_count": _cached_services_count(row, has_service),
+        "metric_service": _metric_service(row),
         "best_score": best_score,
         "score_system": str(row.get("score_system") or "none"),
         "last_scored_at": row.get("latest_scored_at"),
         "stale": _stale_value(row),
-        "cached_scores": [cached_score] if cached_score.get("niche_normalized") else [],
+        "cached_scores": [cached_score] if has_service else [],
     }
 
 
-def _cached_score_from_cell_row(row: Mapping[str, Any]) -> dict[str, Any]:
+def _cached_score_from_cell_row(row: Mapping[str, Any]) -> ExploreServiceMetric:
     return {
         "cbsa_code": row.get("cbsa_code"),
         "niche_normalized": row.get("niche_normalized"),
@@ -225,6 +241,18 @@ def _cached_score_from_cell_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "establishment_growth_yoy": row.get("establishment_growth_yoy"),
         "growth_available": row.get("growth_available"),
     }
+
+
+def _cached_services_count(row: Mapping[str, Any], has_service: bool) -> int:
+    cached_services_count = row.get("cached_services_count")
+    if cached_services_count is not None:
+        return int(cached_services_count)
+    return 1 if has_service else 0
+
+
+def _metric_service(row: Mapping[str, Any]) -> str | None:
+    service = row.get("niche_keyword") or row.get("niche_normalized")
+    return str(service) if service is not None else None
 
 
 def _group_scores_by_cbsa(

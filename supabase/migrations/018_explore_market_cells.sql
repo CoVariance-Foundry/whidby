@@ -135,6 +135,19 @@ score_union AS (
       ON v2.cbsa_code = legacy.cbsa_code
      AND v2.niche_normalized = legacy.niche_normalized
 ),
+ranked_scores AS (
+    SELECT
+        score_union.*,
+        row_number() over (
+            partition by cbsa_code
+            order by
+                presentation_score desc nulls last,
+                latest_scored_at desc nulls last,
+                niche_normalized asc
+        ) AS representative_service_rank,
+        count(*) over (partition by cbsa_code) AS cached_services_count
+    FROM score_union
+),
 refresh AS (
     SELECT DISTINCT ON (t.cbsa_code, t.niche_normalized)
         t.id AS refresh_target_id,
@@ -170,6 +183,8 @@ SELECT
     score.presentation_score,
     score.score_system,
     score.latest_scored_at,
+    score.representative_service_rank,
+    score.cached_services_count,
     latest.latest_weighted_establishments,
     prior.prior_weighted_establishments,
     CASE
@@ -209,7 +224,7 @@ SELECT
     score.local_difficulty,
     score.monetization_signal
 FROM public.metros metro
-JOIN score_union score ON score.cbsa_code = metro.cbsa_code
+JOIN ranked_scores score ON score.cbsa_code = metro.cbsa_code
 LEFT JOIN latest_metrics latest
   ON latest.cbsa_code = score.cbsa_code
  AND latest.niche_normalized = score.niche_normalized
