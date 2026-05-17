@@ -13,6 +13,8 @@ def test_explore_market_cells_is_derived_read_model() -> None:
     sql = _sql()
 
     assert "explore_market_cells" in sql
+    assert "CREATE MATERIALIZED VIEW public.explore_market_cells" in sql
+    assert "CREATE TABLE public.explore_market_cells" not in sql
     assert "public.metros" in sql
     assert "public.census_cbp_establishments" in sql
     assert "public.niche_naics_mapping" in sql
@@ -47,3 +49,29 @@ def test_explore_market_cells_has_lookup_indexes() -> None:
     assert "idx_explore_market_cells_niche_cbsa" in sql
     assert "idx_explore_market_cells_cbsa" in sql
     assert "idx_explore_market_cells_score" in sql
+
+
+def test_explore_market_cells_dedupes_refresh_targets() -> None:
+    sql = _sql()
+
+    assert "SELECT DISTINCT ON (t.cbsa_code, t.niche_normalized)" in sql
+    assert "public.explore_refresh_policies" in sql
+    assert "p.enabled IS TRUE" in sql
+    assert "t.active IS TRUE" in sql
+
+
+def test_explore_market_cells_uses_refresh_cadence_for_staleness() -> None:
+    sql = _sql()
+
+    assert "cadence_days" in sql
+    assert "COALESCE(refresh.cadence_days, 30) * interval '1 day'" in sql
+    assert "now() - interval '30 days'" not in sql
+
+
+def test_explore_market_cells_normalizes_legacy_suffixes() -> None:
+    sql = _sql()
+
+    assert "services?" in sql
+    assert "company" in sql
+    assert "contractors?" in sql
+    assert "lower(trim(r.niche_keyword))" in sql

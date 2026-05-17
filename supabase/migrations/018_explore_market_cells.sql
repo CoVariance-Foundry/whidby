@@ -50,15 +50,23 @@ prior_metrics AS (
     FROM weighted_cbp m
     JOIN prior_cbp_year y ON y.year = m.year
 ),
-latest_legacy_scores AS (
-    SELECT DISTINCT ON (ms.cbsa_code, lower(r.niche_keyword))
+legacy_score_rows AS (
+    SELECT
         ms.cbsa_code,
-        lower(replace(r.niche_keyword, ' ', '_')) AS niche_normalized,
+        regexp_replace(
+            regexp_replace(
+                lower(trim(r.niche_keyword)),
+                '\s+(services?|company|contractors?)$',
+                ''
+            ),
+            '\s+',
+            '_',
+            'g'
+        ) AS niche_normalized,
         r.niche_keyword,
         ms.report_id,
-        ms.opportunity_score AS presentation_score,
-        'legacy'::text AS score_system,
-        r.created_at AS latest_scored_at,
+        ms.opportunity_score,
+        r.created_at,
         ms.serp_archetype,
         ms.ai_exposure,
         ms.difficulty_tier,
@@ -66,7 +74,23 @@ latest_legacy_scores AS (
         ms.ai_resilience_score
     FROM public.metro_scores ms
     JOIN public.reports r ON r.id = ms.report_id
-    ORDER BY ms.cbsa_code, lower(r.niche_keyword), r.created_at DESC
+),
+latest_legacy_scores AS (
+    SELECT DISTINCT ON (legacy.cbsa_code, legacy.niche_normalized)
+        legacy.cbsa_code,
+        legacy.niche_normalized,
+        legacy.niche_keyword,
+        legacy.report_id,
+        legacy.opportunity_score AS presentation_score,
+        'legacy'::text AS score_system,
+        legacy.created_at AS latest_scored_at,
+        legacy.serp_archetype,
+        legacy.ai_exposure,
+        legacy.difficulty_tier,
+        legacy.confidence_score,
+        legacy.ai_resilience_score
+    FROM legacy_score_rows legacy
+    ORDER BY legacy.cbsa_code, legacy.niche_normalized, legacy.created_at DESC
 ),
 latest_v2_scores AS (
     SELECT DISTINCT ON (v2.cbsa_code, v2.niche_normalized)
@@ -114,13 +138,24 @@ score_union AS (
      AND v2.niche_normalized = legacy.niche_normalized
 ),
 refresh AS (
-    SELECT
+    SELECT DISTINCT ON (t.cbsa_code, t.niche_normalized)
         t.id AS refresh_target_id,
         t.cbsa_code,
         t.niche_normalized,
         t.next_refresh_at,
-        t.latest_scored_at AS refresh_scored_at
+        t.latest_scored_at AS refresh_scored_at,
+        COALESCE(p.cadence_days, 30) AS cadence_days
     FROM public.explore_refresh_targets t
+    JOIN public.explore_refresh_policies p ON p.id = t.policy_id
+    WHERE t.active IS TRUE
+      AND p.enabled IS TRUE
+    ORDER BY
+        t.cbsa_code,
+        t.niche_normalized,
+        t.priority ASC,
+        t.next_refresh_at ASC NULLS LAST,
+        t.updated_at DESC,
+        t.created_at DESC
 )
 SELECT
     metro.cbsa_code,
@@ -163,7 +198,7 @@ SELECT
     refresh.next_refresh_at,
     CASE
         WHEN score.latest_scored_at IS NULL THEN false
-        ELSE score.latest_scored_at < now() - interval '30 days'
+        ELSE score.latest_scored_at < now() - (COALESCE(refresh.cadence_days, 30) * interval '1 day')
     END AS stale,
     score.serp_archetype,
     score.ai_exposure,
