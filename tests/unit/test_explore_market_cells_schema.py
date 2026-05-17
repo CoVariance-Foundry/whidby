@@ -75,3 +75,13 @@ def test_explore_market_cells_normalizes_legacy_suffixes() -> None:
     assert "company" in sql
     assert "contractors?" in sql
     assert "lower(trim(r.niche_keyword))" in sql
+
+
+def test_weighted_cbp_aggregates_without_display_keyword() -> None:
+    sql = _sql()
+    weighted_cbp = sql.split("weighted_cbp AS (", 1)[1].split(
+        "latest_metrics AS (",
+        1,
+    )[0]
+
+    assert "w.niche_keyword" not in weighted_cbp

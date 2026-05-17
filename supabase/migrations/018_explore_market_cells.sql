@@ -25,18 +25,16 @@ weighted_cbp AS (
     SELECT
         c.cbsa_code,
         w.niche_normalized,
-        w.niche_keyword,
         c.year,
         sum(coalesce(c.est, 0) * w.weight)::numeric AS weighted_establishments
     FROM public.census_cbp_establishments c
     JOIN service_weights w ON w.naics_code = c.naics_code
-    GROUP BY c.cbsa_code, w.niche_normalized, w.niche_keyword, c.year
+    GROUP BY c.cbsa_code, w.niche_normalized, c.year
 ),
 latest_metrics AS (
     SELECT
         m.cbsa_code,
         m.niche_normalized,
-        m.niche_keyword,
         m.weighted_establishments AS latest_weighted_establishments
     FROM weighted_cbp m
     JOIN latest_cbp_year y ON y.year = m.year
