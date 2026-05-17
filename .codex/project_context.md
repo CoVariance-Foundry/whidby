@@ -1,5 +1,11 @@
 # Project Context
 
+## AI Review and Visual QA CI/CD
+
+Added CI/CD review scaffolding for Greptile PR review policy, Playwright visual QA, optional Codex/Claude artifact critique, preview URL resolution, Supabase preview readiness waits, and environment manifest checks. The workflow keeps `dev -> main` as the release spine, uses preview/staging/production environment separation, and avoids printing or committing secret values.
+
+Greptile review execution remains owned by the Greptile GitHub App and local Greptile MCP use in Cursor/Codex/Claude Code. Visual QA is label-gated for PRs through `.github/workflows/visual-qa.yml`; manual runs can provide `preview_url` directly. Supabase preview branches require external Supabase GitHub/Vercel integration setup before the `Supabase Preview` wait can pass.
+
 ## Phase 7 Benchmark and Sonar Slice-Lite
 
 Phase 7 now has a staging-first benchmark recompute path. `public.recompute_seo_benchmarks(p_window_days integer)` rebuilds `seo_benchmarks` from `seo_facts`, ACS-backed `metros`, CBP-backed `census_cbp_establishments`, and weighted `niche_naics_mapping`; `scripts/benchmarks/recompute_benchmarks.py` calls that RPC through benchmark-specific Supabase env vars.
