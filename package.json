@@ -14,7 +14,11 @@
     "dev:admin": "turbo dev --filter=widby-admin",
     "dev:api": "docker compose up api --build",
     "dev:api:local": "arch -arm64 uvicorn src.research_agent.api:app --reload --port 8000",
-    "env:check": "node scripts/ci/env_manifest_check.mjs"
+    "env:check": "node scripts/ci/env_manifest_check.mjs",
+    "env:sync:vercel": "node scripts/ci/sync_vercel_env.mjs",
+    "env:sync:github": "node scripts/ci/sync_github_env.mjs",
+    "env:sync:supabase": "node scripts/ci/sync_supabase_branch_secrets.mjs",
+    "env:sync:dry-run": "npm run env:sync:vercel -- --dry-run"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
