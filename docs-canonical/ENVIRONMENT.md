@@ -160,6 +160,8 @@ The staging Supabase project needs the same auth accounts as production (see E2E
 
 Feature branches must not receive production service-role credentials. Schema-changing PRs should use Supabase preview branches seeded with deterministic test data. UI-only PRs may use staging Supabase with E2E test accounts.
 
+Supabase preview branches are data-less by default. Preview seed data must be deterministic, minimal, and free of production customer data. Auth users for E2E should be created through the approved staging/preview auth setup, not by committing real passwords into migrations.
+
 ### PR AI Review Policy
 
 Greptile is the code-review AI for PR-level source review. It runs through the GitHub App and is accessed locally through Greptile MCP in Cursor, Codex, or Claude Code. Visual QA is separate: Playwright captures user-flow artifacts and an optional local/CI agent reviews the rendered experience for product and design issues.

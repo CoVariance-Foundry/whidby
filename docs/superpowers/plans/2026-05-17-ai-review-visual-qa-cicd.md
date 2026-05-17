@@ -1202,7 +1202,9 @@ Operator action:
 4. Connect Supabase to the Vercel project through the Vercel integration.
 5. Confirm the `Supabase Preview` check appears on schema-changing PRs.
 
-- [ ] **Step 2: Add Supabase wait step to `visual-qa.yml`**
+Status: external operator action. Repo code now waits for the configurable `Supabase Preview` check when PR diffs include `supabase/migrations/**`, but enabling Supabase GitHub/Vercel integrations remains outside this repository.
+
+- [x] **Step 2: Add Supabase wait step to `visual-qa.yml`**
 
 Before resolving the Vercel preview URL, add:
 
@@ -1223,7 +1225,7 @@ Before resolving the Vercel preview URL, add:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-- [ ] **Step 3: Create `supabase/seed.sql` only if absent**
+- [x] **Step 3: Create `supabase/seed.sql` only if absent**
 
 Seed only non-sensitive deterministic rows required for E2E:
 
@@ -1234,7 +1236,9 @@ Seed only non-sensitive deterministic rows required for E2E:
 
 The implementation must inspect current migrations and schema files before adding inserts.
 
-- [ ] **Step 4: Document seed policy**
+Status: no `supabase/seed.sql` created. Existing migrations include schema/reference-data setup but no clearly safe deterministic E2E seed covering auth, cached reports, and preview flows without inventing production-shaped data or credentials.
+
+- [x] **Step 4: Document seed policy**
 
 Add to `docs-canonical/ENVIRONMENT.md`:
 
@@ -1242,12 +1246,18 @@ Add to `docs-canonical/ENVIRONMENT.md`:
 Supabase preview branches are data-less by default. Preview seed data must be deterministic, minimal, and free of production customer data. Auth users for E2E should be created through the approved staging/preview auth setup, not by committing real passwords into migrations.
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/visual-qa.yml docs-canonical/ENVIRONMENT.md supabase/seed.sql
+git add .github/workflows/visual-qa.yml docs-canonical/ENVIRONMENT.md docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md
 git commit -m "ci: prepare supabase preview qa path"
 ```
+
+Verification recorded:
+
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/visual-qa.yml"); puts "ok"'`: passed.
+- `git diff --check`: passed.
+- `rg -n "Detect Supabase migration changes|git diff --name-only|supabase/migrations/|SUPABASE_PREVIEW_CHECK_NAME|workflow_dispatch|EVENT_NAME.*pull_request|changed=false" .github/workflows/visual-qa.yml`: confirmed migration detection, configurable check-name fallback, and workflow_dispatch-safe skip behavior.
 
 ---
 
