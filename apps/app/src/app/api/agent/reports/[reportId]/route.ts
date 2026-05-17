@@ -6,6 +6,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const UPSTREAM_TIMEOUT_MS = 4_500;
 
 type RouteContext = {
   params: Promise<{ reportId: string }>;
@@ -105,7 +106,33 @@ export async function GET(
       );
     }
 
-    const upstream = await fetch(`${API_BASE}/api/niches/${encodeURIComponent(reportId)}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    let upstream: Response;
+
+    try {
+      upstream = await fetch(`${API_BASE}/api/niches/${encodeURIComponent(reportId)}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const isAbort = error instanceof DOMException && error.name === "AbortError";
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          message: isAbort
+            ? `Report upstream timed out after ${UPSTREAM_TIMEOUT_MS}ms.`
+            : error instanceof Error
+              ? error.message
+              : "Failed to load report.",
+          duration_ms: Date.now() - startedAt,
+        },
+        { status: 502 },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+
     if (!upstream.ok) {
       return NextResponse.json(
         {

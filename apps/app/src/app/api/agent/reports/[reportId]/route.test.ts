@@ -122,6 +122,18 @@ describe("GET /api/agent/reports/[reportId]", () => {
     expect(body.upstream_status).toBe(404);
   });
 
+  it("returns 502 envelope when upstream request times out", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new DOMException("aborted", "AbortError"));
+
+    const req = new NextRequest("http://localhost/api/agent/reports/r1");
+    const res = await GET(req, { params: Promise.resolve({ reportId: "r1" }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(502);
+    expect(body.status).toBe("unavailable");
+    expect(body.message).toContain("timed out");
+  });
+
   it("does not proxy reports owned by another account", async () => {
     maybeSingle.mockResolvedValueOnce({
       data: {
