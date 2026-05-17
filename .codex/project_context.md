@@ -1,5 +1,11 @@
 # Project Context
 
+## AI Review and Visual QA CI/CD
+
+Added CI/CD review scaffolding for Greptile PR review policy, Playwright visual QA, optional Codex/Claude artifact critique, preview URL resolution, Supabase preview readiness waits, and environment manifest checks. The workflow keeps `dev -> main` as the release spine, uses preview/staging/production environment separation, and avoids printing or committing secret values.
+
+Greptile review execution remains owned by the Greptile GitHub App and local Greptile MCP use in Cursor/Codex/Claude Code. Visual QA is label-gated for PRs through `.github/workflows/visual-qa.yml`; manual runs can provide `preview_url` directly. Supabase preview branches require external Supabase GitHub/Vercel integration setup before the `Supabase Preview` wait can pass.
+
 ## Consumer Onboarding Flow
 
 Consumer onboarding now has a first production implementation in the consumer app. Supabase migration `016_consumer_onboarding.sql` defines `onboarding_profiles` and `onboarding_targets` for durable signup intent, starter strategy recommendation, selected service/geography target, resume state, and first-report handoff. The tables are account-scoped through existing account membership checks and preserve Mapbox/DataForSEO metadata when a city target is selected.

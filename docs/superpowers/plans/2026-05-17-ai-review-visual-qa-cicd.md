@@ -1264,10 +1264,10 @@ Verification recorded:
 ## Task 11: End-to-End Dry Run and Closeout
 
 **Files:**
-- Modify: `.Codex/project_context.md`
+- Modify: `.codex/project_context.md`
 - Test: `npm run env:check -- --offline`, `npm run qa:agent -- --dry-run --artifacts apps/app/playwright-report`, GitHub PR checks
 
-- [ ] **Step 1: Run local static checks**
+- [x] **Step 1: Run local static checks**
 
 ```bash
 npm run env:check -- --offline
@@ -1277,13 +1277,24 @@ git diff --check
 
 Expected: all pass.
 
-- [ ] **Step 2: Run visual QA dry-run**
+Result:
+
+- `npm run env:check -- --offline`: passed and printed variable names/metadata only.
+- Ruby YAML parse for `.github/workflows/*.yml`: passed.
+- `npm run qa:visual:app -- --list`: passed, listed 8 tests.
+- `npm run qa:visual:admin -- --list`: passed, listed 6 tests.
+- `node --check` for CI and QA `.mjs` scripts: passed.
+- `git diff --check`: passed.
+
+- [x] **Step 2: Run visual QA dry-run**
 
 ```bash
 npm run qa:agent -- --dry-run --artifacts apps/app/playwright-report
 ```
 
 Expected: writes `visual-qa-review.json` with no findings.
+
+Result: `npm run qa:agent -- --dry-run --artifacts apps/app/playwright-report` passed and wrote `visual-qa-review.json`; the generated dry-run file was removed before commit so it is not tracked.
 
 - [ ] **Step 3: Push branch and open PR into `dev`**
 
@@ -1303,9 +1314,9 @@ Expected hosted checks:
 - Supabase Preview on schema-changing PRs
 - Visual QA when `visual-qa` label is present
 
-- [ ] **Step 5: Update `.Codex/project_context.md`**
+- [x] **Step 5: Update `.codex/project_context.md`**
 
-Add a concise completed-work entry:
+Added a concise completed-work entry:
 
 ```markdown
 ## AI Review and Visual QA CI/CD
@@ -1313,12 +1324,14 @@ Add a concise completed-work entry:
 Added the CI/CD review plan and implementation scaffolding for Greptile PR review, Playwright visual QA, optional Codex/Claude agent critique, preview URL resolution, and environment manifest checks. The workflow keeps `dev -> main` as the release spine, uses preview/staging/prod environment separation, and avoids printing or committing secret values.
 ```
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit**
 
 ```bash
-git add .Codex/project_context.md
+git add .codex/project_context.md
 git commit -m "docs: record ai review qa workflow context"
 ```
+
+Result: committed tracked lowercase `.codex/project_context.md`.
 
 ---
 
