@@ -12,6 +12,7 @@ from typing import Any
 DEFAULT_ADMIN_EMAIL = "admin-test@widby.dev"
 DEFAULT_USER_EMAIL = "user-test@widby.dev"
 DEFAULT_HENOCK_EMAIL = "henock@covariance.studio"
+DEFAULT_ANTWOINE_EMAIL = "antwoine@covariance.studio"
 DEFAULT_LUKE_EMAIL = "lm13vand@gmail.com"
 
 
@@ -234,6 +235,15 @@ def build_personas_from_env() -> list[TestPersona]:
             email=os.environ.get("WHIDBY_BETA_HENOCK_EMAIL", DEFAULT_HENOCK_EMAIL),
             password=_required_env("WHIDBY_BETA_HENOCK_PASSWORD"),
             name=os.environ.get("WHIDBY_BETA_HENOCK_NAME", "Henock"),
+            member_role="admin",
+            plan_key="free",
+            widby_role="admin",
+            quota_exempt=True,
+        ),
+        TestPersona(
+            email=os.environ.get("WHIDBY_BETA_ANTWOINE_EMAIL", DEFAULT_ANTWOINE_EMAIL),
+            password=_required_env("WHIDBY_BETA_ANTWOINE_PASSWORD"),
+            name=os.environ.get("WHIDBY_BETA_ANTWOINE_NAME", "Antwoine"),
             member_role="admin",
             plan_key="free",
             widby_role="admin",

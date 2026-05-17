@@ -173,6 +173,7 @@ Default staging personas:
 | `admin-test@widby.dev` | `admin` | `free` | yes |
 | `user-test@widby.dev` | `owner` | `free` | no |
 | `henock@covariance.studio` | `admin` | `free` | yes |
+| `antwoine@covariance.studio` | `admin` | `free` | yes |
 | `lm13vand@gmail.com` | `owner` | `pro` | no |
 
 This staging setup is not Terraform. Supabase migrations manage schema, RLS, and RPCs. GitHub Environment secrets and local env files store operational credentials. `scripts/supabase/seed_test_accounts.py` manages curated Auth users and entitlements.
@@ -189,6 +190,7 @@ Create these secrets on the GitHub Environment named `staging`:
 | `WHIDBY_TEST_ADMIN_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
 | `WHIDBY_TEST_USER_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
 | `WHIDBY_BETA_HENOCK_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
+| `WHIDBY_BETA_ANTWOINE_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
 | `WHIDBY_BETA_LUKE_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
 
 For manual local runs of `python scripts/supabase/seed_test_accounts.py`, store staging-only values in a local `.env` file:
@@ -200,6 +202,7 @@ For manual local runs of `python scripts/supabase/seed_test_accounts.py`, store 
 | `WHIDBY_TEST_ADMIN_PASSWORD` | Password for `admin-test@widby.dev` |
 | `WHIDBY_TEST_USER_PASSWORD` | Password for `user-test@widby.dev` |
 | `WHIDBY_BETA_HENOCK_PASSWORD` | Password for `henock@covariance.studio` |
+| `WHIDBY_BETA_ANTWOINE_PASSWORD` | Password for `antwoine@covariance.studio` |
 | `WHIDBY_BETA_LUKE_PASSWORD` | Password for `lm13vand@gmail.com` |
 
 Never commit `.env`, service-role keys, or test-account passwords. Redirect URL pattern `https://*.vercel.app/**` must be added to the staging project's Auth settings.

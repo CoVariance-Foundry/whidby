@@ -227,6 +227,7 @@ def test_build_personas_from_env_includes_default_and_beta_role_rules(monkeypatc
     monkeypatch.setenv("WHIDBY_TEST_ADMIN_PASSWORD", "admin-password")
     monkeypatch.setenv("WHIDBY_TEST_USER_PASSWORD", "user-password")
     monkeypatch.setenv("WHIDBY_BETA_HENOCK_PASSWORD", "henock-password")
+    monkeypatch.setenv("WHIDBY_BETA_ANTWOINE_PASSWORD", "antwoine-password")
     monkeypatch.setenv("WHIDBY_BETA_LUKE_PASSWORD", "luke-password")
 
     personas = seed.build_personas_from_env()
@@ -254,6 +255,15 @@ def test_build_personas_from_env_includes_default_and_beta_role_rules(monkeypatc
             email="henock@covariance.studio",
             password="henock-password",
             name="Henock",
+            member_role="admin",
+            plan_key="free",
+            widby_role="admin",
+            quota_exempt=True,
+        ),
+        seed.TestPersona(
+            email="antwoine@covariance.studio",
+            password="antwoine-password",
+            name="Antwoine",
             member_role="admin",
             plan_key="free",
             widby_role="admin",
