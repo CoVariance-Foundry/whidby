@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS account_memberships (
 CREATE INDEX IF NOT EXISTS idx_account_memberships_user
     ON account_memberships (user_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_account_memberships_one_account_per_user
+    ON account_memberships (user_id);
+
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
@@ -230,6 +233,8 @@ BEGIN
         RAISE EXCEPTION 'authenticated user required';
     END IF;
 
+    PERFORM pg_advisory_xact_lock(hashtext(v_user_id::TEXT));
+
     SELECT account_id
     INTO v_account_id
     FROM account_memberships
@@ -263,6 +268,27 @@ BEGIN
     ON CONFLICT (account_id) DO NOTHING;
 
     RETURN v_account_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.archive_account_report(p_report_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_archived_count INT;
+BEGIN
+    UPDATE reports
+    SET archived_at = now()
+    WHERE id = p_report_id
+      AND access_scope = 'account'
+      AND owner_account_id IS NOT NULL
+      AND public.is_account_member(owner_account_id);
+
+    GET DIAGNOSTICS v_archived_count = ROW_COUNT;
+    RETURN v_archived_count > 0;
 END;
 $$;
 
@@ -406,6 +432,7 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.ensure_account_for_current_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.archive_account_report(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_account_entitlement() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.consume_report_quota(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refund_report_quota(UUID) TO authenticated;
@@ -497,20 +524,6 @@ CREATE POLICY "Authenticated users can read visible reports"
             owner_account_id IS NOT NULL
             AND public.is_account_member(owner_account_id)
         )
-    );
-
-CREATE POLICY "Account members can update own reports"
-    ON reports FOR UPDATE
-    TO authenticated
-    USING (
-        access_scope = 'account'
-        AND owner_account_id IS NOT NULL
-        AND public.is_account_member(owner_account_id)
-    )
-    WITH CHECK (
-        access_scope = 'account'
-        AND owner_account_id IS NOT NULL
-        AND public.is_account_member(owner_account_id)
     );
 
 CREATE POLICY "Account members can delete own reports"

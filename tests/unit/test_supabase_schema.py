@@ -207,6 +207,16 @@ class TestUserManagementBillingSchema:
         assert 'DROP POLICY IF EXISTS "Authenticated users can delete reports"' in sql
         assert "Authenticated users can read visible reports" in sql
         assert "public.is_account_member(owner_account_id)" in sql
+        assert "Account members can update own reports" not in sql
+
+    def test_account_bootstrap_is_serialized_per_user(self, sql: str):
+        assert "idx_account_memberships_one_account_per_user" in sql
+        assert "pg_advisory_xact_lock(hashtext(v_user_id::TEXT))" in sql
+
+    def test_report_archive_uses_scoped_rpc(self, sql: str):
+        assert "public.archive_account_report" in sql
+        assert "GRANT EXECUTE ON FUNCTION public.archive_account_report(UUID)" in sql
+        assert "SET archived_at = now()" in sql
 
     def test_child_report_tables_inherit_parent_visibility(self, sql: str):
         for policy in [

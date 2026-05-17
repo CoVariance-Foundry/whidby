@@ -26,10 +26,10 @@ export function getPriceIdForPlan(plan: PaidPlanKey): string {
   return priceId;
 }
 
-export function getPlanForPriceId(priceId: string | null | undefined): PaidPlanKey | "free" {
+export function getPlanForPriceId(priceId: string | null | undefined): PaidPlanKey {
   if (priceId && priceId === process.env.STRIPE_PLUS_PRICE_ID) return "plus";
   if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID) return "pro";
-  return "free";
+  throw new Error(`Unknown Stripe price id: ${priceId ?? "missing"}`);
 }
 
 export function isPaidPlan(value: unknown): value is PaidPlanKey {

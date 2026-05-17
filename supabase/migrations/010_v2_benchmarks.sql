@@ -41,6 +41,8 @@ END;
 CREATE INDEX IF NOT EXISTS idx_metros_pop_class ON public.metros(population_class);
 
 -- ============================================================
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- 2. metro_location_cache: backfill from metros for autocomplete
 -- ============================================================
 
@@ -72,8 +74,6 @@ CREATE INDEX IF NOT EXISTS idx_mlc_normalized
     ON public.metro_location_cache USING gin (normalized_label gin_trgm_ops);
 
 -- Required extension for trigram fast prefix/substring matching
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
 -- ============================================================
 -- 3. niche_naics_mapping
 -- ============================================================

@@ -165,7 +165,7 @@ Default `cadence_days` is 30 until a persisted refresh policy overrides it.
 
 ### Consumer Account and Report Ownership
 
-Consumer account state is account-scoped even when an account has one user. New users default to `free`; Stripe webhooks move accounts to `plus` or `pro`.
+Consumer account state is account-scoped even when an account has one user. New users default to `free`; Stripe webhooks move accounts to `plus` or `pro`. The first-account bootstrap serializes by authenticated user and `account_memberships.user_id` is unique in V1, so concurrent first requests cannot create multiple default accounts for the same user.
 
 | Tier | Monthly price | Fresh report quota |
 | --- | ---: | ---: |
@@ -180,7 +180,7 @@ Reports have two visibility modes:
 | `cached` | `owner_account_id` is null | Authenticated users can read as shared product cache |
 | `account` | `owner_account_id` required | Only members of the owning account can read |
 
-Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report.
+Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report. Authenticated users do not receive direct `UPDATE` access to report payloads; account-owned soft archive is exposed only through `archive_account_report(report_id)`.
 
 ## Schema Definitions
 

@@ -55,6 +55,28 @@ export async function POST(req: NextRequest) {
       throw new Error(customerReadError.message);
     }
 
+    const { data: activeSubscription, error: subscriptionReadError } = await admin
+      .from("subscriptions")
+      .select("status, stripe_subscription_id, plan_key")
+      .eq("account_id", entitlement.account_id)
+      .in("status", ["active", "trialing", "past_due"])
+      .maybeSingle();
+
+    if (subscriptionReadError) {
+      throw new Error(subscriptionReadError.message);
+    }
+
+    if (activeSubscription?.stripe_subscription_id) {
+      return NextResponse.json(
+        {
+          status: "conflict",
+          code: "active_subscription_exists",
+          message: "This account already has an active subscription.",
+        },
+        { status: 409 },
+      );
+    }
+
     let customerId = existingCustomer?.stripe_customer_id as string | undefined;
     if (!customerId) {
       const customer = await stripe.customers.create({

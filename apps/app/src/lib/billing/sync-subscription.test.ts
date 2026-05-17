@@ -54,6 +54,25 @@ describe("Stripe subscription sync", () => {
     });
   });
 
+  it("fails sync when Stripe sends an unknown price id", async () => {
+    const supabase = new FakeSupabase();
+    await expect(
+      syncStripeSubscription(
+        supabase as never,
+        subscription({
+          items: {
+            data: [{
+              price: { id: "price_unknown" },
+              current_period_start: 1777593600,
+              current_period_end: 1780272000,
+            }],
+          } as Stripe.ApiList<Stripe.SubscriptionItem>,
+        }),
+      ),
+    ).rejects.toThrow("Unknown Stripe price id: price_unknown");
+    expect(supabase.rows).toHaveLength(0);
+  });
+
   it("downgrades deleted subscriptions to free", async () => {
     const supabase = new FakeSupabase();
     await downgradeSubscriptionToFree(
