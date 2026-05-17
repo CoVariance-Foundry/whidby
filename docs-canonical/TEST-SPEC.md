@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.4.0 -->
+<!-- docguard:version 1.6.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-05-16 -->
+<!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
@@ -33,6 +33,7 @@
 | `apps/app/src/app/api/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
 | `apps/app/src/lib/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
 | `apps/app/src/app/onboarding/**/*.tsx` | colocated `*.test.tsx` | Component |
+| `scripts/supabase/**/*.py` | `tests/scripts/test_*.py` | Unit/contract |
 
 ## Test Rules (Constitution-Mandated)
 
@@ -128,7 +129,16 @@ Additional contract checks for scoring/autocomplete:
 | GBP Blitz | Review barrier, review velocity, profile completeness, map-pack presence | `tests/unit/test_strategy_projection.py` |
 | Keyword Hijack | Primary keyword volume floor, map-pack presence, exact-match GBP name availability | `tests/unit/test_strategy_projection.py`, `tests/unit/test_api_strategy_discovery.py` |
 | Expand & Conquer | Feature-vector similarity plus equal-or-lower competition filter | `tests/unit/test_discovery_service_strategies.py` |
-| Consumer entitlements | Free cached-only, plus/pro fresh strategy run allowed, batch cap enforced | `apps/app/src/app/api/strategies/runs/route.test.ts` |
+| Consumer entitlements | Free cached-only, plus/pro fresh strategy run allowed, internal quota-exempt admins allowed, batch cap enforced | `apps/app/src/app/api/strategies/runs/route.test.ts` |
+
+## Internal Entitlement and Staging Account Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Internal entitlement schema | `internal_user_entitlements` table, service-role-only policy, active exemption index, `get_account_entitlement()` return shape, and admin bootstrap RPC permissions | `tests/unit/test_supabase_schema.py` |
+| Fresh-report gates | Free users blocked from fresh reports, plus/pro allowed through quota, internal quota-exempt admins bypass quota without consuming usage, and non-city onboarding targets remain cached-route only | `apps/app/src/app/api/agent/scoring/route.test.ts`, `apps/app/src/app/api/strategies/runs/route.test.ts`, `apps/app/src/app/api/onboarding/start-report/route.test.ts` |
+| Staging seed script | Creates/updates Auth users without returning passwords, preserves existing metadata, assigns member role/plan/quota exemption, and supports admin-test, user-test, Henock, Antwoine, and Luke personas | `tests/scripts/test_seed_test_accounts.py` |
+| Migration parity audit | Fails closed on missing/empty local migration directories and reports local migrations absent from staging history | `tests/scripts/test_audit_migration_parity.py` |
 
 ## Unit Test Obligations (Algo Spec §12.1)
 
@@ -196,3 +206,4 @@ npm run lint
 | 1.3.0 | 2026-05-14 | Explore refresh control | Added refresh policy, target selection, run status, snapshot lineage, trend delta, and cron auth test obligations |
 | 1.4.0 | 2026-05-16 | Consumer onboarding flow | Added schema, routing, API, UI, first-report handoff, and auth-resume test obligations |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
+| 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |

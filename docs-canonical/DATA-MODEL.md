@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.4.0`     |
-| **Last Updated** | 2026-05-16  |
+| **Version**      | `1.6.0`     |
+| **Last Updated** | 2026-05-17  |
 | **Owner**        | @widby-team |
 
 
@@ -54,6 +54,7 @@
 | Subscription        | Supabase `subscriptions` table        | subscription_id (UUID) | Active tier state synced from Stripe |
 | UsageCounter        | Supabase `usage_counters` table       | account + metric + period | Atomic monthly quota usage for fresh reports |
 | BillingCustomer     | Supabase `billing_customers` table    | account_id       | Stripe customer mapping |
+| InternalUserEntitlement | Supabase `internal_user_entitlements` table | user_id (UUID) | Internal operator/test override for quota exemption |
 | OnboardingProfile   | Supabase `onboarding_profiles` table  | id (UUID); unique user_id | Durable signup/onboarding answers, recommended strategy, and resume route |
 | OnboardingTarget    | Supabase `onboarding_targets` table   | id (UUID); unique profile + strategy | Selected strategy, service, and resolved geography for first-report handoff |
 
@@ -210,6 +211,22 @@ Reports have two visibility modes:
 
 Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report. Authenticated users do not receive direct `UPDATE` access to report payloads; account-owned soft archive is exposed only through `archive_account_report(report_id)`.
 
+### Internal User Entitlements
+
+Internal report-generation overrides are user-scoped, not paid-plan state. `internal_user_entitlements.fresh_report_quota_exempt = true` lets trusted admin/test users generate fresh reports without consuming monthly quota while their account can remain on `free`. The entitlement is folded into `get_account_entitlement()` as `fresh_report_quota_exempt` and is enforced by app-layer fresh-report gates before quota checks.
+
+Only `service_role` can manage `internal_user_entitlements` or call `ensure_account_for_user_admin(...)`. Do not expose this table or admin bootstrap RPC to `anon` or regular `authenticated` clients. Optional `expires_at` limits the exemption lifetime; `null` means no automatic expiry.
+
+Default staging personas:
+
+| Email | Member role | Plan | Quota exemption |
+| --- | --- | --- | --- |
+| `admin-test@widby.dev` | `admin` | `free` | yes |
+| `user-test@widby.dev` | `owner` | `free` | no |
+| `henock@covariance.studio` | `admin` | `free` | yes |
+| `antwoine@covariance.studio` | `admin` | `free` | yes |
+| `lm13vand@gmail.com` | `owner` | `pro` | no |
+
 ### Consumer Onboarding State
 
 Onboarding is account-scoped, but each authenticated user has at most one active onboarding profile. It captures product intent and first-run target state only; it does not own scoring outputs.
@@ -234,6 +251,18 @@ Valid profile statuses:
 Free users can persist onboarding state and cached-route choices, but fresh scoring still follows `usage_counters` and account entitlement rules.
 
 ## Schema Definitions
+
+### InternalUserEntitlement (`internal_user_entitlements`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `user_id` | UUID | Yes | primary key, references `auth.users.id` | User receiving the internal override |
+| `fresh_report_quota_exempt` | boolean | Yes | default false | Bypasses fresh-report monthly quota when true and unexpired |
+| `reason` | text | Yes | non-empty operational note | Why the override exists |
+| `granted_by` | UUID | No | references `auth.users.id` | Optional granting operator |
+| `expires_at` | timestamptz | No | null or future timestamp | Optional expiry for temporary testing |
+| `created_at` | timestamptz | Yes | default now() | Creation timestamp |
+| `updated_at` | timestamptz | Yes | default now() | Last update timestamp |
 
 ### OnboardingProfile (`onboarding_profiles`)
 
@@ -532,3 +561,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.2.0   | 2026-05-14 | Explore Cities system design | Added Explore service DTOs, density/growth/freshness formulas, and backend filtering expectations |
 | 1.3.0   | 2026-05-14 | Explore refresh control | Added refresh policy, target, run, run item, and report snapshot entities for cached Explore refreshes |
 | 1.4.0   | 2026-05-16 | Strategy Discovery system design | Added strategy run/cache entities, local pack and metro vector facts, and StrategyResult DTO |
+| 1.6.0   | 2026-05-17 | Internal entitlements | Added internal quota-exempt user entitlement model and staging test personas |
