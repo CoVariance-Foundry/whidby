@@ -1,5 +1,49 @@
 # Active Work
 
+## Consumer Onboarding Flow
+
+Status: implementation complete; unauthenticated browser smoke verified.
+
+Completed:
+
+- Added Supabase onboarding persistence in `016_consumer_onboarding.sql` for `onboarding_profiles` and `onboarding_targets`, with account-scoped RLS, service-role policies, idempotent policy creation, and `updated_at` triggers.
+- Added deterministic strategy routing in `apps/app/src/lib/onboarding/`, using snake_case API response contracts.
+- Added `/api/onboarding/profile`, `/api/onboarding/target`, and `/api/onboarding/start-report` route handlers. Fresh city report starts delegate to the existing entitlement-protected `/api/agent/scoring` route; broad/free routes return cached Explore/report handoffs.
+- Added the production `/onboarding` flow with starter intent capture, service selection, city/state target selection, summary/confirmation, and accessible `CityAutocomplete` labeling.
+- Updated auth callback resume routing so new/incomplete users land on `/onboarding`, users with selected targets resume onboarding, explicit safe `next` values still win, and terminal onboarding states route to `/reports`.
+- Updated canonical onboarding architecture, data model, and test obligations.
+
+Verified:
+
+- `npm --workspace apps/app test -- src/lib/onboarding/strategy-routing.test.ts src/app/api/onboarding/profile/route.test.ts src/app/api/onboarding/target/route.test.ts src/app/api/onboarding/start-report/route.test.ts src/app/onboarding/OnboardingClient.test.tsx src/components/niche-finder/CityAutocomplete.test.tsx src/app/auth/callback/route.test.ts src/app/api/agent/scoring/route.test.ts` passed 58 tests.
+- `pytest tests/unit/test_supabase_schema.py -v`
+- `npm --workspace apps/app run lint` exits 0 with two pre-existing warnings outside this onboarding slice.
+- `git diff --check`
+- Local preview `http://localhost:3012/onboarding` redirects unauthenticated users to `/login` without a runtime crash.
+
+Known constraint:
+
+- `npx docguard-cli guard` is blocked in the sandbox by `ENOTFOUND registry.npmjs.org`; escalation to fetch/execute npm code was rejected by the safety reviewer.
+
+## Strategy Discovery System
+
+Status: implementation complete on `codex/strategy-discovery-system`; ready for integration review and live-environment validation.
+
+Completed:
+
+- Canonical architecture, data model, and test-spec updates define strategies as lenses over existing market intelligence, not separate scoring engines.
+- Supabase migration `016_strategy_discovery_system.sql` adds strategy run lineage, local-pack listing facts, metro feature vectors, and optional strategy score cache tables.
+- Python domain logic projects launch strategies `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; `cash_cow` remains phase-2/catalog-only.
+- `StrategyRepository` reads cached market rows, local-pack facts, feature vectors, and persists strategy run lineage.
+- FastAPI exposes `/api/strategies`, strategy-aware `/api/discover`, and `/api/strategy-runs` with validation, fresh-run caps, and storage-failure handling.
+- The consumer app exposes protected `/strategies` gallery/detail screens plus Next.js proxy routes for catalog, discovery, and run creation with existing entitlement/quota behavior.
+
+Known follow-ups:
+
+- Expand & Conquer requests now pass `reference_city_id`; high-quality scoring still depends on populated feature-vector/reference competition inputs.
+- Fresh strategy runs currently persist queued run lineage; full async report fanout/status detail endpoints remain the next implementation slice.
+- Live Supabase/PostgREST validation is still required before production rollout.
+
 ## Consumer User Management, Billing, and Report Quotas
 
 Status: implementation in progress.

@@ -1,0 +1,116 @@
+import { NextRequest, NextResponse } from "next/server";
+import {
+  EntitlementError,
+  consumeReportQuota,
+  refundReportQuota,
+  resolveEntitlementContext,
+} from "@/lib/account/entitlements";
+import { createClient } from "@/lib/supabase/server";
+import {
+  proxyStrategyJsonResponse,
+  proxyStrategyResponse,
+  strategyUpstreamUnavailable,
+} from "@/lib/strategies/api";
+import type { StrategyRunRequest } from "@/lib/strategies/types";
+
+const MAX_FRESH_TARGETS = 100;
+
+export async function POST(req: NextRequest) {
+  let body: StrategyRunRequest;
+  try {
+    body = (await req.json()) as StrategyRunRequest;
+  } catch {
+    return NextResponse.json(
+      { status: "validation_error", message: "Invalid JSON body." },
+      { status: 400 },
+    );
+  }
+
+  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  let quotaConsumedForAccount: string | null = null;
+
+  try {
+    supabase = await createClient();
+    const { user, entitlement } = await resolveEntitlementContext(supabase);
+    const mode = body.mode ?? "cached";
+    const strategy_id = body.strategy_id ?? body.lens_id;
+    const bodyWithoutLensId = { ...body };
+    delete bodyWithoutLensId.lens_id;
+
+    if (mode === "fresh" && entitlement.monthly_report_limit <= 0) {
+      return NextResponse.json(
+        {
+          status: "tier_limit",
+          code: "fresh_strategy_runs_not_included",
+          message: "Your current plan can browse cached strategy results but cannot run fresh strategy discovery.",
+          tier: entitlement.plan_key,
+          monthly_report_limit: entitlement.monthly_report_limit,
+        },
+        { status: 403 },
+      );
+    }
+
+    if (mode === "fresh") {
+      if (Array.isArray(body.targets) && body.targets.length > MAX_FRESH_TARGETS) {
+        return NextResponse.json(
+          {
+            status: "validation_error",
+            message: "Fresh strategy runs are limited to 100 target pairs.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const consumed = await consumeReportQuota(supabase, entitlement.account_id);
+      if (!consumed) {
+        return NextResponse.json(
+          {
+            status: "quota_exceeded",
+            code: "monthly_report_quota_exceeded",
+            message: "You have reached your monthly fresh report limit.",
+            tier: entitlement.plan_key,
+            monthly_report_limit: entitlement.monthly_report_limit,
+          },
+          { status: 429 },
+        );
+      }
+      quotaConsumedForAccount = entitlement.account_id;
+    }
+
+    const internalToken = process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
+    const upstream = await proxyStrategyResponse("/api/strategy-runs", {
+      method: "POST",
+      body: JSON.stringify({
+        ...bodyWithoutLensId,
+        ...(strategy_id ? { strategy_id } : {}),
+        mode,
+        account_id: entitlement.account_id,
+        created_by_user_id: user.id,
+      }),
+      headers: internalToken ? { Authorization: `Bearer ${internalToken}` } : undefined,
+    });
+
+    if (!upstream.ok && quotaConsumedForAccount) {
+      await refundReportQuota(supabase, quotaConsumedForAccount);
+      quotaConsumedForAccount = null;
+    }
+
+    return proxyStrategyJsonResponse(upstream);
+  } catch (err) {
+    if (quotaConsumedForAccount && supabase) {
+      await refundReportQuota(supabase, quotaConsumedForAccount);
+    }
+
+    if (err instanceof EntitlementError) {
+      return NextResponse.json(
+        { status: "error", code: err.code, message: err.message },
+        { status: err.status },
+      );
+    }
+
+    return strategyUpstreamUnavailable(
+      err,
+      "Strategy run service is unavailable.",
+    );
+  }
+}
