@@ -80,13 +80,13 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby/whidby] recent context, 2026-05-16 5:32pm PDT
+# [whidby/whidby] recent context, 2026-05-16 7:29pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (23,609t read) | 506,580t work | 95% savings
+Stats: 50 obs (25,031t read) | 572,557t work | 96% savings
 
 ### Apr 29, 2026
 S205 Phase 6 CI Enforcement Branch Entering Finishing Workflow (Apr 29 at 2:57 PM)
@@ -99,17 +99,8 @@ S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tool
 S268 V2 Scoring — Repository Boundary for seo_benchmarks Access Planned (May 13 at 1:10 PM)
 S269 V2 scoring repository boundary plan — orientation phase for writing a formal implementation plan (May 13 at 1:26 PM)
 S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:26 PM)
-### May 14, 2026
-341 11:39a ✅ PR #34 All Checks Pass — Docs Sync Gate and Supabase Preview Both Green
-342 11:40a ✅ PR #34 Merged to Main — Consumer Billing and Entitlements Now on Main
-343 11:41a 🔵 PR #35 Contains 8 Unrelated phase-7-data-providers Commits Plus 3 Explore Refresh Commits
-344 11:42a ⚖️ PR #35 Repair Strategy — Cherry-Pick 3 Explore Commits onto Fresh Main, Not Rebase
 ### May 15, 2026
-345 8:45p 🔵 Git Worktree Mental Model — Checkout Conflicts and Merge-Back Strategy
-346 8:46p 🔵 Git Worktree Dirty State — AGENTS.md Modified in Two Active Worktrees
-347 8:47p 🔵 Git Worktrees — User Confusion Around Checkout Locks and Merging Back to Main
-348 8:48p 🔵 niche-surface-hardening-v2 Worktree Branch Has Diverged from Remote
-349 " 🔵 Rebase Conflict in scoring/route.ts — account vs report Field in Response
+349 8:48p 🔵 Rebase Conflict in scoring/route.ts — account vs report Field in Response
 351 " 🔴 scoring/route.ts Rebase Conflict Resolved — Both account and report Fields Preserved
 352 8:49p ✅ PRs #38 and #39 Created — Account Billing and Niche Caching Branches
 353 8:50p 🔵 Git Worktree Workflow — Cannot Commit to Main Directly
@@ -153,6 +144,14 @@ S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fet
 393 8:25a 🟣 Task 2: Strategy Discovery Schema Migration Created
 394 " 🔵 pytest Crashes on Import Due to NumPy 1.x/2.x Compiled Module Conflict
 395 " 🟣 Strategy Discovery Schema Migration 016 Written and Tests Passing
+397 5:46p ⚖️ CI/CD + Visual QA + Agent Code Review System — Implementation Plan Initiated
+399 5:47p 🔵 Whidby Project Prior Art for CI/CD and Environment Coordination — Memory Search Results
+400 " 🔵 Whidby Existing CI/CD Infrastructure — GitHub Actions Workflows and Quality Gates
+401 " 🔵 Whidby Environment and Branching Strategy — Canonical Source of Truth from ENVIRONMENT.md
+402 " 🔵 Whidby Monorepo Architecture — Three Next.js Apps, FastAPI on Render, Two Vercel Projects
+403 5:48p ⚖️ CI/CD + Visual QA + AI Code Review — Full Implementation Plan Requested
+404 5:49p ⚖️ CI/CD + Visual QA + AI Code Review — Full Implementation Plan Requested
+405 5:53p ⚖️ CI/CD + Visual QA + AI Agent Code Review — Full System Plan Requested
 
-Access 507k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 573k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
