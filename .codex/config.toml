@@ -9,3 +9,7 @@ url = "https://mcp.render.com/mcp"
 
 [mcp_servers.render.http_headers]
 Authorization = "Bearer ${RENDER_API_TOKEN}"
+
+[mcp_servers.greptile]
+url = "https://api.greptile.com/mcp"
+bearer_token_env_var = "GREPTILE_API_KEY"

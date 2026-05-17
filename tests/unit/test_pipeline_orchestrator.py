@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from src.clients.dataforseo.cost_tracker import CostTracker
 from src.pipeline.orchestrator import ScoreNicheResult, score_niche_for_metro
 from src.pipeline.types import MetroCollectionResult, RawCollectionResult, RunMetadata
+from src.scoring.benchmark_repository import SeoBenchmarkCell
 
 
 _FAKE_KEYWORD_EXPANSION = {
@@ -93,6 +94,43 @@ def _make_fake_dfs_client() -> MagicMock:
     return client
 
 
+class _FakeBenchmarkRepository:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def get(self, *, niche_normalized: str, population_class: str) -> SeoBenchmarkCell | None:
+        self.calls.append((niche_normalized, population_class))
+        return SeoBenchmarkCell.from_mapping(
+            {
+                "niche_normalized": niche_normalized,
+                "naics_code": "238160",
+                "population_class": population_class,
+                "median_total_volume_per_capita": 0.002,
+                "median_avg_cpc": 10.0,
+                "median_top3_review_count_min": 40,
+                "median_top3_review_velocity": 3.0,
+                "median_aggregator_count": 2.0,
+                "median_local_biz_count": 5.0,
+                "median_establishments_per_100k": 50.0,
+                "median_lsa_present_rate": 0.2,
+                "median_ads_present_rate": 0.5,
+                "median_aio_trigger_rate": 0.1,
+                "sample_size_metros": 12,
+                "sample_size_observations": 100,
+                "confidence_label": "medium",
+            }
+        )
+
+
+class _FakeCityDataProvider:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str | None]] = []
+
+    def get_business_density(self, city_id: str, naics: str | None = None) -> dict[str, int]:
+        self.calls.append((city_id, naics))
+        return {"establishments": 350}
+
+
 def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     fake_dfs = _make_fake_dfs_client()
     with patch("src.pipeline.orchestrator.expand_keywords",
@@ -131,6 +169,9 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert metro["ai_exposure"] == "low"
     assert metro["serp_archetype"] == "local_first"
     assert metro["difficulty_tier"] == "T2"
+    assert "population" not in metro["signals"]
+    assert "population_class" not in metro["signals"]
+    assert "v2_scores" not in metro
     assert result.opportunity_score == 72
     assert len(result.evidence) == 4
     categories = {e["category"] for e in result.evidence}
@@ -145,6 +186,96 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert "serp/google/organic/task_post" in breakdown
     assert breakdown["serp/google/organic/task_post"]["calls"] == 2
     assert breakdown["serp/google/organic/task_post"]["cached"] == 1
+
+
+def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:
+    fake_dfs = _make_fake_dfs_client()
+    repo = _FakeBenchmarkRepository()
+    city_provider = _FakeCityDataProvider()
+    signals = {
+        "demand": {
+            "total_search_volume": 2_000,
+            "avg_cpc": 12.0,
+            "transactional_ratio": 0.7,
+            "effective_search_volume": 99_999,
+        },
+        "organic_competition": {
+            "aggregator_count": 2.0,
+            "local_biz_count": 5.0,
+            "avg_top5_da": 30.0,
+            "median_top10_dr": 45,
+        },
+        "local_competition": {
+            "local_pack_present": True,
+            "top3_review_count_min": 60,
+            "review_velocity_avg": 4.5,
+            "gbp_saturation": 0.6,
+        },
+        "monetization": {
+            "lsa_present": True,
+            "ads_present": True,
+            "median_cpc": 12.5,
+        },
+        "ai_resilience": {
+            "aio_trigger_rate": 0.08,
+            "transactional_keyword_ratio": 0.7,
+            "local_fulfillment_required": 1.0,
+            "paa_density": 2.0,
+        },
+    }
+
+    with patch("src.pipeline.orchestrator.expand_keywords",
+               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
+         patch("src.pipeline.orchestrator.collect_data",
+               new=AsyncMock(return_value=_FAKE_RAW_COLLECTION)), \
+         patch("src.pipeline.orchestrator.extract_signals",
+               return_value=signals), \
+         patch("src.pipeline.orchestrator.compute_scores",
+               return_value=_FAKE_SCORES), \
+         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
+         patch("src.pipeline.orchestrator.classify_serp_archetype",
+               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
+         patch("src.pipeline.orchestrator.compute_difficulty_tier",
+               return_value=_FAKE_DIFFICULTY_RESULT), \
+         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
+               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+        result = asyncio.run(
+            score_niche_for_metro(
+                niche="roofing",
+                city="Phoenix",
+                state="AZ",
+                strategy_profile="balanced",
+                llm_client=object(),
+                dataforseo_client=fake_dfs,
+                benchmark_repository=repo,
+                city_data_provider=city_provider,
+            )
+        )
+
+    assert repo.calls == [("roofing", "metro_1m_5m")]
+    assert city_provider.calls == [("38060", "238160")]
+    metro = result.report["metros"][0]
+    assert metro["v2_scores"]["spec_version"] == "2.0"
+    assert metro["v2_scores"]["benchmark"]["confidence_label"] == "medium"
+    assert metro["v2_scores"]["scores"]["demand_strength"]["value"] == 17
+    assert metro["v2_scores"]["scores"]["monetization_signal"]["value"] == 32
+    assert metro["v2_scores"]["flags"]["cbp_data_missing"] is False
+    assert "opportunity" in metro["scores"]
+    assert "population" not in metro["signals"]
+    assert "population_class" not in metro["signals"]
+    assert "cbp_establishments" not in metro["signals"]
+
+
+def test_v2_population_class_derives_from_population_when_signal_missing() -> None:
+    from src.pipeline.orchestrator import _population_class_for_benchmarks
+
+    assert _population_class_for_benchmarks(49_999) == "micro_under_50k"
+    assert _population_class_for_benchmarks(50_000) == "small_50_100k"
+    assert _population_class_for_benchmarks(100_000) == "medium_100_300k"
+    assert _population_class_for_benchmarks(300_000) == "large_300k_1m"
+    assert _population_class_for_benchmarks(1_000_000) == "metro_1m_5m"
+    assert _population_class_for_benchmarks(5_000_000) == "mega_5m_plus"
+    assert _population_class_for_benchmarks(0) is None
 
 
 def test_score_niche_raises_valueerror_on_unknown_city() -> None:
@@ -307,3 +438,26 @@ def test_dry_run_returns_deterministic_report_without_clients() -> None:
     assert first.report["input"]["niche_keyword"] == "roofing"
     assert 0 <= first.opportunity_score <= 100
     assert len(first.evidence) == 4
+
+
+def test_dry_run_attaches_v2_scores_when_repository_is_provided() -> None:
+    repo = _FakeBenchmarkRepository()
+
+    result = asyncio.run(
+        score_niche_for_metro(
+            niche="roofing",
+            city="Phoenix",
+            state="AZ",
+            llm_client=None,
+            dataforseo_client=None,
+            benchmark_repository=repo,
+            dry_run=True,
+        )
+    )
+
+    assert repo.calls == [("roofing", "metro_1m_5m")]
+    metro = result.report["metros"][0]
+    assert metro["cbsa_code"] == "38060"
+    assert "opportunity" in metro["scores"]
+    assert metro["v2_scores"]["spec_version"] == "2.0"
+    assert metro["v2_scores"]["benchmark"]["confidence_label"] == "medium"

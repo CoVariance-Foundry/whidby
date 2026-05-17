@@ -337,7 +337,7 @@ Slice-lite scores must use `score_version = "sonar-lite-0.1"` and include data-q
 
 ## 4. Confidence in the per-(niche, metro) score
 
-Current boundary: Phase 7 completes when `seo_benchmarks` can be recomputed and audited in staging. V2 scoring integration is the next implementation slice and should add a repository around `seo_benchmarks` rather than querying Supabase ad hoc from scoring formulas.
+Implemented boundary: V2 scoring reads `seo_benchmarks` through `src/scoring/benchmark_repository.py::SeoBenchmarkRepository`, with Supabase access isolated in `src/clients/seo_benchmark_repository.py::SupabaseSeoBenchmarkRepository`. Score formulas in `src/scoring/v2.py` consume repository-returned benchmark cells and do not query Supabase directly.
 
 The benchmark's confidence carries forward to the score. `metro_score_v2.benchmark_confidence` is one of `{high, medium, low, insufficient}` — copied from the benchmark cell used.
 

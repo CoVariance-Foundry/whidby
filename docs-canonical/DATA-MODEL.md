@@ -58,6 +58,8 @@
 | OnboardingProfile   | Supabase `onboarding_profiles` table  | id (UUID); unique user_id | Durable signup/onboarding answers, recommended strategy, and resume route |
 | OnboardingTarget    | Supabase `onboarding_targets` table   | id (UUID); unique profile + strategy | Selected strategy, service, and resolved geography for first-report handoff |
 
+V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.SeoBenchmarkRepository`. Scoring formulas must not query Supabase directly; Supabase access belongs in repository adapters such as `src.clients.seo_benchmark_repository.SupabaseSeoBenchmarkRepository`.
+
 
 ### Sonar Slice-Lite Entities
 
