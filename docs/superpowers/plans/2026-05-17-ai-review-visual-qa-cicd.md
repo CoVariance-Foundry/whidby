@@ -1095,7 +1095,8 @@ git commit -m "ci: add visual qa workflow"
 - Create: `.github/workflows/ai-review.yml`
 - Modify: `.github/workflows/quality-gates.yml`
 - Modify: `docs-canonical/ENVIRONMENT.md`
-- Test: `gh workflow view ai-review.yml`
+- Modify: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
+- Test: Ruby YAML parse for `.github/workflows/ai-review.yml` and `.github/workflows/quality-gates.yml`; `git diff --check`
 
 - [ ] **Step 1: Install and configure Greptile outside the repo**
 
@@ -1107,10 +1108,12 @@ Operator action:
 4. Add a label trigger named `greptile-review`.
 5. Set strictness to prioritize logic/security/regression comments over style-only comments.
 
-- [ ] **Step 2: Create `.github/workflows/ai-review.yml`**
+Status: operator action, not executable by repo code. Repo changes below document and support the policy without requiring a Greptile token in CI.
+
+- [x] **Step 2: Create `.github/workflows/ai-review.yml`**
 
 ```yaml
-name: AI Review
+name: Greptile Review Policy
 
 on:
   pull_request:
@@ -1120,7 +1123,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   greptile-policy:
@@ -1142,7 +1145,7 @@ jobs:
           POLICY
 ```
 
-- [ ] **Step 3: Update `quality-gates.yml` permissions**
+- [x] **Step 3: Update `quality-gates.yml` permissions**
 
 Set top-level permissions:
 
@@ -1154,7 +1157,7 @@ permissions:
 
 Keep existing jobs unchanged.
 
-- [ ] **Step 4: Document the PR policy**
+- [x] **Step 4: Document the PR policy**
 
 Add to `docs-canonical/ENVIRONMENT.md`:
 
@@ -1164,12 +1167,20 @@ Add to `docs-canonical/ENVIRONMENT.md`:
 Greptile is the code-review AI for PR-level source review. It runs through the GitHub App and is accessed locally through Greptile MCP in Cursor, Codex, or Claude Code. Visual QA is separate: Playwright captures user-flow artifacts and an optional local/CI agent reviews the rendered experience for product and design issues.
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/ai-review.yml .github/workflows/quality-gates.yml docs-canonical/ENVIRONMENT.md
+git add .github/workflows/ai-review.yml .github/workflows/quality-gates.yml docs-canonical/ENVIRONMENT.md docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md
 git commit -m "ci: document ai review policy"
 ```
+
+Task 9 repo-code verification result:
+
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ai-review.yml"); puts "ai-review.yml OK"'`: passed.
+- `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/quality-gates.yml"); puts "quality-gates.yml OK"'`: passed.
+- `git diff --check`: passed.
+
+Concern recorded: Greptile GitHub App installation, repository indexing, review trigger configuration, and strictness settings are operator actions outside repo code. This commit only adds the repo-owned workflow summary, least-privilege workflow permissions, and canonical policy documentation.
 
 ---
 
@@ -1277,7 +1288,7 @@ Expected hosted checks:
 
 - Quality Gates
 - Environment Audit
-- AI Review
+- Greptile Review Policy
 - Vercel Preview
 - Supabase Preview on schema-changing PRs
 - Visual QA when `visual-qa` label is present
