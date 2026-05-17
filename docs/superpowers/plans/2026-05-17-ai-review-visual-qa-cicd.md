@@ -462,7 +462,7 @@ git commit -m "chore: add environment manifest audit"
 - Modify: `package.json`
 - Test: `npm run env:sync:dry-run -- --environment preview`
 
-- [ ] **Step 1: Create `scripts/ci/sync_vercel_env.mjs`**
+- [x] **Step 1: Create `scripts/ci/sync_vercel_env.mjs`**
 
 Behavior:
 
@@ -495,7 +495,7 @@ for (const variable of vercelVars) {
 }
 ```
 
-- [ ] **Step 2: Create `scripts/ci/sync_github_env.mjs`**
+- [x] **Step 2: Create `scripts/ci/sync_github_env.mjs`**
 
 Behavior:
 
@@ -507,7 +507,7 @@ Behavior:
 - Dry-run by default unless `--apply` is present.
 - Never print raw values.
 
-- [ ] **Step 3: Create `scripts/ci/sync_supabase_branch_secrets.mjs`**
+- [x] **Step 3: Create `scripts/ci/sync_supabase_branch_secrets.mjs`**
 
 Behavior:
 
@@ -518,7 +518,7 @@ Behavior:
 - Dry-run by default unless `--apply` is present.
 - Refuse `--environment production`; production Supabase secrets must be updated through the approved production path.
 
-- [ ] **Step 4: Add package scripts**
+- [x] **Step 4: Add package scripts**
 
 Modify `package.json`:
 
@@ -529,7 +529,7 @@ Modify `package.json`:
 "env:sync:dry-run": "npm run env:sync:vercel -- --dry-run"
 ```
 
-- [ ] **Step 5: Verify dry-run**
+- [x] **Step 5: Verify dry-run**
 
 Run:
 
@@ -539,10 +539,23 @@ npm run env:sync:dry-run -- --environment preview
 
 Expected: prints only variable names and `present`/`missing`.
 
-- [ ] **Step 6: Commit**
+Verification results:
+
+- `npm run env:sync:dry-run -- --environment preview` passed; output listed Vercel preview variable names with `present`/`missing` status only.
+- Code-quality hardening: `--environment`, `--repo`, and `--branch` now fail during argument parsing when the value is omitted or the next token is another flag.
+- Code-quality hardening: Vercel and GitHub dry-run paths now print `No <platform> variables configured for <environment>` instead of silently succeeding when a selected manifest/platform/environment combination has no matching variables; live/apply paths fail instead of claiming an empty sync.
+- `node scripts/ci/sync_vercel_env.mjs --dry-run --environment` failed non-zero with `Missing value for --environment`.
+- `node scripts/ci/sync_github_env.mjs --environment preview --repo` failed non-zero with `Missing value for --repo`.
+- `node scripts/ci/sync_supabase_branch_secrets.mjs --environment preview --branch` failed non-zero with `Missing value for --branch`.
+- `node --check scripts/ci/sync_vercel_env.mjs` passed.
+- `node --check scripts/ci/sync_github_env.mjs` passed.
+- `node --check scripts/ci/sync_supabase_branch_secrets.mjs` passed.
+- `git diff --check` passed.
+
+- [x] **Step 6: Commit**
 
 ```bash
-git add scripts/ci/sync_vercel_env.mjs scripts/ci/sync_github_env.mjs scripts/ci/sync_supabase_branch_secrets.mjs package.json
+git add scripts/ci/sync_vercel_env.mjs scripts/ci/sync_github_env.mjs scripts/ci/sync_supabase_branch_secrets.mjs package.json docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md
 git commit -m "chore: add environment sync dry runs"
 ```
 
