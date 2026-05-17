@@ -42,6 +42,7 @@ describe("/api/onboarding/start-report", () => {
     member_role: "owner",
     plan_key: "plus",
     monthly_report_limit: 10,
+    fresh_report_quota_exempt: false,
     subscription_status: "active",
     current_period_start: "2026-05-01T00:00:00.000Z",
     current_period_end: "2026-06-01T00:00:00.000Z",
@@ -94,6 +95,50 @@ describe("/api/onboarding/start-report", () => {
     );
     expect(supabase.profileUpdateEq).toHaveBeenCalledWith("id", "profile-1");
     expect(mocks.scoringPost).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("delegates quota-exempt free admin city targets to scoring", async () => {
+    const target = createTarget({
+      city: "Phoenix",
+      state: "AZ",
+    });
+    const supabase = createSupabaseMock({
+      targetResult: { data: target, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.resolveEntitlementContext.mockResolvedValueOnce({
+      user: { ...user, email: "admin-test@widby.dev" },
+      entitlement: {
+        ...entitlement,
+        member_role: "admin",
+        plan_key: "free",
+        monthly_report_limit: 0,
+        fresh_report_quota_exempt: true,
+      },
+    });
+
+    const req = new Request("http://localhost/api/onboarding/start-report", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    const res = await POST(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "success",
+      report_id: "report-1",
+      redirect_url: "/reports/report-1?generating=true",
+    });
+    expect(supabase.profileUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "report_queued",
+        next_route: "/reports/report-1?generating=true",
+      }),
+    );
+    expect(mocks.scoringPost).toHaveBeenCalledOnce();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
