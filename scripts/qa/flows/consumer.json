@@ -1,0 +1,39 @@
+{
+  "app": "consumer",
+  "authLandingPattern": "/(reports|$)",
+  "baseUrlEnv": "PLAYWRIGHT_BASE_URL",
+  "viewports": [
+    { "name": "desktop", "width": 1440, "height": 1000 },
+    { "name": "mobile", "width": 390, "height": 844 }
+  ],
+  "routes": [
+    {
+      "name": "login",
+      "path": "/login",
+      "requiresAuth": false,
+      "expectedPath": "/login",
+      "capture": "page"
+    },
+    {
+      "name": "explore",
+      "path": "/explore",
+      "requiresAuth": true,
+      "expectedPath": "/explore",
+      "capture": "page"
+    },
+    {
+      "name": "reports",
+      "path": "/reports",
+      "requiresAuth": true,
+      "expectedPath": "/reports",
+      "capture": "page"
+    },
+    {
+      "name": "niche-finder",
+      "path": "/niche-finder",
+      "requiresAuth": true,
+      "expectedPath": "/niche-finder",
+      "capture": "page"
+    }
+  ]
+}

@@ -161,6 +161,26 @@ The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which e
 
 The staging Supabase project needs the same auth accounts as production (see E2E test accounts below). Redirect URL pattern `https://*.vercel.app/**` must be added to the staging project's Auth settings.
 
+## AI Review, Preview, and Visual QA Environments
+
+| Stage | Git branch | Frontend | API | Database | Review gates |
+|-------|------------|----------|-----|----------|--------------|
+| Feature Preview | `codex/*`, `feature/*`, `fix/*` PRs into `dev` | Vercel Preview | Render staging API by default | Supabase preview branch for schema-changing PRs, otherwise staging Supabase | Quality Gates, Greptile, Playwright smoke, optional visual QA |
+| Integration | `dev` | Vercel staging custom environment or branch-scoped Preview | `whidby-staging` Render service | persistent staging Supabase project or persistent Supabase branch | Full Quality Gates, visual QA, staging smoke |
+| Production | `main` | Vercel Production | `whidby-1` Render service | production Supabase project | protected merge from `dev`, production migration approval |
+
+Feature branches must not receive production service-role credentials. Schema-changing PRs should use Supabase preview branches seeded with deterministic test data. UI-only PRs may use staging Supabase with E2E test accounts.
+
+Supabase preview branches are data-less by default. Preview seed data must be deterministic, minimal, and free of production customer data. Auth users for E2E should be created through the approved staging/preview auth setup, not by committing real passwords into migrations.
+
+Secret-bearing Visual QA runs only from trusted `dev` or `main` workflow dispatches. Use the `visual-qa` PR label to request review, wait for the Vercel preview URL, then dispatch the workflow from `dev` or `main` with that URL. Manual preview URLs must be HTTPS and must match `VISUAL_QA_ALLOWED_HOSTS` or `VISUAL_QA_ALLOWED_HOST_SUFFIXES`; if no allowlist vars are set, only `*.vercel.app` previews are accepted.
+
+Environment sync scripts are dry-run planners in this branch. Use `npm run env:plan:preview`, `npm run env:plan:vercel -- --environment <env>`, `npm run env:plan:github -- --environment <env>`, or `npm run env:plan:supabase -- --environment <env> --branch <name>` to audit required names without applying provider changes.
+
+### PR AI Review Policy
+
+Greptile is the code-review AI for PR-level source review. It runs through the GitHub App and is accessed locally through Greptile MCP in Cursor, Codex, or Claude Code. Visual QA is separate: Playwright captures user-flow artifacts and an optional local/CI agent reviews the rendered experience for product and design issues.
+
 ## Setup Steps
 
 1. Clone the repository
