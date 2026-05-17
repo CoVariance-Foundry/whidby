@@ -21,17 +21,35 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  checks: read
 
 concurrency:
   group: visual-qa-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  visual-qa:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'visual-qa') }}
+  visual-qa-request:
+    if: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'visual-qa') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Explain manual visual QA dispatch
+        run: |
+          cat <<'SUMMARY' >> "$GITHUB_STEP_SUMMARY"
+          A maintainer requested Visual QA with the `visual-qa` label.
+
+          Secret-bearing Visual QA is intentionally not executed in `pull_request`,
+          because that would run PR-controlled code with preview, auth, and agent
+          credentials. After the Vercel preview is ready, run this workflow manually
+          with `workflow_dispatch` and provide `preview_url`.
+          SUMMARY
+
+  visual-qa:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Secrets are only available on the manual maintainer-dispatched job.
     environment: preview
     steps:
       - uses: actions/checkout@v4
@@ -230,11 +248,3 @@ jobs:
             apps/admin/test-results
             visual-qa-review.json
           retention-days: 14
-
-      - name: Post PR feedback
-        if: ${{ github.event_name == 'pull_request' && !cancelled() }}
-        run: npm run qa:post -- --review-json visual-qa-review.json --artifact-url "$ACTION_RUN_URL" --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTION_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
