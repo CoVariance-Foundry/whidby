@@ -220,3 +220,130 @@ def test_city_service_preserves_city_freshness_fields() -> None:
 
     assert city["last_scored_at"] == "2026-05-04T12:00:00Z"
     assert city["stale"] is False
+
+
+class FakePagedExploreRepository:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def list_city_rows(
+        self,
+        *,
+        service: str | None,
+        states: list[str],
+        population_min: int | None,
+        population_max: int | None,
+        income_min: int | None,
+        income_max: int | None,
+        growing_only: bool,
+        sort: str,
+        direction: str,
+        limit: int,
+        cursor: str | None,
+    ) -> list[dict]:
+        self.calls.append(
+            {
+                "service": service,
+                "states": states,
+                "population_min": population_min,
+                "population_max": population_max,
+                "income_min": income_min,
+                "income_max": income_max,
+                "growing_only": growing_only,
+                "sort": sort,
+                "direction": direction,
+                "limit": limit,
+                "cursor": cursor,
+            }
+        )
+        return [
+            {
+                "cbsa_code": "38060",
+                "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+                "state": "AZ",
+                "population": 4_900_000,
+                "population_class": "large_1m_plus",
+                "median_household_income_usd": 82_000,
+                "owner_occupancy_rate": 0.61,
+                "median_age_years": 37.4,
+                "niche_normalized": "roofing",
+                "niche_keyword": "roofing",
+                "presentation_score": 88,
+                "score_system": "v2",
+                "latest_scored_at": "2026-05-01T12:00:00Z",
+                "business_density_per_1k": 3.2,
+                "establishment_growth_yoy": 0.08,
+                "growth_available": True,
+                "stale": False,
+            }
+        ]
+
+
+def test_city_service_returns_paged_result_for_new_repository() -> None:
+    repository = FakePagedExploreRepository()
+    result = ExploreCityService(repository).list_cities(
+        service_filter="Roofing Services",
+        states=["AZ"],
+        population_min=100_000,
+        income_max=120_000,
+        growing_only=True,
+        sort="population",
+        direction="asc",
+        limit=20,
+        cursor="11111",
+    )
+
+    assert not isinstance(result, list)
+    assert result["service_filter"] == "roofing"
+    assert result["growth_available"] is True
+    assert result["next_cursor"] is None
+    assert repository.calls == [
+        {
+            "service": "Roofing Services",
+            "states": ["AZ"],
+            "population_min": 100_000,
+            "population_max": None,
+            "income_min": None,
+            "income_max": 120_000,
+            "growing_only": True,
+            "sort": "population",
+            "direction": "asc",
+            "limit": 20,
+            "cursor": "11111",
+        }
+    ]
+    city = result["cities"][0]
+    assert city["cbsa_code"] == "38060"
+    assert city["best_score"] == 88
+    assert city["cached_scores"][0]["niche_normalized"] == "roofing"
+
+
+def test_city_service_trims_extra_cursor_row() -> None:
+    class Repository(FakePagedExploreRepository):
+        def list_city_rows(self, **kwargs) -> list[dict]:
+            rows = super().list_city_rows(**kwargs)
+            return [
+                rows[0],
+                {
+                    **rows[0],
+                    "cbsa_code": "12060",
+                    "cbsa_name": "Atlanta-Sandy Springs-Alpharetta, GA",
+                    "state": "GA",
+                    "growth_available": False,
+                },
+                {
+                    **rows[0],
+                    "cbsa_code": "19100",
+                    "cbsa_name": "Dallas-Fort Worth-Arlington, TX",
+                    "state": "TX",
+                },
+            ]
+
+    result = ExploreCityService(Repository()).list_cities(
+        service_filter="roofing",
+        limit=2,
+    )
+
+    assert not isinstance(result, list)
+    assert [city["cbsa_code"] for city in result["cities"]] == ["38060", "12060"]
+    assert result["next_cursor"] == "12060"

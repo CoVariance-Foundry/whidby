@@ -21,3 +21,10 @@ class ExploreCitySummary(TypedDict):
     last_scored_at: NotRequired[Any | None]
     stale: bool | None
     cached_scores: list[dict[str, Any]]
+
+
+class ExplorePageResult(TypedDict):
+    cities: list[ExploreCitySummary]
+    next_cursor: str | None
+    growth_available: bool
+    service_filter: str | None

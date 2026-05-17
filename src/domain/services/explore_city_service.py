@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from src.domain.explore.entities import ExploreCitySummary
+from src.domain.explore.entities import ExploreCitySummary, ExplorePageResult
 from src.domain.explore.metrics import (
     annualized_growth,
     business_density_per_1k,
@@ -35,10 +35,39 @@ class ExploreCityRepository(Protocol):
 class ExploreCityService:
     """Build Explore city summaries from repository read inputs."""
 
-    def __init__(self, repository: ExploreCityRepository) -> None:
+    def __init__(self, repository: ExploreCityRepository | Any) -> None:
         self._repository = repository
 
-    def list_cities(self, service_filter: str | None = None) -> list[ExploreCitySummary]:
+    def list_cities(
+        self,
+        service_filter: str | None = None,
+        *,
+        states: list[str] | None = None,
+        population_min: int | None = None,
+        population_max: int | None = None,
+        income_min: int | None = None,
+        income_max: int | None = None,
+        growing_only: bool = False,
+        sort: str = "score",
+        direction: str = "desc",
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[ExploreCitySummary] | ExplorePageResult:
+        if hasattr(self._repository, "list_city_rows"):
+            return self._list_city_rows(
+                service_filter=service_filter,
+                states=states or [],
+                population_min=population_min,
+                population_max=population_max,
+                income_min=income_min,
+                income_max=income_max,
+                growing_only=growing_only,
+                sort=sort,
+                direction=direction,
+                limit=limit,
+                cursor=cursor,
+            )
+
         normalized_filter = _normalize_service(service_filter)
         metros = self._repository.load_metros()
         cbsa_codes = [str(metro["cbsa_code"]) for metro in metros]
@@ -60,6 +89,49 @@ class ExploreCityService:
             )
             for metro in metros
         ]
+
+    def _list_city_rows(
+        self,
+        *,
+        service_filter: str | None,
+        states: list[str],
+        population_min: int | None,
+        population_max: int | None,
+        income_min: int | None,
+        income_max: int | None,
+        growing_only: bool,
+        sort: str,
+        direction: str,
+        limit: int,
+        cursor: str | None,
+    ) -> ExplorePageResult:
+        normalized_filter = _normalize_service(service_filter)
+        safe_limit = max(1, limit)
+        rows = self._repository.list_city_rows(
+            service=service_filter,
+            states=states,
+            population_min=population_min,
+            population_max=population_max,
+            income_min=income_min,
+            income_max=income_max,
+            growing_only=growing_only,
+            sort=sort,
+            direction=direction,
+            limit=safe_limit,
+            cursor=cursor,
+        )
+        page_rows = rows[:safe_limit]
+        cities = [_summary_from_cell_row(row) for row in page_rows]
+        return {
+            "cities": cities,
+            "next_cursor": (
+                str(page_rows[-1]["cbsa_code"])
+                if len(rows) > safe_limit and page_rows
+                else None
+            ),
+            "growth_available": any(city["growth_available"] for city in cities),
+            "service_filter": normalized_filter,
+        }
 
     def _build_summary(
         self,
@@ -113,6 +185,46 @@ def _normalize_service(service_filter: str | None) -> str | None:
 
     normalized = normalize_niche(service_filter)
     return normalized or None
+
+
+def _summary_from_cell_row(row: Mapping[str, Any]) -> ExploreCitySummary:
+    cached_score = _cached_score_from_cell_row(row)
+    best_score = _best_score(cached_score)
+    return {
+        "cbsa_code": str(row["cbsa_code"]),
+        "cbsa_name": str(row["cbsa_name"]),
+        "state": row.get("state"),
+        "population": row.get("population"),
+        "population_class": row.get("population_class"),
+        "median_household_income_usd": row.get("median_household_income_usd"),
+        "owner_occupancy_rate": row.get("owner_occupancy_rate"),
+        "median_age_years": row.get("median_age_years"),
+        "business_density_per_1k": row.get("business_density_per_1k"),
+        "establishment_growth_yoy": row.get("establishment_growth_yoy"),
+        "growth_available": bool(row.get("growth_available")),
+        "cached_services_count": 1 if cached_score.get("niche_normalized") else 0,
+        "best_score": best_score,
+        "score_system": str(row.get("score_system") or "none"),
+        "last_scored_at": row.get("latest_scored_at"),
+        "stale": _stale_value(row),
+        "cached_scores": [cached_score] if cached_score.get("niche_normalized") else [],
+    }
+
+
+def _cached_score_from_cell_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "cbsa_code": row.get("cbsa_code"),
+        "niche_normalized": row.get("niche_normalized"),
+        "niche_keyword": row.get("niche_keyword"),
+        "report_id": row.get("report_id"),
+        "presentation_score": row.get("presentation_score"),
+        "score_system": row.get("score_system"),
+        "latest_scored_at": row.get("latest_scored_at"),
+        "stale": row.get("stale"),
+        "business_density_per_1k": row.get("business_density_per_1k"),
+        "establishment_growth_yoy": row.get("establishment_growth_yoy"),
+        "growth_available": row.get("growth_available"),
+    }
 
 
 def _group_scores_by_cbsa(
