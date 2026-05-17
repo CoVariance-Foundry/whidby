@@ -1080,10 +1080,15 @@ Task 8 code quality fix:
   summary and do not check out or execute PR-controlled code with Vercel, E2E
   auth, GitHub, or agent credentials.
 - Supplying `preview_url` skips Vercel check waiting and deployment lookup, then runs visual QA directly against that URL.
-- Supplying `sha` on manual runs uses that value for artifact id and Vercel lookup when `preview_url` is not supplied; PR runs still use the PR head SHA.
+- Supplying `sha` on manual runs uses that value for artifact id and Vercel lookup when `preview_url` is not supplied.
 - The Vercel preview check name now comes from `VERCEL_PREVIEW_CHECK_NAME` GitHub environment/repo variable with a shell fallback to `Vercel`, so configured repos are not hard-coded to one check name.
 - Agent review remains optional, but fallback JSON now distinguishes unconfigured runs from configured review failures. Configured agent failures continue to artifact upload and PR feedback with a failure summary instead of silently reporting "not configured."
 - Verification requested for this fix: Ruby YAML parse, workflow line inspection for `preview_url`, `sha`, configurable Vercel check name, and fallback review JSON status, plus `git diff --check`.
+
+Final hardening note: the maintainer-dispatched secret job does not inspect
+`github.event.pull_request` context or run Supabase PR-diff waits. Schema-changing
+PRs should wait for Supabase/Vercel preview readiness externally, then dispatch
+Visual QA with the ready `preview_url`.
 
 - [x] **Step 3: Commit**
 
@@ -1207,7 +1212,7 @@ Operator action:
 4. Connect Supabase to the Vercel project through the Vercel integration.
 5. Confirm the `Supabase Preview` check appears on schema-changing PRs.
 
-Status: external operator action. Repo code now waits for the configurable `Supabase Preview` check when PR diffs include `supabase/migrations/**`, but enabling Supabase GitHub/Vercel integrations remains outside this repository.
+Status: external operator action. Enabling Supabase GitHub/Vercel integrations remains outside this repository. Because secret-bearing Visual QA now runs only through maintainer `workflow_dispatch`, schema-changing PRs should wait for the Supabase preview branch externally before dispatching Visual QA with the ready preview URL.
 
 - [x] **Step 2: Add Supabase wait step to `visual-qa.yml`**
 
@@ -1262,7 +1267,7 @@ Verification recorded:
 
 - `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/visual-qa.yml"); puts "ok"'`: passed.
 - `git diff --check`: passed.
-- `rg -n "Detect Supabase migration changes|git diff --name-only|supabase/migrations/|SUPABASE_PREVIEW_CHECK_NAME|workflow_dispatch|EVENT_NAME.*pull_request|changed=false" .github/workflows/visual-qa.yml`: confirmed migration detection, configurable check-name fallback, and workflow_dispatch-safe skip behavior.
+- `rg -n "workflow_dispatch|preview_url|VISUAL|VERCEL_PREVIEW_CHECK_NAME" .github/workflows/visual-qa.yml`: confirmed maintainer-dispatched Visual QA, preview URL override, and configurable Vercel preview wait. Supabase PR-diff waiting was intentionally removed from the secret-bearing workflow during final hardening.
 
 ---
 

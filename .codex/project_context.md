@@ -2,9 +2,9 @@
 
 ## AI Review and Visual QA CI/CD
 
-Added CI/CD review scaffolding for Greptile PR review policy, Playwright visual QA, optional Codex/Claude artifact critique, preview URL resolution, Supabase preview readiness waits, and environment manifest checks. The workflow keeps `dev -> main` as the release spine, uses preview/staging/production environment separation, and avoids printing or committing secret values.
+Added CI/CD review scaffolding for Greptile PR review policy, Playwright visual QA, optional Codex/Claude artifact critique, preview URL resolution, and environment manifest checks. The workflow keeps `dev -> main` as the release spine, uses preview/staging/production environment separation, and avoids printing or committing secret values.
 
-Greptile review execution remains owned by the Greptile GitHub App and local Greptile MCP use in Cursor/Codex/Claude Code. PR `visual-qa` labels now create a no-secret request summary; the secret-bearing Visual QA run is maintainer-dispatched with `workflow_dispatch` and a `preview_url` so PR-controlled code does not receive Vercel, auth, GitHub, or agent credentials. Supabase preview branches require external Supabase GitHub/Vercel integration setup before the `Supabase Preview` wait can pass.
+Greptile review execution remains owned by the Greptile GitHub App and local Greptile MCP use in Cursor/Codex/Claude Code. PR `visual-qa` labels now create a no-secret request summary; the secret-bearing Visual QA run is maintainer-dispatched with `workflow_dispatch` and a `preview_url` so PR-controlled code does not receive Vercel, auth, GitHub, or agent credentials. Supabase preview branches require external Supabase GitHub/Vercel integration setup before manual Visual QA should be dispatched for schema-changing previews.
 
 ## Phase 7 Benchmark and Sonar Slice-Lite
 
