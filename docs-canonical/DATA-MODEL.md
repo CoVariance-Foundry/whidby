@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.3.0`     |
-| **Last Updated** | 2026-05-14  |
+| **Version**      | `1.4.0`     |
+| **Last Updated** | 2026-05-16  |
 | **Owner**        | @widby-team |
 
 
@@ -49,6 +49,8 @@
 | Subscription        | Supabase `subscriptions` table        | subscription_id (UUID) | Active tier state synced from Stripe |
 | UsageCounter        | Supabase `usage_counters` table       | account + metric + period | Atomic monthly quota usage for fresh reports |
 | BillingCustomer     | Supabase `billing_customers` table    | account_id       | Stripe customer mapping |
+| OnboardingProfile   | Supabase `onboarding_profiles` table  | id (UUID); unique user_id | Durable signup/onboarding answers, recommended strategy, and resume route |
+| OnboardingTarget    | Supabase `onboarding_targets` table   | id (UUID); unique profile + strategy | Selected strategy, service, and resolved geography for first-report handoff |
 
 
 ### Sonar Slice-Lite Entities
@@ -190,7 +192,69 @@ Reports have two visibility modes:
 
 Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report.
 
+### Consumer Onboarding State
+
+Onboarding is account-scoped, but each authenticated user has at most one active onboarding profile. It captures product intent and first-run target state only; it does not own scoring outputs.
+
+Valid profile statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `profile_started` | Identity or initial answers exist, but routing is incomplete. |
+| `profile_completed` | Intent/focus answers are persisted. |
+| `strategy_recommended` | `recommended_strategy_id` and `next_route` are available. |
+| `target_selected` | A service + geography target is ready for cached/fresh handoff. |
+| `report_queued` | A fresh report request was accepted by the scoring path. |
+| `cached_route_selected` | Free or researching user was routed to cached Explore/report data. |
+| `upgrade_required` | User selected a fresh flow without a plan/quota that allows it. |
+| `report_ready` | The first generated report is available. |
+
+`recommended_strategy_id` must be one of the strategy catalog ids from the consumer app (`easy_win`, `cash_cow`, `blue_ocean`, `gbp_blitz`, `portfolio_builder`, `expand_conquer`, `seasonal_arbitrage`). Strategy routing is deterministic from `intent`, `focus`, and optional `coach_or_agency` so it remains testable without Supabase.
+
+`onboarding_targets` stores the user's selected target for resume and report start. City-level targets should preserve Mapbox/DataForSEO metadata when selected through autocomplete; state or broad-region targets should preserve `geo_scope`, `state`, and `resolved_label` and hand off to Explore or batch workflows when no single city scoring target exists.
+
+Free users can persist onboarding state and cached-route choices, but fresh scoring still follows `usage_counters` and account entitlement rules.
+
 ## Schema Definitions
+
+### OnboardingProfile (`onboarding_profiles`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Stable onboarding profile id |
+| `user_id` | UUID | Yes | unique, references `user_profiles.id` | Authenticated consumer user |
+| `account_id` | UUID | Yes | references `accounts.id` | Account used for entitlement and report ownership |
+| `intent` | text | No | `find_first`, `scale`, `coach_agency`, `researching` | Primary onboarding job-to-be-done |
+| `focus` | text | No | non-empty when required by intent | Adaptive second answer used for strategy routing |
+| `coach_or_agency` | text | No | `coaching`, `agency`, `both` | Sub-segmentation for coach/agency users |
+| `referral_source` | text | No | — | Optional attribution answer |
+| `recommended_strategy_id` | text | No | strategy catalog id | Deterministic starter strategy |
+| `available_strategy_ids` | text[] | Yes | default empty array | Strategies shown unlocked/recommended after onboarding |
+| `next_route` | text | No | app-relative path | Product surface to open after profile completion |
+| `status` | text | Yes | default `profile_started` | Resume/status state for onboarding |
+| `created_at` | timestamptz | Yes | default now() | Creation timestamp |
+| `updated_at` | timestamptz | Yes | default now() | Last profile update timestamp |
+| `completed_at` | timestamptz | No | — | Set when profile answers are complete |
+
+### OnboardingTarget (`onboarding_targets`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Stable target id |
+| `onboarding_profile_id` | UUID | Yes | references `onboarding_profiles.id` | Parent onboarding profile |
+| `strategy_id` | text | Yes | strategy catalog id | Strategy used to interpret target shape |
+| `niche_keyword` | text | Yes | non-empty | Display service/niche keyword |
+| `service_category_id` | text | No | — | Optional predefined service category from UI |
+| `geo_scope` | text | Yes | `city`, `state`, `region`, `nationwide` | Target geography shape |
+| `city` | text | No | — | City display name for city targets |
+| `state` | text | No | two-letter code when available | State/admin region |
+| `cbsa_code` | text | No | references `metros.cbsa_code` when available | CBSA target for seeded metro workflows |
+| `place_id` | text | No | — | Mapbox canonical place id |
+| `dataforseo_location_code` | integer | No | — | DataForSEO location code from place enrichment |
+| `resolved_label` | text | No | — | Human-readable target summary |
+| `metadata_source` | text | No | `typed`, `mapbox_selected`, `recent_history`, `fallback_cbsa` | Provenance for scoring handoff |
+| `created_at` | timestamptz | Yes | default now() | Creation timestamp |
+| `updated_at` | timestamptz | Yes | default now() | Last target update timestamp |
 
 ### ExploreRefreshPolicy (`explore_refresh_policies`)
 

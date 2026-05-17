@@ -61,9 +61,10 @@ afterEach(() => {
 describe("CityAutocomplete (consumer)", () => {
   it("renders an input with the forwarded value", () => {
     const onChange = vi.fn();
-    render(<CityAutocomplete value="Dallas" onChange={onChange} />);
+    render(<CityAutocomplete id="market-city" value="Dallas" onChange={onChange} />);
     const input = screen.getByTestId("city-input");
     expect(input).toBeInTheDocument();
+    expect(input).toHaveAttribute("id", "market-city");
     expect(input).toHaveValue("Dallas");
     const combobox = screen.getByRole("combobox");
     expect(combobox.tagName.toLowerCase()).toBe("input");
