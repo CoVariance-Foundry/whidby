@@ -254,6 +254,27 @@ def test_ai_resilience_filter_adds_warning_without_hiding_result():
     assert results[0].warnings == ["ai_resilience_risk"]
 
 
+def test_ai_resilience_filter_ignores_malformed_warning_values():
+    market = _strategy_market(
+        BOISE,
+        {
+            "search_volume_monthly": 300,
+            "cpc_usd": 50,
+            "commercial_intent_score": 0.8,
+            "local_pack_present": True,
+            "exact_match_name_taken": False,
+            "ai_resilience": "not-a-number",
+            "aio_trigger_rate": "also-not-a-number",
+        },
+    )
+    svc = DiscoveryService(FakeMarketStore([market]))
+
+    results = asyncio.run(svc.discover(MarketQuery(lens=KEYWORD_HIJACK, ai_resilience_filter=True)))
+
+    assert len(results) == 1
+    assert results[0].warnings == []
+
+
 def test_strategy_scoring_skips_malformed_rows_without_failing(caplog):
     malformed = _strategy_market(
         TUCSON,

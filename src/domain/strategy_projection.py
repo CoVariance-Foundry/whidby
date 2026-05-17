@@ -221,8 +221,13 @@ def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
 
 
 def project_ai_resilience_warning(row: dict[str, Any]) -> dict[str, str] | None:
-    aio_rate = _number_or_default(row, "aio_trigger_rate", 0.0)
-    score = _number_or_default(row, "ai_resilience", 100.0)
+    try:
+        aio_rate = _number_or_default(row, "aio_trigger_rate", 0.0)
+        score = _number_or_default(row, "ai_resilience", 100.0)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(aio_rate) or not math.isfinite(score):
+        return None
     if aio_rate >= 0.15 or score < 65:
         return {
             "code": "ai_resilience_risk",

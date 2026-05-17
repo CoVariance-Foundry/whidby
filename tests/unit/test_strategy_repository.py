@@ -222,6 +222,52 @@ def test_fetch_feature_vectors_batches_cbsa_codes() -> None:
     assert ("eq", "feature_version", "strategy_v1") in calls
 
 
+def test_feature_vector_dict_values_use_stable_key_order() -> None:
+    client = FakeClient(
+        rows_by_table={
+            "metro_score_v2": [
+                {
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "organic_difficulty": 25,
+                    "local_difficulty": 30,
+                    "demand_strength": 120,
+                },
+                {
+                    "cbsa_code": "11111",
+                    "niche_normalized": "roofing",
+                    "organic_difficulty": 45,
+                    "local_difficulty": 50,
+                    "demand_strength": 120,
+                },
+            ],
+            "metro_feature_vectors": [
+                {
+                    "cbsa_code": "11111",
+                    "feature_version": "strategy_v1",
+                    "feature_vector": {"b": 1.0, "a": 0.0},
+                },
+                {
+                    "cbsa_code": "13820",
+                    "feature_version": "strategy_v1",
+                    "feature_vector": {"a": 0.0, "b": 1.0},
+                },
+            ],
+        }
+    )
+    repo = StrategyRepository(client)
+
+    markets = repo.query_markets(
+        MarketQuery(
+            lens=EXPAND_CONQUER,
+            service_filters=[ServiceFilter("name", "like", "roofing")],
+            reference_city_id="11111",
+        )
+    )
+
+    assert markets[0].signals["strategy_row"]["similarity_score"] == 1.0
+
+
 def test_query_markets_maps_ai_exposure_to_aio_trigger_rate() -> None:
     client = FakeClient(
         rows_by_table={

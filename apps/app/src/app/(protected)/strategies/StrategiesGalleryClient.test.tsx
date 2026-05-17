@@ -75,6 +75,11 @@ describe("StrategiesGalleryClient", () => {
     expect(within(launchSection).getByText("GBP Blitz")).toBeInTheDocument();
     expect(within(launchSection).getByText("Keyword Hijack")).toBeInTheDocument();
     expect(within(launchSection).getByText("Expand & Conquer")).toBeInTheDocument();
+    const expandCard = within(launchSection).getByText("Expand & Conquer").closest("article");
+    expect(expandCard).not.toBeNull();
+    expect(within(expandCard as HTMLElement).getByRole("link", { name: /open expand & conquer/i })).toHaveClass(
+      "btn-primary",
+    );
     expect(screen.getByLabelText("Phase 2")).toHaveTextContent("Cash Cow");
     expect(screen.queryByText(/blue ocean/i)).not.toBeInTheDocument();
   });

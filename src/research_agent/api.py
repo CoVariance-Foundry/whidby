@@ -493,7 +493,11 @@ class StrategyRunRequest(BaseModel):
 
     @model_validator(mode="after")
     def _fresh_runs_need_targets(self) -> "StrategyRunRequest":
-        if self.mode == "fresh" and not self.targets:
+        if (
+            self.mode == "fresh"
+            and not self.targets
+            and not (self.city and self.service)
+        ):
             raise ValueError("Fresh strategy runs require at least one target.")
         return self
 
@@ -1361,8 +1365,9 @@ async def list_strategies() -> dict[str, Any]:
 
 
 @app.post("/api/strategy-runs")
-async def create_strategy_run(req: StrategyRunRequest) -> dict[str, Any]:
+async def create_strategy_run(req: StrategyRunRequest, request: Request) -> dict[str, Any]:
     """Create a strategy discovery run and queue fresh target fanout."""
+    _require_strategy_discovery_internal_access(request)
     target_count = len(req.targets)
     if req.mode == "fresh" and target_count > 100:
         raise HTTPException(

@@ -240,7 +240,7 @@ def _feature_vector_values(row: dict[str, Any] | None) -> list[float] | None:
         return None
     raw = row.get("feature_vector")
     if isinstance(raw, dict):
-        values = list(raw.values())
+        values = [raw[key] for key in sorted(raw)]
     elif isinstance(raw, list):
         values = raw
     else:

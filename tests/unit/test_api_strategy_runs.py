@@ -59,7 +59,41 @@ def test_strategy_runs_reject_over_100_pair_fresh_run(
     assert fake_strategy_repository.created_runs == []
 
 
-def test_strategy_runs_reject_empty_fresh_run(
+def test_strategy_runs_allow_fresh_run_without_explicit_targets(
+    client: TestClient,
+    fake_strategy_repository: FakeStrategyRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_id = uuid.UUID("55555555-5555-5555-5555-555555555555")
+    monkeypatch.setattr(api_module.uuid, "uuid4", lambda: run_id)
+
+    response = client.post(
+        "/api/strategy-runs",
+        json={
+            "strategy_id": "easy_win",
+            "mode": "fresh",
+            "city": "Boise",
+            "state": "ID",
+            "service": "roofing",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "run_id": str(run_id),
+        "strategy_id": "easy_win",
+        "mode": "fresh",
+        "status": "queued",
+        "target_count": 0,
+    }
+    created_run = fake_strategy_repository.created_runs[0]
+    assert created_run["input_payload"]["targets"] == []
+    assert created_run["input_payload"]["city"] == "Boise"
+    assert created_run["input_payload"]["service"] == "roofing"
+    assert created_run["quota_consumed"] == 1
+
+
+def test_strategy_runs_reject_empty_fresh_run_without_target_or_city_service(
     client: TestClient,
     fake_strategy_repository: FakeStrategyRepository,
 ) -> None:
@@ -70,6 +104,50 @@ def test_strategy_runs_reject_empty_fresh_run(
 
     assert response.status_code == 400
     assert fake_strategy_repository.created_runs == []
+
+
+def test_strategy_runs_require_internal_token_in_production(
+    client: TestClient,
+    fake_strategy_repository: FakeStrategyRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("STRATEGY_DISCOVERY_INTERNAL_TOKEN", "secret-token")
+
+    response = client.post(
+        "/api/strategy-runs",
+        json={
+            "strategy_id": "easy_win",
+            "mode": "cached",
+            "targets": [{"cbsa_code": "13820", "niche_normalized": "roofing"}],
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Strategy discovery access denied."
+    assert fake_strategy_repository.created_runs == []
+
+
+def test_strategy_runs_accept_internal_token_in_production(
+    client: TestClient,
+    fake_strategy_repository: FakeStrategyRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("STRATEGY_DISCOVERY_INTERNAL_TOKEN", "secret-token")
+
+    response = client.post(
+        "/api/strategy-runs",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "strategy_id": "easy_win",
+            "mode": "cached",
+            "targets": [{"cbsa_code": "13820", "niche_normalized": "roofing"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(fake_strategy_repository.created_runs) == 1
 
 
 def test_strategy_runs_reject_invalid_strategy_id(

@@ -23,7 +23,7 @@ function sortStrategies(a: StrategyCatalogEntry, b: StrategyCatalogEntry) {
 }
 
 function StrategyCard({ strategy }: { strategy: StrategyCatalogEntry }) {
-  const isUnavailable = strategy.input_shape === "reference_city_service" || strategy.status === "phase_2";
+  const isUnavailable = strategy.status === "phase_2";
   return (
     <article
       style={{
