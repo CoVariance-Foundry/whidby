@@ -162,6 +162,8 @@ Feature branches must not receive production service-role credentials. Schema-ch
 
 Supabase preview branches are data-less by default. Preview seed data must be deterministic, minimal, and free of production customer data. Auth users for E2E should be created through the approved staging/preview auth setup, not by committing real passwords into migrations.
 
+Secret-bearing Visual QA runs only from trusted `dev` or `main` workflow dispatches. Use the `visual-qa` PR label to request review, wait for the Vercel preview URL, then dispatch the workflow from `dev` or `main` with that URL. Manual preview URLs must be HTTPS and must match `VISUAL_QA_ALLOWED_HOSTS` or `VISUAL_QA_ALLOWED_HOST_SUFFIXES`; if no allowlist vars are set, only `*.vercel.app` previews are accepted.
+
 ### PR AI Review Policy
 
 Greptile is the code-review AI for PR-level source review. It runs through the GitHub App and is accessed locally through Greptile MCP in Cursor, Codex, or Claude Code. Visual QA is separate: Playwright captures user-flow artifacts and an optional local/CI agent reviews the rendered experience for product and design issues.
