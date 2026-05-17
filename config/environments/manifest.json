@@ -36,6 +36,8 @@
     { "name": "E2E_AUTH_EMAIL", "kind": "secret", "platforms": ["github", "vercel"], "environments": ["preview", "staging"] },
     { "name": "E2E_AUTH_PASSWORD", "kind": "secret", "platforms": ["github", "vercel"], "environments": ["preview", "staging"] },
     { "name": "AI_QA_PROVIDER", "kind": "public", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "VISUAL_QA_ALLOWED_HOSTS", "kind": "public", "platforms": ["github"], "environments": ["preview", "staging"] },
+    { "name": "VISUAL_QA_ALLOWED_HOST_SUFFIXES", "kind": "public", "platforms": ["github"], "environments": ["preview", "staging"] },
     { "name": "ANTHROPIC_API_KEY", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging"] },
     { "name": "OPENAI_API_KEY", "kind": "secret", "platforms": ["github"], "environments": ["preview", "staging"] }
   ]

@@ -21,6 +21,8 @@ on:
 
 permissions:
   contents: read
+  checks: read
+  statuses: read
 
 concurrency:
   group: visual-qa-${{ github.event.pull_request.number || github.run_id }}
@@ -41,19 +43,22 @@ jobs:
           Secret-bearing Visual QA is intentionally not executed in `pull_request`,
           because that would run PR-controlled code with preview, auth, and agent
           credentials. After the Vercel preview is ready, run this workflow manually
-          with `workflow_dispatch` and provide `preview_url`.
+          from `dev` or `main` with `workflow_dispatch` and provide `preview_url`.
           SUMMARY
 
   visual-qa:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.ref_name == 'dev' || github.ref_name == 'main') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      checks: read
+      statuses: read
     # Secrets are only available on the manual maintainer-dispatched job.
     environment: preview
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -83,15 +88,18 @@ jobs:
 
           sha="$WORKFLOW_SHA"
           if [[ -n "$INPUT_SHA" ]]; then
+            if [[ ! "$INPUT_SHA" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+              echo "Invalid sha input. Expected a git SHA." >&2
+              exit 1
+            fi
             sha="$INPUT_SHA"
           fi
 
           echo "app=$SELECTED_APP" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "preview_url=$INPUT_PREVIEW_URL" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Vercel preview
-        if: ${{ steps.qa-inputs.outputs.preview_url == '' }}
+        if: ${{ github.event.inputs.preview_url == '' }}
         run: |
           set -euo pipefail
           check_name="${VERCEL_PREVIEW_CHECK_NAME:-Vercel}"
@@ -103,7 +111,7 @@ jobs:
 
       - name: Resolve preview URL
         id: preview
-        if: ${{ steps.qa-inputs.outputs.preview_url == '' }}
+        if: ${{ github.event.inputs.preview_url == '' }}
         run: |
           set -euo pipefail
           project_id="$VERCEL_PROJECT_ID_APP"
@@ -126,7 +134,8 @@ jobs:
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
-      - name: Run Playwright visual QA
+      - name: Validate preview URL
+        id: preview-url
         run: |
           set -euo pipefail
           preview_url="$INPUT_PREVIEW_URL"
@@ -137,12 +146,22 @@ jobs:
             echo "Missing preview URL for visual QA." >&2
             exit 1
           fi
-          npm run qa:run -- --app "$QA_APP" --base-url "$preview_url" --sha "$QA_SHA"
+          validated_url=$(npm run --silent ci:validate-preview-url -- --url "$preview_url")
+          echo "url=$validated_url" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_PREVIEW_URL: ${{ github.event.inputs.preview_url || '' }}
+          RESOLVED_PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          VISUAL_QA_ALLOWED_HOSTS: ${{ vars.VISUAL_QA_ALLOWED_HOSTS }}
+          VISUAL_QA_ALLOWED_HOST_SUFFIXES: ${{ vars.VISUAL_QA_ALLOWED_HOST_SUFFIXES }}
+
+      - name: Run Playwright visual QA
+        run: |
+          set -euo pipefail
+          npm run qa:run -- --app "$QA_APP" --base-url "$VALIDATED_PREVIEW_URL" --sha "$QA_SHA"
         env:
           QA_APP: ${{ steps.qa-inputs.outputs.app }}
           QA_SHA: ${{ steps.qa-inputs.outputs.sha }}
-          INPUT_PREVIEW_URL: ${{ steps.qa-inputs.outputs.preview_url }}
-          RESOLVED_PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          VALIDATED_PREVIEW_URL: ${{ steps.preview-url.outputs.url }}
           E2E_AUTH_EMAIL: ${{ secrets.E2E_AUTH_EMAIL }}
           E2E_AUTH_PASSWORD: ${{ secrets.E2E_AUTH_PASSWORD }}
 

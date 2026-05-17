@@ -2,9 +2,9 @@
 
 ## Active Work
 
-- CI/CD AI review and visual QA workflow implementation.
+- CI/CD AI review and visual QA workflow implementation is complete on `codex/ai-review-visual-qa-cicd` and in closeout review.
 - Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
-- Next: implement MCP config, env manifest, visual QA scripts, and GitHub workflows in separate reviewed commits.
+- Next: configure external GitHub/Vercel/Supabase/Greptile secrets and run hosted workflow verification after the PR is opened.
 
 ## Prior/Archived Context
 

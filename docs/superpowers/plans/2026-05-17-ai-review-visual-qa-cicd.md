@@ -1085,10 +1085,14 @@ Task 8 code quality fix:
 - Agent review remains optional, but fallback JSON now distinguishes unconfigured runs from configured review failures. Configured agent failures continue to artifact upload and PR feedback with a failure summary instead of silently reporting "not configured."
 - Verification requested for this fix: Ruby YAML parse, workflow line inspection for `preview_url`, `sha`, configurable Vercel check name, and fallback review JSON status, plus `git diff --check`.
 
-Final hardening note: the maintainer-dispatched secret job does not inspect
-`github.event.pull_request` context or run Supabase PR-diff waits. Schema-changing
-PRs should wait for Supabase/Vercel preview readiness externally, then dispatch
-Visual QA with the ready `preview_url`.
+Final hardening note: the maintainer-dispatched secret job runs only when the
+workflow is dispatched from trusted `dev` or `main`, checks out that trusted ref,
+and does not inspect `github.event.pull_request` context or run Supabase PR-diff
+waits. Schema-changing PRs should wait for Supabase/Vercel preview readiness
+externally, then dispatch Visual QA from `dev` or `main` with the ready
+`preview_url`. The preview URL must be HTTPS and match
+`VISUAL_QA_ALLOWED_HOSTS`, `VISUAL_QA_ALLOWED_HOST_SUFFIXES`, or the default
+`*.vercel.app` suffix before E2E credentials are used.
 
 - [x] **Step 3: Commit**
 
