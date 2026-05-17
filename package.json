@@ -18,7 +18,9 @@
     "env:sync:vercel": "node scripts/ci/sync_vercel_env.mjs",
     "env:sync:github": "node scripts/ci/sync_github_env.mjs",
     "env:sync:supabase": "node scripts/ci/sync_supabase_branch_secrets.mjs",
-    "env:sync:dry-run": "npm run env:sync:vercel -- --dry-run"
+    "env:sync:dry-run": "npm run env:sync:vercel -- --dry-run",
+    "ci:wait-check": "node scripts/ci/wait_for_github_check.mjs",
+    "ci:find-preview": "node scripts/ci/find_vercel_deployment.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

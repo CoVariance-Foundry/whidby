@@ -569,7 +569,7 @@ git commit -m "chore: add environment sync dry runs"
 - Modify: `package.json`
 - Test: `node scripts/ci/find_vercel_deployment.mjs --dry-run --sha abc123`
 
-- [ ] **Step 1: Create `scripts/ci/wait_for_github_check.mjs`**
+- [x] **Step 1: Create `scripts/ci/wait_for_github_check.mjs`**
 
 Behavior:
 
@@ -578,7 +578,7 @@ Behavior:
 - Poll GitHub Checks API until success, failure, cancelled, or timeout.
 - Exit non-zero on failure or timeout.
 
-- [ ] **Step 2: Create `scripts/ci/find_vercel_deployment.mjs`**
+- [x] **Step 2: Create `scripts/ci/find_vercel_deployment.mjs`**
 
 Behavior:
 
@@ -588,7 +588,7 @@ Behavior:
 - Print a single HTTPS preview URL.
 - In `--dry-run`, print `https://example-preview.vercel.app`.
 
-- [ ] **Step 3: Add package scripts**
+- [x] **Step 3: Add package scripts**
 
 Modify `package.json`:
 
@@ -597,7 +597,7 @@ Modify `package.json`:
 "ci:find-preview": "node scripts/ci/find_vercel_deployment.mjs"
 ```
 
-- [ ] **Step 4: Verify dry-run**
+- [x] **Step 4: Verify dry-run**
 
 Run:
 
@@ -611,7 +611,28 @@ Expected:
 https://example-preview.vercel.app
 ```
 
-- [ ] **Step 5: Commit**
+Verification results:
+
+- `node scripts/ci/find_vercel_deployment.mjs --dry-run --sha abc123` passed and printed exactly `https://example-preview.vercel.app`.
+- `node scripts/ci/wait_for_github_check.mjs --dry-run --repo owner/name --sha abc123 --check-name Vercel` passed and printed a dry-run wait message.
+- `node --check scripts/ci/find_vercel_deployment.mjs` passed.
+- `node --check scripts/ci/wait_for_github_check.mjs` passed.
+- `git diff --check` passed.
+
+Spec review fix:
+
+- `find_vercel_deployment.mjs` now only selects deployments whose `meta.githubCommitSha` exactly equals the requested `--sha`; deployments missing SHA metadata are skipped and do not print unrelated URLs.
+- Mocked no-network verification passed: a deployment with missing `githubCommitSha` was skipped in favor of a matching SHA deployment, and a payload containing only a no-SHA deployment exited non-zero with `No Vercel deployment found for commit abc123`.
+- Re-ran `node scripts/ci/find_vercel_deployment.mjs --dry-run --sha abc123`, `node --check scripts/ci/find_vercel_deployment.mjs`, mocked deployment checks, and `git diff --check`.
+
+Code quality hardening:
+
+- `find_vercel_deployment.mjs` now requires explicit `--mock` before reading `VERCEL_DEPLOYMENTS_MOCK_JSON`; a mock env var without `--mock` exits non-zero with a clear message. Dry-run still prints exactly `https://example-preview.vercel.app`.
+- `find_vercel_deployment.mjs` selects only deployments with exact SHA match, `READY` state, and explicit preview target/environment metadata; missing target metadata, `ERROR`, `CANCELED`, `BUILDING`, `QUEUED`, missing-state, and non-preview payloads fail without printing a URL.
+- `find_vercel_deployment.mjs` and `wait_for_github_check.mjs` both accept `--request-timeout-ms <positive integer>` and use `AbortController` to fail bounded fetches clearly.
+- Re-ran dry-run, mocked ready preview with explicit metadata, mocked missing target metadata, mocked production/non-preview, GitHub dry-run with request timeout, `node --check` for both scripts, and `git diff --check`.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/ci/find_vercel_deployment.mjs scripts/ci/wait_for_github_check.mjs package.json
