@@ -39,7 +39,61 @@ Status: closeout review.
 
 Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
 
-Next: merge after Greptile follow-up fixes land and hosted checks pass; then dispatch Visual QA from `dev` or `main` with `preview_url` and `pr_number`.
+Next: dispatch Visual QA from `dev` or `main` with `preview_url` and `pr_number` when a trusted preview is ready.
+
+## Account and Billing Settings
+
+Status: implementation merged into local `dev`; awaiting final integrated verification.
+
+Completed:
+
+- Added protected `/settings` and `/settings/password` consumer settings screens.
+- Routed billing checkout, portal return URLs, plan actions, invoices, payment methods, and cancellation entry points through the settings surface.
+- Added account summary loading, fresh-report usage display, sidebar account entry, and password reset completion controls.
+- Preserved canonical `free` / `plus` / `pro` plan behavior and existing Stripe Checkout/Portal boundaries.
+
+## Explore Cities Refactor
+
+Status: implementation complete locally; staging/live rollout still requires migration, materialized-view refresh, and data readiness audit.
+
+Current plan: `docs/superpowers/plans/2026-05-17-explore-cities-refactor.md`.
+Linear: `WHI-1` Refactor Explore Cities into city-first market discovery surface.
+
+Product direction: keep `/explore` city-first like the UX prototype, add service-selected comparison for city-service metrics, and keep Strategies as guided ranking lenses over the same market-cell read model. Density and growth remain service-aware metrics; do not present them as unlabelled city-only facts.
+
+Completed:
+
+- Updated canonical docs for the Explore vs. Strategies responsibility split, the `ExploreMarketCell` derived read model, service-aware metric lineage, backend filtering/pagination, and growth-unavailable behavior.
+- Added `supabase/migrations/020_explore_market_cells.sql` as a derived materialized read model over `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, `public.metro_score_v2`, `public.metro_scores`, reports, and refresh targets.
+- Added `src/clients/explore_repository.py` and wired `ExploreCityService` to backend list/detail reads with cursor pagination, service filters, sort mapping, representative-service defaults, V2-over-legacy score preference, freshness fields, density, growth, and `growth_available`.
+- Added FastAPI `GET /api/explore/cities` and `GET /api/explore/cities/{cbsa_code}` plus bounded Next proxy routes under `apps/app/src/app/api/explore/cities`.
+- Replaced the app Explore loader's direct Supabase stitching/top-100 React filtering with backend-backed query loading from URL search params.
+- Refactored the Explore UI to city-first prototype copy/labels, URL-driven filters/sorts, growth-disabled/cleared state, representative metric lineage, and stale-refresh guards during URL transitions.
+- Updated the city drawer and fresh-scan flow so cached rows, catalog defaults, and custom services can start fresh scans through `/api/agent/scoring`; refresh remains limited to cached targets with `refresh_target_id`.
+- Extended `scripts/explore/audit_explore_sources.py` to report `explore_market_cells_count`, `market_cells_with_density`, loaded CBP years, and `growth_available`.
+- Extended `scripts/explore/backfill_cbp_establishments.py --year <year>` so 2022/2023 CBP import files can be prepared/applied independently.
+
+Verified locally:
+
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_explore_metrics.py tests/unit/test_explore_city_service.py tests/unit/test_explore_repository.py tests/unit/test_api_explore_cities.py tests/unit/test_explore_market_cells_schema.py -q` passed 43 tests with one pre-existing pytest config warning.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/scripts/test_audit_explore_sources.py tests/scripts/test_backfill_cbp_establishments.py -q` passed 20 tests with one pre-existing pytest config warning.
+- `npm --workspace apps/app test -- load-explore-data api/explore/cities explore` passed 54 tests.
+- `npx tsc --noEmit` from `apps/app` passed.
+- `npm --workspace apps/app run lint` exited 0 with two pre-existing unrelated warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- Local app server started on `http://localhost:3004`; `/explore` redirected to `/login`, so protected-page visual smoke was auth-blocked rather than compile/runtime blocked.
+
+Not verified:
+
+- `npx docguard-cli guard` could not complete in this sandbox because `npx` could not resolve `registry.npmjs.org` (`ENOTFOUND`).
+- Live Supabase migration application, `REFRESH MATERIALIZED VIEW public.explore_market_cells`, and `python scripts/explore/audit_explore_sources.py --service-role` against staging/prod.
+- Historical CBP backfill for a second year. Until at least two CBP years exist, Explore should keep `growth_available=false` and the UI should disable/clear growth-only filters.
+
+Known constraints:
+
+- Do not create duplicate `cities`, `business_patterns`, `_simplified`, or `_v2` tables; use `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, score tables, and optional read-only views only.
+- If historical CBP years are absent, return `growth_available=false` and hide/disable growth filters rather than filtering all rows out.
+- `Run report` must be available for a city even when it has no cached services; `Refresh cached score` only applies to existing cached city + service targets.
 
 ## Phase 7 Benchmark Completion
 

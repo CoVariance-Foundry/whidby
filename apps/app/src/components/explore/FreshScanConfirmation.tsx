@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type RefObject, useRef } from "react";
 import { Icon, I } from "@/lib/icons";
-import type { ExploreCachedScore } from "@/lib/explore/types";
+import type { ExploreScanTarget } from "@/lib/explore/types";
 import { useModalAccessibility } from "./useModalAccessibility";
 
 export interface FreshScanResult {
@@ -15,18 +15,18 @@ export interface FreshScanResult {
 
 interface FreshScanConfirmationProps {
   cityName: string;
-  services: ExploreCachedScore[];
+  targets: ExploreScanTarget[];
   results: FreshScanResult[];
   isOpen: boolean;
   isSubmitting: boolean;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   onCancel: () => void;
-  onConfirm: (services: ExploreCachedScore[]) => void | Promise<void>;
+  onConfirm: (targets: ExploreScanTarget[]) => void | Promise<void>;
 }
 
 export default function FreshScanConfirmation({
   cityName,
-  services,
+  targets,
   results,
   isOpen,
   isSubmitting,
@@ -108,7 +108,7 @@ export default function FreshScanConfirmation({
                 color: "var(--ink-2)",
               }}
             >
-              {cityName} · 1 fresh scan per service.
+              {cityName} · {targets.length} fresh scans selected. Uses one monthly fresh scan per selected service.
             </p>
           </div>
           <button
@@ -131,9 +131,9 @@ export default function FreshScanConfirmation({
               marginBottom: 18,
             }}
           >
-            {services.map((service) => (
+            {targets.map((target) => (
               <div
-                key={service.report_id}
+                key={target.report_id ?? `${target.source}:${target.service}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -148,7 +148,7 @@ export default function FreshScanConfirmation({
                 }}
               >
                 <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {service.service}
+                  {target.service_label}
                 </span>
                 <span
                   style={{
@@ -158,7 +158,7 @@ export default function FreshScanConfirmation({
                     flexShrink: 0,
                   }}
                 >
-                  {service.opportunity_score}
+                  {target.source === "cached" ? "cached" : "new"}
                 </span>
               </div>
             ))}
@@ -192,9 +192,9 @@ export default function FreshScanConfirmation({
                 margin: "0 0 16px",
               }}
             >
-              {results.map((result) => (
+              {results.map((result, index) => (
                 <div
-                  key={result.service}
+                  key={`${result.service}:${result.report_id ?? result.message ?? index}`}
                   role={result.status === "error" ? "alert" : "status"}
                   style={{
                     display: "grid",
@@ -255,9 +255,9 @@ export default function FreshScanConfirmation({
             <button
               type="button"
               className="btn-primary"
-              aria-label={`Confirm fresh scan for ${services.length} services`}
-              onClick={() => onConfirm(services)}
-              disabled={services.length === 0 || isSubmitting}
+              aria-label={`Confirm fresh scan for ${targets.length} services`}
+              onClick={() => onConfirm(targets)}
+              disabled={targets.length === 0 || isSubmitting}
             >
               <Icon d={I.sparkle} />
               {isSubmitting ? "Scanning..." : "Confirm scan"}

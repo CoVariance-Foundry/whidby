@@ -233,4 +233,46 @@ describe("POST /api/agent/scoring", () => {
     const sent = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string);
     expect(sent.metadata_source).toBe("mapbox_selected");
   });
+
+  it("preserves Explore fallback_cbsa scan metadata through quota-protected proxy", async () => {
+    const spy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        report_id: "r5",
+        opportunity_score: 79,
+        classification_label: "High",
+        evidence: [],
+        report: { input: { niche_keyword: "roofing" } },
+      }), { status: 200 }),
+    );
+    global.fetch = spy;
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({
+        city: "Phoenix-Mesa-Chandler",
+        service: "roofing",
+        state: "AZ",
+        metadata_source: "fallback_cbsa",
+      }),
+    });
+    const res = await POST(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.query).toMatchObject({
+      city: "Phoenix-Mesa-Chandler",
+      service: "roofing",
+      state: "AZ",
+      metadata_source: "fallback_cbsa",
+    });
+    expect(body.fallback_path).toBe("city_state");
+    const sent = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string);
+    expect(sent).toMatchObject({
+      niche: "roofing",
+      city: "Phoenix-Mesa-Chandler",
+      state: "AZ",
+      metadata_source: "fallback_cbsa",
+      owner_account_id: "33333333-3333-3333-3333-333333333333",
+      created_by_user_id: "44444444-4444-4444-4444-444444444444",
+    });
+  });
 });
