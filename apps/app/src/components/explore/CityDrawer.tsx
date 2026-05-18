@@ -20,6 +20,7 @@ interface CityDrawerProps {
   isTopLayer?: boolean;
   freshScanButtonRef?: RefObject<HTMLButtonElement | null>;
   isRefreshSubmitting?: boolean;
+  refreshDisabled?: boolean;
   selectedRefreshableCount?: number;
   onClose: () => void;
   onToggleService: (score: ExploreCachedScore) => void;
@@ -115,6 +116,7 @@ export default function CityDrawer({
   isTopLayer = true,
   freshScanButtonRef,
   isRefreshSubmitting = false,
+  refreshDisabled = false,
   selectedRefreshableCount = 0,
   onClose,
   onToggleService,
@@ -249,7 +251,11 @@ export default function CityDrawer({
                   type="button"
                   className="btn-ghost"
                   onClick={onRefreshSelected}
-                  disabled={isRefreshSubmitting || selectedRefreshableCount === 0}
+                  disabled={
+                    refreshDisabled ||
+                    isRefreshSubmitting ||
+                    selectedRefreshableCount === 0
+                  }
                 >
                   <Icon d={I.clock} />
                   Refresh selected

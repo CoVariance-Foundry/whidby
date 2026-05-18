@@ -195,6 +195,33 @@ describe("ExplorePageClient", () => {
     expect(screen.getByLabelText("Show growing markets only")).toBeDisabled();
   });
 
+  it("clears growing-only URL state when growth is unavailable", async () => {
+    navigationMock.searchParams = new URLSearchParams("growing_only=1&service=roofing");
+
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          growth_available: false,
+          cities: fixtureData.cities.map((city) => ({
+            ...city,
+            growth_available: false,
+          })),
+        }}
+      />,
+    );
+
+    const growthFilter = screen.getByLabelText("Show growing markets only");
+    expect(growthFilter).toBeDisabled();
+    expect(growthFilter).not.toBeChecked();
+    await waitFor(() =>
+      expect(navigationMock.replace).toHaveBeenCalledWith(
+        "/explore?service=roofing",
+        { scroll: false },
+      ),
+    );
+  });
+
   it("opens the city drawer with row keyboard activation", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
@@ -291,12 +318,10 @@ describe("ExplorePageClient", () => {
       ),
     );
     global.fetch = fetchMock;
+    navigationMock.searchParams = new URLSearchParams("service=roofing");
 
     render(<ExplorePageClient data={fixtureData} />);
 
-    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
-      target: { value: "roofing" },
-    });
     fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
     const drawer = screen.getByRole("dialog", { name: /austin-round rock/i });
     fireEvent.click(screen.getByLabelText("Select roofing for fresh scan"));
@@ -343,6 +368,25 @@ describe("ExplorePageClient", () => {
       "/explore?refresh_run=refresh-run-123",
     );
     expect(screen.getByText(/refresh-run-123 queued/i)).toBeTruthy();
+  });
+
+  it("disables visible refresh actions until URL-filtered data catches up", () => {
+    global.fetch = vi.fn();
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    const refreshVisibleButton = screen.getByRole("button", {
+      name: /refresh all visible/i,
+    });
+    expect(refreshVisibleButton).not.toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
+      target: { value: "roofing" },
+    });
+
+    expect(refreshVisibleButton).toBeDisabled();
+    fireEvent.click(refreshVisibleButton);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("renders successful fresh scan report links", async () => {
@@ -585,9 +629,13 @@ describe("ExplorePageClient", () => {
   it("writes demographic filters and reset actions to the URL", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
-    fireEvent.change(screen.getByLabelText("Minimum population"), {
+    const populationMin = screen.getByLabelText("Minimum population");
+    fireEvent.change(populationMin, {
       target: { value: "99999999" },
     });
+
+    expect(navigationMock.replace).not.toHaveBeenCalled();
+    fireEvent.blur(populationMin);
 
     expect(navigationMock.replace).toHaveBeenLastCalledWith(
       "/explore?population_min=99999999",

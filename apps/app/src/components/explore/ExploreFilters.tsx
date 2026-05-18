@@ -1,5 +1,6 @@
 "use client";
 
+import { type KeyboardEvent, useState } from "react";
 import { Icon, I } from "@/lib/icons";
 
 export interface ExploreFilterState {
@@ -28,6 +29,24 @@ function updateFilter(
   return { ...filters, ...patch };
 }
 
+type NumericFilterKey =
+  | "populationMin"
+  | "populationMax"
+  | "incomeMin"
+  | "incomeMax";
+
+function numericFilters(filters: ExploreFilterState): Pick<
+  ExploreFilterState,
+  NumericFilterKey
+> {
+  return {
+    populationMin: filters.populationMin,
+    populationMax: filters.populationMax,
+    incomeMin: filters.incomeMin,
+    incomeMax: filters.incomeMax,
+  };
+}
+
 export default function ExploreFilters({
   filters,
   states,
@@ -36,6 +55,29 @@ export default function ExploreFilters({
   onChange,
   onReset,
 }: ExploreFiltersProps) {
+  const [drafts, setDrafts] = useState(numericFilters(filters));
+
+  function updateDraft(key: NumericFilterKey, value: string) {
+    setDrafts((current) => ({ ...current, [key]: value }));
+  }
+
+  function commitDrafts(nextDrafts = drafts) {
+    const current = numericFilters(filters);
+    const changed = (Object.keys(nextDrafts) as NumericFilterKey[]).some(
+      (key) => nextDrafts[key] !== current[key],
+    );
+    if (changed) {
+      onChange(updateFilter(filters, nextDrafts));
+    }
+  }
+
+  function commitOnEnter(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      commitDrafts();
+      event.currentTarget.blur();
+    }
+  }
+
   function toggleState(state: string) {
     const selectedStates = filters.selectedStates.includes(state)
       ? filters.selectedStates.filter((item) => item !== state)
@@ -70,10 +112,10 @@ export default function ExploreFilters({
             <input
               aria-label="Minimum population"
               inputMode="numeric"
-              value={filters.populationMin}
-              onChange={(event) =>
-                onChange(updateFilter(filters, { populationMin: event.target.value }))
-              }
+              value={drafts.populationMin}
+              onChange={(event) => updateDraft("populationMin", event.target.value)}
+              onBlur={() => commitDrafts()}
+              onKeyDown={commitOnEnter}
               placeholder="Any"
             />
           </div>
@@ -85,10 +127,10 @@ export default function ExploreFilters({
             <input
               aria-label="Maximum population"
               inputMode="numeric"
-              value={filters.populationMax}
-              onChange={(event) =>
-                onChange(updateFilter(filters, { populationMax: event.target.value }))
-              }
+              value={drafts.populationMax}
+              onChange={(event) => updateDraft("populationMax", event.target.value)}
+              onBlur={() => commitDrafts()}
+              onKeyDown={commitOnEnter}
               placeholder="Any"
             />
           </div>
@@ -100,10 +142,10 @@ export default function ExploreFilters({
             <input
               aria-label="Minimum median household income"
               inputMode="numeric"
-              value={filters.incomeMin}
-              onChange={(event) =>
-                onChange(updateFilter(filters, { incomeMin: event.target.value }))
-              }
+              value={drafts.incomeMin}
+              onChange={(event) => updateDraft("incomeMin", event.target.value)}
+              onBlur={() => commitDrafts()}
+              onKeyDown={commitOnEnter}
               placeholder="Any"
             />
           </div>
@@ -115,10 +157,10 @@ export default function ExploreFilters({
             <input
               aria-label="Maximum median household income"
               inputMode="numeric"
-              value={filters.incomeMax}
-              onChange={(event) =>
-                onChange(updateFilter(filters, { incomeMax: event.target.value }))
-              }
+              value={drafts.incomeMax}
+              onChange={(event) => updateDraft("incomeMax", event.target.value)}
+              onBlur={() => commitDrafts()}
+              onKeyDown={commitOnEnter}
               placeholder="Any"
             />
           </div>

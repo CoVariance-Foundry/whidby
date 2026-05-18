@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type {
@@ -26,6 +26,7 @@ import RefreshRunStatus from "./RefreshRunStatus";
 
 interface ExplorePageClientProps {
   data: ExploreData;
+  dataQueryKey?: string;
   onRunFreshScan?: (
     city: ExploreCitySummary,
     services: ExploreCachedScore[],
@@ -79,6 +80,12 @@ const FILTER_QUERY_KEYS = [
 
 function enabledParam(value: string | null): boolean {
   return value === "1" || value === "true";
+}
+
+function canonicalQueryString(query: string): string {
+  const params = new URLSearchParams(query);
+  params.sort();
+  return params.toString();
 }
 
 function filtersFromSearchParams(searchParams: SearchParamsLike): ExploreFilterState {
@@ -220,12 +227,15 @@ async function runFreshScanForService(
 
 export default function ExplorePageClient({
   data,
+  dataQueryKey,
   onRunFreshScan,
 }: ExplorePageClientProps) {
   const router = useRouter();
   const pathname = usePathname() || "/explore";
   const searchParams = useSearchParams();
   const queryRef = useRef(searchParams.toString());
+  const loadedDataQueryKey = dataQueryKey ?? canonicalQueryString(searchParams.toString());
+  const [currentQueryKey, setCurrentQueryKey] = useState(loadedDataQueryKey);
   const freshScanButtonRef = useRef<HTMLButtonElement>(null);
   const freshScanRequestIdRef = useRef(0);
   const freshScanInFlightRef = useRef(false);
@@ -242,9 +252,24 @@ export default function ExplorePageClient({
     () => sortDirectionFromSearchParams(searchParams),
     [searchParams],
   );
-  const [filters, setFilters] = useState<ExploreFilterState>(urlFilters);
+  const growthAvailable =
+    data.growth_available ?? data.cities.some((city) => city.growth_available);
+  const hasUnavailableGrowthFilter =
+    !growthAvailable && enabledParam(searchParams.get("growing_only"));
+  const initialFilters = useMemo(
+    () =>
+      growthAvailable
+        ? urlFilters
+        : {
+            ...urlFilters,
+            growingOnly: false,
+          },
+    [growthAvailable, urlFilters],
+  );
+  const [filters, setFilters] = useState<ExploreFilterState>(initialFilters);
   const [sortKey, setSortKey] = useState<ExploreSortKey>(urlSortKey);
   const [sortDirection, setSortDirection] = useState<SortDirection>(urlSortDirection);
+  const [filterResetVersion, setFilterResetVersion] = useState(0);
   const [openCity, setOpenCity] = useState<ExploreCitySummary | null>(null);
   const [selectedScores, setSelectedScores] = useState<ExploreCachedScore[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -268,8 +293,6 @@ export default function ExplorePageClient({
     [data.cities],
   );
 
-  const growthAvailable =
-    data.growth_available ?? data.cities.some((city) => city.growth_available);
   const visibleCities = data.cities;
   const visibleScores = useMemo(
     () => visibleCities.flatMap((city) => city.cached_scores),
@@ -287,6 +310,19 @@ export default function ExplorePageClient({
     () => visibleScores.filter((score) => score.refresh_target_id),
     [visibleScores],
   );
+  const refreshDataCurrent =
+    currentQueryKey === loadedDataQueryKey && !hasUnavailableGrowthFilter;
+
+  useEffect(() => {
+    if (!hasUnavailableGrowthFilter) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("growing_only");
+    params.delete("cursor");
+    const query = params.toString();
+    queryRef.current = query;
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [hasUnavailableGrowthFilter, pathname, router, searchParams]);
 
   function currentParams() {
     return new URLSearchParams(queryRef.current);
@@ -295,13 +331,17 @@ export default function ExplorePageClient({
   function replaceWithParams(params: URLSearchParams) {
     const query = params.toString();
     queryRef.current = query;
+    setCurrentQueryKey(canonicalQueryString(query));
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
 
   function applyFilters(nextFilters: ExploreFilterState) {
     const nextParams = currentParams();
-    writeExploreFilters(nextParams, nextFilters);
-    setFilters(nextFilters);
+    const normalizedFilters = growthAvailable
+      ? nextFilters
+      : { ...nextFilters, growingOnly: false };
+    writeExploreFilters(nextParams, normalizedFilters);
+    setFilters(normalizedFilters);
     replaceWithParams(nextParams);
   }
 
@@ -309,6 +349,7 @@ export default function ExplorePageClient({
     const nextParams = currentParams();
     for (const key of FILTER_QUERY_KEYS) nextParams.delete(key);
     setFilters(DEFAULT_FILTERS);
+    setFilterResetVersion((version) => version + 1);
     replaceWithParams(nextParams);
   }
 
@@ -362,7 +403,7 @@ export default function ExplorePageClient({
   }
 
   async function startRefreshRun(scope: ExploreRefreshScope) {
-    if (refreshInFlightRef.current) return;
+    if (refreshInFlightRef.current || !refreshDataCurrent) return;
 
     const scores =
       scope === "selected"
@@ -538,6 +579,7 @@ export default function ExplorePageClient({
         </div>
 
         <ExploreFilters
+          key={`${filterResetVersion}:${filters.populationMin}|${filters.populationMax}|${filters.incomeMin}|${filters.incomeMax}`}
           filters={filters}
           states={states}
           services={services}
@@ -552,6 +594,7 @@ export default function ExplorePageClient({
           staleCount={staleRefreshableScores.length}
           visibleCount={visibleRefreshableScores.length}
           isSubmitting={isRefreshSubmitting}
+          disabled={!refreshDataCurrent}
           onRefreshSelected={() => void startRefreshRun("selected")}
           onRefreshStale={() => void startRefreshRun("stale")}
           onRefreshVisible={() => void startRefreshRun("visible")}
@@ -576,6 +619,7 @@ export default function ExplorePageClient({
         isTopLayer={!confirmOpen}
         freshScanButtonRef={freshScanButtonRef}
         isRefreshSubmitting={isRefreshSubmitting}
+        refreshDisabled={!refreshDataCurrent}
         selectedRefreshableCount={selectedRefreshableScores.length}
         onClose={closeDrawer}
         onToggleService={toggleService}

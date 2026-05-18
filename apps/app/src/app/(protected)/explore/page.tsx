@@ -51,7 +51,11 @@ export default async function ExplorePage({
             width: "100%",
           }}
         >
-          <ExplorePageClient key={exploreKey} data={data} />
+          <ExplorePageClient
+            key={exploreKey}
+            data={data}
+            dataQueryKey={exploreKey}
+          />
         </main>
       </div>
     </div>
