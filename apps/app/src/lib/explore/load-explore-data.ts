@@ -75,7 +75,10 @@ function getBaseUrl() {
   }
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3002";
+  if (process.env.NODE_ENV === "development") return "http://localhost:3002";
+  throw new Error(
+    "loadExploreData requires NEXT_PUBLIC_APP_FRONTEND_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL outside local development.",
+  );
 }
 
 function appendIfPresent(

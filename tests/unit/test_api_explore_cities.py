@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import src.research_agent.api as api_module
+from src.research_agent import api as api_module
 from src.research_agent.api import app
 
 
@@ -203,6 +203,10 @@ def test_get_explore_city_service_singleton_wires_supabase_repository(
         def __init__(self) -> None:
             self._client = object()
             created["client"] = self._client
+
+        @property
+        def client(self) -> object:
+            return self._client
 
     class FakeRepository:
         def __init__(self, client: Any) -> None:

@@ -80,13 +80,13 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby] recent context, 2026-05-16 5:33pm PDT
+# [whidby] recent context, 2026-05-17 8:20pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (24,294t read) | 481,897t work | 95% savings
+Stats: 50 obs (24,359t read) | 1,796,565t work | 99% savings
 
 ### Apr 26, 2026
 S188 Run pilot benchmark (scripts.benchmarks.run_pilot) against DataForSEO and Anthropic APIs for two niches across 200 metro slots (Apr 26 at 7:11 PM)
@@ -100,58 +100,59 @@ S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
 ### May 13, 2026
 S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:09 PM)
 S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:10 PM)
-278 7:19p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
-279 7:20p ✅ Explore Refresh Control — Canonical Docs Update (Task 1)
-280 7:21p ✅ Explore Refresh Control — Canonical Docs Updated (DATA-MODEL, ARCHITECTURE, TEST-SPEC)
-281 " 🔵 Explore Refresh Control Doc Verification — git diff --check Clean, docguard-cli Hung
-283 7:22p 🔵 Whidby Sandbox Blocks `ps` Command — Operation Not Permitted
-284 " 🔵 docguard-cli Never Spawned — Not Found in Process List; Only MCP Servers Running via npx
-285 " 🔵 docguard-cli Fails with ENOTFOUND — npm Registry Unreachable in Whidby Sandbox
-287 7:23p 🔵 DocGuard v0.9.11 Full Guard Run — 124/191 Passed, All HIGH Checks Clean, 97 MEDIUM Warnings
-288 7:24p 🔵 Explore Refresh Control — Task 1 Spec-Compliance Review Findings
-289 " 🔵 Explore Refresh Control — Task 1 Doc Review: Diff and Schema Cross-Check
-290 7:25p ✅ Explore Refresh Control — Task 1 Spec-Compliance Review Initiated
-291 7:26p 🔵 Explore Refresh Control — Canonical Doc Review: Version Metadata and Placeholder Audit Results
-292 " 🔵 Whidby Explore Component and Test File Inventory (as of codex/explore-refresh-control)
-293 7:27p 🔵 docguard-cli Sandbox Hang Confirmed: Process Tracker Shows Running But No OS Process Exists
-294 7:28p 🔵 Explore Refresh Control — Planned API Route and Test File Structure Confirmed
-295 7:30p ✅ Explore Refresh Control — Canonical Docs Updated (Task 1)
-296 " 🔵 Whidby Sandbox Blocks npm Registry, ps Syscall, and pgrep Without Escalation
-297 7:31p 🔵 Primary Key Naming Discrepancy Between DATA-MODEL.md and Migration SQL Plan
-298 " ✅ DATA-MODEL.md Refresh Entity Schemas Reconciled with Migration SQL Plan
-299 " ✅ TEST-SPEC.md Explore Refresh Test Obligation Expanded with Two Additional Test Files
-300 7:32p 🔵 Supabase `reports` Table Uses `id` as PK, Not `report_id` — Application Layer Translates
-301 " ✅ Explore Refresh Control Task 1 Canonical Docs — Final Verified State
-302 " ✅ Explore Refresh Control Task 1 — Canonical Docs Complete at DONE_WITH_CONCERNS
-304 7:33p 🔵 docguard-cli Exact Failure: ENOTFOUND registry.npmjs.org + npm Log Write Blocked
-305 7:34p 🔵 Explore Refresh Control — Task 1 Spec-Compliance Review Criteria Established
-306 " ⚖️ Explore Refresh Control — Task 1 Doc-Quality Review Criteria Established
-307 7:35p 🔵 Explore Refresh Control Task 1 — Spec-Compliance Review Result: PASS
-308 " 🔵 Explore Refresh Control — Canonical Docs Verified Against SQL Contract
-309 " 🔵 Explore Refresh Control — Git Diff Confirms Prior Session Fixed Stale reports.report_id PK
-310 7:37p 🔵 Explore Refresh Control — DATA-MODEL.md Task 1 Spec Compliance Verified
 ### May 15, 2026
-345 8:45p 🔵 Git Worktree Mental Model — Checkout Conflicts and Merge-Back Strategy
-346 8:46p 🔵 Git Worktree Dirty State — AGENTS.md Modified in Two Active Worktrees
-347 8:47p 🔵 Git Worktrees — User Confusion Around Checkout Locks and Merging Back to Main
-348 8:48p 🔵 niche-surface-hardening-v2 Worktree Branch Has Diverged from Remote
-349 " 🔵 Rebase Conflict in scoring/route.ts — account vs report Field in Response
-351 " 🔴 scoring/route.ts Rebase Conflict Resolved — Both account and report Fields Preserved
-352 8:49p ✅ PRs #38 and #39 Created — Account Billing and Niche Caching Branches
-353 8:50p 🔵 Git Worktree Workflow — Cannot Commit to Main Directly
 S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fetch/checkout/pull sequence (May 15 at 8:52 PM)
-354 8:55p 🔵 Explore Cities Table — Population, Income, Density, Growth Fields Missing from Data Flow
-355 8:56p 🔵 Explore Table — business_density_per_1k and establishment_growth_yoy Always Null
-356 8:57p 🔵 Supabase Environment Points to eoajvifhbmqmoluiokcj Instance in Both .env Files
-357 9:02p 🔵 Explore Cities Data Flow — Historical Context Retrieved from Memory
-358 9:05p 🔵 Whidby Repo — On Main Branch with Untracked AGENTS.md Change
-360 9:09p ⚖️ Explore Data Model Population — 8-Task Implementation Plan Written
-361 " ⚖️ Explore Data Model Fix — Working Directly on Main Branch
-362 " 🔵 Git Worktree Creation Blocked by Sandbox Permission Restriction
-363 9:10p ✅ Git Worktree Created for Explore Data Model Implementation
-364 " 🔵 Explore Worktree Has No node_modules or .venv — Dependencies Need Install
-365 9:11p 🔵 Python venv pip install -e .[dev] Fails in Worktree Due to Zsh Glob Expansion
-366 " 🔵 Sandbox Has No Network Access — pip Cannot Install Python Build Dependencies
+### May 17, 2026
+892 3:39p ✅ Lint Clean — 0 Errors, 2 Pre-existing Warnings Only
+895 3:41p 🔵 Settings Route Auth Gate Confirmed — Redirects to /login?next=/settings
+897 3:44p 🔵 Dev Server Logs — Local Login Failing with "Invalid Credentials" and Auth Rate Limit
+898 3:45p 🔵 Sandbox Network Egress Blocks Live Supabase Probe — fetch failed for All Tables
+899 " 🔵 Task 8 Documentation Review — Supabase Staging Accounts Worktree
+900 3:46p 🔵 Supabase Staging — Tables Exist but `get_account_entitlement` RPC Missing from Schema Cache
+901 " 🔵 Task 8 Documentation Review — All Four Files Approved with One Version Gap Note
+902 " 🔵 InternalUserEntitlement — Full Schema and Access Policy Now Canonical
+903 " 🔵 Staging Deployment State — Two Blockers Remain After Task 8
+904 3:48p 🔵 Migration 014 Not Applied to Staging — Billing Tables and RPCs Are Completely Absent
+905 " 🔵 Task 8 Spec Compliance Review — Supabase Staging Docs Audit Initiated
+909 3:50p 🟣 Supabase Staging Test Accounts Branch — Full Implementation Complete and Branch-Reviewed
+910 " 🔐 GitHub Staging Environment Secrets Blocked — Manual Upload Required
+917 3:52p 🟣 Migration 018 — internal_user_entitlements Schema, Admin Bootstrap RPC, and Updated Entitlement Surface
+918 " 🟣 App Entitlement Gate — fresh_report_quota_exempt Bypass Added to All Three Fresh-Report Routes
+919 " 🟣 seed_test_accounts.py — stdlib-Only Staging Account Seeder with Five Named Personas
+920 " 🟣 GitHub Actions Staging Workflows — supabase-staging.yml and supabase-seed-test-accounts.yml
+921 " 🔵 Migration 014 get_account_entitlement() Redefined in 018 — Safe Sequential Override Pattern
+922 " ✅ Canonical Docs Updated — DATA-MODEL, ENVIRONMENT, TEST-SPEC, ACTIVE_WORK, project_context All Include 018 and Staging Seeding
+926 3:55p 🔵 Accounts and Billing — Migration and Hydration Gap Investigation Initiated
+927 " 🔵 Migration 014 Confirmed Never Applied — Billing Tables Absent from Staging Supabase
+928 " 🔵 ENVIRONMENT.md Migration Table Incomplete — Migrations 006, 009–013, 016, 017 Not Listed
+929 4:31p 🔴 Explore API Sort Mapping Gap Fixed — cached_services Now Properly Routed
+930 " 🔵 Explore Sort Fix a11e938 Verified — 19 Tests Pass, Worktree Clean
+931 " 🔵 Task 5 Explore Cities Proxy — Orientation and Directory Creation
+936 4:33p 🟣 Task 5 Initiated — Explore Cities Proxy Routes and Loader Replacement
+938 4:34p 🔴 Explore Cities Route — req.nextUrl Unavailable in Vitest, Fixed with new URL(req.url).search
+939 " 🟣 Explore Cities Proxy Routes and Loader — All 11 Tests Passing, ESLint Clean
+940 " 🔴 explore/page.test.tsx — vi.mock Factory Must Explicitly Export fromSearchParams
+942 4:35p 🟣 Task 5 Initiated — Explore Cities Proxy Routes and Backend Loader Replacement
+945 " 🟣 Explore Cities Proxy Routes — Implementation Confirmed with Bounded Error Handling
+946 " 🟣 Explore Cities Loader — Supabase Removed, Backend DTO Normalization Layer Added
+947 " ✅ ExplorePageClient Test Fixtures Updated with New DTO Fields
+948 " 🔵 Task 5 Validation — TypeScript Clean, ESLint Warnings Pre-Existing, No Whitespace Errors
+950 4:36p 🟣 Task 5 Committed — Explore Cities Proxy Loader on Branch codex/whi-1-explore-cities-refactor
+953 4:37p 🔵 Task 5 Spec Compliance Review Initiated — Commit ad7463e
+954 " 🔵 Task 5 Commit ad7463e — Scope Confirmed: 10 Files, Net 700-Line Reduction
+955 " 🔵 Zsh Glob Expansion Blocks git show for [cbsaCode] Bracket Paths
+956 4:38p 🔵 Task 5 Core Deliverables Verified — All Spec Files Present and Structurally Correct
+957 " 🔵 Query Param Name Mismatch — Frontend Uses min_population/min_income, Backend Expects population_min/income_min
+958 4:39p 🔵 Task 5 Code Quality Review Initiated — Explore Cities Proxy Refactor at Commit ad7463e
+974 4:45p 🔴 Explore Cities Loader Contract Fixes — Commit 93dd683
+975 4:46p 🔵 Task 5 Re-Review APPROVED — All Four Contract Bugs Verified Fixed in Commit 93dd683
+992 4:56p 🔵 Task 6 Spec Compliance Review Initiated — Explore Cities UI Refactor at Commit f65b3f6
+996 4:57p 🔵 Explore Cities Proxy Refactor — Code Review Initiated for Commit f65b3f6
+1016 5:08p 🔵 Commit 79d8da2 Code Review Initiated — Explore Cities Refactor Branch
+1019 5:10p 🔵 Task 7 Spec Compliance Review Initiated — Explore Cities Refactor at Commit 79d8da2
+1028 5:16p 🔵 Task 8 Spec Compliance Review Initiated — Commit f44a832 in whi-1-explore-cities-refactor
+1031 " 🔵 Task 8 Spec Compliance — APPROVED with One Residual Risk at Commit f44a832
+1032 5:17p 🔵 Task 7 Final State Re-Review Initiated — Prior Findings Tracked Through Commit f64e4d1
 
-Access 482k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 1797k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

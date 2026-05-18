@@ -67,10 +67,10 @@ class SupabaseExploreRepository:
         descending = direction.lower() != "asc"
         query = query.order(order_column, desc=descending).order("cbsa_code", desc=False)
         offset = _cursor_offset(cursor)
-        if hasattr(query, "range"):
-            query = query.range(offset, offset + limit)
-        else:
-            query = query.limit(limit + 1)
+        range_query = getattr(query, "range", None)
+        if not callable(range_query):
+            raise RuntimeError("Supabase query object must support range() for pagination")
+        query = range_query(offset, offset + limit)
 
         try:
             response = query.execute()

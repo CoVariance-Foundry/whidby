@@ -91,21 +91,18 @@ describe("loadExploreData", () => {
     );
   });
 
-  it("defaults server-side fetches to the consumer app local port", async () => {
+  it("fails explicitly when no server-side app URL is configured outside development", async () => {
     delete process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
     delete process.env.NEXT_PUBLIC_APP_URL;
     delete process.env.VERCEL_URL;
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ cities: [] }), { status: 200 }),
-    );
+    const fetchMock = vi.fn();
     global.fetch = fetchMock;
 
-    await loadExploreData();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3002/api/explore/cities",
-      { cache: "no-store" },
+    await expect(loadExploreData()).rejects.toThrow(
+      "loadExploreData requires NEXT_PUBLIC_APP_FRONTEND_URL",
     );
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("maps backend rows to compatibility aliases for existing components", async () => {
@@ -197,6 +194,7 @@ describe("loadExploreData", () => {
   });
 
   it("throws an HTTP-specific error for non-ok proxy responses", async () => {
+    process.env.NEXT_PUBLIC_APP_FRONTEND_URL = "https://app.example.test";
     global.fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 502 }));
 
     await expect(loadExploreData()).rejects.toThrow(

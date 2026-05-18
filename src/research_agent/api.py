@@ -196,7 +196,7 @@ def _get_discovery_service() -> DiscoveryService:
     if _DISCOVERY_SERVICE is None:
         persistence = SupabasePersistence()
         _DISCOVERY_SERVICE = DiscoveryService(
-            market_store=StrategyRepository(persistence._client)
+            market_store=StrategyRepository(persistence.client)
         )
     return _DISCOVERY_SERVICE
 
@@ -592,7 +592,7 @@ def _get_explore_refresh_service() -> ExploreRefreshService:
     global _EXPLORE_REFRESH_SERVICE
     if _EXPLORE_REFRESH_SERVICE is None:
         persistence = SupabasePersistence()
-        store = SupabaseExploreRefreshStore(client=persistence._client)
+        store = SupabaseExploreRefreshStore(client=persistence.client)
         _EXPLORE_REFRESH_SERVICE = ExploreRefreshService(
             store=store,
             market_service=_market_service(),
@@ -604,7 +604,7 @@ def _get_explore_city_service() -> ExploreCityService:
     global _EXPLORE_CITY_SERVICE
     if _EXPLORE_CITY_SERVICE is None:
         persistence = SupabasePersistence()
-        repository = SupabaseExploreRepository(persistence._client)
+        repository = SupabaseExploreRepository(persistence.client)
         _EXPLORE_CITY_SERVICE = ExploreCityService(repository)
     return _EXPLORE_CITY_SERVICE
 
@@ -613,7 +613,7 @@ def _get_strategy_repository() -> StrategyRepository:
     global _STRATEGY_REPOSITORY
     if _STRATEGY_REPOSITORY is None:
         persistence = SupabasePersistence()
-        _STRATEGY_REPOSITORY = StrategyRepository(persistence._client)
+        _STRATEGY_REPOSITORY = StrategyRepository(persistence.client)
     return _STRATEGY_REPOSITORY
 
 

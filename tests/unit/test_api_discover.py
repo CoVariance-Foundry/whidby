@@ -77,6 +77,10 @@ def test_post_discover_uses_strategy_repository_by_default(
     class FakePersistence:
         _client = object()
 
+        @property
+        def client(self):
+            return self._client
+
     class FakeStrategyRepository:
         def __init__(self, client):
             self.client = client

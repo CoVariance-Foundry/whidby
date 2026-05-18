@@ -23,20 +23,20 @@ class ExploreCityRepository(Protocol):
     """Read boundary for Explore city summaries."""
 
     def load_metros(self) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def load_scores(self, cbsa_codes: list[str]) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def load_metric_inputs(
         self,
         cbsa_codes: list[str],
         niche_normalized: str,
     ) -> dict[str, Any]:
-        ...
+        raise NotImplementedError
 
     def load_city_detail(self, cbsa_code: str) -> dict[str, Any] | None:
-        ...
+        raise NotImplementedError
 
 
 class ExploreCityService:

@@ -193,6 +193,34 @@ def test_list_city_rows_uses_offset_cursor_for_any_sort() -> None:
     assert not any(call[:2] == ("gt", "cbsa_code") for call in calls)
 
 
+def test_list_city_rows_requires_range_pagination_support() -> None:
+    class RangeLessTable(FakeTable):
+        range = None
+
+    class RangeLessClient(FakeClient):
+        def table(self, name):
+            table = RangeLessTable(self.rows_by_table.get(name), self.errors_by_table.get(name))
+            self.tables[name] = table
+            return table
+
+    repo = SupabaseExploreRepository(RangeLessClient())
+
+    with pytest.raises(RuntimeError, match="must support range"):
+        repo.list_city_rows(
+            service=None,
+            states=[],
+            population_min=None,
+            population_max=None,
+            income_min=None,
+            income_max=None,
+            growing_only=False,
+            sort="score",
+            direction="desc",
+            limit=10,
+            cursor="10",
+        )
+
+
 def test_list_city_rows_maps_cached_services_sort() -> None:
     client = FakeClient()
     repo = SupabaseExploreRepository(client)

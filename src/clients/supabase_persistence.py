@@ -584,6 +584,10 @@ class SupabasePersistence:
             client = create_client(url, key)
         self._client = client
 
+    @property
+    def client(self) -> _SupabaseLike:
+        return self._client
+
     def persist_report(self, report: dict[str, Any]) -> str:
         report_id = report["report_id"]
         persist_start = time.monotonic()
