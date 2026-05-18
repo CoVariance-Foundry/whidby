@@ -92,7 +92,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Settings / Account & billing")).toBeInTheDocument();
     expect(screen.getByText("Settings for owner@example.com")).toBeInTheDocument();
     expect(mocks.sidebar).toHaveBeenCalledWith(
-      expect.objectContaining({ active: "settings" }),
+      expect.objectContaining({ active: "settings", planLabel: "Plus" }),
       undefined,
     );
   });

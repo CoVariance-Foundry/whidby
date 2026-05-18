@@ -6,4 +6,4 @@ name = "whidby"
 script = ""
 
 [setup.darwin]
-script = "cp /Users/antwoineflowers/Desktop/development/covariance/whidby/.env"
+script = 'if [ -n "${WHIDBY_ENV_FILE:-}" ]; then cp "$WHIDBY_ENV_FILE" .env; elif [ -f "$HOME/.config/whidby/env" ]; then cp "$HOME/.config/whidby/env" .env; fi'
