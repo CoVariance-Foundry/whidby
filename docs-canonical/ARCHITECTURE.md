@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.5.0` |
-| **Last Updated** | 2026-05-16 |
+| **Version** | `1.5.1` |
+| **Last Updated** | 2026-05-18 |
 | **Owner** | @widby-team |
 
 ---
@@ -124,7 +124,9 @@ Explore Cities is a read-optimized backend system over canonical scoring/referen
 4. `public.reports`, `public.metro_scores`, and `public.metro_score_v2` — cached report and score outputs.
 5. `public.seo_facts` and `public.seo_benchmarks` — benchmark facts and population-class benchmark cells.
 
-The backend boundary is `src/domain/explore/` for pure entities and metric formulas, `src/domain/services/explore_city_service.py` for orchestration, and a `SupabaseExploreRepository` adapter under `src/clients/`. Next.js route handlers or FastAPI endpoints call the service; React components receive already-filtered, paginated result DTOs. Domain formulas must remain fixture-testable without Supabase.
+The backend boundary is `src/domain/explore/` for pure entities and metric formulas, `src/domain/services/explore_city_service.py` for orchestration, and a `SupabaseExploreRepository` adapter under `src/clients/`. FastAPI wires repository adapters through the public `SupabasePersistence.client` accessor so persistence, Explore reads, and strategy reads share one configured Supabase client without reaching into private adapter state. Next.js route handlers or FastAPI endpoints call the service; React components receive already-filtered, paginated result DTOs. Domain formulas must remain fixture-testable without Supabase.
+
+Consumer app route handlers that proxy to FastAPI use shared upstream helpers in `apps/app/src/lib/api/upstream.ts` for request-origin resolution, bounded response reads, optional JSON parsing, and unavailable/upstream-error responses. Explore, billing checkout, billing portal, and refresh proxies should use those helpers instead of duplicating body-size and origin logic locally.
 
 Data flow:
 
@@ -389,3 +391,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.3.0 | 2026-05-14 | Explore Cities system design | Added backend-backed Explore Cities architecture, canonical source tables, server-side filtering contract, metric ownership, and run report/refresh boundaries |
 | 1.4.0 | 2026-05-14 | Explore refresh control | Documented refresh policy storage, FastAPI scoring bridge queueing, app proxy routes, and report snapshots for Explore trend analysis |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy discovery architecture, repository boundary, source tables, and consumer data flow |
+| 1.5.1 | 2026-05-18 | Adapter boundary sync | Documented shared Supabase client accessor and consumer upstream proxy helper dependency |
