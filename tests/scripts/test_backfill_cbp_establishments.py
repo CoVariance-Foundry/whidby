@@ -32,6 +32,20 @@ def test_build_cbp_payload_maps_census_fields() -> None:
     assert payload["suppressed"] is False
 
 
+def test_build_cbp_payload_allows_cli_year_override() -> None:
+    payload = build_cbp_payload(
+        {
+            "cbsa_code": "38060",
+            "naics_code": "238160",
+            "est": "123",
+        },
+        year_override=2022,
+    )
+
+    assert payload["year"] == 2022
+    assert payload["est"] == 123
+
+
 def test_build_cbp_payload_marks_suppressed_establishments() -> None:
     payload = build_cbp_payload(
         {
@@ -139,6 +153,38 @@ def test_main_defaults_to_preview_without_live_write(monkeypatch, tmp_path, caps
     assert "dry_run=true" in output
     assert "prepared_rows=1" in output
     assert "secret-service-role" not in output
+
+
+def test_main_dry_run_accepts_year_for_rows_without_year(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    input_path = tmp_path / "cbp.csv"
+    input_path.write_text(
+        "cbsa_code,naics_code,est\n38060,238160,123\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "backfill_cbp_establishments.py",
+            "--input",
+            str(input_path),
+            "--year",
+            "2022",
+            "--dry-run",
+        ],
+    )
+
+    assert backfill_cbp.main() == 0
+
+    output = capsys.readouterr().out
+    assert '"year": 2022' in output
+    assert "year=2022" in output
+    assert "prepared_rows=1" in output
 
 
 def test_main_apply_refuses_missing_env_without_live_write(

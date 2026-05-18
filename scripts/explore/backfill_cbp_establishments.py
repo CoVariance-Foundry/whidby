@@ -57,11 +57,18 @@ def _require_value(row: dict[str, Any], keys: tuple[str, ...], field: str, row_n
     return value
 
 
-def build_cbp_payload(row: dict[str, Any], *, row_number: int = 1) -> dict[str, Any]:
+def build_cbp_payload(
+    row: dict[str, Any],
+    *,
+    row_number: int = 1,
+    year_override: int | None = None,
+) -> dict[str, Any]:
     """Map an already-fetched CBP row to public.census_cbp_establishments."""
     cbsa_code = _require_value(row, ALIASES["cbsa_code"], "cbsa_code", row_number)
     naics_code = _require_value(row, ALIASES["naics_code"], "naics_code", row_number)
-    year = _require_value(row, ("year",), "year", row_number)
+    year = year_override
+    if year is None:
+        year = _require_value(row, ("year",), "year", row_number)
 
     payload: dict[str, Any] = {
         "cbsa_code": str(cbsa_code),
@@ -122,9 +129,9 @@ def postgrest_upsert(url: str, service_key: str, rows: list[dict[str, Any]]) -> 
         ) from exc
 
 
-def _build_rows(path: Path) -> list[dict[str, Any]]:
+def _build_rows(path: Path, *, year_override: int | None = None) -> list[dict[str, Any]]:
     return [
-        build_cbp_payload(row, row_number=index)
+        build_cbp_payload(row, row_number=index, year_override=year_override)
         for index, row in enumerate(load_rows(path), start=1)
     ]
 
@@ -136,6 +143,11 @@ def main() -> int:
         type=Path,
         help="Path to already-fetched CBP rows as JSON or CSV.",
     )
+    parser.add_argument(
+        "--year",
+        type=int,
+        help="CBP year to assign to every input row when source rows omit year.",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--apply", action="store_true")
@@ -146,7 +158,7 @@ def main() -> int:
         return 1
 
     try:
-        rows = _build_rows(args.input)
+        rows = _build_rows(args.input, year_override=args.year)
     except Exception as exc:  # noqa: BLE001 - CLI should fail without tracebacks.
         print(f"CBP input import failed: {type(exc).__name__}: {exc}")
         print("No live mutation ran.")
@@ -155,6 +167,8 @@ def main() -> int:
     if not args.apply:
         print(json.dumps(rows[:5], indent=2, sort_keys=True))
         print("dry_run=true")
+        if args.year is not None:
+            print(f"year={args.year}")
         print(f"prepared_rows={len(rows)}")
         return 0
 

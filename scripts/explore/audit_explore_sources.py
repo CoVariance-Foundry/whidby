@@ -18,6 +18,7 @@ REQUIRED_TABLES = (
     "reports",
     "metro_scores",
     "metro_score_v2",
+    "explore_market_cells",
     "seo_facts",
     "seo_benchmarks",
 )
@@ -84,6 +85,43 @@ def summarize_table_health(
     if error:
         summary["error"] = error
     return summary
+
+
+def summarize_explore_readiness(
+    *,
+    explore_market_cells_count: int,
+    market_cells_with_density: int,
+    cbp_years: list[int],
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    growth_available = len(cbp_years) >= 2
+    status = "pass"
+    messages: list[str] = []
+
+    if explore_market_cells_count == 0:
+        status = "fail"
+        messages.append("explore_market_cells has no rows")
+    if market_cells_with_density == 0:
+        status = "warn" if status == "pass" else status
+        messages.append("explore_market_cells has no density metrics")
+    if not growth_available:
+        status = "warn" if status == "pass" else status
+        messages.append(
+            f"growth unavailable: census_cbp_establishments has {len(cbp_years)} year loaded",
+        )
+    if errors:
+        status = "fail"
+        messages.extend(errors)
+
+    return {
+        "table": "explore_readiness",
+        "status": status,
+        "explore_market_cells_count": explore_market_cells_count,
+        "market_cells_with_density": market_cells_with_density,
+        "cbp_years": cbp_years,
+        "growth_available": growth_available,
+        "message": "; ".join(messages) if messages else "explore data ready",
+    }
 
 
 def load_env(env_path: Path | None = None) -> dict[str, str]:
@@ -207,6 +245,34 @@ def get_non_null_count(
     return _parse_count(headers), None
 
 
+def get_cbp_years(config: SupabaseConfig) -> tuple[list[int], str | None]:
+    status, _headers, body = postgrest_get(
+        config,
+        "census_cbp_establishments",
+        params={
+            "select": "year",
+            "year": "not.is.null",
+            "order": "year.asc",
+            "limit": "10000",
+        },
+    )
+    if status < 200 or status >= 300:
+        return [], _count_error("census_cbp_establishments.year", status, body)
+
+    try:
+        rows = json.loads(body)
+    except json.JSONDecodeError as exc:
+        return [], f"census_cbp_establishments.year parse failed: {exc}"
+    years = sorted(
+        {
+            int(row["year"])
+            for row in rows
+            if isinstance(row, dict) and row.get("year") is not None
+        },
+    )
+    return years, None
+
+
 def audit(config: SupabaseConfig) -> list[dict[str, Any]]:
     summaries: list[dict[str, Any]] = []
     for table in REQUIRED_TABLES:
@@ -233,6 +299,24 @@ def audit(config: SupabaseConfig) -> list[dict[str, Any]]:
                 error="; ".join(errors) if errors else None,
             ),
         )
+    market_cells_count, market_cells_error = get_count(config, "explore_market_cells")
+    market_cells_with_density, density_error = get_non_null_count(
+        config,
+        "explore_market_cells",
+        "business_density_per_1k",
+    )
+    cbp_years, years_error = get_cbp_years(config)
+    readiness_errors = [
+        item for item in (market_cells_error, density_error, years_error) if item
+    ]
+    summaries.append(
+        summarize_explore_readiness(
+            explore_market_cells_count=market_cells_count,
+            market_cells_with_density=market_cells_with_density,
+            cbp_years=cbp_years,
+            errors=readiness_errors,
+        ),
+    )
     return summaries
 
 

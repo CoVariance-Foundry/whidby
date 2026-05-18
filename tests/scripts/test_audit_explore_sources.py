@@ -1,5 +1,6 @@
 from scripts.explore.audit_explore_sources import (
     REQUIRED_TABLES,
+    summarize_explore_readiness,
     summarize_table_health,
 )
 
@@ -12,6 +13,7 @@ def test_required_tables_include_explore_sources() -> None:
         "reports",
         "metro_scores",
         "metro_score_v2",
+        "explore_market_cells",
         "seo_facts",
         "seo_benchmarks",
     )
@@ -51,3 +53,31 @@ def test_summarize_table_health_allows_optional_fields() -> None:
     assert summary["status"] == "warn"
     assert summary["missing_required_fields"] == []
     assert summary["missing_optional_fields"] == ["median_age_years"]
+
+
+def test_summarize_explore_readiness_keeps_one_year_growth_as_warning() -> None:
+    summary = summarize_explore_readiness(
+        explore_market_cells_count=120,
+        market_cells_with_density=100,
+        cbp_years=[2023],
+    )
+
+    assert summary["status"] == "warn"
+    assert summary["explore_market_cells_count"] == 120
+    assert summary["market_cells_with_density"] == 100
+    assert summary["cbp_years"] == [2023]
+    assert summary["growth_available"] is False
+    assert summary["message"] == (
+        "growth unavailable: census_cbp_establishments has 1 year loaded"
+    )
+
+
+def test_summarize_explore_readiness_passes_with_two_cbp_years() -> None:
+    summary = summarize_explore_readiness(
+        explore_market_cells_count=120,
+        market_cells_with_density=100,
+        cbp_years=[2022, 2023],
+    )
+
+    assert summary["status"] == "pass"
+    assert summary["growth_available"] is True
