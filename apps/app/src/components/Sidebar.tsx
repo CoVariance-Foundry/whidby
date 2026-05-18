@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Icon, I } from "@/lib/icons";
+import { resolveEntitlementContext } from "@/lib/account/entitlements";
+import { getPlanLabel } from "@/lib/account/summary";
 import { createClient } from "@/lib/supabase/server";
 import UserMenu from "./UserMenu";
 
-type NavId = "home" | "finder" | "explore" | "strategies" | "recs" | "reports";
+type NavId = "home" | "finder" | "explore" | "strategies" | "recs" | "reports" | "settings";
 
 const NAV: { id: NavId; label: string; d: string; href: string }[] = [
   { id: "home", label: "Home", d: I.home, href: "/" },
@@ -31,7 +33,15 @@ export default async function Sidebar({ active }: { active: NavId }) {
     user?.user_metadata?.name ??
     user?.email ??
     "User";
+  const email = user?.email ?? fullName;
   const initials = deriveInitials(fullName);
+  let plan = "Free plan";
+  try {
+    const { entitlement } = await resolveEntitlementContext(supabase);
+    plan = `${getPlanLabel(entitlement.plan_key)} plan`;
+  } catch {
+    plan = "Free plan";
+  }
 
   return (
     <aside className="sidebar">
@@ -56,10 +66,11 @@ export default async function Sidebar({ active }: { active: NavId }) {
       })}
 
       <UserMenu
-        name={fullName}
-        plan="Pro plan"
+        name={email}
+        plan={plan}
         initials={initials}
         adminUrl={adminUrl}
+        accountActive={active === "settings"}
       />
     </aside>
   );

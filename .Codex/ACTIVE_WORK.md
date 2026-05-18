@@ -2,11 +2,19 @@
 
 ## Active Work
 
-- CI/CD AI review and visual QA workflow implementation is complete on `codex/ai-review-visual-qa-cicd` and in closeout review.
-- Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
-- Next: merge after Greptile follow-up fixes land and hosted checks pass; then dispatch Visual QA from `dev` or `main` with `preview_url` and `pr_number`.
+- Account & Billing screen spec is active on `codex/accounts-and-billing`.
+- Spec: `specs/015-account-billing-screen/spec.md`
+- Next: implement the protected consumer account/settings surface from the spec, preserving the bottom-sidebar `UserMenu` account entry convention and canonical `free`/`plus`/`pro` quota rules.
 
 ## Prior/Archived Context
+
+## AI Review and Visual QA CI/CD
+
+Status: closeout review.
+
+Plan: `docs/superpowers/plans/2026-05-17-ai-review-visual-qa-cicd.md`
+
+Next: merge after Greptile follow-up fixes land and hosted checks pass; then dispatch Visual QA from `dev` or `main` with `preview_url` and `pr_number`.
 
 ## Phase 7 Benchmark Completion
 
