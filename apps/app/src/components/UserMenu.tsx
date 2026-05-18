@@ -10,9 +10,10 @@ interface Props {
   plan: string;
   initials: string;
   adminUrl: string;
+  accountActive?: boolean;
 }
 
-export default function UserMenu({ name, plan, initials, adminUrl }: Props) {
+export default function UserMenu({ name, plan, initials, adminUrl, accountActive = false }: Props) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -129,6 +130,7 @@ export default function UserMenu({ name, plan, initials, adminUrl }: Props) {
             label="Account settings"
             d={I.sliders}
             href="/settings"
+            active={accountActive}
             onClick={() => setOpen(false)}
           />
           <MenuLink
@@ -183,12 +185,14 @@ function MenuLink({
   d,
   href,
   external,
+  active,
   onClick,
 }: {
   label: string;
   d: string;
   href: string;
   external?: boolean;
+  active?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -205,7 +209,8 @@ function MenuLink({
         padding: "7px 10px",
         borderRadius: 6,
         fontSize: 12.5,
-        color: "var(--ink-2)",
+        color: active ? "var(--accent-ink)" : "var(--ink-2)",
+        background: active ? "var(--accent-soft)" : "none",
         textDecoration: "none",
         cursor: "pointer",
       }}
@@ -213,6 +218,18 @@ function MenuLink({
     >
       <Icon d={d} size={12} style={{ color: "var(--ink-3)" }} />
       <span style={{ flex: 1 }}>{label}</span>
+      {active && (
+        <span
+          aria-hidden="true"
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "var(--accent)",
+            flex: "0 0 auto",
+          }}
+        />
+      )}
       {external && (
         <Icon d={I.arrow} size={10} style={{ color: "var(--ink-3)" }} />
       )}

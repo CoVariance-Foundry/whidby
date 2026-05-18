@@ -6,6 +6,10 @@ import { getStripeClient } from "@/lib/billing/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
+function getRequestOrigin(req: NextRequest): string {
+  return req.nextUrl?.origin ?? new URL(req.url).origin;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -50,10 +54,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const origin = process.env.NEXT_PUBLIC_APP_FRONTEND_URL ?? req.nextUrl.origin;
+    const origin = process.env.NEXT_PUBLIC_APP_FRONTEND_URL ?? getRequestOrigin(req);
     const session = await getStripeClient().billingPortal.sessions.create({
       customer: data.stripe_customer_id,
-      return_url: `${origin}/reports`,
+      return_url: `${origin}/settings?billing=success`,
     });
 
     return NextResponse.json({ status: "success", url: session.url });
