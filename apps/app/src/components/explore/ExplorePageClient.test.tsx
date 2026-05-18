@@ -409,6 +409,28 @@ describe("ExplorePageClient", () => {
     });
   });
 
+  it("does not add duplicate custom services by case variant", () => {
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    const customInput = within(drawer).getByLabelText("Custom service for fresh scan");
+    const addButton = within(drawer).getByRole("button", {
+      name: "Add custom service for fresh scan",
+    });
+
+    fireEvent.change(customInput, { target: { value: "Gutter cleaning" } });
+    fireEvent.click(addButton);
+    fireEvent.change(customInput, { target: { value: "gutter cleaning" } });
+
+    expect(addButton).toBeDisabled();
+    expect(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    ).toBeTruthy();
+  });
+
   it("uses cached service labels for scan identity when niche keyword differs", async () => {
     const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(init?.body as string) as { service: string };

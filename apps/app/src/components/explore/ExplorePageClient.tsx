@@ -422,7 +422,7 @@ export default function ExplorePageClient({
   }
 
   function scanTargetKey(target: ExploreScanTarget): string {
-    return target.report_id ?? `${target.source}:${target.service}`;
+    return target.report_id ?? `${target.source}:${normalizedServiceLabel(target.service)}`;
   }
 
   function toggleTarget(target: ExploreScanTarget) {

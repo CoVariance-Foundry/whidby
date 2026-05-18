@@ -167,6 +167,9 @@ export default function CityDrawer({
   if (!city) return null;
 
   const selectedIds = new Set(selectedTargets.map((target) => scanTargetKey(target)));
+  const selectedServiceKeys = new Set(
+    selectedTargets.map((target) => normalizedService(target.service)),
+  );
   const stats = verifiedStats(city);
   const cachedServiceKeys = new Set(
     city.cached_scores.map((score) => normalizedService(score.service)),
@@ -179,7 +182,8 @@ export default function CityDrawer({
   const customServiceVisible =
     customServiceKey.length > 0 &&
     (cachedServiceKeys.has(customServiceKey) ||
-      otherServices.some((service) => normalizedService(service) === customServiceKey));
+      otherServices.some((service) => normalizedService(service) === customServiceKey) ||
+      selectedServiceKeys.has(customServiceKey));
   const canAddCustomService = customServiceValue.length >= 2 && !customServiceVisible;
 
   return (
