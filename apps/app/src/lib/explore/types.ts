@@ -30,6 +30,14 @@ export interface ExploreCachedScore {
   opportunity_delta?: number | null;
 }
 
+export interface ExploreScanTarget {
+  service: string;
+  service_label: string;
+  source: "cached" | "catalog";
+  report_id?: string;
+  refresh_target_id?: string;
+}
+
 export interface ExploreCitySummary {
   cbsa_code: string;
   cbsa_name: string;

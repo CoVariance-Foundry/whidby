@@ -261,7 +261,7 @@ describe("ExplorePageClient", () => {
     fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
 
     const closeButton = screen.getByRole("button", { name: "Close city drawer" });
-    const lastFocusable = screen.getByLabelText("Select plumbing for fresh scan");
+    const lastFocusable = screen.getByLabelText("Select Water damage for fresh scan");
 
     lastFocusable.focus();
     pressTab();
@@ -300,13 +300,61 @@ describe("ExplorePageClient", () => {
         city: "Austin-Round Rock-Georgetown",
         service: "roofing",
         state: "TX",
+        metadata_source: "fallback_cbsa",
       },
       {
         city: "Austin-Round Rock-Georgetown",
         service: "plumbing",
         state: "TX",
+        metadata_source: "fallback_cbsa",
       },
     ]);
+  });
+
+  it("scans catalog services without enabling refresh selected", async () => {
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { service: string };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "success",
+            query: body,
+            score_result: { opportunity_score: 80, classification_label: "High" },
+            report_id: `fresh-${body.service}-report`,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    global.fetch = fetchMock;
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    fireEvent.click(within(drawer).getByLabelText("Select Roofing for fresh scan"));
+
+    expect(
+      within(drawer).getByRole("button", { name: "Refresh selected" }),
+    ).toBeDisabled();
+
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /confirm fresh scan/i });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /confirm fresh scan for 1 services/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      city: "Reno",
+      service: "Roofing",
+      state: "NV",
+      metadata_source: "fallback_cbsa",
+    });
   });
 
   it("posts one selected refresh run with refreshable selected services and filters", async () => {

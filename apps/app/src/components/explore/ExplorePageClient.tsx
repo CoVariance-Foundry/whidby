@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type {
-  ExploreCachedScore,
   ExploreCitySummary,
   ExploreData,
+  ExploreScanTarget,
 } from "@/lib/explore/types";
 import type {
   ExploreRefreshRunRequest,
@@ -29,7 +29,7 @@ interface ExplorePageClientProps {
   dataQueryKey?: string;
   onRunFreshScan?: (
     city: ExploreCitySummary,
-    services: ExploreCachedScore[],
+    targets: ExploreScanTarget[],
   ) => FreshScanResult[] | void | Promise<FreshScanResult[] | void>;
 }
 
@@ -44,6 +44,14 @@ const DEFAULT_FILTERS: ExploreFilterState = {
 };
 
 const REFRESH_BATCH_CAP = 50;
+const DEFAULT_CATALOG_SERVICES = [
+  "Plumbing",
+  "HVAC",
+  "Roofing",
+  "Tree service",
+  "Pest control",
+  "Water damage",
+];
 
 function parseNumber(value: string): number | null {
   const cleaned = value.replace(/,/g, "").trim();
@@ -86,6 +94,19 @@ function canonicalQueryString(query: string): string {
   const params = new URLSearchParams(query);
   params.sort();
   return params.toString();
+}
+
+function normalizedServiceLabel(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/[_-]+/g, " ");
+}
+
+function uniqueServiceCatalog(services: string[]): string[] {
+  const byKey = new Map<string, string>();
+  [...DEFAULT_CATALOG_SERVICES, ...services].forEach((service) => {
+    const key = normalizedServiceLabel(service);
+    if (!byKey.has(key)) byKey.set(key, service);
+  });
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
 
 function filtersFromSearchParams(searchParams: SearchParamsLike): ExploreFilterState {
@@ -150,11 +171,11 @@ function serializeFilters(filters: ExploreFilterState): Record<string, unknown> 
   };
 }
 
-function uniqueTargetIds(scores: ExploreCachedScore[]): string[] {
+function uniqueTargetIds(items: Array<{ refresh_target_id?: string | null }>): string[] {
   return [
     ...new Set(
-      scores
-        .map((score) => score.refresh_target_id)
+      items
+        .map((item) => item.refresh_target_id)
         .filter((targetId): targetId is string => Boolean(targetId)),
     ),
   ];
@@ -177,11 +198,12 @@ async function readRefreshError(response: Response): Promise<string> {
 
 async function runFreshScanForService(
   city: ExploreCitySummary,
-  service: ExploreCachedScore,
+  target: ExploreScanTarget,
 ): Promise<FreshScanResult> {
   const body: Record<string, string> = {
     city: cityNameForScoring(city),
-    service: service.service,
+    service: target.service,
+    metadata_source: "fallback_cbsa",
   };
   if (city.state) {
     body.state = city.state;
@@ -203,7 +225,7 @@ async function runFreshScanForService(
 
     if (!response.ok || !json || json.status !== "success") {
       return {
-        service: service.service,
+        service: target.service_label,
         status: "error",
         message:
           json?.message ??
@@ -212,13 +234,13 @@ async function runFreshScanForService(
     }
 
     return {
-      service: service.service,
+      service: target.service_label,
       status: "success",
       report_id: json.report_id,
     };
   } catch (error) {
     return {
-      service: service.service,
+      service: target.service_label,
       status: "error",
       message: error instanceof Error ? error.message : "Failed to run fresh scan.",
     };
@@ -271,7 +293,7 @@ export default function ExplorePageClient({
   const [sortDirection, setSortDirection] = useState<SortDirection>(urlSortDirection);
   const [filterResetVersion, setFilterResetVersion] = useState(0);
   const [openCity, setOpenCity] = useState<ExploreCitySummary | null>(null);
-  const [selectedScores, setSelectedScores] = useState<ExploreCachedScore[]>([]);
+  const [selectedTargets, setSelectedTargets] = useState<ExploreScanTarget[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [freshScanResults, setFreshScanResults] = useState<FreshScanResult[]>([]);
   const [isFreshScanRunning, setIsFreshScanRunning] = useState(false);
@@ -292,6 +314,10 @@ export default function ExplorePageClient({
       ].sort((a, b) => a.localeCompare(b)),
     [data.cities],
   );
+  const catalogServices = useMemo(
+    () => uniqueServiceCatalog(services),
+    [services],
+  );
 
   const visibleCities = data.cities;
   const visibleScores = useMemo(
@@ -299,8 +325,11 @@ export default function ExplorePageClient({
     [visibleCities],
   );
   const selectedRefreshableScores = useMemo(
-    () => selectedScores.filter((score) => score.refresh_target_id),
-    [selectedScores],
+    () =>
+      selectedTargets.filter(
+        (target) => target.source === "cached" && target.refresh_target_id,
+      ),
+    [selectedTargets],
   );
   const staleRefreshableScores = useMemo(
     () => visibleScores.filter((score) => score.is_stale && score.refresh_target_id),
@@ -381,24 +410,29 @@ export default function ExplorePageClient({
   function openDrawer(city: ExploreCitySummary) {
     invalidateFreshScanRequest();
     setOpenCity(city);
-    setSelectedScores([]);
+    setSelectedTargets([]);
     setConfirmOpen(false);
   }
 
   function closeDrawer() {
     invalidateFreshScanRequest();
     setOpenCity(null);
-    setSelectedScores([]);
+    setSelectedTargets([]);
     setConfirmOpen(false);
   }
 
-  function toggleService(score: ExploreCachedScore) {
+  function scanTargetKey(target: ExploreScanTarget): string {
+    return target.report_id ?? `${target.source}:${target.service}`;
+  }
+
+  function toggleTarget(target: ExploreScanTarget) {
     setFreshScanResults([]);
-    setSelectedScores((current) => {
-      if (current.some((item) => item.report_id === score.report_id)) {
-        return current.filter((item) => item.report_id !== score.report_id);
+    setSelectedTargets((current) => {
+      const key = scanTargetKey(target);
+      if (current.some((item) => scanTargetKey(item) === key)) {
+        return current.filter((item) => scanTargetKey(item) !== key);
       }
-      return [...current, score];
+      return [...current, target];
     });
   }
 
@@ -465,8 +499,8 @@ export default function ExplorePageClient({
     setConfirmOpen(false);
   }
 
-  async function confirmFreshScan(servicesToScan: ExploreCachedScore[]) {
-    if (!openCity || freshScanInFlightRef.current || servicesToScan.length === 0) {
+  async function confirmFreshScan(targetsToScan: ExploreScanTarget[]) {
+    if (!openCity || freshScanInFlightRef.current || targetsToScan.length === 0) {
       return;
     }
 
@@ -481,9 +515,9 @@ export default function ExplorePageClient({
 
     try {
       const results = onRunFreshScan
-        ? await onRunFreshScan(cityToScan, servicesToScan)
+        ? await onRunFreshScan(cityToScan, targetsToScan)
         : await Promise.all(
-            servicesToScan.map((service) => runFreshScanForService(cityToScan, service)),
+            targetsToScan.map((target) => runFreshScanForService(cityToScan, target)),
           );
       if (isCurrentRequest()) {
         setFreshScanResults(results ?? []);
@@ -492,8 +526,8 @@ export default function ExplorePageClient({
       const message = error instanceof Error ? error.message : "Failed to run fresh scan.";
       if (isCurrentRequest()) {
         setFreshScanResults(
-          servicesToScan.map((service) => ({
-            service: service.service,
+          targetsToScan.map((target) => ({
+            service: target.service_label,
             status: "error",
             message,
           })),
@@ -615,21 +649,22 @@ export default function ExplorePageClient({
 
       <CityDrawer
         city={openCity}
-        selectedServices={selectedScores}
+        catalogServices={catalogServices}
+        selectedTargets={selectedTargets}
         isTopLayer={!confirmOpen}
         freshScanButtonRef={freshScanButtonRef}
         isRefreshSubmitting={isRefreshSubmitting}
         refreshDisabled={!refreshDataCurrent}
         selectedRefreshableCount={selectedRefreshableScores.length}
         onClose={closeDrawer}
-        onToggleService={toggleService}
+        onToggleTarget={toggleTarget}
         onOpenConfirmation={openFreshScanConfirmation}
         onRefreshSelected={() => void startRefreshRun("selected")}
       />
 
       <FreshScanConfirmation
         cityName={openCity?.cbsa_name ?? ""}
-        services={selectedScores}
+        targets={selectedTargets}
         results={freshScanResults}
         isOpen={confirmOpen}
         isSubmitting={isFreshScanRunning}
