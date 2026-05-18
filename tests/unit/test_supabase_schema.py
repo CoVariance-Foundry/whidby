@@ -27,6 +27,8 @@ class TestMigrationFiles:
             "016_consumer_onboarding.sql",
             "017_strategy_discovery_system.sql",
             "018_internal_user_entitlements.sql",
+            "019_explore_refresh_grants.sql",
+            "020_explore_market_cells.sql",
         ]
         for name in expected:
             path = MIGRATIONS_DIR / name

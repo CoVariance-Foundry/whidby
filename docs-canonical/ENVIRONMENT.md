@@ -300,6 +300,8 @@ Run in order from `supabase/migrations/`:
 | 016 | `016_consumer_onboarding.sql` | Consumer onboarding profiles, target selection state, and onboarding lifecycle support. |
 | 017 | `017_strategy_discovery_system.sql` | Strategy discovery system tables, cached strategy data, and protected discovery runtime support. |
 | 018 | `018_internal_user_entitlements.sql` | Internal user entitlement overrides for curated accounts and quota exemptions. |
+| 019 | `019_explore_refresh_grants.sql` | Forward-only Data API grants for environments that applied refresh control before explicit grants were added. |
+| 020 | `020_explore_market_cells.sql` | Derived Explore market-cell materialized read model for city-first discovery. |
 
 ## Revision History
 
