@@ -46,7 +46,7 @@
 
 ### Database read model
 
-- Create: `supabase/migrations/018_explore_market_cells.sql`
+- Create: `supabase/migrations/020_explore_market_cells.sql`
   - Derived materialized view or refreshable table named `public.explore_market_cells`.
   - Index by `(niche_normalized, cbsa_code)`, `(cbsa_code)`, `presentation_score DESC`, and `latest_scored_at DESC`.
   - RLS or view exposure must allow authenticated read and service-role refresh.
@@ -194,7 +194,7 @@ git commit -m "docs: define explore cities refactor contract"
 ### Task 2: Add The Derived Explore Market-Cell Schema
 
 **Files:**
-- Create: `supabase/migrations/018_explore_market_cells.sql`
+- Create: `supabase/migrations/020_explore_market_cells.sql`
 - Create: `tests/unit/test_explore_market_cells_schema.py`
 
 - [ ] **Step 1: Write schema structure tests**
@@ -205,7 +205,7 @@ Create `tests/unit/test_explore_market_cells_schema.py`:
 from pathlib import Path
 
 
-MIGRATION = Path("supabase/migrations/018_explore_market_cells.sql")
+MIGRATION = Path("supabase/migrations/020_explore_market_cells.sql")
 
 
 def _sql() -> str:
@@ -261,11 +261,11 @@ Run:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_explore_market_cells_schema.py -q
 ```
 
-Expected: fail because `supabase/migrations/018_explore_market_cells.sql` does not exist.
+Expected: fail because `supabase/migrations/020_explore_market_cells.sql` does not exist.
 
 - [ ] **Step 3: Add the migration**
 
-Create `supabase/migrations/018_explore_market_cells.sql` with these concrete requirements:
+Create `supabase/migrations/020_explore_market_cells.sql` with these concrete requirements:
 
 ```sql
 -- Derived Explore read model. Source tables remain canonical.
@@ -486,7 +486,7 @@ Expected: pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/018_explore_market_cells.sql tests/unit/test_explore_market_cells_schema.py
+git add supabase/migrations/020_explore_market_cells.sql tests/unit/test_explore_market_cells_schema.py
 git commit -m "feat: add explore market cell read model"
 ```
 
@@ -1186,7 +1186,7 @@ git commit -m "docs: close out explore cities refactor"
 
 ## Rollout Notes
 
-- Apply migration `018_explore_market_cells.sql` to staging first.
+- Apply migration `020_explore_market_cells.sql` to staging first.
 - Refresh `public.explore_market_cells` after hydration:
 
 ```sql

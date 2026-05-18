@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-MIGRATION = Path("supabase/migrations/018_explore_market_cells.sql")
+MIGRATION = Path("supabase/migrations/020_explore_market_cells.sql")
 
 
 def _sql() -> str:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 MIGRATION = Path("supabase/migrations/015_explore_refresh_control.sql")
+GRANTS_MIGRATION = Path("supabase/migrations/019_explore_refresh_grants.sql")
 
 
 def _migration_sql() -> str:
@@ -57,3 +58,13 @@ def test_refresh_schema_has_explicit_data_api_grants() -> None:
 
     assert "GRANT SELECT ON public.explore_refresh_targets TO authenticated" in sql
     assert "GRANT ALL ON TABLE public.explore_refresh_targets TO service_role" in sql
+
+
+def test_refresh_grants_migration_is_forward_only_and_idempotent() -> None:
+    assert GRANTS_MIGRATION.exists(), f"Missing migration: {GRANTS_MIGRATION}"
+    sql = GRANTS_MIGRATION.read_text()
+
+    assert "to_regclass('public.explore_refresh_targets')" in sql
+    assert "GRANT SELECT ON TABLE public.explore_refresh_targets TO authenticated" in sql
+    assert "GRANT ALL ON TABLE public.explore_refresh_targets TO service_role" in sql
+    assert "GRANT SELECT ON TABLE public.explore_target_trends TO authenticated" in sql
