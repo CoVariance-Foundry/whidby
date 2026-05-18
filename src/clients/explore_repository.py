@@ -141,7 +141,14 @@ def _cursor_offset(cursor: str | None) -> int:
 
 
 def _has_cached_service(row: dict[str, Any]) -> bool:
-    return bool(row.get("niche_normalized"))
+    return bool(
+        row.get("niche_normalized")
+        and (
+            row.get("report_id")
+            or row.get("presentation_score") is not None
+            or row.get("latest_scored_at")
+        )
+    )
 
 
 def _cached_score(row: dict[str, Any]) -> dict[str, Any]:

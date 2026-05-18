@@ -235,7 +235,7 @@ Fresh scoring requests must persist generated reports as `account`; existing own
 
 ### Internal User Entitlements
 
-Internal report-generation overrides are user-scoped, not paid-plan state. `internal_user_entitlements.fresh_report_quota_exempt = true` lets trusted admin/test users generate fresh reports without consuming monthly quota while their account can remain on `free`. The entitlement is folded into `get_account_entitlement()` as `fresh_report_quota_exempt` and is enforced by app-layer fresh-report gates before quota checks.
+Internal report-generation overrides are user-scoped, not paid-plan state. `internal_user_entitlements.fresh_report_quota_exempt = true` lets trusted admin/test users generate fresh reports without consuming monthly quota while their account can remain on `free`. The entitlement is folded into `get_account_entitlement()` as `fresh_report_quota_exempt` and is enforced by app-layer fresh-report gates before quota checks. The same entitlement RPC also exposes `subscriptions.cancel_at_period_end` so UI can distinguish active paid plans from paid plans scheduled to end at the current period boundary without locally mutating Stripe state.
 
 Only `service_role` can manage `internal_user_entitlements` or call `ensure_account_for_user_admin(...)`. Do not expose this table or admin bootstrap RPC to `anon` or regular `authenticated` clients. Optional `expires_at` limits the exemption lifetime; `null` means no automatic expiry.
 

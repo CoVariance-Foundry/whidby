@@ -22,7 +22,7 @@ export default async function SettingsPage() {
   if (summary) {
     return (
       <div className="app">
-        <Sidebar active="settings" />
+        <Sidebar active="settings" planLabel={summary.plan_label} />
         <div className="main">
           <Topbar crumbs={["Settings", "Account & billing"]} />
           <main className="page" style={{ maxWidth: 1120, margin: "0 auto", width: "100%" }}>

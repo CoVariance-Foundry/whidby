@@ -22,7 +22,13 @@ function deriveInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-export default async function Sidebar({ active }: { active: NavId }) {
+export default async function Sidebar({
+  active,
+  planLabel,
+}: {
+  active: NavId;
+  planLabel?: string;
+}) {
   const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3001";
 
   const supabase = await createClient();
@@ -35,12 +41,14 @@ export default async function Sidebar({ active }: { active: NavId }) {
     "User";
   const email = user?.email ?? fullName;
   const initials = deriveInitials(fullName);
-  let plan = "Free plan";
-  try {
-    const { entitlement } = await resolveEntitlementContext(supabase);
-    plan = `${getPlanLabel(entitlement.plan_key)} plan`;
-  } catch {
-    plan = "Free plan";
+  let plan = planLabel ? `${planLabel} plan` : "Free plan";
+  if (!planLabel) {
+    try {
+      const { entitlement } = await resolveEntitlementContext(supabase);
+      plan = `${getPlanLabel(entitlement.plan_key)} plan`;
+    } catch {
+      plan = "Free plan";
+    }
   }
 
   return (

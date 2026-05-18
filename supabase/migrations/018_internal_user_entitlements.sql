@@ -134,6 +134,7 @@ RETURNS TABLE (
     plan_key TEXT,
     monthly_report_limit INT,
     subscription_status TEXT,
+    cancel_at_period_end BOOLEAN,
     current_period_start TIMESTAMPTZ,
     current_period_end TIMESTAMPTZ,
     fresh_report_quota_exempt BOOLEAN
@@ -157,6 +158,7 @@ BEGIN
         END AS plan_key,
         pc.monthly_report_limit,
         COALESCE(s.status, 'active') AS subscription_status,
+        COALESCE(s.cancel_at_period_end, false) AS cancel_at_period_end,
         COALESCE(s.current_period_start, date_trunc('month', now())) AS current_period_start,
         COALESCE(s.current_period_end, date_trunc('month', now()) + interval '1 month') AS current_period_end,
         COALESCE(iue.fresh_report_quota_exempt, false) AS fresh_report_quota_exempt

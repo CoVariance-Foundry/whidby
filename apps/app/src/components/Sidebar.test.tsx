@@ -120,4 +120,13 @@ describe("Sidebar", () => {
     expect(account.getAttribute("href")).toBe("/settings");
     expect(account).toHaveStyle({ background: "var(--accent-soft)" });
   });
+
+  it("uses a supplied plan label without resolving entitlement again", async () => {
+    mockSupabaseUser("owner@example.com");
+
+    render(await Sidebar({ active: "settings", planLabel: "Pro" }));
+
+    expect(resolveEntitlementContext).not.toHaveBeenCalled();
+    expect(screen.getByText("Pro plan")).toBeInTheDocument();
+  });
 });

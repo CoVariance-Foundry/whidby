@@ -48,7 +48,7 @@ Status: implementation merged into local `dev`; awaiting final integrated verifi
 Completed:
 
 - Added protected `/settings` and `/settings/password` consumer settings screens.
-- Routed billing checkout, portal return URLs, plan actions, invoices, payment methods, and cancellation entry points through the settings surface.
+- Routed billing checkout, portal return URLs, plan actions, invoices, payment methods, cancellation entry points, and scheduled-cancellation display through the settings surface.
 - Added account summary loading, fresh-report usage display, sidebar account entry, and password reset completion controls.
 - Preserved canonical `free` / `plus` / `pro` plan behavior and existing Stripe Checkout/Portal boundaries.
 

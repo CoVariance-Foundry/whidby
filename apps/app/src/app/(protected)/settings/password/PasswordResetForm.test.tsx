@@ -5,6 +5,7 @@ import PasswordResetForm from "./PasswordResetForm";
 import { createClient } from "@/lib/supabase/client";
 
 const mocks = vi.hoisted(() => ({
+  routerPush: vi.fn(),
   updateUser: vi.fn(),
 }));
 
@@ -28,6 +29,12 @@ vi.mock("@/lib/supabase/client", () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: mocks.routerPush,
+  }),
+}));
+
 beforeEach(() => {
   mocks.updateUser.mockResolvedValue({ error: null });
   vi.mocked(createClient).mockReturnValue({
@@ -43,7 +50,7 @@ afterEach(() => {
 });
 
 describe("PasswordResetForm", () => {
-  it("updates the password when both fields are valid and matching", async () => {
+  it("updates the password and redirects back to account settings", async () => {
     render(<PasswordResetForm />);
 
     fireEvent.change(screen.getByLabelText(/new password/i), {
@@ -57,6 +64,6 @@ describe("PasswordResetForm", () => {
     await waitFor(() => {
       expect(mocks.updateUser).toHaveBeenCalledWith({ password: "CorrectHorse1" });
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Password updated.");
+    expect(mocks.routerPush).toHaveBeenCalledWith("/settings?password=updated");
   });
 });

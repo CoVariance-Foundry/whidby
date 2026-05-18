@@ -324,6 +324,8 @@ class TestInternalUserEntitlementsSchema:
             normalized_sql
         )
         assert "fresh_report_quota_exempt BOOLEAN" in normalized_sql
+        assert "cancel_at_period_end BOOLEAN" in normalized_sql
+        assert "COALESCE(s.cancel_at_period_end, false)" in normalized_sql
         assert "public.internal_user_entitlements iue" in normalized_sql
         assert "COALESCE(iue.fresh_report_quota_exempt, false)" in normalized_sql
         assert (

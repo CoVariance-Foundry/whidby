@@ -3,9 +3,11 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function PasswordResetForm() {
+  const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export default function PasswordResetForm() {
         setMessage(error.message);
         return;
       }
-      setMessage("Password updated.");
+      router.push("/settings?password=updated");
     } catch {
       setMessage("Password could not be updated.");
     } finally {

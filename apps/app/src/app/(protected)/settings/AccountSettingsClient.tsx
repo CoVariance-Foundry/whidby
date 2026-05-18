@@ -56,6 +56,16 @@ function usageTone(summary: AccountSummary): "ok" | "warn" | "over" {
   return "ok";
 }
 
+function planStatusCopy(summary: AccountSummary): string {
+  if (summary.plan_key === "free") {
+    return "Cached market intelligence is available. Fresh reports require Plus or Pro.";
+  }
+  if (summary.cancel_at_period_end) {
+    return `${formatMoney(summary.monthly_price_cents)}/mo. Cancels at period end; access continues through ${formatDate(summary.current_period_end)}.`;
+  }
+  return `${formatMoney(summary.monthly_price_cents)}/mo. Status: ${summary.subscription_status}.`;
+}
+
 interface Props {
   summary: AccountSummary;
 }
@@ -183,9 +193,7 @@ export default function AccountSettingsClient({ summary }: Props) {
           <div className="kicker">Current plan</div>
           <h2 className="settings-plan-title">{summary.plan_label}</h2>
           <p className="settings-muted">
-            {summary.plan_key === "free"
-              ? "Cached market intelligence is available. Fresh reports require Plus or Pro."
-              : `${formatMoney(summary.monthly_price_cents)}/mo. Status: ${summary.subscription_status}.`}
+            {planStatusCopy(summary)}
           </p>
           <div className="settings-meta-grid">
             <div>
@@ -321,10 +329,13 @@ export default function AccountSettingsClient({ summary }: Props) {
       {summary.plan_key !== "free" && (
         <section className="settings-danger">
           <div>
-            <strong>Cancel subscription</strong>
+            <strong>
+              {summary.cancel_at_period_end ? "Subscription scheduled to cancel" : "Cancel subscription"}
+            </strong>
             <p>
-              Stripe will manage cancellation timing. Your reports remain available through
-              the account boundary.
+              {summary.cancel_at_period_end
+                ? `Access continues through ${formatDate(summary.current_period_end)}. Stripe manages changes to this schedule.`
+                : "Stripe will manage cancellation timing. Your reports remain available through the account boundary."}
             </p>
           </div>
           <button
@@ -333,7 +344,7 @@ export default function AccountSettingsClient({ summary }: Props) {
             disabled={busyAction === "portal-cancel" || !summary.billing_management_available}
             onClick={() => openPortal("cancel")}
           >
-            Cancel in Stripe
+            {summary.cancel_at_period_end ? "Manage in Stripe" : "Cancel in Stripe"}
           </button>
         </section>
       )}

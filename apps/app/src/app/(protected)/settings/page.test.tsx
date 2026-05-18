@@ -59,6 +59,7 @@ beforeEach(() => {
       plan_key: "plus",
       monthly_report_limit: 10,
       subscription_status: "active",
+      cancel_at_period_end: false,
       current_period_start: "2026-05-01T00:00:00.000Z",
       current_period_end: "2026-06-01T00:00:00.000Z",
     },
@@ -73,6 +74,7 @@ beforeEach(() => {
     fresh_reports_used: 4,
     fresh_reports_remaining: 6,
     subscription_status: "active",
+    cancel_at_period_end: false,
     current_period_start: "2026-05-01T00:00:00.000Z",
     current_period_end: "2026-06-01T00:00:00.000Z",
     stripe_customer_exists: true,
@@ -92,7 +94,7 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Settings / Account & billing")).toBeInTheDocument();
     expect(screen.getByText("Settings for owner@example.com")).toBeInTheDocument();
     expect(mocks.sidebar).toHaveBeenCalledWith(
-      expect.objectContaining({ active: "settings" }),
+      expect.objectContaining({ active: "settings", planLabel: "Plus" }),
       undefined,
     );
   });
