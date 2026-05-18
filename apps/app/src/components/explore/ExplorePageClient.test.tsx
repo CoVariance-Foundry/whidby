@@ -261,7 +261,7 @@ describe("ExplorePageClient", () => {
     fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
 
     const closeButton = screen.getByRole("button", { name: "Close city drawer" });
-    const lastFocusable = screen.getByLabelText("Select Water damage for fresh scan");
+    const lastFocusable = screen.getByLabelText("Custom service for fresh scan");
 
     lastFocusable.focus();
     pressTab();
@@ -292,6 +292,9 @@ describe("ExplorePageClient", () => {
     render(<ExplorePageClient data={fixtureData} />);
     const dialog = openAustinFreshScan(["roofing", "plumbing"]);
 
+    expect(
+      within(dialog).getByText(/uses one monthly fresh scan per selected service/i),
+    ).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: /confirm fresh scan for 2 services/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -355,6 +358,120 @@ describe("ExplorePageClient", () => {
       state: "NV",
       metadata_source: "fallback_cbsa",
     });
+  });
+
+  it("scans custom services without cached rows", async () => {
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { service: string };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "success",
+            query: body,
+            score_result: { opportunity_score: 80, classification_label: "High" },
+            report_id: `fresh-${body.service}-report`,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    global.fetch = fetchMock;
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    fireEvent.change(within(drawer).getByLabelText("Custom service for fresh scan"), {
+      target: { value: "Gutter cleaning" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: "Add custom service for fresh scan",
+      }),
+    );
+
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /confirm fresh scan/i });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /confirm fresh scan for 1 services/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      city: "Reno",
+      service: "Gutter cleaning",
+      state: "NV",
+      metadata_source: "fallback_cbsa",
+    });
+  });
+
+  it("uses cached service labels for scan identity when niche keyword differs", async () => {
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { service: string };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "success",
+            query: body,
+            score_result: { opportunity_score: 80, classification_label: "High" },
+            report_id: `fresh-${body.service}-report`,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    global.fetch = fetchMock;
+
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          cities: [
+            {
+              ...fixtureData.cities[2],
+              cached_scores: [
+                {
+                  report_id: "reno-roofing-contractors",
+                  service: "Roofing",
+                  niche_normalized: "roofing",
+                  niche_keyword: "roofing contractors",
+                  opportunity_score: 70,
+                  archetype_id: "FRAG_WEAK",
+                  archetype_label: "Fragmented, weak",
+                  last_scored_at: "2026-05-03T12:00:00Z",
+                  refresh_target_id: "target-reno-roofing",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    expect(within(drawer).queryByLabelText("Select Roofing for fresh scan")).toBeTruthy();
+    expect(within(drawer).queryAllByLabelText("Select Roofing for fresh scan")).toHaveLength(1);
+    fireEvent.click(within(drawer).getByLabelText("Select Roofing for fresh scan"));
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /confirm fresh scan/i });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /confirm fresh scan for 1 services/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).service).toBe(
+      "roofing",
+    );
   });
 
   it("posts one selected refresh run with refreshable selected services and filters", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { type RefObject, useRef } from "react";
+import { type RefObject, useState, useRef } from "react";
 import { Icon, I } from "@/lib/icons";
 import type {
   ExploreCachedScore,
@@ -120,10 +120,9 @@ function normalizedService(value: string): string {
 }
 
 function cachedScanTarget(score: ExploreCachedScore): ExploreScanTarget {
-  const label = score.niche_keyword ?? score.service;
   return {
-    service: label,
-    service_label: label,
+    service: score.niche_normalized ?? score.service,
+    service_label: score.service,
     source: "cached",
     report_id: score.report_id,
     refresh_target_id: score.refresh_target_id,
@@ -157,6 +156,7 @@ export default function CityDrawer({
   onRefreshSelected,
 }: CityDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [customService, setCustomService] = useState("");
   useModalAccessibility({
     isOpen: city !== null,
     isTopLayer,
@@ -169,13 +169,18 @@ export default function CityDrawer({
   const selectedIds = new Set(selectedTargets.map((target) => scanTargetKey(target)));
   const stats = verifiedStats(city);
   const cachedServiceKeys = new Set(
-    city.cached_scores.map((score) =>
-      normalizedService(score.niche_keyword ?? score.service),
-    ),
+    city.cached_scores.map((score) => normalizedService(score.service)),
   );
   const otherServices = catalogServices.filter(
     (service) => !cachedServiceKeys.has(normalizedService(service)),
   );
+  const customServiceValue = customService.trim();
+  const customServiceKey = normalizedService(customServiceValue);
+  const customServiceVisible =
+    customServiceKey.length > 0 &&
+    (cachedServiceKeys.has(customServiceKey) ||
+      otherServices.some((service) => normalizedService(service) === customServiceKey));
+  const canAddCustomService = customServiceValue.length >= 2 && !customServiceVisible;
 
   return (
     <div
@@ -366,25 +371,25 @@ export default function CityDrawer({
               </div>
             )}
 
-            {otherServices.length > 0 && (
-              <div
+            <div
+              style={{
+                marginTop: 18,
+                paddingTop: 16,
+                borderTop: "1px solid var(--rule)",
+              }}
+            >
+              <h4
                 style={{
-                  marginTop: 18,
-                  paddingTop: 16,
-                  borderTop: "1px solid var(--rule)",
+                  margin: "0 0 10px",
+                  fontFamily: "var(--sans)",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--ink)",
                 }}
               >
-                <h4
-                  style={{
-                    margin: "0 0 10px",
-                    fontFamily: "var(--sans)",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: "var(--ink)",
-                  }}
-                >
-                  Other services
-                </h4>
+                Other services
+              </h4>
+              {otherServices.length > 0 && (
                 <div
                   role="list"
                   aria-label="Other services"
@@ -430,8 +435,40 @@ export default function CityDrawer({
                     );
                   })}
                 </div>
+              )}
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "stretch",
+                }}
+              >
+                <div className="input-wrap" style={{ flex: 1 }}>
+                  <Icon d={I.plus} />
+                  <input
+                    aria-label="Custom service for fresh scan"
+                    value={customService}
+                    onChange={(event) => setCustomService(event.target.value)}
+                    placeholder="Custom service"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  aria-label="Add custom service for fresh scan"
+                  disabled={!canAddCustomService}
+                  onClick={() => {
+                    if (!canAddCustomService) return;
+                    onToggleTarget(catalogScanTarget(customServiceValue));
+                    setCustomService("");
+                  }}
+                >
+                  <Icon d={I.plus} />
+                  Add
+                </button>
               </div>
-            )}
+            </div>
           </section>
         </div>
       </aside>

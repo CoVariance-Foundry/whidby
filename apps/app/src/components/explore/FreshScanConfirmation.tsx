@@ -108,7 +108,7 @@ export default function FreshScanConfirmation({
                 color: "var(--ink-2)",
               }}
             >
-              {cityName} · {targets.length} fresh scans selected.
+              {cityName} · {targets.length} fresh scans selected. Uses one monthly fresh scan per selected service.
             </p>
           </div>
           <button
@@ -192,9 +192,9 @@ export default function FreshScanConfirmation({
                 margin: "0 0 16px",
               }}
             >
-              {results.map((result) => (
+              {results.map((result, index) => (
                 <div
-                  key={result.service}
+                  key={`${result.service}:${result.report_id ?? result.message ?? index}`}
                   role={result.status === "error" ? "alert" : "status"}
                   style={{
                     display: "grid",
