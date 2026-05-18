@@ -4,12 +4,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExploreData } from "@/lib/explore/types";
 import ExplorePageClient from "./ExplorePageClient";
 
+const navigationMock = vi.hoisted(() => ({
+  replace: vi.fn(),
+  searchParams: new URLSearchParams(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/explore",
+  useRouter: () => ({ replace: navigationMock.replace }),
+  useSearchParams: () => navigationMock.searchParams,
+}));
+
 const originalFetch = global.fetch;
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   global.fetch = originalFetch;
+  navigationMock.replace.mockClear();
+  navigationMock.searchParams = new URLSearchParams();
 });
 
 const fixtureData: ExploreData = {
@@ -25,6 +38,10 @@ const fixtureData: ExploreData = {
       median_age_years: 35.8,
       business_density_per_1k: 41.2,
       establishment_growth_yoy: 4.4,
+      growth_available: true,
+      score_system: "v2",
+      best_score: 82,
+      presentation_score: 82,
       cached_services_count: 2,
       best_opportunity_score: 82,
       average_opportunity_score: 75,
@@ -69,6 +86,10 @@ const fixtureData: ExploreData = {
       median_age_years: 37.4,
       business_density_per_1k: 34.1,
       establishment_growth_yoy: 1.2,
+      growth_available: true,
+      score_system: "v2",
+      best_score: 91,
+      presentation_score: 91,
       cached_services_count: 1,
       best_opportunity_score: 91,
       average_opportunity_score: 91,
@@ -100,6 +121,10 @@ const fixtureData: ExploreData = {
       median_age_years: null,
       business_density_per_1k: null,
       establishment_growth_yoy: null,
+      growth_available: false,
+      score_system: "none",
+      best_score: null,
+      presentation_score: null,
       cached_services_count: 0,
       best_opportunity_score: null,
       average_opportunity_score: null,
@@ -128,24 +153,73 @@ function pressTab(shiftKey = false) {
 }
 
 describe("ExplorePageClient", () => {
-  it("filters by service and sorts city rows", () => {
+  it("writes service filters and sort changes to the URL", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
-    expect(cityRows()[0].textContent).toContain("Phoenix-Mesa-Chandler");
+    expect(cityRows()[0].textContent).toContain("Austin-Round Rock");
 
     fireEvent.change(screen.getByLabelText("Filter by cached service"), {
       target: { value: "plumbing" },
     });
-    expect(screen.getByRole("row", { name: /open austin/i })).toBeTruthy();
-    expect(screen.queryByRole("row", { name: /open phoenix/i })).toBeNull();
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?service=plumbing",
+      { scroll: false },
+    );
 
-    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
-      target: { value: "" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Sort by Population" }));
-    expect(cityRows()[0].textContent).toContain("Phoenix-Mesa-Chandler");
-    fireEvent.click(screen.getByRole("button", { name: "Sort by Population" }));
-    expect(cityRows()[0].textContent).toContain("Reno");
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Pop." }));
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?service=plumbing&sort=population&direction=desc",
+      { scroll: false },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Pop." }));
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?service=plumbing&sort=population&direction=asc",
+      { scroll: false },
+    );
+  });
+
+  it("disables the growing-only filter when growth is unavailable", () => {
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          growth_available: false,
+          cities: fixtureData.cities.map((city) => ({
+            ...city,
+            growth_available: false,
+          })),
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Show growing markets only")).toBeDisabled();
+  });
+
+  it("clears growing-only URL state when growth is unavailable", async () => {
+    navigationMock.searchParams = new URLSearchParams("growing_only=1&service=roofing");
+
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          growth_available: false,
+          cities: fixtureData.cities.map((city) => ({
+            ...city,
+            growth_available: false,
+          })),
+        }}
+      />,
+    );
+
+    const growthFilter = screen.getByLabelText("Show growing markets only");
+    expect(growthFilter).toBeDisabled();
+    expect(growthFilter).not.toBeChecked();
+    await waitFor(() =>
+      expect(navigationMock.replace).toHaveBeenCalledWith(
+        "/explore?service=roofing",
+        { scroll: false },
+      ),
+    );
   });
 
   it("opens the city drawer with row keyboard activation", () => {
@@ -187,7 +261,7 @@ describe("ExplorePageClient", () => {
     fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
 
     const closeButton = screen.getByRole("button", { name: "Close city drawer" });
-    const lastFocusable = screen.getByLabelText("Select plumbing for fresh scan");
+    const lastFocusable = screen.getByLabelText("Custom service for fresh scan");
 
     lastFocusable.focus();
     pressTab();
@@ -218,6 +292,9 @@ describe("ExplorePageClient", () => {
     render(<ExplorePageClient data={fixtureData} />);
     const dialog = openAustinFreshScan(["roofing", "plumbing"]);
 
+    expect(
+      within(dialog).getByText(/uses one monthly fresh scan per selected service/i),
+    ).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: /confirm fresh scan for 2 services/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -226,13 +303,197 @@ describe("ExplorePageClient", () => {
         city: "Austin-Round Rock-Georgetown",
         service: "roofing",
         state: "TX",
+        metadata_source: "fallback_cbsa",
       },
       {
         city: "Austin-Round Rock-Georgetown",
         service: "plumbing",
         state: "TX",
+        metadata_source: "fallback_cbsa",
       },
     ]);
+  });
+
+  it("scans catalog services without enabling refresh selected", async () => {
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { service: string };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "success",
+            query: body,
+            score_result: { opportunity_score: 80, classification_label: "High" },
+            report_id: `fresh-${body.service}-report`,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    global.fetch = fetchMock;
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    fireEvent.click(within(drawer).getByLabelText("Select Roofing for fresh scan"));
+
+    expect(
+      within(drawer).getByRole("button", { name: "Refresh selected" }),
+    ).toBeDisabled();
+
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /confirm fresh scan/i });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /confirm fresh scan for 1 services/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      city: "Reno",
+      service: "Roofing",
+      state: "NV",
+      metadata_source: "fallback_cbsa",
+    });
+  });
+
+  it("scans custom services without cached rows", async () => {
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { service: string };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "success",
+            query: body,
+            score_result: { opportunity_score: 80, classification_label: "High" },
+            report_id: `fresh-${body.service}-report`,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    global.fetch = fetchMock;
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    fireEvent.change(within(drawer).getByLabelText("Custom service for fresh scan"), {
+      target: { value: "Gutter cleaning" },
+    });
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: "Add custom service for fresh scan",
+      }),
+    );
+
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /confirm fresh scan/i });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /confirm fresh scan for 1 services/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      city: "Reno",
+      service: "Gutter cleaning",
+      state: "NV",
+      metadata_source: "fallback_cbsa",
+    });
+  });
+
+  it("does not add duplicate custom services by case variant", () => {
+    render(<ExplorePageClient data={fixtureData} />);
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    const customInput = within(drawer).getByLabelText("Custom service for fresh scan");
+    const addButton = within(drawer).getByRole("button", {
+      name: "Add custom service for fresh scan",
+    });
+
+    fireEvent.change(customInput, { target: { value: "Gutter cleaning" } });
+    fireEvent.click(addButton);
+    fireEvent.change(customInput, { target: { value: "gutter cleaning" } });
+
+    expect(addButton).toBeDisabled();
+    expect(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("uses cached service labels for scan identity when niche keyword differs", async () => {
+    const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { service: string };
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "success",
+            query: body,
+            score_result: { opportunity_score: 80, classification_label: "High" },
+            report_id: `fresh-${body.service}-report`,
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    global.fetch = fetchMock;
+
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          cities: [
+            {
+              ...fixtureData.cities[2],
+              cached_scores: [
+                {
+                  report_id: "reno-roofing-contractors",
+                  service: "Roofing",
+                  niche_normalized: "roofing",
+                  niche_keyword: "roofing contractors",
+                  opportunity_score: 70,
+                  archetype_id: "FRAG_WEAK",
+                  archetype_label: "Fragmented, weak",
+                  last_scored_at: "2026-05-03T12:00:00Z",
+                  refresh_target_id: "target-reno-roofing",
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /open reno/i }));
+    const drawer = screen.getByRole("dialog", { name: /reno/i });
+    expect(within(drawer).queryByLabelText("Select Roofing for fresh scan")).toBeTruthy();
+    expect(within(drawer).queryAllByLabelText("Select Roofing for fresh scan")).toHaveLength(1);
+    fireEvent.click(within(drawer).getByLabelText("Select Roofing for fresh scan"));
+    fireEvent.click(
+      within(drawer).getByRole("button", {
+        name: /open fresh scan confirmation for 1 selected services/i,
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /confirm fresh scan/i });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /confirm fresh scan for 1 services/i }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).service).toBe(
+      "roofing",
+    );
   });
 
   it("posts one selected refresh run with refreshable selected services and filters", async () => {
@@ -244,12 +505,10 @@ describe("ExplorePageClient", () => {
       ),
     );
     global.fetch = fetchMock;
+    navigationMock.searchParams = new URLSearchParams("service=roofing");
 
     render(<ExplorePageClient data={fixtureData} />);
 
-    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
-      target: { value: "roofing" },
-    });
     fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
     const drawer = screen.getByRole("dialog", { name: /austin-round rock/i });
     fireEvent.click(screen.getByLabelText("Select roofing for fresh scan"));
@@ -296,6 +555,25 @@ describe("ExplorePageClient", () => {
       "/explore?refresh_run=refresh-run-123",
     );
     expect(screen.getByText(/refresh-run-123 queued/i)).toBeTruthy();
+  });
+
+  it("disables visible refresh actions until URL-filtered data catches up", () => {
+    global.fetch = vi.fn();
+
+    render(<ExplorePageClient data={fixtureData} />);
+
+    const refreshVisibleButton = screen.getByRole("button", {
+      name: /refresh all visible/i,
+    });
+    expect(refreshVisibleButton).not.toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Filter by cached service"), {
+      target: { value: "roofing" },
+    });
+
+    expect(refreshVisibleButton).toBeDisabled();
+    fireEvent.click(refreshVisibleButton);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("renders successful fresh scan report links", async () => {
@@ -535,17 +813,25 @@ describe("ExplorePageClient", () => {
     expect(document.activeElement).toBe(closeButton);
   });
 
-  it("shows empty state and reset restores results", () => {
+  it("writes demographic filters and reset actions to the URL", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
-    fireEvent.change(screen.getByLabelText("Minimum population"), {
+    const populationMin = screen.getByLabelText("Minimum population");
+    fireEvent.change(populationMin, {
       target: { value: "99999999" },
     });
 
-    expect(screen.getByText(/no cities match/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+    expect(navigationMock.replace).not.toHaveBeenCalled();
+    fireEvent.blur(populationMin);
 
-    expect(screen.getByRole("row", { name: /open phoenix/i })).toBeTruthy();
-    expect(screen.getByRole("row", { name: /open austin/i })).toBeTruthy();
+    expect(navigationMock.replace).toHaveBeenLastCalledWith(
+      "/explore?population_min=99999999",
+      { scroll: false },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset explore filters" }));
+
+    expect(navigationMock.replace).toHaveBeenLastCalledWith("/explore", {
+      scroll: false,
+    });
   });
 });

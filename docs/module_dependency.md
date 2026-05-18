@@ -70,6 +70,30 @@ M3 (LLM Client) ─────────────────→ │  RA-4
 
 See `docs/research_agent_design.md` for full architecture, loop semantics, and tool contracts.
 
+## Consumer / FastAPI Adapter Layer
+
+```
+apps/app route handlers ──→ apps/app/src/lib/api/upstream.ts ──→ Render FastAPI
+                                   │
+                                   ├──→ /api/explore/cities*
+                                   ├──→ /api/explore/refresh/*
+                                   ├──→ /api/billing/checkout
+                                   └──→ /api/billing/portal
+
+src/research_agent/api.py ──→ SupabasePersistence.client
+                                   │
+                                   ├──→ SupabaseExploreRepository
+                                   ├──→ StrategyRepository
+                                   └──→ SupabaseMarketStore
+```
+
+| Module | Depends On | Depended On By |
+|--------|-----------|----------------|
+| Upstream proxy helpers (`apps/app/src/lib/api/upstream.ts`) | Next.js request/response primitives | Consumer Explore, billing, and refresh route handlers |
+| Supabase persistence client accessor (`src/clients/supabase_persistence.py`) | Configured Supabase client | FastAPI repository adapters for persistence, Explore reads, and strategy reads |
+
+The consumer helpers own request-origin resolution, bounded upstream response reads, optional JSON parsing, and unavailable/upstream-error responses. FastAPI adapters must use the public persistence client accessor instead of reaching into private adapter state when sharing the configured Supabase client.
+
 ## Recipe / Report Subsystem
 
 ```

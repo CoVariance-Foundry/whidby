@@ -9,6 +9,7 @@ interface RefreshControlPanelProps {
   staleCount: number;
   visibleCount: number;
   isSubmitting: boolean;
+  disabled?: boolean;
   onRefreshSelected: () => void;
   onRefreshStale: () => void;
   onRefreshVisible: () => void;
@@ -21,6 +22,7 @@ export default function RefreshControlPanel({
   staleCount,
   visibleCount,
   isSubmitting,
+  disabled = false,
   onRefreshSelected,
   onRefreshStale,
   onRefreshVisible,
@@ -68,7 +70,7 @@ export default function RefreshControlPanel({
           type="button"
           className="btn-primary"
           onClick={onRefreshSelected}
-          disabled={isSubmitting || selectedCount === 0}
+          disabled={disabled || isSubmitting || selectedCount === 0}
         >
           <Icon d={I.clock} />
           Refresh selected
@@ -77,7 +79,7 @@ export default function RefreshControlPanel({
           type="button"
           className="btn-ghost"
           onClick={onRefreshStale}
-          disabled={isSubmitting || staleCount === 0}
+          disabled={disabled || isSubmitting || staleCount === 0}
         >
           <Icon d={I.clock} />
           Refresh stale ({staleCount})
@@ -86,7 +88,7 @@ export default function RefreshControlPanel({
           type="button"
           className="btn-ghost"
           onClick={onRefreshVisible}
-          disabled={isSubmitting || visibleCount === 0}
+          disabled={disabled || isSubmitting || visibleCount === 0}
         >
           <Icon d={I.list} />
           Refresh all visible

@@ -7,7 +7,9 @@ export interface AccountEntitlement {
   member_role: string;
   plan_key: PlanKey;
   monthly_report_limit: number;
+  fresh_report_quota_exempt: boolean;
   subscription_status: string;
+  cancel_at_period_end: boolean;
   current_period_start: string;
   current_period_end: string;
 }
@@ -54,7 +56,9 @@ export async function resolveEntitlementContext(
       member_role: String(row.member_role ?? "owner"),
       plan_key: normalizePlanKey(row.plan_key),
       monthly_report_limit: Number(row.monthly_report_limit ?? 0),
+      fresh_report_quota_exempt: row.fresh_report_quota_exempt === true,
       subscription_status: String(row.subscription_status ?? "active"),
+      cancel_at_period_end: row.cancel_at_period_end === true,
       current_period_start: String(row.current_period_start ?? ""),
       current_period_end: String(row.current_period_end ?? ""),
     },

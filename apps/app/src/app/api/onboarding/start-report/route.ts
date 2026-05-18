@@ -198,7 +198,10 @@ export async function POST(req: NextRequest) {
       return cachedRouteResponse(target);
     }
 
-    if (entitlement.monthly_report_limit <= 0) {
+    if (
+      !entitlement.fresh_report_quota_exempt &&
+      entitlement.monthly_report_limit <= 0
+    ) {
       await updateProfileStatus(supabase, profile.id, "upgrade_required", "/onboarding");
       return NextResponse.json(
         {

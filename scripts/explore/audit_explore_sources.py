@@ -18,6 +18,7 @@ REQUIRED_TABLES = (
     "reports",
     "metro_scores",
     "metro_score_v2",
+    "explore_market_cells",
     "seo_facts",
     "seo_benchmarks",
 )
@@ -36,6 +37,8 @@ OPTIONAL_NON_NULL_FIELDS = {
         "median_age_years",
     ),
 }
+
+CBP_YEAR_CANDIDATES = tuple(range(2010, 2031))
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,43 @@ def summarize_table_health(
     if error:
         summary["error"] = error
     return summary
+
+
+def summarize_explore_readiness(
+    *,
+    explore_market_cells_count: int,
+    market_cells_with_density: int,
+    cbp_years: list[int],
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    growth_available = len(cbp_years) >= 2
+    status = "pass"
+    messages: list[str] = []
+
+    if explore_market_cells_count == 0:
+        status = "fail"
+        messages.append("explore_market_cells has no rows")
+    if market_cells_with_density == 0:
+        status = "warn" if status == "pass" else status
+        messages.append("explore_market_cells has no density metrics")
+    if not growth_available:
+        status = "warn" if status == "pass" else status
+        messages.append(
+            f"growth unavailable: census_cbp_establishments has {len(cbp_years)} year loaded",
+        )
+    if errors:
+        status = "fail"
+        messages.extend(errors)
+
+    return {
+        "table": "explore_readiness",
+        "status": status,
+        "explore_market_cells_count": explore_market_cells_count,
+        "market_cells_with_density": market_cells_with_density,
+        "cbp_years": cbp_years,
+        "growth_available": growth_available,
+        "message": "; ".join(messages) if messages else "explore data ready",
+    }
 
 
 def load_env(env_path: Path | None = None) -> dict[str, str]:
@@ -175,11 +215,20 @@ def _count_error(table: str, status: int, body: str) -> str:
     return f"{table} count request failed with HTTP {status}: {body}"
 
 
-def get_count(config: SupabaseConfig, table: str) -> tuple[int, str | None]:
+def get_count(
+    config: SupabaseConfig,
+    table: str,
+    params: dict[str, str] | None = None,
+) -> tuple[int, str | None]:
+    query_params = {
+        "select": "*",
+        "limit": "1",
+    }
+    query_params.update(params or {})
     status, headers, body = postgrest_get(
         config,
         table,
-        params={"select": "*", "limit": "1"},
+        params=query_params,
         headers={"Prefer": "count=exact", "Range": "0-0"},
     )
     if status < 200 or status >= 300:
@@ -205,6 +254,22 @@ def get_non_null_count(
     if status < 200 or status >= 300:
         return 0, _count_error(f"{table}.{field}", status, body)
     return _parse_count(headers), None
+
+
+def get_cbp_years(config: SupabaseConfig) -> tuple[list[int], str | None]:
+    years: list[int] = []
+    errors: list[str] = []
+    for year in CBP_YEAR_CANDIDATES:
+        count, error = get_count(
+            config,
+            "census_cbp_establishments",
+            params={"year": f"eq.{year}"},
+        )
+        if error:
+            errors.append(error)
+        elif count > 0:
+            years.append(year)
+    return years, "; ".join(errors) if errors else None
 
 
 def audit(config: SupabaseConfig) -> list[dict[str, Any]]:
@@ -233,6 +298,24 @@ def audit(config: SupabaseConfig) -> list[dict[str, Any]]:
                 error="; ".join(errors) if errors else None,
             ),
         )
+    market_cells_count, market_cells_error = get_count(config, "explore_market_cells")
+    market_cells_with_density, density_error = get_non_null_count(
+        config,
+        "explore_market_cells",
+        "business_density_per_1k",
+    )
+    cbp_years, years_error = get_cbp_years(config)
+    readiness_errors = [
+        item for item in (market_cells_error, density_error, years_error) if item
+    ]
+    summaries.append(
+        summarize_explore_readiness(
+            explore_market_cells_count=market_cells_count,
+            market_cells_with_density=market_cells_with_density,
+            cbp_years=cbp_years,
+            errors=readiness_errors,
+        ),
+    )
     return summaries
 
 

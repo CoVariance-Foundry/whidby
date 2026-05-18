@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type {
-  ExploreCachedScore,
   ExploreCitySummary,
   ExploreData,
+  ExploreScanTarget,
 } from "@/lib/explore/types";
 import type {
   ExploreRefreshRunRequest,
@@ -25,9 +26,10 @@ import RefreshRunStatus from "./RefreshRunStatus";
 
 interface ExplorePageClientProps {
   data: ExploreData;
+  dataQueryKey?: string;
   onRunFreshScan?: (
     city: ExploreCitySummary,
-    services: ExploreCachedScore[],
+    targets: ExploreScanTarget[],
   ) => FreshScanResult[] | void | Promise<FreshScanResult[] | void>;
 }
 
@@ -42,85 +44,20 @@ const DEFAULT_FILTERS: ExploreFilterState = {
 };
 
 const REFRESH_BATCH_CAP = 50;
-
-const NUMERIC_SORTS: Record<ExploreSortKey, (city: ExploreCitySummary) => number | null> = {
-  city: () => null,
-  population: (city) => city.population,
-  income: (city) => city.median_household_income_usd,
-  business_density: (city) => city.business_density_per_1k,
-  growth: (city) => city.establishment_growth_yoy,
-  cached_services: (city) => city.cached_services_count,
-  best_opportunity: (city) => city.best_opportunity_score,
-};
+const DEFAULT_CATALOG_SERVICES = [
+  "Plumbing",
+  "HVAC",
+  "Roofing",
+  "Tree service",
+  "Pest control",
+  "Water damage",
+];
 
 function parseNumber(value: string): number | null {
   const cleaned = value.replace(/,/g, "").trim();
   if (!cleaned) return null;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function passesRange(value: number | null, min: number | null, max: number | null): boolean {
-  if (min == null && max == null) return true;
-  if (value == null) return false;
-  if (min != null && value < min) return false;
-  if (max != null && value > max) return false;
-  return true;
-}
-
-function sortCities(
-  cities: ExploreCitySummary[],
-  sortKey: ExploreSortKey,
-  direction: SortDirection,
-): ExploreCitySummary[] {
-  const multiplier = direction === "asc" ? 1 : -1;
-  return [...cities].sort((a, b) => {
-    if (sortKey === "city") {
-      return a.cbsa_name.localeCompare(b.cbsa_name) * multiplier;
-    }
-
-    const getter = NUMERIC_SORTS[sortKey];
-    const aValue = getter(a);
-    const bValue = getter(b);
-    if (aValue == null && bValue == null) {
-      return a.cbsa_name.localeCompare(b.cbsa_name);
-    }
-    if (aValue == null) return 1;
-    if (bValue == null) return -1;
-    if (aValue === bValue) return a.cbsa_name.localeCompare(b.cbsa_name);
-    return (aValue - bValue) * multiplier;
-  });
-}
-
-function filterCities(
-  cities: ExploreCitySummary[],
-  filters: ExploreFilterState,
-): ExploreCitySummary[] {
-  const populationMin = parseNumber(filters.populationMin);
-  const populationMax = parseNumber(filters.populationMax);
-  const incomeMin = parseNumber(filters.incomeMin);
-  const incomeMax = parseNumber(filters.incomeMax);
-
-  return cities.filter((city) => {
-    if (!passesRange(city.population, populationMin, populationMax)) return false;
-    if (!passesRange(city.median_household_income_usd, incomeMin, incomeMax)) return false;
-    if (filters.selectedStates.length > 0 && !filters.selectedStates.includes(city.state)) {
-      return false;
-    }
-    if (
-      filters.service &&
-      !city.cached_scores.some((score) => score.service === filters.service)
-    ) {
-      return false;
-    }
-    if (
-      filters.growingOnly &&
-      (city.establishment_growth_yoy == null || city.establishment_growth_yoy < 3)
-    ) {
-      return false;
-    }
-    return true;
-  });
 }
 
 function cityNameForScoring(city: ExploreCitySummary): string {
@@ -136,6 +73,92 @@ function cityNameForScoring(city: ExploreCitySummary): string {
   return cityName;
 }
 
+type SearchParamsLike = Pick<URLSearchParams, "get" | "getAll" | "toString">;
+
+const FILTER_QUERY_KEYS = [
+  "service",
+  "state",
+  "population_min",
+  "population_max",
+  "income_min",
+  "income_max",
+  "growing_only",
+  "cursor",
+];
+
+function enabledParam(value: string | null): boolean {
+  return value === "1" || value === "true";
+}
+
+function canonicalQueryString(query: string): string {
+  const params = new URLSearchParams(query);
+  params.sort();
+  return params.toString();
+}
+
+function normalizedServiceLabel(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/[_-]+/g, " ");
+}
+
+function uniqueServiceCatalog(services: string[]): string[] {
+  const byKey = new Map<string, string>();
+  [...DEFAULT_CATALOG_SERVICES, ...services].forEach((service) => {
+    const key = normalizedServiceLabel(service);
+    if (!byKey.has(key)) byKey.set(key, service);
+  });
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
+function filtersFromSearchParams(searchParams: SearchParamsLike): ExploreFilterState {
+  return {
+    populationMin: searchParams.get("population_min") ?? "",
+    populationMax: searchParams.get("population_max") ?? "",
+    incomeMin: searchParams.get("income_min") ?? "",
+    incomeMax: searchParams.get("income_max") ?? "",
+    selectedStates: searchParams.getAll("state"),
+    service: searchParams.get("service") ?? "",
+    growingOnly: enabledParam(searchParams.get("growing_only")),
+  };
+}
+
+function sortKeyFromSearchParams(searchParams: SearchParamsLike): ExploreSortKey {
+  const raw = searchParams.get("sort");
+  if (raw === "presentation_score") return "best_opportunity";
+  if (
+    raw === "city" ||
+    raw === "population" ||
+    raw === "income" ||
+    raw === "business_density" ||
+    raw === "growth" ||
+    raw === "cached_services" ||
+    raw === "best_opportunity"
+  ) {
+    return raw;
+  }
+  return "best_opportunity";
+}
+
+function sortDirectionFromSearchParams(searchParams: SearchParamsLike): SortDirection {
+  return searchParams.get("direction") === "asc" ? "asc" : "desc";
+}
+
+function writeNumberParam(params: URLSearchParams, key: string, raw: string) {
+  const value = parseNumber(raw);
+  if (value == null) return;
+  params.set(key, String(value));
+}
+
+function writeExploreFilters(params: URLSearchParams, filters: ExploreFilterState) {
+  for (const key of FILTER_QUERY_KEYS) params.delete(key);
+  if (filters.service) params.set("service", filters.service);
+  for (const state of filters.selectedStates) params.append("state", state);
+  writeNumberParam(params, "population_min", filters.populationMin);
+  writeNumberParam(params, "population_max", filters.populationMax);
+  writeNumberParam(params, "income_min", filters.incomeMin);
+  writeNumberParam(params, "income_max", filters.incomeMax);
+  if (filters.growingOnly) params.set("growing_only", "1");
+}
+
 function serializeFilters(filters: ExploreFilterState): Record<string, unknown> {
   return {
     population_min: parseNumber(filters.populationMin),
@@ -148,11 +171,11 @@ function serializeFilters(filters: ExploreFilterState): Record<string, unknown> 
   };
 }
 
-function uniqueTargetIds(scores: ExploreCachedScore[]): string[] {
+function uniqueTargetIds(items: Array<{ refresh_target_id?: string | null }>): string[] {
   return [
     ...new Set(
-      scores
-        .map((score) => score.refresh_target_id)
+      items
+        .map((item) => item.refresh_target_id)
         .filter((targetId): targetId is string => Boolean(targetId)),
     ),
   ];
@@ -175,11 +198,12 @@ async function readRefreshError(response: Response): Promise<string> {
 
 async function runFreshScanForService(
   city: ExploreCitySummary,
-  service: ExploreCachedScore,
+  target: ExploreScanTarget,
 ): Promise<FreshScanResult> {
   const body: Record<string, string> = {
     city: cityNameForScoring(city),
-    service: service.service,
+    service: target.service,
+    metadata_source: "fallback_cbsa",
   };
   if (city.state) {
     body.state = city.state;
@@ -201,7 +225,7 @@ async function runFreshScanForService(
 
     if (!response.ok || !json || json.status !== "success") {
       return {
-        service: service.service,
+        service: target.service_label,
         status: "error",
         message:
           json?.message ??
@@ -210,13 +234,13 @@ async function runFreshScanForService(
     }
 
     return {
-      service: service.service,
+      service: target.service_label,
       status: "success",
       report_id: json.report_id,
     };
   } catch (error) {
     return {
-      service: service.service,
+      service: target.service_label,
       status: "error",
       message: error instanceof Error ? error.message : "Failed to run fresh scan.",
     };
@@ -225,17 +249,51 @@ async function runFreshScanForService(
 
 export default function ExplorePageClient({
   data,
+  dataQueryKey,
   onRunFreshScan,
 }: ExplorePageClientProps) {
+  const router = useRouter();
+  const pathname = usePathname() || "/explore";
+  const searchParams = useSearchParams();
+  const queryRef = useRef(searchParams.toString());
+  const loadedDataQueryKey = dataQueryKey ?? canonicalQueryString(searchParams.toString());
+  const [currentQueryKey, setCurrentQueryKey] = useState(loadedDataQueryKey);
   const freshScanButtonRef = useRef<HTMLButtonElement>(null);
   const freshScanRequestIdRef = useRef(0);
   const freshScanInFlightRef = useRef(false);
   const refreshInFlightRef = useRef(false);
-  const [filters, setFilters] = useState<ExploreFilterState>(DEFAULT_FILTERS);
-  const [sortKey, setSortKey] = useState<ExploreSortKey>("best_opportunity");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const urlFilters = useMemo(
+    () => filtersFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const urlSortKey = useMemo(
+    () => sortKeyFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const urlSortDirection = useMemo(
+    () => sortDirectionFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const growthAvailable =
+    data.growth_available ?? data.cities.some((city) => city.growth_available);
+  const hasUnavailableGrowthFilter =
+    !growthAvailable && enabledParam(searchParams.get("growing_only"));
+  const initialFilters = useMemo(
+    () =>
+      growthAvailable
+        ? urlFilters
+        : {
+            ...urlFilters,
+            growingOnly: false,
+          },
+    [growthAvailable, urlFilters],
+  );
+  const [filters, setFilters] = useState<ExploreFilterState>(initialFilters);
+  const [sortKey, setSortKey] = useState<ExploreSortKey>(urlSortKey);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(urlSortDirection);
+  const [filterResetVersion, setFilterResetVersion] = useState(0);
   const [openCity, setOpenCity] = useState<ExploreCitySummary | null>(null);
-  const [selectedScores, setSelectedScores] = useState<ExploreCachedScore[]>([]);
+  const [selectedTargets, setSelectedTargets] = useState<ExploreScanTarget[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [freshScanResults, setFreshScanResults] = useState<FreshScanResult[]>([]);
   const [isFreshScanRunning, setIsFreshScanRunning] = useState(false);
@@ -256,18 +314,22 @@ export default function ExplorePageClient({
       ].sort((a, b) => a.localeCompare(b)),
     [data.cities],
   );
-
-  const visibleCities = useMemo(
-    () => sortCities(filterCities(data.cities, filters), sortKey, sortDirection),
-    [data.cities, filters, sortDirection, sortKey],
+  const catalogServices = useMemo(
+    () => uniqueServiceCatalog(services),
+    [services],
   );
+
+  const visibleCities = data.cities;
   const visibleScores = useMemo(
     () => visibleCities.flatMap((city) => city.cached_scores),
     [visibleCities],
   );
   const selectedRefreshableScores = useMemo(
-    () => selectedScores.filter((score) => score.refresh_target_id),
-    [selectedScores],
+    () =>
+      selectedTargets.filter(
+        (target) => target.source === "cached" && target.refresh_target_id,
+      ),
+    [selectedTargets],
   );
   const staleRefreshableScores = useMemo(
     () => visibleScores.filter((score) => score.is_stale && score.refresh_target_id),
@@ -277,18 +339,65 @@ export default function ExplorePageClient({
     () => visibleScores.filter((score) => score.refresh_target_id),
     [visibleScores],
   );
+  const refreshDataCurrent =
+    currentQueryKey === loadedDataQueryKey && !hasUnavailableGrowthFilter;
+
+  useEffect(() => {
+    if (!hasUnavailableGrowthFilter) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("growing_only");
+    params.delete("cursor");
+    const query = params.toString();
+    queryRef.current = query;
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [hasUnavailableGrowthFilter, pathname, router, searchParams]);
+
+  function currentParams() {
+    return new URLSearchParams(queryRef.current);
+  }
+
+  function replaceWithParams(params: URLSearchParams) {
+    const query = params.toString();
+    queryRef.current = query;
+    setCurrentQueryKey(canonicalQueryString(query));
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  function applyFilters(nextFilters: ExploreFilterState) {
+    const nextParams = currentParams();
+    const normalizedFilters = growthAvailable
+      ? nextFilters
+      : { ...nextFilters, growingOnly: false };
+    writeExploreFilters(nextParams, normalizedFilters);
+    setFilters(normalizedFilters);
+    replaceWithParams(nextParams);
+  }
 
   function resetFilters() {
+    const nextParams = currentParams();
+    for (const key of FILTER_QUERY_KEYS) nextParams.delete(key);
     setFilters(DEFAULT_FILTERS);
+    setFilterResetVersion((version) => version + 1);
+    replaceWithParams(nextParams);
   }
 
   function changeSort(nextKey: ExploreSortKey) {
-    if (nextKey === sortKey) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
+    const nextParams = currentParams();
+    nextParams.delete("cursor");
+    const nextDirection =
+      nextKey === sortKey
+        ? sortDirection === "asc"
+          ? "desc"
+          : "asc"
+        : nextKey === "city"
+          ? "asc"
+          : "desc";
     setSortKey(nextKey);
-    setSortDirection(nextKey === "city" ? "asc" : "desc");
+    setSortDirection(nextDirection);
+    nextParams.set("sort", nextKey);
+    nextParams.set("direction", nextDirection);
+    replaceWithParams(nextParams);
   }
 
   function invalidateFreshScanRequest() {
@@ -301,29 +410,34 @@ export default function ExplorePageClient({
   function openDrawer(city: ExploreCitySummary) {
     invalidateFreshScanRequest();
     setOpenCity(city);
-    setSelectedScores([]);
+    setSelectedTargets([]);
     setConfirmOpen(false);
   }
 
   function closeDrawer() {
     invalidateFreshScanRequest();
     setOpenCity(null);
-    setSelectedScores([]);
+    setSelectedTargets([]);
     setConfirmOpen(false);
   }
 
-  function toggleService(score: ExploreCachedScore) {
+  function scanTargetKey(target: ExploreScanTarget): string {
+    return target.report_id ?? `${target.source}:${normalizedServiceLabel(target.service)}`;
+  }
+
+  function toggleTarget(target: ExploreScanTarget) {
     setFreshScanResults([]);
-    setSelectedScores((current) => {
-      if (current.some((item) => item.report_id === score.report_id)) {
-        return current.filter((item) => item.report_id !== score.report_id);
+    setSelectedTargets((current) => {
+      const key = scanTargetKey(target);
+      if (current.some((item) => scanTargetKey(item) === key)) {
+        return current.filter((item) => scanTargetKey(item) !== key);
       }
-      return [...current, score];
+      return [...current, target];
     });
   }
 
   async function startRefreshRun(scope: ExploreRefreshScope) {
-    if (refreshInFlightRef.current) return;
+    if (refreshInFlightRef.current || !refreshDataCurrent) return;
 
     const scores =
       scope === "selected"
@@ -385,8 +499,8 @@ export default function ExplorePageClient({
     setConfirmOpen(false);
   }
 
-  async function confirmFreshScan(servicesToScan: ExploreCachedScore[]) {
-    if (!openCity || freshScanInFlightRef.current || servicesToScan.length === 0) {
+  async function confirmFreshScan(targetsToScan: ExploreScanTarget[]) {
+    if (!openCity || freshScanInFlightRef.current || targetsToScan.length === 0) {
       return;
     }
 
@@ -401,9 +515,9 @@ export default function ExplorePageClient({
 
     try {
       const results = onRunFreshScan
-        ? await onRunFreshScan(cityToScan, servicesToScan)
+        ? await onRunFreshScan(cityToScan, targetsToScan)
         : await Promise.all(
-            servicesToScan.map((service) => runFreshScanForService(cityToScan, service)),
+            targetsToScan.map((target) => runFreshScanForService(cityToScan, target)),
           );
       if (isCurrentRequest()) {
         setFreshScanResults(results ?? []);
@@ -412,8 +526,8 @@ export default function ExplorePageClient({
       const message = error instanceof Error ? error.message : "Failed to run fresh scan.";
       if (isCurrentRequest()) {
         setFreshScanResults(
-          servicesToScan.map((service) => ({
-            service: service.service,
+          targetsToScan.map((target) => ({
+            service: target.service_label,
             status: "error",
             message,
           })),
@@ -445,12 +559,12 @@ export default function ExplorePageClient({
           }}
         >
           <div>
-            <div className="kicker">Consumer explore</div>
+            <div className="kicker">Explore</div>
             <h1 className="page-h1" style={{ margin: "4px 0 0" }}>
-              Explore cities
+              Cities & service data
             </h1>
             <p className="page-sub">
-              Compare cached market signals and open city-level service scores.
+              Browse the data layer for free. Narrow down by demographics, then spend scans on the markets that need fresh numbers.
             </p>
           </div>
           <div
@@ -499,10 +613,12 @@ export default function ExplorePageClient({
         </div>
 
         <ExploreFilters
+          key={`${filterResetVersion}:${filters.populationMin}|${filters.populationMax}|${filters.incomeMin}|${filters.incomeMax}`}
           filters={filters}
           states={states}
           services={services}
-          onChange={setFilters}
+          growthAvailable={growthAvailable}
+          onChange={applyFilters}
           onReset={resetFilters}
         />
 
@@ -512,6 +628,7 @@ export default function ExplorePageClient({
           staleCount={staleRefreshableScores.length}
           visibleCount={visibleRefreshableScores.length}
           isSubmitting={isRefreshSubmitting}
+          disabled={!refreshDataCurrent}
           onRefreshSelected={() => void startRefreshRun("selected")}
           onRefreshStale={() => void startRefreshRun("stale")}
           onRefreshVisible={() => void startRefreshRun("visible")}
@@ -523,6 +640,7 @@ export default function ExplorePageClient({
           cities={visibleCities}
           sortKey={sortKey}
           sortDirection={sortDirection}
+          activeService={filters.service}
           onSortChange={changeSort}
           onCityOpen={openDrawer}
           onReset={resetFilters}
@@ -531,20 +649,22 @@ export default function ExplorePageClient({
 
       <CityDrawer
         city={openCity}
-        selectedServices={selectedScores}
+        catalogServices={catalogServices}
+        selectedTargets={selectedTargets}
         isTopLayer={!confirmOpen}
         freshScanButtonRef={freshScanButtonRef}
         isRefreshSubmitting={isRefreshSubmitting}
+        refreshDisabled={!refreshDataCurrent}
         selectedRefreshableCount={selectedRefreshableScores.length}
         onClose={closeDrawer}
-        onToggleService={toggleService}
+        onToggleTarget={toggleTarget}
         onOpenConfirmation={openFreshScanConfirmation}
         onRefreshSelected={() => void startRefreshRun("selected")}
       />
 
       <FreshScanConfirmation
         cityName={openCity?.cbsa_name ?? ""}
-        services={selectedScores}
+        targets={selectedTargets}
         results={freshScanResults}
         isOpen={confirmOpen}
         isSubmitting={isFreshScanRunning}

@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     const flagProperties = {
       account_id: entitlement.account_id,
       tier: entitlement.plan_key,
+      fresh_report_quota_exempt: entitlement.fresh_report_quota_exempt,
       subscription_status: entitlement.subscription_status,
     };
 
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
       flagProperties,
     );
 
-    if (quotaEnforcementEnabled) {
+    if (quotaEnforcementEnabled && !entitlement.fresh_report_quota_exempt) {
       if (entitlement.monthly_report_limit <= 0) {
         return NextResponse.json(
           {
@@ -204,6 +205,7 @@ export async function POST(req: NextRequest) {
     captureServerEvent(user.id, "fresh_report_generated", {
       account_id: entitlement.account_id,
       tier: entitlement.plan_key,
+      fresh_report_quota_exempt: entitlement.fresh_report_quota_exempt,
       report_id: data.report_id ?? null,
       opportunity_score: data.opportunity_score ?? null,
     });
@@ -241,6 +243,7 @@ export async function POST(req: NextRequest) {
         account_id: entitlement.account_id,
         tier: entitlement.plan_key,
         monthly_report_limit: entitlement.monthly_report_limit,
+        fresh_report_quota_exempt: entitlement.fresh_report_quota_exempt,
       },
       report: data.report ?? null,
       status: "success",

@@ -6,7 +6,11 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from src.domain.explore.entities import ExploreCitySummary
+from src.domain.explore.entities import (
+    ExploreCitySummary,
+    ExplorePageResult,
+    ExploreServiceMetric,
+)
 from src.domain.explore.metrics import (
     annualized_growth,
     business_density_per_1k,
@@ -19,26 +23,58 @@ class ExploreCityRepository(Protocol):
     """Read boundary for Explore city summaries."""
 
     def load_metros(self) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def load_scores(self, cbsa_codes: list[str]) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def load_metric_inputs(
         self,
         cbsa_codes: list[str],
         niche_normalized: str,
     ) -> dict[str, Any]:
-        ...
+        raise NotImplementedError
+
+    def load_city_detail(self, cbsa_code: str) -> dict[str, Any] | None:
+        raise NotImplementedError
 
 
 class ExploreCityService:
     """Build Explore city summaries from repository read inputs."""
 
-    def __init__(self, repository: ExploreCityRepository) -> None:
+    def __init__(self, repository: ExploreCityRepository | Any) -> None:
         self._repository = repository
 
-    def list_cities(self, service_filter: str | None = None) -> list[ExploreCitySummary]:
+    def list_cities(
+        self,
+        service_filter: str | None = None,
+        *,
+        states: list[str] | None = None,
+        population_min: int | None = None,
+        population_max: int | None = None,
+        income_min: int | None = None,
+        income_max: int | None = None,
+        growing_only: bool = False,
+        sort: str = "score",
+        direction: str = "desc",
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[ExploreCitySummary] | ExplorePageResult:
+        if hasattr(self._repository, "list_city_rows"):
+            return self._list_city_rows(
+                service_filter=service_filter,
+                states=states or [],
+                population_min=population_min,
+                population_max=population_max,
+                income_min=income_min,
+                income_max=income_max,
+                growing_only=growing_only,
+                sort=sort,
+                direction=direction,
+                limit=limit,
+                cursor=cursor,
+            )
+
         normalized_filter = _normalize_service(service_filter)
         metros = self._repository.load_metros()
         cbsa_codes = [str(metro["cbsa_code"]) for metro in metros]
@@ -60,6 +96,48 @@ class ExploreCityService:
             )
             for metro in metros
         ]
+
+    def _list_city_rows(
+        self,
+        *,
+        service_filter: str | None,
+        states: list[str],
+        population_min: int | None,
+        population_max: int | None,
+        income_min: int | None,
+        income_max: int | None,
+        growing_only: bool,
+        sort: str,
+        direction: str,
+        limit: int,
+        cursor: str | None,
+    ) -> ExplorePageResult:
+        normalized_filter = _normalize_service(service_filter)
+        safe_limit = max(1, limit)
+        rows = self._repository.list_city_rows(
+            service=service_filter,
+            states=states,
+            population_min=population_min,
+            population_max=population_max,
+            income_min=income_min,
+            income_max=income_max,
+            growing_only=growing_only,
+            sort=sort,
+            direction=direction,
+            limit=safe_limit,
+            cursor=cursor,
+        )
+        page_rows = rows[:safe_limit]
+        cities = [_summary_from_cell_row(row) for row in page_rows]
+        offset = _cursor_offset(cursor)
+        return {
+            "cities": cities,
+            "next_cursor": (
+                str(offset + safe_limit) if len(rows) > safe_limit else None
+            ),
+            "growth_available": any(city["growth_available"] for city in cities),
+            "service_filter": normalized_filter,
+        }
 
     def _build_summary(
         self,
@@ -95,6 +173,7 @@ class ExploreCityService:
             "establishment_growth_yoy": metrics["establishment_growth_yoy"],
             "growth_available": metrics["establishment_growth_yoy"] is not None,
             "cached_services_count": len(sorted_scores),
+            "metric_service": None,
             "best_score": _best_score(best_score_row),
             "score_system": (
                 str(best_score_row.get("score_system") or "none")
@@ -106,6 +185,11 @@ class ExploreCityService:
             "cached_scores": sorted_scores,
         }
 
+    def load_city_detail(self, cbsa_code: str) -> dict[str, Any] | None:
+        if not hasattr(self._repository, "load_city_detail"):
+            raise RuntimeError("Explore city detail repository is not configured")
+        return self._repository.load_city_detail(cbsa_code)
+
 
 def _normalize_service(service_filter: str | None) -> str | None:
     if service_filter is None:
@@ -113,6 +197,73 @@ def _normalize_service(service_filter: str | None) -> str | None:
 
     normalized = normalize_niche(service_filter)
     return normalized or None
+
+
+def _cursor_offset(cursor: str | None) -> int:
+    if cursor is None:
+        return 0
+    try:
+        offset = int(cursor)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, offset)
+
+
+def _summary_from_cell_row(row: Mapping[str, Any]) -> ExploreCitySummary:
+    cached_score = _cached_score_from_cell_row(row)
+    best_score = _best_score(cached_score)
+    has_service = bool(cached_score.get("niche_normalized"))
+    return {
+        "cbsa_code": str(row["cbsa_code"]),
+        "cbsa_name": str(row["cbsa_name"]),
+        "state": row.get("state"),
+        "population": row.get("population"),
+        "population_class": row.get("population_class"),
+        "median_household_income_usd": row.get("median_household_income_usd"),
+        "owner_occupancy_rate": row.get("owner_occupancy_rate"),
+        "median_age_years": row.get("median_age_years"),
+        "business_density_per_1k": row.get("business_density_per_1k"),
+        "establishment_growth_yoy": row.get("establishment_growth_yoy"),
+        "growth_available": bool(row.get("growth_available")),
+        "cached_services_count": _cached_services_count(row, has_service),
+        "metric_service": _metric_service(row),
+        "best_score": best_score,
+        "score_system": str(row.get("score_system") or "none"),
+        "last_scored_at": row.get("latest_scored_at"),
+        "stale": _stale_value(row),
+        "cached_scores": [cached_score] if has_service else [],
+    }
+
+
+def _cached_score_from_cell_row(row: Mapping[str, Any]) -> ExploreServiceMetric:
+    return {
+        "cbsa_code": row.get("cbsa_code"),
+        "niche_normalized": row.get("niche_normalized"),
+        "niche_keyword": row.get("niche_keyword"),
+        "report_id": row.get("report_id"),
+        "presentation_score": row.get("presentation_score"),
+        "score_system": row.get("score_system"),
+        "latest_scored_at": row.get("latest_scored_at"),
+        "last_refreshed_at": row.get("last_refreshed_at") or row.get("latest_scored_at"),
+        "refresh_target_id": row.get("refresh_target_id"),
+        "next_refresh_at": row.get("next_refresh_at"),
+        "stale": row.get("stale"),
+        "business_density_per_1k": row.get("business_density_per_1k"),
+        "establishment_growth_yoy": row.get("establishment_growth_yoy"),
+        "growth_available": row.get("growth_available"),
+    }
+
+
+def _cached_services_count(row: Mapping[str, Any], has_service: bool) -> int:
+    cached_services_count = row.get("cached_services_count")
+    if cached_services_count is not None:
+        return int(cached_services_count)
+    return 1 if has_service else 0
+
+
+def _metric_service(row: Mapping[str, Any]) -> str | None:
+    service = row.get("niche_keyword") or row.get("niche_normalized")
+    return str(service) if service is not None else None
 
 
 def _group_scores_by_cbsa(

@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.5.0` |
-| **Last Updated** | 2026-05-16 |
+| **Version** | `1.5.1` |
+| **Last Updated** | 2026-05-18 |
 | **Owner** | @widby-team |
 
 ---
@@ -114,6 +114,8 @@ Both apps share request validation, score shape, and the `CityAutocomplete` comp
 
 ### Explore Cities System
 
+Explore is the flexible market data browser. It supports city-first browsing, service-selected city comparison, city detail inspection, cached target refresh, and fresh report starts.
+
 Explore Cities is a read-optimized backend system over canonical scoring/reference tables. It must not create duplicate `cities`, `business_patterns`, `_simplified`, or `_v2` source tables. Its source-of-truth inputs are:
 
 1. `public.metros` — ACS-backed CBSA identity, demographics, population class, principal cities, and DataForSEO location codes.
@@ -122,7 +124,9 @@ Explore Cities is a read-optimized backend system over canonical scoring/referen
 4. `public.reports`, `public.metro_scores`, and `public.metro_score_v2` — cached report and score outputs.
 5. `public.seo_facts` and `public.seo_benchmarks` — benchmark facts and population-class benchmark cells.
 
-The backend boundary is `src/domain/explore/` for pure entities and metric formulas, `src/domain/services/explore_city_service.py` for orchestration, and a `SupabaseExploreRepository` adapter under `src/clients/`. Next.js route handlers or FastAPI endpoints call the service; React components receive already-filtered, paginated result DTOs. Domain formulas must remain fixture-testable without Supabase.
+The backend boundary is `src/domain/explore/` for pure entities and metric formulas, `src/domain/services/explore_city_service.py` for orchestration, and a `SupabaseExploreRepository` adapter under `src/clients/`. FastAPI wires repository adapters through the public `SupabasePersistence.client` accessor so persistence, Explore reads, and strategy reads share one configured Supabase client without reaching into private adapter state. Next.js route handlers or FastAPI endpoints call the service; React components receive already-filtered, paginated result DTOs. Domain formulas must remain fixture-testable without Supabase.
+
+Consumer app route handlers that proxy to FastAPI use shared upstream helpers in `apps/app/src/lib/api/upstream.ts` for request-origin resolution, bounded response reads, optional JSON parsing, and unavailable/upstream-error responses. Explore, billing checkout, billing portal, and refresh proxies should use those helpers instead of duplicating body-size and origin logic locally.
 
 Data flow:
 
@@ -152,6 +156,8 @@ Filtering rules:
 - The frontend must not limit the search universe to the first 100 metros; pagination/cursors belong in the backend contract.
 
 ### Strategy Discovery System
+
+Strategies are guided ranking lenses over the same city-service market-cell read model. They should not duplicate the Explore table; they package opinionated scoring, ordering, and explanation around strategy intent.
 
 The consumer strategy system applies strategy-specific ranking lenses over the existing cached market intelligence read model. Launch strategies are `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; `cash_cow` is a phase-2/flagged strategy; AI resilience is a global modifier and warning, not a standalone strategy route.
 
@@ -385,3 +391,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.3.0 | 2026-05-14 | Explore Cities system design | Added backend-backed Explore Cities architecture, canonical source tables, server-side filtering contract, metric ownership, and run report/refresh boundaries |
 | 1.4.0 | 2026-05-14 | Explore refresh control | Documented refresh policy storage, FastAPI scoring bridge queueing, app proxy routes, and report snapshots for Explore trend analysis |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy discovery architecture, repository boundary, source tables, and consumer data flow |
+| 1.5.1 | 2026-05-18 | Adapter boundary sync | Documented shared Supabase client accessor and consumer upstream proxy helper dependency |

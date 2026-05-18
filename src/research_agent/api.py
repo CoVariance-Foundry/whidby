@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Literal
 
 import anthropic
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Path as FastAPIPath, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -29,6 +29,7 @@ from src.clients.dataforseo.client import DataForSEOClient
 from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
 from src.clients.llm.client import LLMClient
+from src.clients.explore_repository import SupabaseExploreRepository
 from src.clients.strategy_repository import StrategyRepository
 from src.clients.supabase_adapter import SupabaseMarketStore
 from src.clients.supabase_persistence import SupabaseExploreRefreshStore, SupabasePersistence
@@ -38,6 +39,7 @@ from src.domain.services.explore_refresh_service import (
     ExploreRefreshService,
     QueuedExploreRefreshRun,
 )
+from src.domain.services.explore_city_service import ExploreCityService
 from src.domain.services.market_service import MarketService, ScoreRequest
 from src.pipeline.orchestrator import score_niche_for_metro
 from src.research_agent.deep_agent import run_research_session
@@ -194,7 +196,7 @@ def _get_discovery_service() -> DiscoveryService:
     if _DISCOVERY_SERVICE is None:
         persistence = SupabasePersistence()
         _DISCOVERY_SERVICE = DiscoveryService(
-            market_store=StrategyRepository(persistence._client)
+            market_store=StrategyRepository(persistence.client)
         )
     return _DISCOVERY_SERVICE
 
@@ -490,6 +492,19 @@ class ExploreRefreshRunRequest(BaseModel):
     flags: ExploreRefreshFlagsPayload = Field(default_factory=ExploreRefreshFlagsPayload)
 
 
+ExploreCitySort = Literal[
+    "city",
+    "population",
+    "income",
+    "business_density",
+    "growth",
+    "cached_services",
+    "presentation_score",
+    "latest_scored_at",
+]
+ExploreCityDirection = Literal["asc", "desc"]
+
+
 StrategyId = Literal["easy_win", "gbp_blitz", "keyword_hijack", "expand_conquer", "cash_cow"]
 
 
@@ -506,6 +521,7 @@ class StrategyRunRequest(BaseModel):
     strategy_id: StrategyId
     mode: Literal["cached", "fresh"] = "cached"
     targets: list[StrategyRunTarget] = Field(default_factory=list)
+    quota_consumed: int = Field(default=0, ge=0, le=1)
     account_id: uuid.UUID | None = None
     created_by_user_id: uuid.UUID | None = None
     city: str | None = None
@@ -533,6 +549,7 @@ class StrategyRunRequest(BaseModel):
 
 _MARKET_SERVICE: MarketService | None = None
 _EXPLORE_REFRESH_SERVICE: ExploreRefreshService | None = None
+_EXPLORE_CITY_SERVICE: ExploreCityService | None = None
 _STRATEGY_REPOSITORY: StrategyRepository | None = None
 
 
@@ -575,7 +592,7 @@ def _get_explore_refresh_service() -> ExploreRefreshService:
     global _EXPLORE_REFRESH_SERVICE
     if _EXPLORE_REFRESH_SERVICE is None:
         persistence = SupabasePersistence()
-        store = SupabaseExploreRefreshStore(client=persistence._client)
+        store = SupabaseExploreRefreshStore(client=persistence.client)
         _EXPLORE_REFRESH_SERVICE = ExploreRefreshService(
             store=store,
             market_service=_market_service(),
@@ -583,11 +600,20 @@ def _get_explore_refresh_service() -> ExploreRefreshService:
     return _EXPLORE_REFRESH_SERVICE
 
 
+def _get_explore_city_service() -> ExploreCityService:
+    global _EXPLORE_CITY_SERVICE
+    if _EXPLORE_CITY_SERVICE is None:
+        persistence = SupabasePersistence()
+        repository = SupabaseExploreRepository(persistence.client)
+        _EXPLORE_CITY_SERVICE = ExploreCityService(repository)
+    return _EXPLORE_CITY_SERVICE
+
+
 def _get_strategy_repository() -> StrategyRepository:
     global _STRATEGY_REPOSITORY
     if _STRATEGY_REPOSITORY is None:
         persistence = SupabasePersistence()
-        _STRATEGY_REPOSITORY = StrategyRepository(persistence._client)
+        _STRATEGY_REPOSITORY = StrategyRepository(persistence.client)
     return _STRATEGY_REPOSITORY
 
 
@@ -831,6 +857,70 @@ def niches_read(report_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Explore refresh endpoints
 # ---------------------------------------------------------------------------
+
+
+def _explore_city_service_or_503() -> ExploreCityService:
+    try:
+        return _get_explore_city_service()
+    except RuntimeError as exc:
+        logger.warning("Explore cities service unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Explore cities service unavailable.",
+        ) from exc
+
+
+@app.get("/api/explore/cities")
+def list_explore_cities(
+    service: str | None = None,
+    state: list[str] = Query(default_factory=list),
+    population_min: int | None = None,
+    population_max: int | None = None,
+    income_min: int | None = None,
+    income_max: int | None = None,
+    growing_only: bool = False,
+    sort: ExploreCitySort = "presentation_score",
+    direction: ExploreCityDirection = "desc",
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = None,
+) -> Any:
+    explore_service = _explore_city_service_or_503()
+    try:
+        return explore_service.list_cities(
+            service_filter=service,
+            states=state,
+            population_min=population_min,
+            population_max=population_max,
+            income_min=income_min,
+            income_max=income_max,
+            growing_only=growing_only,
+            sort=sort,
+            direction=direction,
+            limit=limit,
+            cursor=cursor,
+        )
+    except RuntimeError as exc:
+        logger.warning("Explore cities list failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Explore cities service unavailable.",
+        ) from exc
+
+
+@app.get("/api/explore/cities/{cbsa_code}")
+def get_explore_city_detail(cbsa_code: str) -> dict[str, Any]:
+    explore_service = _explore_city_service_or_503()
+    try:
+        detail = explore_service.load_city_detail(cbsa_code)
+    except RuntimeError as exc:
+        logger.warning("Explore city detail failed cbsa_code=%s: %s", cbsa_code, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Explore cities service unavailable.",
+        ) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Explore city not found.")
+    return detail
 
 
 def _explore_refresh_service_or_503() -> ExploreRefreshService:
@@ -1420,7 +1510,7 @@ async def create_strategy_run(req: StrategyRunRequest, request: Request) -> dict
             "limit": req.limit,
         },
         "result_count": target_count if req.mode == "cached" else 0,
-        "quota_consumed": 1 if req.mode == "fresh" else 0,
+        "quota_consumed": req.quota_consumed if req.mode == "fresh" else 0,
     }
     try:
         created = _get_strategy_repository().create_run(payload)

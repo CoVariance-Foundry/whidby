@@ -19,7 +19,7 @@ class SupabaseMarketStore:
 
     def read_report(self, report_id: str) -> dict[str, Any] | None:
         res = (
-            self._persistence._client
+            self._persistence.client
             .table("reports")
             .select("*")
             .eq("id", report_id)

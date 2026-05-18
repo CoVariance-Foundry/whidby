@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { ExploreCachedScore } from "@/lib/explore/types";
-import { formatDate, humanize } from "./format";
+import { formatDate, formatDecimal, formatPercent, humanize } from "./format";
 
 interface ServiceScoreRowProps {
   score: ExploreCachedScore;
   selected: boolean;
-  onToggle: (score: ExploreCachedScore) => void;
+  onToggle: () => void;
 }
 
 function archetypeClass(id: ExploreCachedScore["archetype_id"]): string {
@@ -90,10 +90,17 @@ export default function ServiceScoreRow({
           }}
         >
           <span>Scored {formatDate(score.last_scored_at)}</span>
+          {score.score_system && <span>{score.score_system.toUpperCase()}</span>}
           {score.confidence_score != null && <span>Confidence {Math.round(score.confidence_score)}</span>}
           {score.ai_resilience_score != null && <span>AI resilience {Math.round(score.ai_resilience_score)}</span>}
           {score.ai_exposure && <span>AI {humanize(score.ai_exposure)}</span>}
           {score.difficulty_tier && <span>{humanize(score.difficulty_tier)}</span>}
+          {score.business_density_per_1k != null && (
+            <span>Density {formatDecimal(score.business_density_per_1k)}</span>
+          )}
+          {score.growth_available && score.establishment_growth_yoy != null && (
+            <span>Growth {formatPercent(score.establishment_growth_yoy)}</span>
+          )}
         </div>
       </Link>
 
@@ -139,7 +146,7 @@ export default function ServiceScoreRow({
             type="checkbox"
             aria-label={`Select ${score.service} for fresh scan`}
             checked={selected}
-            onChange={() => onToggle(score)}
+            onChange={onToggle}
             style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
           />
         </label>

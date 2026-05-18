@@ -33,24 +33,29 @@ export async function POST(req: NextRequest) {
     supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     const mode = body.mode ?? "cached";
+    let quotaConsumed = 0;
     const strategy_id = body.strategy_id ?? body.lens_id;
     const bodyWithoutLensId = { ...body };
     delete bodyWithoutLensId.lens_id;
-
-    if (mode === "fresh" && entitlement.monthly_report_limit <= 0) {
-      return NextResponse.json(
-        {
-          status: "tier_limit",
-          code: "fresh_strategy_runs_not_included",
-          message: "Your current plan can browse cached strategy results but cannot run fresh strategy discovery.",
-          tier: entitlement.plan_key,
-          monthly_report_limit: entitlement.monthly_report_limit,
-        },
-        { status: 403 },
-      );
-    }
+    delete bodyWithoutLensId.quota_consumed;
 
     if (mode === "fresh") {
+      if (
+        !entitlement.fresh_report_quota_exempt &&
+        entitlement.monthly_report_limit <= 0
+      ) {
+        return NextResponse.json(
+          {
+            status: "tier_limit",
+            code: "fresh_strategy_runs_not_included",
+            message: "Your current plan can browse cached strategy results but cannot run fresh strategy discovery.",
+            tier: entitlement.plan_key,
+            monthly_report_limit: entitlement.monthly_report_limit,
+          },
+          { status: 403 },
+        );
+      }
+
       if (Array.isArray(body.targets) && body.targets.length > MAX_FRESH_TARGETS) {
         return NextResponse.json(
           {
@@ -61,20 +66,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const consumed = await consumeReportQuota(supabase, entitlement.account_id);
-      if (!consumed) {
-        return NextResponse.json(
-          {
-            status: "quota_exceeded",
-            code: "monthly_report_quota_exceeded",
-            message: "You have reached your monthly fresh report limit.",
-            tier: entitlement.plan_key,
-            monthly_report_limit: entitlement.monthly_report_limit,
-          },
-          { status: 429 },
-        );
+      if (!entitlement.fresh_report_quota_exempt) {
+        const consumed = await consumeReportQuota(supabase, entitlement.account_id);
+        if (!consumed) {
+          return NextResponse.json(
+            {
+              status: "quota_exceeded",
+              code: "monthly_report_quota_exceeded",
+              message: "You have reached your monthly fresh report limit.",
+              tier: entitlement.plan_key,
+              monthly_report_limit: entitlement.monthly_report_limit,
+            },
+            { status: 429 },
+          );
+        }
+        quotaConsumedForAccount = entitlement.account_id;
+        quotaConsumed = 1;
       }
-      quotaConsumedForAccount = entitlement.account_id;
     }
 
     const internalToken = process.env.STRATEGY_DISCOVERY_INTERNAL_TOKEN;
@@ -84,6 +92,7 @@ export async function POST(req: NextRequest) {
         ...bodyWithoutLensId,
         ...(strategy_id ? { strategy_id } : {}),
         mode,
+        quota_consumed: quotaConsumed,
         account_id: entitlement.account_id,
         created_by_user_id: user.id,
       }),

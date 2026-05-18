@@ -3,12 +3,9 @@ import { resolveEntitlementContext } from "@/lib/account/entitlements";
 import { PRODUCT_FLAGS } from "@/lib/flags/product-flags";
 import { getServerFeatureFlag } from "@/lib/flags/server";
 import { getStripeClient } from "@/lib/billing/stripe";
+import { getRequestOrigin } from "@/lib/api/upstream";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-
-function getRequestOrigin(req: NextRequest): string {
-  return req.nextUrl?.origin ?? new URL(req.url).origin;
-}
 
 export async function POST(req: NextRequest) {
   try {

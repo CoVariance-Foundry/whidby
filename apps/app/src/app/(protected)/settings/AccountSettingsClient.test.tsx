@@ -45,6 +45,7 @@ const baseSummary: AccountSummary = {
   fresh_reports_used: 0,
   fresh_reports_remaining: 0,
   subscription_status: "active",
+  cancel_at_period_end: false,
   current_period_start: "2026-05-01T00:00:00.000Z",
   current_period_end: "2026-06-01T00:00:00.000Z",
   stripe_customer_exists: false,
@@ -117,6 +118,23 @@ describe("AccountSettingsClient", () => {
     });
 
     expect(screen.getByText(/fresh reports are exhausted/i)).toBeInTheDocument();
+  });
+
+  it("shows scheduled cancellation state for paid subscriptions", () => {
+    renderClient({
+      plan_key: "plus",
+      plan_label: "Plus",
+      monthly_price_cents: 4900,
+      monthly_report_limit: 10,
+      fresh_reports_used: 4,
+      fresh_reports_remaining: 6,
+      stripe_customer_exists: true,
+      cancel_at_period_end: true,
+    });
+
+    expect(screen.getByText(/cancels at period end/i)).toBeInTheDocument();
+    expect(screen.getByText("Subscription scheduled to cancel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /manage in stripe/i })).toBeInTheDocument();
   });
 
   it("does not call Stripe when billing is disabled", () => {

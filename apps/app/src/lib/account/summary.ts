@@ -22,6 +22,7 @@ export interface AccountSummary {
   fresh_reports_used: number;
   fresh_reports_remaining: number;
   subscription_status: string;
+  cancel_at_period_end: boolean;
   current_period_start: string;
   current_period_end: string;
   stripe_customer_exists: boolean;
@@ -94,6 +95,7 @@ export async function loadAccountSummary({
     fresh_reports_used: used,
     fresh_reports_remaining: Math.max(0, limit - used),
     subscription_status: entitlement.subscription_status,
+    cancel_at_period_end: entitlement.cancel_at_period_end,
     current_period_start: entitlement.current_period_start,
     current_period_end: entitlement.current_period_end,
     stripe_customer_exists: Boolean(customer?.stripe_customer_id),

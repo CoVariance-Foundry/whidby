@@ -209,3 +209,19 @@ DROP POLICY IF EXISTS "Service role manages explore report snapshots"
     ON public.explore_report_snapshots;
 CREATE POLICY "Service role manages explore report snapshots"
     ON public.explore_report_snapshots FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+GRANT SELECT ON public.explore_refresh_policies TO authenticated;
+GRANT SELECT ON public.explore_refresh_targets TO authenticated;
+GRANT SELECT ON public.explore_refresh_runs TO authenticated;
+GRANT SELECT ON public.explore_refresh_run_items TO authenticated;
+GRANT SELECT ON public.explore_report_snapshots TO authenticated;
+GRANT SELECT ON public.explore_latest_target_scores TO authenticated;
+GRANT SELECT ON public.explore_target_trends TO authenticated;
+
+GRANT ALL ON TABLE public.explore_refresh_policies TO service_role;
+GRANT ALL ON TABLE public.explore_refresh_targets TO service_role;
+GRANT ALL ON TABLE public.explore_refresh_runs TO service_role;
+GRANT ALL ON TABLE public.explore_refresh_run_items TO service_role;
+GRANT ALL ON TABLE public.explore_report_snapshots TO service_role;
+GRANT SELECT ON public.explore_latest_target_scores TO service_role;
+GRANT SELECT ON public.explore_target_trends TO service_role;
