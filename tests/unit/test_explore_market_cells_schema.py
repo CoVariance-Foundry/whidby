@@ -48,15 +48,38 @@ def test_explore_market_cells_exposes_metric_contract() -> None:
 def test_explore_market_cells_marks_representative_city_rows() -> None:
     sql = _sql()
 
-    assert "ranked_scores AS (" in sql
+    assert "market_cells AS (" in sql
     assert "row_number() over (" in sql
-    assert "partition by cbsa_code" in sql
-    assert "presentation_score desc nulls last" in sql
-    assert "latest_scored_at desc nulls last" in sql
-    assert "niche_normalized asc" in sql
+    assert "partition by cell.cbsa_code" in sql
+    assert "cell.presentation_score desc nulls last" in sql
+    assert "cell.latest_scored_at desc nulls last" in sql
+    assert "cell.niche_normalized asc" in sql
     assert "AS representative_service_rank" in sql
-    assert "count(*) over (partition by cbsa_code) AS cached_services_count" in sql
-    assert "JOIN ranked_scores score ON score.cbsa_code = metro.cbsa_code" in sql
+    assert (
+        "count(cell.report_id) over (partition by cell.cbsa_code) "
+        "AS cached_services_count"
+    ) in sql
+
+
+def test_explore_market_cells_keeps_uncached_metros_reachable() -> None:
+    sql = _sql()
+
+    assert "service_catalog AS (" in sql
+    assert "CROSS JOIN service_catalog service" in sql
+    assert "LEFT JOIN score_union score" in sql
+    assert "JOIN ranked_scores" not in sql
+
+
+def test_explore_market_cells_preserves_v2_report_links() -> None:
+    sql = _sql()
+
+    latest_v2 = sql.split("latest_v2_scores AS (", 1)[1].split(
+        "score_union AS (",
+        1,
+    )[0]
+
+    assert "v2.report_id" in latest_v2
+    assert "NULL::uuid AS report_id" not in latest_v2
 
 
 def test_explore_market_cells_has_lookup_indexes() -> None:
@@ -80,7 +103,7 @@ def test_explore_market_cells_uses_refresh_cadence_for_staleness() -> None:
     sql = _sql()
 
     assert "cadence_days" in sql
-    assert "COALESCE(refresh.cadence_days, 30) * interval '1 day'" in sql
+    assert "COALESCE(cell.cadence_days, 30) * interval '1 day'" in sql
     assert "now() - interval '30 days'" not in sql
 
 

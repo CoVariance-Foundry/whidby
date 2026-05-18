@@ -21,6 +21,13 @@ service_weights AS (
     FROM public.niche_naics_mapping
     GROUP BY niche_normalized, naics_code, weight
 ),
+service_catalog AS (
+    SELECT
+        niche_normalized,
+        max(niche_keyword) AS niche_keyword
+    FROM service_weights
+    GROUP BY niche_normalized
+),
 weighted_cbp AS (
     SELECT
         c.cbsa_code,
@@ -95,7 +102,7 @@ latest_v2_scores AS (
         v2.cbsa_code,
         v2.niche_normalized,
         v2.niche_normalized AS niche_keyword,
-        NULL::uuid AS report_id,
+        v2.report_id,
         greatest(
             coalesce(v2.demand_strength, 0) / 2,
             0
@@ -135,19 +142,6 @@ score_union AS (
       ON v2.cbsa_code = legacy.cbsa_code
      AND v2.niche_normalized = legacy.niche_normalized
 ),
-ranked_scores AS (
-    SELECT
-        score_union.*,
-        row_number() over (
-            partition by cbsa_code
-            order by
-                presentation_score desc nulls last,
-                latest_scored_at desc nulls last,
-                niche_normalized asc
-        ) AS representative_service_rank,
-        count(*) over (partition by cbsa_code) AS cached_services_count
-    FROM score_union
-),
 refresh AS (
     SELECT DISTINCT ON (t.cbsa_code, t.niche_normalized)
         t.id AS refresh_target_id,
@@ -167,74 +161,118 @@ refresh AS (
         t.next_refresh_at ASC NULLS LAST,
         t.updated_at DESC,
         t.created_at DESC
+),
+market_cells AS (
+    SELECT
+        metro.cbsa_code,
+        metro.cbsa_name,
+        metro.state,
+        metro.population,
+        metro.population_class,
+        metro.median_household_income_usd,
+        metro.owner_occupancy_rate,
+        metro.median_age_years,
+        service.niche_normalized,
+        COALESCE(score.niche_keyword, service.niche_keyword) AS niche_keyword,
+        score.report_id,
+        score.presentation_score,
+        score.score_system,
+        score.latest_scored_at,
+        score.report_id IS NOT NULL AS has_cached_score,
+        latest.latest_weighted_establishments,
+        prior.prior_weighted_establishments,
+        prior.prior_year,
+        refresh.refresh_target_id,
+        refresh.next_refresh_at,
+        refresh.cadence_days,
+        score.serp_archetype,
+        score.ai_exposure,
+        score.difficulty_tier,
+        score.confidence_score,
+        score.ai_resilience_score,
+        score.benchmark_confidence,
+        score.demand_strength,
+        score.organic_difficulty,
+        score.local_difficulty,
+        score.monetization_signal
+    FROM public.metros metro
+    CROSS JOIN service_catalog service
+    LEFT JOIN score_union score
+      ON score.cbsa_code = metro.cbsa_code
+     AND score.niche_normalized = service.niche_normalized
+    LEFT JOIN latest_metrics latest
+      ON latest.cbsa_code = metro.cbsa_code
+     AND latest.niche_normalized = service.niche_normalized
+    LEFT JOIN prior_metrics prior
+      ON prior.cbsa_code = metro.cbsa_code
+     AND prior.niche_normalized = service.niche_normalized
+    LEFT JOIN refresh
+      ON refresh.cbsa_code = metro.cbsa_code
+     AND refresh.niche_normalized = service.niche_normalized
+    WHERE metro.population IS NOT NULL
 )
 SELECT
-    metro.cbsa_code,
-    metro.cbsa_name,
-    metro.state,
-    metro.population,
-    metro.population_class,
-    metro.median_household_income_usd,
-    metro.owner_occupancy_rate,
-    metro.median_age_years,
-    score.niche_normalized,
-    score.niche_keyword,
-    score.report_id,
-    score.presentation_score,
-    score.score_system,
-    score.latest_scored_at,
-    score.representative_service_rank,
-    score.cached_services_count,
-    latest.latest_weighted_establishments,
-    prior.prior_weighted_establishments,
+    cell.cbsa_code,
+    cell.cbsa_name,
+    cell.state,
+    cell.population,
+    cell.population_class,
+    cell.median_household_income_usd,
+    cell.owner_occupancy_rate,
+    cell.median_age_years,
+    cell.niche_normalized,
+    cell.niche_keyword,
+    cell.report_id,
+    cell.presentation_score,
+    cell.score_system,
+    cell.latest_scored_at,
+    row_number() over (
+        partition by cell.cbsa_code
+        order by
+            cell.presentation_score desc nulls last,
+            cell.latest_scored_at desc nulls last,
+            cell.niche_normalized asc
+    ) AS representative_service_rank,
+    count(cell.report_id) over (partition by cell.cbsa_code) AS cached_services_count,
+    cell.latest_weighted_establishments,
+    cell.prior_weighted_establishments,
     CASE
-        WHEN metro.population IS NULL OR metro.population <= 0 OR latest.latest_weighted_establishments IS NULL
+        WHEN cell.population IS NULL OR cell.population <= 0 OR cell.latest_weighted_establishments IS NULL
         THEN NULL
-        ELSE round((latest.latest_weighted_establishments / metro.population) * 1000, 10)
+        ELSE round((cell.latest_weighted_establishments / cell.population) * 1000, 10)
     END AS business_density_per_1k,
     CASE
-        WHEN prior.prior_weighted_establishments IS NULL
-          OR prior.prior_weighted_establishments <= 0
-          OR latest.latest_weighted_establishments IS NULL
-          OR prior.prior_year IS NULL
+        WHEN cell.prior_weighted_establishments IS NULL
+          OR cell.prior_weighted_establishments <= 0
+          OR cell.latest_weighted_establishments IS NULL
+          OR cell.prior_year IS NULL
         THEN NULL
         ELSE round(
             power(
-                latest.latest_weighted_establishments / prior.prior_weighted_establishments,
-                1.0 / ((SELECT year FROM latest_cbp_year) - prior.prior_year)
+                cell.latest_weighted_establishments / cell.prior_weighted_establishments,
+                1.0 / ((SELECT year FROM latest_cbp_year) - cell.prior_year)
             ) - 1,
             10
         )
     END AS establishment_growth_yoy,
-    prior.prior_weighted_establishments IS NOT NULL AS growth_available,
-    refresh.refresh_target_id,
-    refresh.next_refresh_at,
+    cell.prior_weighted_establishments IS NOT NULL AS growth_available,
+    cell.refresh_target_id,
+    cell.next_refresh_at,
     CASE
-        WHEN score.latest_scored_at IS NULL THEN false
-        ELSE score.latest_scored_at < now() - (COALESCE(refresh.cadence_days, 30) * interval '1 day')
+        WHEN cell.latest_scored_at IS NULL THEN false
+        ELSE cell.latest_scored_at < now() - (COALESCE(cell.cadence_days, 30) * interval '1 day')
     END AS stale,
-    score.serp_archetype,
-    score.ai_exposure,
-    score.difficulty_tier,
-    score.confidence_score,
-    score.ai_resilience_score,
-    score.benchmark_confidence,
-    score.demand_strength,
-    score.organic_difficulty,
-    score.local_difficulty,
-    score.monetization_signal
-FROM public.metros metro
-JOIN ranked_scores score ON score.cbsa_code = metro.cbsa_code
-LEFT JOIN latest_metrics latest
-  ON latest.cbsa_code = score.cbsa_code
- AND latest.niche_normalized = score.niche_normalized
-LEFT JOIN prior_metrics prior
-  ON prior.cbsa_code = score.cbsa_code
- AND prior.niche_normalized = score.niche_normalized
-LEFT JOIN refresh
-  ON refresh.cbsa_code = score.cbsa_code
- AND refresh.niche_normalized = score.niche_normalized
-WHERE metro.population IS NOT NULL;
+    cell.serp_archetype,
+    cell.ai_exposure,
+    cell.difficulty_tier,
+    cell.confidence_score,
+    cell.ai_resilience_score,
+    cell.benchmark_confidence,
+    cell.demand_strength,
+    cell.organic_difficulty,
+    cell.local_difficulty,
+    cell.monetization_signal
+FROM market_cells cell;
 
 CREATE UNIQUE INDEX idx_explore_market_cells_niche_cbsa
     ON public.explore_market_cells(niche_normalized, cbsa_code);
