@@ -7,6 +7,10 @@ import { upsertBillingCustomer } from "@/lib/billing/sync-subscription";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
+function getRequestOrigin(req: NextRequest): string {
+  return req.nextUrl?.origin ?? new URL(req.url).origin;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
     const stripe = getStripeClient();
-    const origin = process.env.NEXT_PUBLIC_APP_FRONTEND_URL ?? req.nextUrl.origin;
+    const origin = process.env.NEXT_PUBLIC_APP_FRONTEND_URL ?? getRequestOrigin(req);
     const priceId = getPriceIdForPlan(body.plan_key);
 
     const { data: existingCustomer, error: customerReadError } = await admin
@@ -98,8 +102,8 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/reports?billing=success`,
-      cancel_url: `${origin}/reports?billing=cancelled`,
+      success_url: `${origin}/settings?billing=success`,
+      cancel_url: `${origin}/settings?billing=cancelled`,
       metadata: {
         account_id: entitlement.account_id,
         user_id: user.id,

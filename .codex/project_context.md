@@ -1,5 +1,11 @@
 # Project Context
 
+## Account and Billing Settings
+
+Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, and billing-management flag, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.
+
+The bottom-sidebar user menu now links Account settings to `/settings`, shows the signed-in email plus live plan label, and marks settings pages active. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs now land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
+
 ## AI Review and Visual QA CI/CD
 
 Added CI/CD review scaffolding for Greptile PR review policy, Playwright visual QA, optional Codex/Claude artifact critique, preview URL resolution, and environment manifest checks. The workflow keeps `dev -> main` as the release spine, uses preview/staging/production environment separation, and avoids printing or committing secret values.
