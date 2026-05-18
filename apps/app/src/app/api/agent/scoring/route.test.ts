@@ -44,6 +44,7 @@ describe("POST /api/agent/scoring", () => {
     member_role: "owner",
     plan_key: "plus",
     monthly_report_limit: 10,
+    fresh_report_quota_exempt: false,
     subscription_status: "active",
     current_period_start: "2026-05-01T00:00:00.000Z",
     current_period_end: "2026-06-01T00:00:00.000Z",
@@ -108,6 +109,45 @@ describe("POST /api/agent/scoring", () => {
     expect(res.status).toBe(403);
     expect(body.code).toBe("fresh_reports_not_included");
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("allows quota-exempt free admins without consuming quota", async () => {
+    mocks.resolveEntitlementContext.mockResolvedValueOnce({
+      user: {
+        id: "55555555-5555-5555-5555-555555555555",
+        email: "admin-test@widby.dev",
+      },
+      entitlement: {
+        ...entitlement,
+        member_role: "admin",
+        plan_key: "free",
+        monthly_report_limit: 0,
+        fresh_report_quota_exempt: true,
+      },
+    });
+    const spy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        report_id: "admin-report-1",
+        opportunity_score: 91,
+        classification_label: "High",
+        evidence: [],
+        report: { input: { niche_keyword: "roofing" } },
+      }), { status: 200 }),
+    );
+    global.fetch = spy;
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({ city: "Phoenix", service: "roofing", state: "AZ" }),
+    });
+
+    const res = await POST(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.account.tier).toBe("free");
+    expect(body.account.fresh_report_quota_exempt).toBe(true);
+    expect(mocks.consumeReportQuota).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledOnce();
   });
 
   it("blocks users who have exhausted monthly quota", async () => {

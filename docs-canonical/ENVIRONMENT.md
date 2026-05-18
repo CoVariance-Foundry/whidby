@@ -1,8 +1,8 @@
 # Environment & Configuration
 
-<!-- docguard:version 1.3.0 -->
+<!-- docguard:version 1.4.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-25 -->
+<!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file documents everything needed to run this project.
@@ -101,15 +101,17 @@ Login uses email + password (`signInWithPassword`). These accounts are seeded di
 
 | Account | Email | Password | Purpose |
 |---------|-------|----------|---------|
-| Personal | `antwoine@covariance.studio` | `WidbyDev2026!` | Dev/admin login |
-| E2E Test | `e2e-test@widby.dev` | `WidbyTest2026!` | Playwright automation |
+| Personal | `antwoine@covariance.studio` | Local `.env` value only | Dev/admin login |
+| E2E Test | `e2e-test@widby.dev` | `E2E_AUTH_PASSWORD` | Playwright automation |
 
 For Vercel preview E2E, set these env vars in the project's **Preview** environment:
 
 | Variable | Value |
 |----------|-------|
 | `E2E_AUTH_EMAIL` | `e2e-test@widby.dev` |
-| `E2E_AUTH_PASSWORD` | `WidbyTest2026!` |
+| `E2E_AUTH_PASSWORD` | GitHub/Vercel preview secret value, never committed |
+
+Any previously committed test-account passwords should be treated as exposed and rotated before reuse.
 
 ## Staging Environment
 
@@ -121,7 +123,7 @@ The project uses a `dev` branch as a staging/integration gate. Feature branches 
 |-------|---------|--------|-----|
 | Frontend | Vercel preview deploys (all 3 apps) | any non-`main` push | auto-generated `*.vercel.app` URLs |
 | API | `whidby-staging` (Render, Starter) | `dev` | `https://whidby-staging.onrender.com` |
-| Database | `widby-staging` (Supabase, free tier) | — | separate project URL |
+| Database | `whidby-staging` (Supabase, free tier) | — | `https://wuybidpvqhhgkukpyyhq.supabase.co` |
 
 ### Env var scoping
 
@@ -150,16 +152,60 @@ The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which e
 |---------|---------|
 | `.venv/bin/python -m scripts.benchmarks.recompute_benchmarks 120` | Rebuild staging `seo_benchmarks` from recent `seo_facts` |
 
-### Migration workflow
+### Supabase staging migrations
+
+Staging migrations deploy from `dev` to Supabase project `whidby-staging` (`wuybidpvqhhgkukpyyhq`) through `.github/workflows/supabase-staging.yml`. The workflow runs manually through `workflow_dispatch` and automatically on `dev` pushes that change `supabase/migrations/**` or the workflow file. Manual runs must choose branch `dev`; the deploy job is guarded to skip any other branch.
 
 1. Write migration in `supabase/migrations/`
-2. Apply to staging Supabase first (SQL editor or CLI)
-3. Test end-to-end on staging (Vercel preview + staging Render + staging Supabase)
-4. On merge to `main`, apply the same migration to production Supabase
+2. Merge the feature branch into `dev`
+3. Let `.github/workflows/supabase-staging.yml` install Supabase CLI `2.98.2` with `supabase/setup-cli@v2`, initialize `supabase/config.toml` when the checkout only has migrations, link `whidby-staging`, list pending migrations, run `supabase db push`, and list migration status again
+4. Test end-to-end on staging (Vercel preview + staging Render + staging Supabase)
+5. On merge to `main`, apply the same migration to production Supabase
 
-### Staging auth users
+### Staging test-account seeding
 
-The staging Supabase project needs the same auth accounts as production (see E2E test accounts below). Redirect URL pattern `https://*.vercel.app/**` must be added to the staging project's Auth settings.
+Staging test accounts are seeded manually through `.github/workflows/supabase-seed-test-accounts.yml` after the migrations that create account, entitlement, and internal user entitlement objects exist in staging. Manual runs must choose branch `dev`; the seed job is guarded to skip any other branch because it uses staging service-role credentials. Do not run this workflow on every push; it curates Auth users and account entitlements with operational credentials.
+
+Default staging personas:
+
+| Email | Member role | Plan | Quota exemption |
+|-------|-------------|------|-----------------|
+| `admin-test@widby.dev` | `admin` | `free` | yes |
+| `user-test@widby.dev` | `owner` | `free` | no |
+| `henock@covariance.studio` | `admin` | `free` | yes |
+| `antwoine@covariance.studio` | `admin` | `free` | yes |
+| `lm13vand@gmail.com` | `owner` | `pro` | no |
+
+This staging setup is not Terraform. Supabase migrations manage schema, RLS, and RPCs. GitHub Environment secrets and local env files store operational credentials. `scripts/supabase/seed_test_accounts.py` manages curated Auth users and entitlements.
+
+### GitHub Environment `staging` secrets
+
+Create these secrets on the GitHub Environment named `staging`:
+
+| Secret | Used by |
+|--------|---------|
+| `SUPABASE_ACCESS_TOKEN` | `.github/workflows/supabase-staging.yml` |
+| `STAGING_DB_PASSWORD` | `.github/workflows/supabase-staging.yml` |
+| `STAGING_SUPABASE_SERVICE_ROLE_KEY` | `.github/workflows/supabase-seed-test-accounts.yml` |
+| `WHIDBY_TEST_ADMIN_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
+| `WHIDBY_TEST_USER_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
+| `WHIDBY_BETA_HENOCK_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
+| `WHIDBY_BETA_ANTWOINE_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
+| `WHIDBY_BETA_LUKE_PASSWORD` | `.github/workflows/supabase-seed-test-accounts.yml` |
+
+For manual local runs of `python scripts/supabase/seed_test_accounts.py`, store staging-only values in a local `.env` file:
+
+| Variable | Purpose |
+|----------|---------|
+| `SUPABASE_URL` | `https://wuybidpvqhhgkukpyyhq.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Staging service-role key |
+| `WHIDBY_TEST_ADMIN_PASSWORD` | Password for `admin-test@widby.dev` |
+| `WHIDBY_TEST_USER_PASSWORD` | Password for `user-test@widby.dev` |
+| `WHIDBY_BETA_HENOCK_PASSWORD` | Password for `henock@covariance.studio` |
+| `WHIDBY_BETA_ANTWOINE_PASSWORD` | Password for `antwoine@covariance.studio` |
+| `WHIDBY_BETA_LUKE_PASSWORD` | Password for `lm13vand@gmail.com` |
+
+Never commit `.env`, service-role keys, or test-account passwords. Redirect URL pattern `https://*.vercel.app/**` must be added to the staging project's Auth settings.
 
 ## AI Review, Preview, and Visual QA Environments
 
@@ -241,10 +287,19 @@ Run in order from `supabase/migrations/`:
 | 003 | `003_shared_tables.sql` | `metro_location_cache`, `api_usage_log`, `suppression_list` |
 | 004 | `004_rls_policies.sql` | RLS enabled on all tables; `service_role` FOR ALL policies |
 | 005 | `005_authenticated_read_reports.sql` | Grants `authenticated` users SELECT on the four report-facing tables so the consumer `/reports` page can read via the publishable key. Writes remain `service_role`. Added in PR #25. |
+| 006 | `006_authenticated_delete_reports.sql` | Grants authenticated users scoped report deletion support. |
 | 007 | `007_kb_schema.sql` | Knowledge base tables: `kb_entities`, `kb_snapshots`, `kb_evidence_artifacts`, `api_response_cache`, `feedback_events` — canonical geo+industry entities, versioned snapshots with supersedence, raw evidence persistence, persistent API cache, and runtime feedback |
 | 008 | `008_kb_rls_and_lifecycle.sql` | RLS on KB tables, authenticated SELECT on entities/snapshots/feedback, soft-delete governance (`archived_at` + `entity_id` + `snapshot_id` columns on `reports`) |
+| 009 | `009_metros_and_census.sql` | Explore metro/census source tables and metro read-model support. |
+| 010 | `010_v2_benchmarks.sql` | V2 benchmark tables for city-size and business-type scoring inputs. |
+| 011 | `011_data_provider_tables.sql` | Data-provider persistence tables for external evidence ingestion. |
+| 012 | `012_recompute_seo_benchmarks.sql` | Benchmark recompute SQL for SEO benchmark refreshes. |
+| 013 | `013_sonar_slice_lite.sql` | Sonar Slice Lite schema support. |
 | 014 | `014_user_management_billing.sql` | Consumer accounts, memberships, subscriptions, usage counters, billing customer mapping, report ownership columns, account-scoped report RLS, and quota RPCs |
 | 015 | `015_explore_refresh_control.sql` | Explore refresh policies, targets, runs, run items, report snapshots, latest/trend views, and read/service-role RLS policies |
+| 016 | `016_consumer_onboarding.sql` | Consumer onboarding profiles, target selection state, and onboarding lifecycle support. |
+| 017 | `017_strategy_discovery_system.sql` | Strategy discovery system tables, cached strategy data, and protected discovery runtime support. |
+| 018 | `018_internal_user_entitlements.sql` | Internal user entitlement overrides for curated accounts and quota exemptions. |
 
 ## Revision History
 
@@ -257,3 +312,4 @@ Run in order from `supabase/migrations/`:
 | 1.1.0 | 2026-04-21 | Apps reorg + operational wiring | Distinguish `apps/admin` (3001) vs `apps/app` (3002), drop magic-link language for email/password, add `NEXT_PUBLIC_NICHE_DRY_RUN`, document migration 005 |
 | 1.2.0 | 2026-04-22 | Mapbox autocomplete | Added `MAPBOX_ACCESS_TOKEN` to both root and Render env tables |
 | 1.3.0 | 2026-04-25 | Staging environment | Added staging stack docs, `ENVIRONMENT`/`CORS_EXTRA_ORIGINS` vars, migration workflow, env scoping |
+| 1.4.0 | 2026-05-17 | Supabase staging workflows | Added staging migration and test-account seeding workflow docs, required `staging` secrets, local env handling, pinned Supabase CLI workflow setup, dev-branch guards, and missing migration rows through 018 |

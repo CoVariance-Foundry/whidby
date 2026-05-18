@@ -41,6 +41,7 @@ describe("POST /api/strategies/runs", () => {
     member_role: "owner",
     plan_key: "plus",
     monthly_report_limit: 10,
+    fresh_report_quota_exempt: false,
     subscription_status: "active",
     current_period_start: "2026-05-01T00:00:00.000Z",
     current_period_end: "2026-06-01T00:00:00.000Z",
@@ -83,6 +84,37 @@ describe("POST /api/strategies/runs", () => {
     expect(mocks.consumeReportQuota).not.toHaveBeenCalled();
   });
 
+  it("allows quota-exempt free admins to run fresh strategy requests", async () => {
+    mocks.resolveEntitlementContext.mockResolvedValueOnce({
+      user: { ...user, email: "admin-test@widby.dev" },
+      entitlement: {
+        ...entitlement,
+        member_role: "admin",
+        plan_key: "free",
+        monthly_report_limit: 0,
+        fresh_report_quota_exempt: true,
+      },
+    });
+    const req = new Request("http://localhost/api/strategies/runs", {
+      method: "POST",
+      body: JSON.stringify({ mode: "fresh", strategy_id: "easy_win" }),
+    });
+
+    const res = await POST(req as never);
+
+    expect(res.status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledOnce();
+    expect(mocks.consumeReportQuota).not.toHaveBeenCalled();
+    const init = vi.mocked(global.fetch).mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      mode: "fresh",
+      strategy_id: "easy_win",
+      quota_consumed: 0,
+      account_id: "33333333-3333-3333-3333-333333333333",
+      created_by_user_id: "44444444-4444-4444-4444-444444444444",
+    });
+  });
+
   it("allows cached free requests and injects account and user ids", async () => {
     mocks.resolveEntitlementContext.mockResolvedValueOnce({
       user,
@@ -104,6 +136,7 @@ describe("POST /api/strategies/runs", () => {
       strategy_id: "gbp_blitz",
       limit: 25,
       mode: "cached",
+      quota_consumed: 0,
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
     });
@@ -133,6 +166,7 @@ describe("POST /api/strategies/runs", () => {
       mode: "fresh",
       strategy_id: "keyword_hijack",
       primary_keyword: "boise plumber",
+      quota_consumed: 1,
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
     });
@@ -159,6 +193,7 @@ describe("POST /api/strategies/runs", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({
       strategy_id: "easy_win",
       mode: "cached",
+      quota_consumed: 0,
     });
     expect(JSON.parse(init.body as string)).not.toHaveProperty("lens_id");
   });

@@ -90,7 +90,7 @@ def test_strategy_runs_allow_fresh_run_without_explicit_targets(
     assert created_run["input_payload"]["targets"] == []
     assert created_run["input_payload"]["city"] == "Boise"
     assert created_run["input_payload"]["service"] == "roofing"
-    assert created_run["quota_consumed"] == 1
+    assert created_run["quota_consumed"] == 0
 
 
 def test_strategy_runs_reject_empty_fresh_run_without_target_or_city_service(
@@ -331,6 +331,7 @@ def test_strategy_runs_create_fresh_run_response_shape(
         json={
             "strategy_id": "gbp_blitz",
             "mode": "fresh",
+            "quota_consumed": 1,
             "targets": [
                 {
                     "cbsa_code": "13820",
