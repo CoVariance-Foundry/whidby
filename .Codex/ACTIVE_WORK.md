@@ -66,51 +66,40 @@ Implementation path:
 
 ## Explore Cities Refactor
 
-Status: Task 1 canonical product/data/test contract locked; code refactor not started in this slice.
+Status: implementation complete locally; staging/live rollout still requires migration, materialized-view refresh, and data readiness audit.
 
 Current plan: `docs/superpowers/plans/2026-05-17-explore-cities-refactor.md`.
 Linear: `WHI-1` Refactor Explore Cities into city-first market discovery surface.
 
 Product direction: keep `/explore` city-first like the UX prototype, add service-selected comparison for city-service metrics, and keep Strategies as guided ranking lenses over the same market-cell read model. Density and growth remain service-aware metrics; do not present them as unlabelled city-only facts.
 
-Completed foundation: canonical Explore Cities architecture defines the backend read model, source tables, metric formulas, server-side filtering boundary, run-report control, and refresh-target separation.
+Completed:
 
-Latest contract slice: updated canonical docs for the Explore vs. Strategies responsibility split, the `ExploreMarketCell` derived read model, and Explore market-cell/service-mode/default-lineage/pagination/growth-unavailable test obligations.
-
-Latest audit slice: added `scripts/explore/audit_explore_sources.py`, a read-only PostgREST audit for Explore source table visibility and sparse `metros` demographic fields. Focused test `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py -v` passes. Live publishable-key and service-role audit commands currently report missing Supabase env in this worktree: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
-
-Latest backfill slice: added and hardened `scripts/explore/backfill_metros.py`, which builds `public.metros` payloads from `src/data/seed/cbsa_seed.json` plus ACS demographics, derives `population_class`, includes `cbsa_type`, renter units, median age, and ACS load metadata, and only performs PostgREST upserts when `--apply` is explicitly passed with `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` present. Default and `--dry-run` mode are non-mutating previews. Focused tests `./.venv/bin/pytest tests/scripts/test_backfill_metros.py -v` and `./.venv/bin/pytest tests/clients/census/test_client.py -v` pass. Required dry-run command `python scripts/explore/backfill_metros.py --dry-run` still cannot complete in this worktree because Census fetch is blocked/missing credentials, but it now exits nonzero with sanitized output only: `ACS fetch failed: ConnectError: ACS demographic request failed`. No live mutation ran; this worktree has no root `.env`, `NEXT_PUBLIC_SUPABASE_URL` is unset, and `SUPABASE_SERVICE_ROLE_KEY` is unset.
-
-Latest CBP establishment slice: added `scripts/explore/backfill_cbp_establishments.py` and `tests/scripts/test_backfill_cbp_establishments.py` for import-file payload preparation targeting `public.census_cbp_establishments`. The CLI accepts already-fetched `.json` or `.csv` CBP rows, defaults to dry-run preview, and only performs PostgREST upserts when `--apply` is passed with Supabase URL/service-role env present. No live CBP fetch/write ran. Fetch-path blocker: `src/clients/census/cbp_client.py` currently verifies only a narrow `ESTAB`, `EMP`, `PAYANN`, `NAICS2017` MSA cache path and does not provide the size-bucket, `empflag`, `naics_label`, or suppression contract required for the Explore CBP table.
-
-Latest benchmark readiness slice: added `scripts/explore/recompute_benchmark_readiness.py` and `tests/scripts/test_recompute_benchmark_readiness.py` as a read-only preflight before running the existing benchmark recompute path. The helper blocks recompute when `metros_with_population`, `seo_fact_count`, or `cbp_count` are zero or missing. No benchmark recompute ran in this worktree because live source checks/env were not part of this slice.
-
-Latest read-model slice: added `src/domain/explore/metrics.py`, `src/domain/explore/entities.py`, and `src/domain/services/explore_city_service.py`. The service combines metros, score rows, and service-scoped CBP metric inputs through a repository protocol with no direct Supabase I/O; canonical service normalization, latest unique cached service collapse, V2-over-legacy preference, coherent latest-score freshness, business density, and annualized growth are covered by focused unit tests.
-
-Latest consumer loader slice: `apps/app/src/lib/explore/load-explore-data.ts` now selects optional `public.metros.business_density_per_1k` and `establishment_growth_yoy` metrics when the backend/read-model exposes them, maps them into Explore city summaries, and falls back to the base metros select if PostgREST reports either optional metric column missing from the schema cache. Focused Vitest coverage verifies metric mapping and the missing-column fallback. `METRO_LIMIT` remains in place; final backend pagination/API route work is still required before removing the 100-metro loader limit.
-
-Next implementation slice:
-
-- Add `supabase/migrations/018_explore_market_cells.sql` as a derived read model, not a duplicate source table.
-- Add `src/clients/explore_repository.py` so `ExploreCityService` reads from Supabase through a concrete adapter.
-- Add backend/API routes for `GET /api/explore/cities` and `GET /api/explore/cities/{cbsa_code}`.
-- Update `/explore` to consume backend DTOs instead of loading the first 100 metros and filtering in React.
-- Refactor filters/table/drawer to match the prototype while preserving service-aware metric lineage.
-- Add readiness checks for `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, `public.metro_score_v2`, PostgREST schema visibility, and density/growth availability.
+- Updated canonical docs for the Explore vs. Strategies responsibility split, the `ExploreMarketCell` derived read model, service-aware metric lineage, backend filtering/pagination, and growth-unavailable behavior.
+- Added `supabase/migrations/018_explore_market_cells.sql` as a derived materialized read model over `public.metros`, `public.census_cbp_establishments`, `public.niche_naics_mapping`, `public.metro_score_v2`, `public.metro_scores`, reports, and refresh targets.
+- Added `src/clients/explore_repository.py` and wired `ExploreCityService` to backend list/detail reads with cursor pagination, service filters, sort mapping, representative-service defaults, V2-over-legacy score preference, freshness fields, density, growth, and `growth_available`.
+- Added FastAPI `GET /api/explore/cities` and `GET /api/explore/cities/{cbsa_code}` plus bounded Next proxy routes under `apps/app/src/app/api/explore/cities`.
+- Replaced the app Explore loader's direct Supabase stitching/top-100 React filtering with backend-backed query loading from URL search params.
+- Refactored the Explore UI to city-first prototype copy/labels, URL-driven filters/sorts, growth-disabled/cleared state, representative metric lineage, and stale-refresh guards during URL transitions.
+- Updated the city drawer and fresh-scan flow so cached rows, catalog defaults, and custom services can start fresh scans through `/api/agent/scoring`; refresh remains limited to cached targets with `refresh_target_id`.
+- Extended `scripts/explore/audit_explore_sources.py` to report `explore_market_cells_count`, `market_cells_with_density`, loaded CBP years, and `growth_available`.
+- Extended `scripts/explore/backfill_cbp_establishments.py --year <year>` so 2022/2023 CBP import files can be prepared/applied independently.
 
 Verified locally:
 
-- `./.venv/bin/pytest tests/scripts/test_audit_explore_sources.py tests/scripts/test_backfill_metros.py tests/scripts/test_backfill_cbp_establishments.py tests/scripts/test_recompute_benchmark_readiness.py tests/unit/test_explore_metrics.py tests/unit/test_explore_city_service.py tests/clients/census/test_client.py -v`
-- `npm --workspace apps/app test -- load-explore-data`
-- `git diff --check`
-- `npx docguard-cli guard` ran with network approval and completed at `119/188 passed` with warning-only MEDIUM findings; HIGH categories passed.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_explore_metrics.py tests/unit/test_explore_city_service.py tests/unit/test_explore_repository.py tests/unit/test_api_explore_cities.py tests/unit/test_explore_market_cells_schema.py -q` passed 43 tests with one pre-existing pytest config warning.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/scripts/test_audit_explore_sources.py tests/scripts/test_backfill_cbp_establishments.py -q` passed 20 tests with one pre-existing pytest config warning.
+- `npm --workspace apps/app test -- load-explore-data api/explore/cities explore` passed 54 tests.
+- `npx tsc --noEmit` from `apps/app` passed.
+- `npm --workspace apps/app run lint` exited 0 with two pre-existing unrelated warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- Local app server started on `http://localhost:3004`; `/explore` redirected to `/login`, so protected-page visual smoke was auth-blocked rather than compile/runtime blocked.
 
-Not verified live:
+Not verified:
 
-- `scripts/explore/backfill_metros.py --apply`
-- `scripts/explore/backfill_cbp_establishments.py --apply`
-- benchmark recompute after fresh source data
-- `python scripts/explore/audit_explore_sources.py` against a valid Supabase service-role environment. The 2026-05-16 service-role and publishable-key audits reached the configured Supabase project URL but returned `HTTP 401 Invalid API key` for all checked tables, so no source counts or non-null coverage were verified live.
+- `npx docguard-cli guard` could not complete in this sandbox because `npx` could not resolve `registry.npmjs.org` (`ENOTFOUND`).
+- Live Supabase migration application, `REFRESH MATERIALIZED VIEW public.explore_market_cells`, and `python scripts/explore/audit_explore_sources.py --service-role` against staging/prod.
+- Historical CBP backfill for a second year. Until at least two CBP years exist, Explore should keep `growth_available=false` and the UI should disable/clear growth-only filters.
 
 Known constraints:
 
