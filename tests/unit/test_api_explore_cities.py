@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.research_agent import api as api_module
-from src.research_agent.api import app
 
 
 class FakeExploreCityService:
@@ -68,7 +67,7 @@ class FakeExploreCityService:
 
 @pytest.fixture()
 def client() -> TestClient:
-    return TestClient(app)
+    return TestClient(api_module.app)
 
 
 def test_get_explore_cities_forwards_filters(
