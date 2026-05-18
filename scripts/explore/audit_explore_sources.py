@@ -38,6 +38,8 @@ OPTIONAL_NON_NULL_FIELDS = {
     ),
 }
 
+CBP_YEAR_CANDIDATES = tuple(range(2010, 2031))
+
 
 @dataclass(frozen=True)
 class SupabaseConfig:
@@ -213,11 +215,20 @@ def _count_error(table: str, status: int, body: str) -> str:
     return f"{table} count request failed with HTTP {status}: {body}"
 
 
-def get_count(config: SupabaseConfig, table: str) -> tuple[int, str | None]:
+def get_count(
+    config: SupabaseConfig,
+    table: str,
+    params: dict[str, str] | None = None,
+) -> tuple[int, str | None]:
+    query_params = {
+        "select": "*",
+        "limit": "1",
+    }
+    query_params.update(params or {})
     status, headers, body = postgrest_get(
         config,
         table,
-        params={"select": "*", "limit": "1"},
+        params=query_params,
         headers={"Prefer": "count=exact", "Range": "0-0"},
     )
     if status < 200 or status >= 300:
@@ -246,31 +257,19 @@ def get_non_null_count(
 
 
 def get_cbp_years(config: SupabaseConfig) -> tuple[list[int], str | None]:
-    status, _headers, body = postgrest_get(
-        config,
-        "census_cbp_establishments",
-        params={
-            "select": "year",
-            "year": "not.is.null",
-            "order": "year.asc",
-            "limit": "10000",
-        },
-    )
-    if status < 200 or status >= 300:
-        return [], _count_error("census_cbp_establishments.year", status, body)
-
-    try:
-        rows = json.loads(body)
-    except json.JSONDecodeError as exc:
-        return [], f"census_cbp_establishments.year parse failed: {exc}"
-    years = sorted(
-        {
-            int(row["year"])
-            for row in rows
-            if isinstance(row, dict) and row.get("year") is not None
-        },
-    )
-    return years, None
+    years: list[int] = []
+    errors: list[str] = []
+    for year in CBP_YEAR_CANDIDATES:
+        count, error = get_count(
+            config,
+            "census_cbp_establishments",
+            params={"year": f"eq.{year}"},
+        )
+        if error:
+            errors.append(error)
+        elif count > 0:
+            years.append(year)
+    return years, "; ".join(errors) if errors else None
 
 
 def audit(config: SupabaseConfig) -> list[dict[str, Any]]:

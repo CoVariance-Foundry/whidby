@@ -1,5 +1,6 @@
 from scripts.explore.audit_explore_sources import (
     REQUIRED_TABLES,
+    get_cbp_years,
     summarize_explore_readiness,
     summarize_table_health,
 )
@@ -81,3 +82,25 @@ def test_summarize_explore_readiness_passes_with_two_cbp_years() -> None:
 
     assert summary["status"] == "pass"
     assert summary["growth_available"] is True
+
+
+def test_get_cbp_years_checks_candidate_years_without_row_sampling(monkeypatch) -> None:
+    calls: list[dict[str, str] | None] = []
+
+    def fake_get_count(config, table, params=None):  # noqa: ANN001
+        calls.append(params)
+        if params in ({"year": "eq.2022"}, {"year": "eq.2023"}):
+            return 1, None
+        return 0, None
+
+    monkeypatch.setattr(
+        "scripts.explore.audit_explore_sources.get_count",
+        fake_get_count,
+    )
+
+    years, error = get_cbp_years(object())  # type: ignore[arg-type]
+
+    assert error is None
+    assert years == [2022, 2023]
+    assert {"year": "eq.2022"} in calls
+    assert {"year": "eq.2023"} in calls
