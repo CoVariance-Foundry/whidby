@@ -70,7 +70,11 @@ const BACKEND_ARCHETYPE_MAP: Record<string, ArchetypeId> = {
 };
 
 function getUpstreamApiBase() {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("loadExploreData requires NEXT_PUBLIC_API_URL");
+  }
   return "http://localhost:8000";
 }
 
@@ -281,17 +285,18 @@ export async function loadExploreData(
   let response: Response;
   try {
     response = await fetch(url, { cache: "no-store" });
-  } catch {
-    return { cities: [], next_cursor: null, service_filter: null };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "request failed";
+    throw new Error(`loadExploreData explore cities: ${detail}`);
   }
 
   if (!response.ok) {
-    return { cities: [], next_cursor: null, service_filter: null };
+    throw new Error(`loadExploreData explore cities: HTTP ${response.status}`);
   }
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    return { cities: [], next_cursor: null, service_filter: null };
+    throw new Error("loadExploreData explore cities: expected JSON response");
   }
 
   return normalizeExploreData((await response.json()) as BackendExploreData);
