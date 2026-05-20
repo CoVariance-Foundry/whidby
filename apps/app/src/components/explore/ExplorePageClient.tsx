@@ -8,6 +8,7 @@ import type {
   ExploreData,
   ExploreScanTarget,
 } from "@/lib/explore/types";
+import { normalizeExploreCity } from "@/lib/explore/load-explore-data";
 import type {
   ExploreRefreshRunRequest,
   ExploreRefreshRunResponse,
@@ -17,7 +18,11 @@ import type { StandardSurfaceResponse } from "@/lib/niche-finder/types";
 import { Icon, I } from "@/lib/icons";
 import CityDrawer from "./CityDrawer";
 import ExploreFilters, { type ExploreFilterState } from "./ExploreFilters";
-import ExploreTable, { type ExploreSortKey, type SortDirection } from "./ExploreTable";
+import ExploreTable, {
+  type ExploreCityDetailState,
+  type ExploreSortKey,
+  type SortDirection,
+} from "./ExploreTable";
 import FreshScanConfirmation, {
   type FreshScanResult,
 } from "./FreshScanConfirmation";
@@ -92,14 +97,29 @@ function normalizedServiceLabel(value: string): string {
   return value.trim().toLocaleLowerCase().replace(/[_-]+/g, " ");
 }
 
+function catalogServiceLabel(value: string): string {
+  return normalizedServiceLabel(value)
+    .split(" ")
+    .map((word) => {
+      if (word === "hvac") return "HVAC";
+      return word.charAt(0).toLocaleUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
 function uniqueServiceCatalog(services: string[]): string[] {
   const byKey = new Map<string, string>();
   services.forEach((service) => {
     const key = normalizedServiceLabel(service);
-    if (!byKey.has(key)) byKey.set(key, service);
+    if (!byKey.has(key)) byKey.set(key, catalogServiceLabel(service));
   });
   return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
+
+type CityDetailCacheEntry =
+  | { status: "loading" }
+  | { status: "ready"; city: ExploreCitySummary }
+  | { status: "error"; message: string };
 
 function filtersFromSearchParams(searchParams: SearchParamsLike): ExploreFilterState {
   return {
@@ -292,6 +312,60 @@ export default function ExplorePageClient({
   const [refreshRun, setRefreshRun] = useState<ExploreRefreshRunResponse | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isRefreshSubmitting, setIsRefreshSubmitting] = useState(false);
+  const [cityDetailCache, setCityDetailCache] = useState<
+    Record<string, CityDetailCacheEntry>
+  >({});
+
+  async function ensureCityDetail(city: ExploreCitySummary) {
+    if (city.cached_services_count <= city.cached_scores.length) return;
+    const current = cityDetailCache[city.cbsa_code];
+    if (current?.status === "loading" || current?.status === "ready") return;
+
+    setCityDetailCache((cache) => ({
+      ...cache,
+      [city.cbsa_code]: { status: "loading" },
+    }));
+
+    try {
+      const response = await fetch(
+        `/api/explore/cities/${encodeURIComponent(city.cbsa_code)}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new Error(`Service detail unavailable (HTTP ${response.status}).`);
+      }
+      const detail = normalizeExploreCity(await response.json());
+      setCityDetailCache((cache) => ({
+        ...cache,
+        [city.cbsa_code]: { status: "ready", city: detail },
+      }));
+    } catch (error) {
+      setCityDetailCache((cache) => ({
+        ...cache,
+        [city.cbsa_code]: {
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Service detail unavailable.",
+        },
+      }));
+    }
+  }
+
+  const visibleCities = useMemo(
+    () =>
+      data.cities.map((city) => {
+        const entry = cityDetailCache[city.cbsa_code];
+        return entry?.status === "ready" ? entry.city : city;
+      }),
+    [cityDetailCache, data.cities],
+  );
+  const openCityWithDetail = useMemo(() => {
+    if (!openCity) return null;
+    const entry = cityDetailCache[openCity.cbsa_code];
+    return entry?.status === "ready" ? entry.city : openCity;
+  }, [cityDetailCache, openCity]);
 
   const states = useMemo(
     () => [...new Set(data.cities.map((city) => city.state).filter(Boolean))].sort(),
@@ -301,17 +375,30 @@ export default function ExplorePageClient({
     () =>
       [
         ...new Set(
-          data.cities.flatMap((city) => city.cached_scores.map((score) => score.service)),
+          visibleCities.flatMap((city) => city.cached_scores.map((score) => score.service)),
         ),
       ].sort((a, b) => a.localeCompare(b)),
-    [data.cities],
+    [visibleCities],
   );
   const catalogServices = useMemo(
     () => uniqueServiceCatalog(services),
     [services],
   );
 
-  const visibleCities = data.cities;
+  const detailStates = useMemo(() => {
+    const statesByCity: Record<string, ExploreCityDetailState> = {};
+    for (const [cbsaCode, entry] of Object.entries(cityDetailCache)) {
+      if (entry.status === "loading") {
+        statesByCity[cbsaCode] = { status: "loading" };
+      } else if (entry.status === "error") {
+        statesByCity[cbsaCode] = {
+          status: "error",
+          message: entry.message,
+        };
+      }
+    }
+    return statesByCity;
+  }, [cityDetailCache]);
   const visibleScores = useMemo(
     () => visibleCities.flatMap((city) => city.cached_scores),
     [visibleCities],
@@ -404,6 +491,7 @@ export default function ExplorePageClient({
     setOpenCity(city);
     setSelectedTargets([]);
     setConfirmOpen(false);
+    void ensureCityDetail(city);
   }
 
   function closeDrawer() {
@@ -492,7 +580,7 @@ export default function ExplorePageClient({
   }
 
   async function confirmFreshScan(targetsToScan: ExploreScanTarget[]) {
-    if (!openCity || freshScanInFlightRef.current || targetsToScan.length === 0) {
+    if (!openCityWithDetail || freshScanInFlightRef.current || targetsToScan.length === 0) {
       return;
     }
 
@@ -501,7 +589,7 @@ export default function ExplorePageClient({
     freshScanInFlightRef.current = true;
     setIsFreshScanRunning(true);
     setFreshScanResults([]);
-    const cityToScan = openCity;
+    const cityToScan = openCityWithDetail;
     const isCurrentRequest = () =>
       freshScanRequestIdRef.current === requestId && freshScanInFlightRef.current;
 
@@ -633,6 +721,8 @@ export default function ExplorePageClient({
           sortKey={sortKey}
           sortDirection={sortDirection}
           activeService={filters.service}
+          detailStates={detailStates}
+          onCityExpand={(city) => void ensureCityDetail(city)}
           onSortChange={changeSort}
           onCityOpen={openDrawer}
           onReset={resetFilters}
@@ -640,7 +730,7 @@ export default function ExplorePageClient({
       </div>
 
       <CityDrawer
-        city={openCity}
+        city={openCityWithDetail}
         catalogServices={catalogServices}
         selectedTargets={selectedTargets}
         isTopLayer={!confirmOpen}
@@ -655,7 +745,7 @@ export default function ExplorePageClient({
       />
 
       <FreshScanConfirmation
-        cityName={openCity?.cbsa_name ?? ""}
+        cityName={openCityWithDetail?.cbsa_name ?? ""}
         targets={selectedTargets}
         results={freshScanResults}
         isOpen={confirmOpen}

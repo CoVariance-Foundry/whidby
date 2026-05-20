@@ -230,7 +230,7 @@ function averageOpportunityScore(scores: ExploreCachedScore[]) {
   return Math.round(total / scores.length);
 }
 
-function normalizeCity(city: BackendCity): ExploreCitySummary {
+export function normalizeExploreCity(city: BackendCity): ExploreCitySummary {
   const cachedScores = (city.cached_scores ?? []).map(normalizeCachedScore);
   const bestScore = asNumber(city.best_score);
   const presentationScore = asNumber(city.presentation_score);
@@ -268,7 +268,7 @@ function normalizeCity(city: BackendCity): ExploreCitySummary {
 
 function normalizeExploreData(data: BackendExploreData): ExploreData {
   return {
-    cities: (data.cities ?? []).map(normalizeCity),
+    cities: (data.cities ?? []).map(normalizeExploreCity),
     next_cursor: data.next_cursor ?? null,
     service_filter: data.service_filter ?? null,
     growth_available: data.growth_available,

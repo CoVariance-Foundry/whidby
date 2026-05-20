@@ -21,7 +21,7 @@ Usage:
 
 Env vars:
     NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY — for matview refresh
-    NEXT_PUBLIC_API_URL — FastAPI base (default: http://localhost:8001)
+    NEXT_PUBLIC_API_URL — FastAPI base (default: http://localhost:8000)
 """
 
 from __future__ import annotations
@@ -67,6 +67,7 @@ SERVICES = [
 ]
 
 DEFAULT_CONCURRENCY = 10
+PAGE_SIZE = 1000
 
 
 def _load_env() -> None:
@@ -87,7 +88,7 @@ def _load_env() -> None:
 def _api_url(args: argparse.Namespace) -> str:
     if args.api_url:
         return args.api_url.rstrip("/")
-    return os.environ.get("NEXT_PUBLIC_API_URL", "http://localhost:8001").rstrip("/")
+    return os.environ.get("NEXT_PUBLIC_API_URL", "http://localhost:8000").rstrip("/")
 
 
 def _supabase_client() -> Any:
@@ -115,29 +116,38 @@ def fetch_top_metros(supabase: Any, limit: int) -> list[dict[str, Any]]:
 
 
 def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
-    response = (
-        supabase.table("metro_scores")
-        .select("cbsa_code, report_id")
-        .execute()
-    )
-    scored_cbsa = {row["cbsa_code"] for row in response.data}
+    all_rows = _fetch_pages(supabase, "metro_scores", "cbsa_code, report_id")
+    scored_cbsa = {row["cbsa_code"] for row in all_rows}
 
     if not scored_cbsa:
         return set()
 
-    reports_response = (
-        supabase.table("reports")
-        .select("id, niche_keyword")
-        .execute()
-    )
-    report_niche = {row["id"]: row["niche_keyword"] for row in reports_response.data}
+    all_reports = _fetch_pages(supabase, "reports", "id, niche_keyword")
+    report_niche = {row["id"]: row["niche_keyword"] for row in all_reports}
 
     pairs = set()
-    for row in response.data:
+    for row in all_rows:
         niche = report_niche.get(row["report_id"])
         if niche:
             pairs.add((row["cbsa_code"], niche.strip().lower()))
     return pairs
+
+
+def _fetch_pages(supabase: Any, table: str, columns: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        response = (
+            supabase.table(table)
+            .select(columns)
+            .range(offset, offset + PAGE_SIZE - 1)
+            .execute()
+        )
+        page = list(response.data or [])
+        rows.extend(page)
+        if len(page) < PAGE_SIZE:
+            return rows
+        offset += PAGE_SIZE
 
 
 async def score_one(
@@ -181,6 +191,20 @@ def refresh_matview(supabase: Any) -> None:
     supabase.rpc("_refresh_explore_market_cells", {}).execute()
 
 
+def _is_missing_refresh_rpc(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "_refresh_explore_market_cells" in message and any(
+        marker in message
+        for marker in (
+            "not found",
+            "does not exist",
+            "could not find",
+            "schema cache",
+            "pgrst202",
+        )
+    )
+
+
 def refresh_matview_sql() -> None:
     """Refresh via direct SQL if the RPC doesn't exist."""
     _load_env()
@@ -188,7 +212,10 @@ def refresh_matview_sql() -> None:
     try:
         refresh_matview(sb)
         logger.info("Materialized view refreshed via RPC.")
-    except Exception:
+        return
+    except Exception as exc:
+        if not _is_missing_refresh_rpc(exc):
+            raise
         logger.info("RPC not found, refreshing via raw SQL...")
         sb.postgrest.auth(os.environ["SUPABASE_SERVICE_ROLE_KEY"])
         if hasattr(sb, "rpc"):
@@ -199,12 +226,14 @@ def refresh_matview_sql() -> None:
                 ).execute()
                 logger.info("Materialized view refreshed via exec_sql RPC.")
                 return
-            except Exception:
-                pass
-        logger.warning(
-            "Could not refresh matview programmatically. "
-            "Run this SQL manually in Supabase:\n"
-            "  REFRESH MATERIALIZED VIEW public.explore_market_cells;"
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    "Could not refresh explore_market_cells via fallback exec_sql RPC."
+                ) from fallback_exc
+        raise RuntimeError(
+            "Could not refresh explore_market_cells programmatically. "
+            "Run this SQL manually in Supabase: "
+            "REFRESH MATERIALIZED VIEW public.explore_market_cells;"
         )
 
 
@@ -341,7 +370,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             _worker(i, metro, service, client)
             for i, (metro, service) in enumerate(pairs, 1)
         ]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks)
 
     total_time = time.monotonic() - started
     logger.info(
@@ -409,7 +438,7 @@ def main() -> None:
         "--api-url",
         type=str,
         default=None,
-        help="FastAPI base URL (default: NEXT_PUBLIC_API_URL or http://localhost:8001).",
+        help="FastAPI base URL (default: NEXT_PUBLIC_API_URL or http://localhost:8000).",
     )
     args = parser.parse_args()
 

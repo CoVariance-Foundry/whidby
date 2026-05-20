@@ -27,10 +27,16 @@ interface ExploreTableProps {
   sortKey: ExploreSortKey;
   sortDirection: SortDirection;
   activeService?: string;
+  detailStates?: Record<string, ExploreCityDetailState>;
+  onCityExpand: (city: ExploreCitySummary) => void;
   onSortChange: (key: ExploreSortKey) => void;
   onCityOpen: (city: ExploreCitySummary) => void;
   onReset: () => void;
 }
+
+export type ExploreCityDetailState =
+  | { status: "loading" }
+  | { status: "error"; message: string };
 
 const COLUMNS: Array<{ key: ExploreSortKey; label: string; align?: "right" }> = [
   { key: "city", label: "City" },
@@ -179,12 +185,14 @@ function CityRow({
   city,
   isExpanded,
   activeService,
+  detailState,
   onToggle,
   onCityOpen,
 }: {
   city: ExploreCitySummary;
   isExpanded: boolean;
   activeService: string;
+  detailState?: ExploreCityDetailState;
   onToggle: () => void;
   onCityOpen: () => void;
 }) {
@@ -192,11 +200,21 @@ function CityRow({
     .trim()
     .toLocaleLowerCase()
     .replace(/[_-]+/g, " ");
+  const needsFullServiceDetail = city.cached_services_count > city.cached_scores.length;
 
   return (
     <>
       <div
         role="row"
+        aria-label={`Open ${city.cbsa_name}`}
+        tabIndex={0}
+        onClick={onCityOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onCityOpen();
+          }
+        }}
         style={{
           display: "grid",
           gridTemplateColumns:
@@ -209,19 +227,12 @@ function CityRow({
           fontSize: 13.5,
           color: "var(--ink)",
           background: isExpanded ? "var(--paper-alt)" : "transparent",
+          cursor: "pointer",
         }}
       >
         <span
           role="cell"
-          style={{ minWidth: 0, cursor: "pointer" }}
-          onClick={onCityOpen}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onCityOpen();
-            }
-          }}
-          tabIndex={0}
+          style={{ minWidth: 0 }}
         >
           <span
             style={{
@@ -308,7 +319,13 @@ function CityRow({
         <span role="cell" style={{ textAlign: "center" }}>
           <button
             type="button"
-            onClick={onToggle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle();
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+            }}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? "Collapse services" : "Expand services"}
             style={{
@@ -343,7 +360,7 @@ function CityRow({
         </span>
       </div>
 
-      {isExpanded && city.cached_scores.length > 0 && (
+      {isExpanded && (
         <div
           style={{
             background: "var(--paper-alt)",
@@ -373,25 +390,50 @@ function CityRow({
             <span style={{ textAlign: "right" }}>Difficulty</span>
             <span style={{ textAlign: "right" }}>Last scored</span>
           </div>
-          {city.cached_scores.map((score) => {
-            const serviceKey =
-              (score.service || score.niche_normalized || "")
-                .trim()
-                .toLocaleLowerCase()
-                .replace(/[_-]+/g, " ");
-            const isHighlighted =
-              !!normalizedActiveService && serviceKey === normalizedActiveService;
-            return (
-              <ServiceDetailRow
-                key={score.report_id ?? score.service}
-                score={score}
-                isHighlighted={isHighlighted}
-              />
-            );
-          })}
+          {detailState?.status === "loading" || (needsFullServiceDetail && !detailState) ? (
+            <ServicePanelMessage message="Loading service details..." />
+          ) : detailState?.status === "error" ? (
+            <ServicePanelMessage message={detailState.message} />
+          ) : city.cached_scores.length === 0 ? (
+            <ServicePanelMessage message="No cached service scores are available." />
+          ) : (
+            city.cached_scores.map((score) => {
+              const serviceKey =
+                (score.service || score.niche_normalized || "")
+                  .trim()
+                  .toLocaleLowerCase()
+                  .replace(/[_-]+/g, " ");
+              const isHighlighted =
+                !!normalizedActiveService && serviceKey === normalizedActiveService;
+              return (
+                <ServiceDetailRow
+                  key={score.report_id ?? score.service}
+                  score={score}
+                  isHighlighted={isHighlighted}
+                />
+              );
+            })
+          )}
         </div>
       )}
     </>
+  );
+}
+
+function ServicePanelMessage({ message }: { message: string }) {
+  return (
+    <div
+      role="row"
+      style={{
+        padding: "12px 16px 12px 48px",
+        borderBottom: "1px solid var(--rule)",
+        fontFamily: "var(--sans)",
+        fontSize: 12.5,
+        color: "var(--ink-3)",
+      }}
+    >
+      {message}
+    </div>
   );
 }
 
@@ -400,19 +442,22 @@ export default function ExploreTable({
   sortKey,
   sortDirection,
   activeService = "",
+  detailStates = {},
+  onCityExpand,
   onSortChange,
   onCityOpen,
   onReset,
 }: ExploreTableProps) {
   const [expandedCities, setExpandedCities] = useState<Set<string>>(new Set());
 
-  function toggleExpand(cbsaCode: string) {
+  function toggleExpand(city: ExploreCitySummary) {
     setExpandedCities((prev) => {
       const next = new Set(prev);
-      if (next.has(cbsaCode)) {
-        next.delete(cbsaCode);
+      if (next.has(city.cbsa_code)) {
+        next.delete(city.cbsa_code);
       } else {
-        next.add(cbsaCode);
+        next.add(city.cbsa_code);
+        onCityExpand(city);
       }
       return next;
     });
@@ -511,7 +556,8 @@ export default function ExploreTable({
             city={city}
             isExpanded={expandedCities.has(city.cbsa_code)}
             activeService={activeService}
-            onToggle={() => toggleExpand(city.cbsa_code)}
+            detailState={detailStates[city.cbsa_code]}
+            onToggle={() => toggleExpand(city)}
             onCityOpen={() => onCityOpen(city)}
           />
         ))}

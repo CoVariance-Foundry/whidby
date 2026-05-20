@@ -272,6 +272,83 @@ describe("ExplorePageClient", () => {
     expect(document.activeElement).toBe(lastFocusable);
   });
 
+  it("loads full city detail before rendering expanded service rows", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...fixtureData.cities[0],
+          cached_services_count: 2,
+          cached_scores: [
+            {
+              report_id: "report-austin-roofing",
+              niche_keyword: "roofing",
+              presentation_score: 82,
+              latest_scored_at: "2026-05-01T12:00:00Z",
+            },
+            {
+              report_id: "report-austin-window-washing",
+              niche_keyword: "window washing",
+              presentation_score: 76,
+              latest_scored_at: "2026-05-04T12:00:00Z",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          cities: [
+            {
+              ...fixtureData.cities[0],
+              cached_services_count: 2,
+              cached_scores: [fixtureData.cities[0].cached_scores[0]],
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand services" }));
+
+    expect(screen.getByText("Loading service details...")).toBeTruthy();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/explore/cities/11111",
+        expect.objectContaining({ cache: "no-store" }),
+      ),
+    );
+    expect(await screen.findByText("Window washing")).toBeTruthy();
+  });
+
+  it("shows a service-detail error instead of rendering partial expanded rows", async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 503 }));
+
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          cities: [
+            {
+              ...fixtureData.cities[0],
+              cached_services_count: 2,
+              cached_scores: [fixtureData.cities[0].cached_scores[0]],
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand services" }));
+
+    expect(await screen.findByText("Service detail unavailable (HTTP 503).")).toBeTruthy();
+    expect(screen.queryByText("Pack, vulnerable")).toBeNull();
+  });
+
   it("posts one fresh scan per selected cached service with city, service, and state", async () => {
     const fetchMock = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(init?.body as string) as { service: string };
