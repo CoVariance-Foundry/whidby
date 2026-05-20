@@ -44,14 +44,6 @@ const DEFAULT_FILTERS: ExploreFilterState = {
 };
 
 const REFRESH_BATCH_CAP = 50;
-const DEFAULT_CATALOG_SERVICES = [
-  "Plumbing",
-  "HVAC",
-  "Roofing",
-  "Tree service",
-  "Pest control",
-  "Water damage",
-];
 
 function parseNumber(value: string): number | null {
   const cleaned = value.replace(/,/g, "").trim();
@@ -102,7 +94,7 @@ function normalizedServiceLabel(value: string): string {
 
 function uniqueServiceCatalog(services: string[]): string[] {
   const byKey = new Map<string, string>();
-  [...DEFAULT_CATALOG_SERVICES, ...services].forEach((service) => {
+  services.forEach((service) => {
     const key = normalizedServiceLabel(service);
     if (!byKey.has(key)) byKey.set(key, service);
   });
