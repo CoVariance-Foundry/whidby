@@ -69,19 +69,13 @@ const BACKEND_ARCHETYPE_MAP: Record<string, ArchetypeId> = {
   MIXED: "MIXED",
 };
 
-function getBaseUrl() {
-  if (typeof window === "undefined" && process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
+function getUpstreamApiBase() {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("loadExploreData requires NEXT_PUBLIC_API_URL");
   }
-  if (process.env.NEXT_PUBLIC_APP_FRONTEND_URL) {
-    return process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
-  }
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  if (process.env.NODE_ENV === "development") return "http://localhost:3002";
-  throw new Error(
-    "loadExploreData requires NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_FRONTEND_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL outside local development.",
-  );
+  return "http://localhost:8000";
 }
 
 function appendIfPresent(
@@ -236,7 +230,7 @@ function averageOpportunityScore(scores: ExploreCachedScore[]) {
   return Math.round(total / scores.length);
 }
 
-function normalizeCity(city: BackendCity): ExploreCitySummary {
+export function normalizeExploreCity(city: BackendCity): ExploreCitySummary {
   const cachedScores = (city.cached_scores ?? []).map(normalizeCachedScore);
   const bestScore = asNumber(city.best_score);
   const presentationScore = asNumber(city.presentation_score);
@@ -274,7 +268,7 @@ function normalizeCity(city: BackendCity): ExploreCitySummary {
 
 function normalizeExploreData(data: BackendExploreData): ExploreData {
   return {
-    cities: (data.cities ?? []).map(normalizeCity),
+    cities: (data.cities ?? []).map(normalizeExploreCity),
     next_cursor: data.next_cursor ?? null,
     service_filter: data.service_filter ?? null,
     growth_available: data.growth_available,
@@ -286,11 +280,23 @@ export async function loadExploreData(
 ): Promise<ExploreData> {
   const query = toExploreSearchParams(params);
   const queryString = query.toString();
-  const url = `${getBaseUrl()}/api/explore/cities${queryString ? `?${queryString}` : ""}`;
-  const response = await fetch(url, { cache: "no-store" });
+  const url = `${getUpstreamApiBase()}/api/explore/cities${queryString ? `?${queryString}` : ""}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "request failed";
+    throw new Error(`loadExploreData explore cities: ${detail}`);
+  }
 
   if (!response.ok) {
     throw new Error(`loadExploreData explore cities: HTTP ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("loadExploreData explore cities: expected JSON response");
   }
 
   return normalizeExploreData((await response.json()) as BackendExploreData);

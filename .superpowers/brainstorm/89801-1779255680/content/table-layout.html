@@ -1,0 +1,125 @@
+<h2>Explore Table: Which layout for scored pairs?</h2>
+<p class="subtitle">Each row = one scored (city, service) pair. Only scored pairs appear. Pick the layout that best supports finding the best opportunities.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family: monospace; font-size: 11px; line-height: 1.6; padding: 8px; background: #1a1a2e; color: #e0e0e0; border-radius: 6px; overflow-x: auto;">
+        <div style="display: grid; grid-template-columns: 2fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.6fr; gap: 4px; padding: 4px 0; border-bottom: 1px solid #333; font-weight: 700; color: #8bb4f0;">
+          <span>City</span><span>Service</span><span>Score</span><span>Pop.</span><span>Income</span><span>Density</span><span>Growth</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.6fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid #222;">
+          <span>Dallas, TX</span><span style="color:#7ec8e3">Roofing</span><span style="color:#4ade80; font-weight:700">82</span><span>7.8M</span><span>$72k</span><span>3.2</span><span style="color:#4ade80">+4.1%</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.6fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid #222;">
+          <span>Houston, TX</span><span style="color:#7ec8e3">Plumbing</span><span style="color:#4ade80; font-weight:700">78</span><span>7.3M</span><span>$68k</span><span>2.8</span><span style="color:#4ade80">+3.5%</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.6fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid #222;">
+          <span>Phoenix, AZ</span><span style="color:#7ec8e3">HVAC</span><span style="color:#facc15; font-weight:700">71</span><span>4.9M</span><span>$65k</span><span>2.1</span><span style="color:#4ade80">+5.2%</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.6fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid #222;">
+          <span>Dallas, TX</span><span style="color:#7ec8e3">Plumbing</span><span style="color:#facc15; font-weight:700">68</span><span>7.8M</span><span>$72k</span><span>3.2</span><span style="color:#4ade80">+4.1%</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 1.2fr 0.8fr 0.8fr 0.8fr 0.8fr 0.6fr; gap: 4px; padding: 6px 0; color: #888;">
+          <span>Atlanta, GA</span><span style="color:#7ec8e3">Tree Svc</span><span style="color:#f87171; font-weight:700">45</span><span>6.2M</span><span>$71k</span><span>1.9</span><span style="color:#f87171">-0.3%</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Flat Pairs Table</h3>
+      <p>One row per (city, service) pair. All columns visible. Simple, sortable by any column. A city appears multiple times if it has multiple scored services.</p>
+      <div class="pros-cons" style="margin-top: 8px; font-size: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Simple, familiar pattern</li><li>Sort by any column instantly</li><li>Every data point visible</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>City info repeats across rows</li><li>Hard to compare services within a city</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family: monospace; font-size: 11px; line-height: 1.6; padding: 8px; background: #1a1a2e; color: #e0e0e0; border-radius: 6px; overflow-x: auto;">
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 0.6fr 2.5fr; gap: 4px; padding: 4px 0; border-bottom: 1px solid #333; font-weight: 700; color: #8bb4f0;">
+          <span>City</span><span>Pop.</span><span>Income</span><span>Density</span><span>Growth</span><span>Scored Services</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 0.6fr 2.5fr; gap: 4px; padding: 8px 0; border-bottom: 1px solid #222;">
+          <span style="font-weight:600">Dallas, TX</span><span>7.8M</span><span>$72k</span><span>3.2</span><span style="color:#4ade80">+4.1%</span>
+          <span>
+            <span style="background:#065f46;color:#4ade80;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">Roofing <b>82</b></span>
+            <span style="background:#854d0e;color:#facc15;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">Plumbing <b>68</b></span>
+            <span style="background:#854d0e;color:#facc15;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">HVAC <b>55</b></span>
+          </span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 0.6fr 2.5fr; gap: 4px; padding: 8px 0; border-bottom: 1px solid #222;">
+          <span style="font-weight:600">Houston, TX</span><span>7.3M</span><span>$68k</span><span>2.8</span><span style="color:#4ade80">+3.5%</span>
+          <span>
+            <span style="background:#065f46;color:#4ade80;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">Plumbing <b>78</b></span>
+            <span style="background:#7f1d1d;color:#f87171;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">Roofing <b>42</b></span>
+          </span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 0.6fr 2.5fr; gap: 4px; padding: 8px 0; border-bottom: 1px solid #222;">
+          <span style="font-weight:600">Phoenix, AZ</span><span>4.9M</span><span>$65k</span><span>2.1</span><span style="color:#4ade80">+5.2%</span>
+          <span>
+            <span style="background:#065f46;color:#4ade80;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">HVAC <b>71</b></span>
+          </span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 0.6fr 2.5fr; gap: 4px; padding: 8px 0; border-bottom: 1px solid #222;">
+          <span style="font-weight:600">Atlanta, GA</span><span>6.2M</span><span>$71k</span><span>1.9</span><span style="color:#f87171">-0.3%</span>
+          <span>
+            <span style="background:#7f1d1d;color:#f87171;padding:2px 6px;border-radius:4px;margin:1px;display:inline-block;font-size:10px">Tree Svc <b>45</b></span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: City Rows + Service Chips</h3>
+      <p>One row per city. Scored services appear as color-coded chips (green=high, yellow=mid, red=low) inside the row. City demographics never repeat. Click a chip for detail.</p>
+      <div class="pros-cons" style="margin-top: 8px; font-size: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>No repeated city info</li><li>See all services at a glance per city</li><li>Compact</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't sort by service score directly</li><li>Chips get crowded with many services</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family: monospace; font-size: 11px; line-height: 1.6; padding: 8px; background: #1a1a2e; color: #e0e0e0; border-radius: 6px; overflow-x: auto;">
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.6fr 0.6fr 0.8fr; gap: 4px; padding: 4px 0; border-bottom: 1px solid #333; font-weight: 700; color: #8bb4f0;">
+          <span>City</span><span>Pop.</span><span>Income</span><span>Dens.</span><span>Grwth</span><span>Best / #Svc</span>
+        </div>
+        <div style="padding: 0;">
+          <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.6fr 0.6fr 0.8fr; gap: 4px; padding: 6px 0; background: #1e2a3a; cursor: pointer; border-bottom: 1px solid #333;">
+            <span style="font-weight:600">&#9660; Dallas, TX</span><span>7.8M</span><span>$72k</span><span>3.2</span><span style="color:#4ade80">+4.1%</span><span><b style="color:#4ade80">82</b> / 3 svc</span>
+          </div>
+          <div style="padding: 4px 0 4px 24px; background: #151b2e; border-bottom: 1px solid #1a1a2e;">
+            <div style="display: grid; grid-template-columns: 1.5fr 0.8fr 0.8fr 0.8fr; gap: 4px; padding: 2px 0; color: #8bb4f0; font-size: 10px; font-weight: 600;">
+              <span>Service</span><span>Score</span><span>Archetype</span><span>Difficulty</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1.5fr 0.8fr 0.8fr 0.8fr; gap: 4px; padding: 3px 0; border-bottom: 1px solid #1a1a2e;">
+              <span style="color:#7ec8e3">Roofing</span><span style="color:#4ade80; font-weight:700">82</span><span>Frag. Weak</span><span style="color:#4ade80">Easy</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1.5fr 0.8fr 0.8fr 0.8fr; gap: 4px; padding: 3px 0; border-bottom: 1px solid #1a1a2e;">
+              <span style="color:#7ec8e3">Plumbing</span><span style="color:#facc15; font-weight:700">68</span><span>Pack Vuln.</span><span style="color:#facc15">Medium</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1.5fr 0.8fr 0.8fr 0.8fr; gap: 4px; padding: 3px 0;">
+              <span style="color:#7ec8e3">HVAC</span><span style="color:#facc15; font-weight:700">55</span><span>Mixed</span><span style="color:#facc15">Medium</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.6fr 0.6fr 0.8fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid #222; cursor: pointer;">
+          <span>&#9654; Houston, TX</span><span>7.3M</span><span>$68k</span><span>2.8</span><span style="color:#4ade80">+3.5%</span><span><b style="color:#4ade80">78</b> / 2 svc</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.6fr 0.6fr 0.8fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid #222; cursor: pointer;">
+          <span>&#9654; Phoenix, AZ</span><span>4.9M</span><span>$65k</span><span>2.1</span><span style="color:#4ade80">+5.2%</span><span><b style="color:#facc15">71</b> / 1 svc</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C: Expandable City Rows</h3>
+      <p>City rows show demographics + summary (best score, service count). Click to expand and see per-service detail rows with score, archetype, difficulty. Sort by best score at city level.</p>
+      <div class="pros-cons" style="margin-top: 8px; font-size: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Clean separation of city vs. service data</li><li>Full detail without crowding</li><li>Sortable at city level</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Requires clicking to see services</li><li>Harder to compare same service across cities</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

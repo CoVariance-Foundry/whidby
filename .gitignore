@@ -62,6 +62,7 @@ venv/
 # research agent runtime
 research_runs/
 research_graph.json
+scripts/explore/bulk_score_results.jsonl
 
 # docker
 docker-compose.override.yml
@@ -87,3 +88,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# HubSpot config file
+hubspot.config.yml

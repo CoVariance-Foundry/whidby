@@ -91,8 +91,11 @@ src/research_agent/api.py ──→ SupabasePersistence.client
 |--------|-----------|----------------|
 | Upstream proxy helpers (`apps/app/src/lib/api/upstream.ts`) | Next.js request/response primitives | Consumer Explore, billing, and refresh route handlers |
 | Supabase persistence client accessor (`src/clients/supabase_persistence.py`) | Configured Supabase client | FastAPI repository adapters for persistence, Explore reads, and strategy reads |
+| Explore repository (`src/clients/explore_repository.py`) | Supabase `explore_market_cells`, canonical niche normalization | FastAPI Explore city list/detail endpoints |
 
 The consumer helpers own request-origin resolution, bounded upstream response reads, optional JSON parsing, and unavailable/upstream-error responses. FastAPI adapters must use the public persistence client accessor instead of reaching into private adapter state when sharing the configured Supabase client.
+
+Explore city listing reads only cached report-backed market cells (`report_id IS NOT NULL`) and supports the UI sort aliases `best_opportunity`, `score`, and `best_score` through `presentation_score`. City detail cached scores pass through score metadata such as SERP archetype, difficulty tier, confidence, AI resilience, and AI exposure for downstream presentation without recomputing those signals in the frontend.
 
 ## Recipe / Report Subsystem
 
