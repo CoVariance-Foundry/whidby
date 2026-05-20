@@ -70,6 +70,9 @@ const BACKEND_ARCHETYPE_MAP: Record<string, ArchetypeId> = {
 };
 
 function getBaseUrl() {
+  if (typeof window === "undefined" && process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
   if (process.env.NEXT_PUBLIC_APP_FRONTEND_URL) {
     return process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
   }
@@ -77,7 +80,7 @@ function getBaseUrl() {
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   if (process.env.NODE_ENV === "development") return "http://localhost:3002";
   throw new Error(
-    "loadExploreData requires NEXT_PUBLIC_APP_FRONTEND_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL outside local development.",
+    "loadExploreData requires NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_FRONTEND_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL outside local development.",
   );
 }
 
