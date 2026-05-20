@@ -7,6 +7,18 @@ class FakeError:
     message = "database read failed"
 
 
+class _FakeNot:
+    """Handles `.not_.is_(col, val)` chaining."""
+
+    def __init__(self, parent: "FakeTable"):
+        self._parent = parent
+
+    def is_(self, key: str, value: str) -> "FakeTable":
+        self._parent.calls.append(("not_.is_", key, value))
+        self._parent.filters.append(("not_.is_", key, value))
+        return self._parent
+
+
 class FakeTable:
     def __init__(self, rows=None, error=None):
         self.calls = []
@@ -18,6 +30,10 @@ class FakeTable:
         self.limit_value = None
         self.range_value = None
         self.execute_exception = None
+
+    @property
+    def not_(self):
+        return _FakeNot(self)
 
     def select(self, value):
         self.calls.append(("select", value))
@@ -79,6 +95,9 @@ class FakeTable:
                 rows = [row for row in rows if row.get(key) <= value]
             if operator == "gt":
                 rows = [row for row in rows if row.get(key) > value]
+            if operator == "not_.is_":
+                if value == "null":
+                    rows = [row for row in rows if row.get(key) is not None]
         for key, values in self.in_filters:
             rows = [row for row in rows if row.get(key) in values]
         for key, kwargs in reversed(self.orders):
@@ -163,6 +182,7 @@ def test_list_city_rows_without_service_filters_representative_rows() -> None:
 
     calls = client.tables["explore_market_cells"].calls
     assert ("eq", "representative_service_rank", 1) in calls
+    assert ("not_.is_", "report_id", "null") in calls
     assert ("order", "presentation_score", {"desc": True}) in calls
     assert ("range", 0, 10) in calls
     assert ("limit", 11) not in calls
@@ -282,6 +302,55 @@ def test_list_city_rows_wraps_execute_exceptions() -> None:
             limit=10,
             cursor=None,
         )
+
+
+def test_list_city_rows_without_service_excludes_unscored() -> None:
+    rows = [
+        {"cbsa_code": "11111", "cbsa_name": "Scored City", "state": "TX",
+         "representative_service_rank": 1, "report_id": "r-1",
+         "presentation_score": 82, "niche_normalized": "roofing"},
+        {"cbsa_code": "22222", "cbsa_name": "Unscored City", "state": "CA",
+         "representative_service_rank": 1, "report_id": None,
+         "presentation_score": None, "niche_normalized": "air_conditioning"},
+    ]
+    client = FakeClient(rows_by_table={"explore_market_cells": rows})
+    repo = SupabaseExploreRepository(client)
+
+    result = repo.list_city_rows(
+        service=None, states=[], population_min=None, population_max=None,
+        income_min=None, income_max=None, growing_only=False,
+        sort="score", direction="desc", limit=50, cursor=None,
+    )
+
+    assert len(result) == 1
+    assert result[0]["cbsa_code"] == "11111"
+    calls = client.tables["explore_market_cells"].calls
+    assert ("not_.is_", "report_id", "null") in calls
+
+
+def test_list_city_rows_with_service_excludes_unscored() -> None:
+    rows = [
+        {"cbsa_code": "11111", "cbsa_name": "Dallas", "state": "TX",
+         "niche_normalized": "roofing", "report_id": "r-1",
+         "presentation_score": 82},
+        {"cbsa_code": "22222", "cbsa_name": "Phoenix", "state": "AZ",
+         "niche_normalized": "roofing", "report_id": None,
+         "presentation_score": None},
+    ]
+    client = FakeClient(rows_by_table={"explore_market_cells": rows})
+    repo = SupabaseExploreRepository(client)
+
+    result = repo.list_city_rows(
+        service="roofing", states=[], population_min=None, population_max=None,
+        income_min=None, income_max=None, growing_only=False,
+        sort="score", direction="desc", limit=50, cursor=None,
+    )
+
+    assert len(result) == 1
+    assert result[0]["cbsa_code"] == "11111"
+    calls = client.tables["explore_market_cells"].calls
+    assert ("eq", "niche_normalized", "roofing") in calls
+    assert ("not_.is_", "report_id", "null") in calls
 
 
 def test_load_city_detail_returns_city_with_cached_scores() -> None:

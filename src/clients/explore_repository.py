@@ -10,6 +10,7 @@ from src.pipeline.canonical_key import normalize_niche
 SORT_COLUMNS = {
     "score": "presentation_score",
     "best_score": "presentation_score",
+    "best_opportunity": "presentation_score",
     "presentation_score": "presentation_score",
     "population": "population",
     "income": "median_household_income_usd",
@@ -50,6 +51,7 @@ class SupabaseExploreRepository:
             query = query.eq("niche_normalized", normalized_service)
         else:
             query = query.eq("representative_service_rank", 1)
+        query = query.not_.is_("report_id", "null")
         if states:
             query = query.in_("state", states)
         if population_min is not None:
@@ -166,4 +168,9 @@ def _cached_score(row: dict[str, Any]) -> dict[str, Any]:
         "business_density_per_1k": row.get("business_density_per_1k"),
         "establishment_growth_yoy": row.get("establishment_growth_yoy"),
         "growth_available": row.get("growth_available"),
+        "serp_archetype": row.get("serp_archetype"),
+        "difficulty_tier": row.get("difficulty_tier"),
+        "confidence_score": row.get("confidence_score"),
+        "ai_resilience_score": row.get("ai_resilience_score"),
+        "ai_exposure": row.get("ai_exposure"),
     }
