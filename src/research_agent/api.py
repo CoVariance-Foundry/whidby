@@ -501,6 +501,10 @@ ExploreCitySort = Literal[
     "cached_services",
     "presentation_score",
     "latest_scored_at",
+    "best_opportunity",
+    "score",
+    "best_score",
+    "density",
 ]
 ExploreCityDirection = Literal["asc", "desc"]
 
