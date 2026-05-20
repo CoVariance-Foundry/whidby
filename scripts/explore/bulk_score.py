@@ -66,7 +66,7 @@ SERVICES = [
     "locksmith",
 ]
 
-DELAY_BETWEEN_CALLS_S = 2.0
+DEFAULT_CONCURRENCY = 10
 
 
 def _load_env() -> None:
@@ -191,8 +191,6 @@ def refresh_matview_sql() -> None:
     except Exception:
         logger.info("RPC not found, refreshing via raw SQL...")
         sb.postgrest.auth(os.environ["SUPABASE_SERVICE_ROLE_KEY"])
-        from supabase._sync.client import SyncClient
-
         if hasattr(sb, "rpc"):
             try:
                 sb.rpc(
@@ -261,16 +259,21 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             "\nEstimated DataForSEO cost: ~$%.2f (at ~$0.01/pair)",
             len(pairs) * 0.01,
         )
-        logger.info("Estimated time: ~%d minutes (at ~%.0fs/pair)",
-            int(len(pairs) * (DELAY_BETWEEN_CALLS_S + 8) / 60),
-            DELAY_BETWEEN_CALLS_S + 8,
+        avg_time_per_pair = 15.0
+        parallel_time = len(pairs) * avg_time_per_pair / args.concurrency
+        logger.info(
+            "Estimated time: ~%d minutes (at ~%.0fs/pair, concurrency=%d)",
+            int(parallel_time / 60),
+            avg_time_per_pair,
+            args.concurrency,
         )
         return
 
     logger.info(
-        "Scoring %d pairs (%d skipped as already scored)...",
+        "Scoring %d pairs (%d skipped as already scored), concurrency=%d...",
         len(pairs),
         total_pairs - len(pairs),
+        args.concurrency,
     )
 
     # Verify API is reachable
@@ -286,31 +289,33 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
 
     succeeded = 0
     failed = 0
+    completed = 0
     results_path = PROJECT_ROOT / "scripts" / "explore" / "bulk_score_results.jsonl"
     started = time.monotonic()
+    write_lock = asyncio.Lock()
+    sem = asyncio.Semaphore(args.concurrency)
 
-    async with httpx.AsyncClient() as client:
-        for i, (metro, service) in enumerate(pairs, 1):
-            city_name = city_short_name(metro["cbsa_name"])
-            state = metro["state"]
+    async def _worker(
+        idx: int, metro: dict[str, Any], service: str, client: httpx.AsyncClient
+    ) -> bool:
+        nonlocal succeeded, failed, completed
+        city_name = city_short_name(metro["cbsa_name"])
+        state = metro["state"]
+
+        async with sem:
             elapsed = time.monotonic() - started
             rate = succeeded / (elapsed / 60) if elapsed > 60 else 0
-
             logger.info(
                 "[%d/%d] Scoring %s, %s × %s  (ok=%d fail=%d rate=%.1f/min)",
-                i,
-                len(pairs),
-                city_name,
-                state,
-                service,
-                succeeded,
-                failed,
-                rate,
+                idx, len(pairs), city_name, state, service, succeeded, failed, rate,
             )
 
             result = await score_one(client, api_url, city_name, state, service)
-            if result and result.get("report_id"):
-                succeeded += 1
+
+        completed += 1
+        if result and result.get("report_id"):
+            succeeded += 1
+            async with write_lock:
                 with open(results_path, "a") as f:
                     f.write(
                         json.dumps(
@@ -326,11 +331,17 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
                         )
                         + "\n"
                     )
-            else:
-                failed += 1
+            return True
+        else:
+            failed += 1
+            return False
 
-            if i < len(pairs):
-                await asyncio.sleep(DELAY_BETWEEN_CALLS_S)
+    async with httpx.AsyncClient() as client:
+        tasks = [
+            _worker(i, metro, service, client)
+            for i, (metro, service) in enumerate(pairs, 1)
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     total_time = time.monotonic() - started
     logger.info(
@@ -389,6 +400,12 @@ def main() -> None:
         help="Number of services from the catalog (default: 12).",
     )
     parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_CONCURRENCY,
+        help=f"Max parallel scoring requests (default: {DEFAULT_CONCURRENCY}, range 1-20).",
+    )
+    parser.add_argument(
         "--api-url",
         type=str,
         default=None,
@@ -402,6 +419,8 @@ def main() -> None:
 
     if not args.preview and not args.apply:
         parser.error("Specify --preview or --apply")
+
+    args.concurrency = max(1, min(20, args.concurrency))
 
     asyncio.run(run_bulk_score(args))
 

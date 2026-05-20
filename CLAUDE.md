@@ -190,7 +190,7 @@ Consumer API routes require auth — scoring E2E tests use `signIn()` + `page.ev
 
 ## Testing Philosophy
 
-Tests verify **module boundaries**, not individual functions. Implement first, then test at service entry points.
+Tests verify **module boundaries and functional groups**, not individual functions. Implement first, then test at service entry points. Be judicious — every test must earn its maintenance cost.
 
 ### What gets tested
 
@@ -198,15 +198,29 @@ Tests verify **module boundaries**, not individual functions. Implement first, t
 |----------|---------|-------|
 | Module boundary entry points | `score_niche_for_metro`, `compute_scores`, classification pipeline | Yes — boundary test |
 | Complex pure logic | Scoring formulas, weight calculations, confidence math, difficulty tiers | Yes — targeted unit test |
-| Simple pass-through / glue code | API route handlers, Supabase insert wrappers, data mapping adapters | No — covered by boundary tests + structured logging |
+| API HTTP contracts | Request validation, auth, response shape at route level | Yes — contract test |
+| Simple pass-through / glue code | Supabase insert wrappers, config loaders, data-mapping adapters | No — covered by boundary tests + structured logging |
+| Template / HTML rendering | Jinja output, component markup | No — use Playwright E2E |
+| SQL migration content | String-matching on `.sql` files | No — validated by applying migrations |
+| Trivial property assertions | `recipe.id == "x"`, `isinstance(obj, Foo)` | No — zero regression value |
 
 ### Rules
 
-1. **Existing tests stay.** All tests in `tests/unit/` and `tests/integration/` must continue to pass. Do not delete working tests.
-2. **New tests target boundaries.** When adding a new module or pipeline stage, write tests for the module's entry-point function with representative inputs and expected outputs.
-3. **Complex pure logic still gets unit tests.** Scoring formulas (`src/scoring/`), classification logic (`src/classification/`), and any function with branching math should have targeted tests.
-4. **Simple glue code does NOT need tests.** A Supabase insert route, a config loader, or a data-mapping adapter is verified by the boundary test that exercises it plus structured logging at the boundary.
-5. **Test file naming is unchanged:** `src/scoring/demand_score.py` → `tests/unit/test_demand_score.py`
+1. **New tests target boundaries and functional groups.** When adding a new module or pipeline stage, write tests for the module's entry-point function with representative inputs and expected outputs. Think "what breaks if this module regresses?" not "does this field exist?"
+2. **Complex pure logic still gets unit tests.** Scoring formulas (`src/scoring/`), classification logic (`src/classification/`), and any function with branching math should have targeted tests.
+3. **Simple glue code does NOT need tests.** A Supabase insert route, a config loader, or a data-mapping adapter is verified by the boundary test that exercises it plus structured logging at the boundary.
+4. **One test file per source module.** Do not create separate test files per ticket/user-story (e.g., `test_m07_confidence_us3.py`). Consolidate into one file per module: `src/scoring/engine.py` → `tests/unit/test_scoring_engine.py`.
+5. **Prune low-value tests.** If you encounter tests that string-match SQL files, assert trivial properties, or duplicate E2E coverage — delete them. The suite should stay lean.
+6. **Test file naming mirrors source:** `src/scoring/demand_score.py` → `tests/unit/test_demand_score.py`
+
+### Anti-patterns — do NOT generate these
+
+- SQL migration string-matching tests (`assert "CREATE TABLE" in sql`)
+- Trivial property/metadata assertions (`assert obj.id == "expected_id"`)
+- Template rendering tests (use Playwright instead)
+- CRUD wrapper tests with fake Supabase scaffolds
+- One-test-per-file for minor regression scenarios
+- Tests for admin/backfill scripts unless they contain complex logic
 
 ### Skill Override
 

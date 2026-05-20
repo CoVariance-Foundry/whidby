@@ -87,3 +87,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# HubSpot config file
+hubspot.config.yml

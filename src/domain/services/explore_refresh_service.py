@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol, Sequence
@@ -266,29 +267,35 @@ class ExploreRefreshService:
         self._store.mark_run_running(queued_run.run_id)
         success_count = 0
         failure_count = 0
-        for target in queued_run.targets:
-            try:
-                result = await self._score_target(target, queued_run.flags)
-                if not queued_run.flags.dry_run and not result.report_id:
-                    raise ValueError("Scoring completed without a report_id")
-                self._mark_success(
-                    run_id=queued_run.run_id,
-                    target=target,
-                    result=result,
-                    flags=queued_run.flags,
-                    now=queued_run.now,
-                )
-                success_count += 1
-            except Exception as exc:
-                failure_count += 1
-                self._store.mark_item_failed(
-                    {
-                        "run_id": queued_run.run_id,
-                        "target_id": target.id,
-                        "old_report_id": target.latest_report_id,
-                        "error_message": str(exc),
-                    }
-                )
+        sem = asyncio.Semaphore(queued_run.flags.concurrency)
+
+        async def _score_one(target: RefreshTarget) -> None:
+            nonlocal success_count, failure_count
+            async with sem:
+                try:
+                    result = await self._score_target(target, queued_run.flags)
+                    if not queued_run.flags.dry_run and not result.report_id:
+                        raise ValueError("Scoring completed without a report_id")
+                    self._mark_success(
+                        run_id=queued_run.run_id,
+                        target=target,
+                        result=result,
+                        flags=queued_run.flags,
+                        now=queued_run.now,
+                    )
+                    success_count += 1
+                except Exception as exc:
+                    failure_count += 1
+                    self._store.mark_item_failed(
+                        {
+                            "run_id": queued_run.run_id,
+                            "target_id": target.id,
+                            "old_report_id": target.latest_report_id,
+                            "error_message": str(exc),
+                        }
+                    )
+
+        await asyncio.gather(*[_score_one(t) for t in queued_run.targets])
 
         self._store.mark_run_complete(queued_run.run_id, success_count, failure_count)
         return {

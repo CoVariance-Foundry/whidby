@@ -20,3 +20,53 @@
 {"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "carpet cleaning", "report_id": "e74337e0-20d0-44d4-ad45-e5a8374419cc", "opportunity_score": 40, "classification_label": "Low"}
 {"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "junk removal", "report_id": "99d2a69b-9b37-4717-8404-b4d25fabe9cd", "opportunity_score": 67, "classification_label": "Medium"}
 {"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "locksmith", "report_id": "133e08ea-dfd2-4a8d-a2a5-a1d4cb471e16", "opportunity_score": 72, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "hvac", "report_id": "adf2ef8a-7418-4894-bd66-9adc5356290b", "opportunity_score": 64, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "tree service", "report_id": "bcd48a4b-1598-4875-8010-39e57efbb2dc", "opportunity_score": 74, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "pest control", "report_id": "24a7ba61-0248-4d8c-8ef0-960d9bcf973c", "opportunity_score": 67, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "water damage restoration", "report_id": "8a945634-db8f-4184-9431-db2efcf2f463", "opportunity_score": 79, "classification_label": "High"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "landscaping", "report_id": "56d5bebe-9cff-4a78-a894-c8c00fe94fb4", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "electrician", "report_id": "cb81250d-21a4-49a3-911c-a10eb2ea6927", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "concrete", "report_id": "ac731927-364d-4bd2-938e-c8571c641761", "opportunity_score": 55, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "fence installation", "report_id": "9d441294-6709-4f5d-ab36-6dfe13b4acc4", "opportunity_score": 73, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "pressure washing", "report_id": "3c557068-1737-45ad-8714-d8d0b40d0be8", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "garage door repair", "report_id": "ab9b94c7-8b31-434d-adf3-bac115b9e4c4", "opportunity_score": 70, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "painting", "report_id": "52cff32c-fafc-4f74-b163-0db6224d201d", "opportunity_score": 50, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "carpet cleaning", "report_id": "878eeb54-49c4-4eb7-81be-c8304c0f8676", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "junk removal", "report_id": "37e49016-4d8f-452e-8e59-ac9495caf307", "opportunity_score": 68, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "locksmith", "report_id": "b056eb97-51f2-492b-9ef8-ee53b4068638", "opportunity_score": 72, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "hvac", "report_id": "56062187-1dd0-4f97-af05-d15d8f6aeb0d", "opportunity_score": 64, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "tree service", "report_id": "02547fe3-042f-46d0-9bf4-9446cad66a82", "opportunity_score": 66, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "pest control", "report_id": "2daeb850-95e7-43b9-838b-dcc21ab359e4", "opportunity_score": 67, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "water damage restoration", "report_id": "e48a37c4-1ac5-4cb7-9b7f-623f386c5e86", "opportunity_score": 79, "classification_label": "High"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "landscaping", "report_id": "4f86a6bd-a7a5-41ab-a52a-107528c74dd2", "opportunity_score": 53, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "electrician", "report_id": "6aae832a-5ba7-4bb7-b188-34bb84bc11f9", "opportunity_score": 70, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "concrete", "report_id": "97f25b4c-fe5a-4f79-84bf-d21a9bcc61eb", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "fence installation", "report_id": "df3d5f83-68ac-4985-9895-2e74a448d760", "opportunity_score": 51, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "pressure washing", "report_id": "24bf0a33-6518-4faa-9f4f-7ec505bc52a2", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "garage door repair", "report_id": "d91991b4-49cb-4668-88b8-42638170f5e8", "opportunity_score": 67, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "painting", "report_id": "ceea7742-8e6d-473c-9fce-11a4bd719b55", "opportunity_score": 50, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "carpet cleaning", "report_id": "fb13caf0-5452-4e7e-946c-2a8a879d2dc0", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "junk removal", "report_id": "4e7292e0-167b-4449-a631-e38560d2493e", "opportunity_score": 67, "classification_label": "Medium"}
+{"cbsa_code": "16980", "city": "Chicago", "state": "IL", "service": "locksmith", "report_id": "db3c8748-2e5e-46e9-ae26-180a63795f51", "opportunity_score": 71, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "hvac", "report_id": "c3bd4fe3-75a6-4c87-930b-a58b3ad879d6", "opportunity_score": 70, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "tree service", "report_id": "fb0872f6-723e-4971-864d-f9c074f17b7d", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "pest control", "report_id": "d6b155cc-b204-4725-b65f-bf09116e54ab", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "water damage restoration", "report_id": "6f0cd5f7-8bf6-43e8-93d4-4a62e73e3bc1", "opportunity_score": 79, "classification_label": "High"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "landscaping", "report_id": "2b7beb99-e1f5-4ecf-aaab-2084f047b08e", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "electrician", "report_id": "776e3fdd-cd5c-4c7f-8d01-fb0ed65df66b", "opportunity_score": 72, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "concrete", "report_id": "0222e95c-a338-466d-9f51-5add823a5514", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "fence installation", "report_id": "22e25a8b-4c32-4604-b5e1-1275c38c32e8", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "pressure washing", "report_id": "608af299-a753-4e91-a6a5-befa5026f99c", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "garage door repair", "report_id": "a0e4dbef-9118-4bd6-97e6-fcc75fd01555", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "painting", "report_id": "f4035b18-6702-4a87-840a-7bb6214af644", "opportunity_score": 48, "classification_label": "Low"}
+{"cbsa_code": "47900", "city": "Washington", "state": "DC", "service": "water damage restoration", "report_id": "8aa06ba2-a70a-4849-84a1-af954ff21204", "opportunity_score": 55, "classification_label": "Medium"}
+{"cbsa_code": "26420", "city": "Houston", "state": "TX", "service": "pest control", "report_id": "50417452-bb67-4496-9153-2f71b04d1874", "opportunity_score": 68, "classification_label": "Medium"}
+{"cbsa_code": "47900", "city": "Washington", "state": "DC", "service": "electrician", "report_id": "3edca214-acc3-4403-8823-c786d0a9f0b9", "opportunity_score": 58, "classification_label": "Medium"}
+{"cbsa_code": "47900", "city": "Washington", "state": "DC", "service": "concrete", "report_id": "cbf2a327-1079-4dde-b8c3-792957b9bbc4", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "47900", "city": "Washington", "state": "DC", "service": "fence installation", "report_id": "8b3dc1a6-db94-47ac-8056-e465292af9c0", "opportunity_score": 49, "classification_label": "Low"}
+{"cbsa_code": "37980", "city": "Philadelphia", "state": "PA", "service": "water damage restoration", "report_id": "f1213eb4-ba19-4d43-bfac-83da71f5622a", "opportunity_score": 20, "classification_label": "Low"}
+{"cbsa_code": "37980", "city": "Philadelphia", "state": "PA", "service": "pest control", "report_id": "624cd778-2d68-4dea-942f-4c655ac16930", "opportunity_score": 20, "classification_label": "Low"}
+{"cbsa_code": "37980", "city": "Philadelphia", "state": "PA", "service": "tree service", "report_id": "527a2a48-3a48-4cf1-9bde-e499a4bc721f", "opportunity_score": 20, "classification_label": "Low"}
+{"cbsa_code": "37980", "city": "Philadelphia", "state": "PA", "service": "garage door repair", "report_id": "e8817e58-c705-4eab-9bd0-722d70d5c7e6", "opportunity_score": 20, "classification_label": "Low"}
+{"cbsa_code": "37980", "city": "Philadelphia", "state": "PA", "service": "electrician", "report_id": "65a54167-bd33-4400-8742-2126bee45372", "opportunity_score": 20, "classification_label": "Low"}
+{"cbsa_code": "37980", "city": "Philadelphia", "state": "PA", "service": "landscaping", "report_id": "4e5eb030-8f13-4fe8-ade5-836084bbd69f", "opportunity_score": 20, "classification_label": "Low"}
