@@ -1,0 +1,22 @@
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "roofing", "report_id": "7f7616bb-c145-4f3f-acff-a20c38955152", "opportunity_score": 73, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "plumbing", "report_id": "6ae2b7bd-1ecf-4135-b320-e839ae56c316", "opportunity_score": 61, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "plumbing", "report_id": "b1057f96-ebce-4041-aab0-af1f2a581f48", "opportunity_score": 60, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "roofing", "report_id": "d4674051-4690-4590-8a4d-84363216ecb5", "opportunity_score": 75, "classification_label": "High"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "hvac", "report_id": "3b0ebd4d-f68d-424e-a284-e25cd2daf97e", "opportunity_score": 66, "classification_label": "Medium"}
+{"cbsa_code": "31080", "city": "Los Angeles", "state": "CA", "service": "plumbing", "report_id": "9a616b7b-769d-4483-a635-66b6f364cc20", "opportunity_score": 76, "classification_label": "High"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "tree service", "report_id": "0d01f783-050f-4879-bae3-fb154846b204", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "roofing", "report_id": "29c0a981-f0a9-4f59-843f-5921a3e21e4a", "opportunity_score": 69, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "pest control", "report_id": "3e3ef969-da88-40e7-aba4-a3bca1c853c0", "opportunity_score": 65, "classification_label": "Medium"}
+{"cbsa_code": "19100", "city": "Dallas", "state": "TX", "service": "plumbing", "report_id": "8a709e66-04d2-4cf8-a79c-0851be8cfd5d", "opportunity_score": 72, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "water damage restoration", "report_id": "09d16b49-7809-4de0-9006-e74cf696b762", "opportunity_score": 80, "classification_label": "High"}
+{"cbsa_code": "26420", "city": "Houston", "state": "TX", "service": "roofing", "report_id": "039440a2-56d1-4fd0-a7f1-c66e2bacee2f", "opportunity_score": 76, "classification_label": "High"}
+{"cbsa_code": "26420", "city": "Houston", "state": "TX", "service": "plumbing", "report_id": "fbb920ae-a5f0-4884-a18b-532da68ed07d", "opportunity_score": 73, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "landscaping", "report_id": "1a433217-0e33-4633-a0c3-aac4487221f6", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "electrician", "report_id": "c12e6cb6-4dc8-4dfe-b58b-1ce0557cfadd", "opportunity_score": 70, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "concrete", "report_id": "6154e25a-48ea-4c97-b376-e1c69b1c8d68", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "fence installation", "report_id": "ca300882-dd6d-46c3-9e51-beab38c2fb43", "opportunity_score": 56, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "garage door repair", "report_id": "013da4a2-8184-46ba-83af-253adccd9782", "opportunity_score": 71, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "painting", "report_id": "0d6b5d71-c2e9-4fec-9987-f90ee1a106ed", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "carpet cleaning", "report_id": "e74337e0-20d0-44d4-ad45-e5a8374419cc", "opportunity_score": 40, "classification_label": "Low"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "junk removal", "report_id": "99d2a69b-9b37-4717-8404-b4d25fabe9cd", "opportunity_score": 67, "classification_label": "Medium"}
+{"cbsa_code": "35620", "city": "New York", "state": "NY", "service": "locksmith", "report_id": "133e08ea-dfd2-4a8d-a2a5-a1d4cb471e16", "opportunity_score": 72, "classification_label": "Medium"}
