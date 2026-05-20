@@ -69,16 +69,9 @@ const BACKEND_ARCHETYPE_MAP: Record<string, ArchetypeId> = {
   MIXED: "MIXED",
 };
 
-function getBaseUrl() {
-  if (process.env.NEXT_PUBLIC_APP_FRONTEND_URL) {
-    return process.env.NEXT_PUBLIC_APP_FRONTEND_URL;
-  }
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  if (process.env.NODE_ENV === "development") return "http://localhost:3002";
-  throw new Error(
-    "loadExploreData requires NEXT_PUBLIC_APP_FRONTEND_URL, NEXT_PUBLIC_APP_URL, or VERCEL_URL outside local development.",
-  );
+function getUpstreamApiBase() {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  return "http://localhost:8000";
 }
 
 function appendIfPresent(
@@ -283,11 +276,22 @@ export async function loadExploreData(
 ): Promise<ExploreData> {
   const query = toExploreSearchParams(params);
   const queryString = query.toString();
-  const url = `${getBaseUrl()}/api/explore/cities${queryString ? `?${queryString}` : ""}`;
-  const response = await fetch(url, { cache: "no-store" });
+  const url = `${getUpstreamApiBase()}/api/explore/cities${queryString ? `?${queryString}` : ""}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch {
+    return { cities: [], next_cursor: null, service_filter: null };
+  }
 
   if (!response.ok) {
-    throw new Error(`loadExploreData explore cities: HTTP ${response.status}`);
+    return { cities: [], next_cursor: null, service_filter: null };
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return { cities: [], next_cursor: null, service_filter: null };
   }
 
   return normalizeExploreData((await response.json()) as BackendExploreData);
