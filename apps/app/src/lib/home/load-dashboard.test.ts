@@ -342,6 +342,45 @@ describe("loadDashboard", () => {
     );
   });
 
+  it("does not load reports after unexpected onboarding context failures", async () => {
+    const supabase = {
+      from: vi.fn(() => {
+        throw new Error("onboarding client unavailable");
+      }),
+    };
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.account).toEqual({
+      status: "error",
+      error: { message: "onboarding client unavailable" },
+      blocking: true,
+      summary: null,
+      entitlement: null,
+      can_run_fresh_reports: false,
+    });
+    expect(dashboard.recent).toEqual([]);
+    expect(dashboard.report_error).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("can disable multi-market when the agency route is absent", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+      multi_market_available: false,
+    });
+
+    expect(dashboard.multi_market_available).toBe(false);
+  });
+
   it("returns usable account and strategy state when reports fetch fails", async () => {
     const supabase = createSupabaseMock({
       profileResult: { data: null, error: null },

@@ -112,6 +112,7 @@ export interface DashboardData {
 
 interface LoadDashboardOptions {
   app_base_url?: string;
+  multi_market_available?: boolean;
 }
 
 const APP_BASE_ENV_KEYS = [
@@ -127,6 +128,9 @@ const LAUNCH_SAFE_STRATEGY_IDS = [
   "expand_conquer",
 ] as const satisfies readonly LaunchSafeStrategyId[];
 const LAUNCH_SAFE_STRATEGY_SET = new Set<string>(LAUNCH_SAFE_STRATEGY_IDS);
+// Phase 2 route-gates Multi-market only. This branch already includes /agency,
+// so production defaults to enabled while tests can still cover the disabled card.
+const DEFAULT_MULTI_MARKET_AVAILABLE = true;
 const DASHBOARD_NEXT_ROUTES = new Set<string>([
   "/strategies",
   "/explore",
@@ -258,6 +262,10 @@ function canRunFreshReports(summary: AccountSummary, entitlement: AccountEntitle
   return summary.fresh_reports_remaining > 0;
 }
 
+function resolveMultiMarketAvailability(options: LoadDashboardOptions) {
+  return options.multi_market_available ?? DEFAULT_MULTI_MARKET_AVAILABLE;
+}
+
 async function loadOnboardingContext(
   supabase: Awaited<ReturnType<typeof createClient>>,
   user: User,
@@ -376,8 +384,8 @@ export async function loadDashboard(
   try {
     const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
-    canLoadReports = true;
     onboardingRows = await loadOnboardingContext(supabase, user);
+    canLoadReports = true;
 
     try {
       const summary = await loadAccountSummary({ supabase, user, entitlement });
@@ -444,6 +452,6 @@ export async function loadDashboard(
     onboarding,
     strategies: strategyContext,
     report_error,
-    multi_market_available: true,
+    multi_market_available: resolveMultiMarketAvailability(options),
   };
 }
