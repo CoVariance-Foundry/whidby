@@ -29,11 +29,7 @@ interface DashboardAccountReady {
   status: "ready";
   error: null;
   summary: AccountSummary;
-  entitlement: {
-    account_id: string;
-    plan_key: PlanKey;
-    fresh_report_quota_exempt: boolean;
-  };
+  entitlement: DashboardEntitlementSummary;
   can_run_fresh_reports: boolean;
 }
 
@@ -42,11 +38,17 @@ interface DashboardAccountError {
   error: DashboardError;
   blocking: boolean;
   summary: null;
-  entitlement: null;
-  can_run_fresh_reports: false;
+  entitlement: DashboardEntitlementSummary | null;
+  can_run_fresh_reports: boolean;
 }
 
 type DashboardAccountState = DashboardAccountReady | DashboardAccountError;
+
+interface DashboardEntitlementSummary {
+  account_id: string;
+  plan_key: PlanKey;
+  fresh_report_quota_exempt: boolean;
+}
 
 interface OnboardingProfileRow {
   id: string;
@@ -131,6 +133,36 @@ const LAUNCH_SAFE_STRATEGY_SET = new Set<string>(LAUNCH_SAFE_STRATEGY_IDS);
 // Phase 2 route-gates Multi-market only. This branch already includes /agency,
 // so production defaults to enabled while tests can still cover the disabled card.
 const DEFAULT_MULTI_MARKET_AVAILABLE = true;
+const FALLBACK_STRATEGY_ENTRIES: Record<LaunchSafeStrategyId, StrategyCatalogEntry> = {
+  easy_win: {
+    strategy_id: "easy_win",
+    name: "Easy Win",
+    description: "Find city and service pairs with useful demand and weaker competition.",
+    status: "launch",
+    input_shape: "city_service",
+  },
+  gbp_blitz: {
+    strategy_id: "gbp_blitz",
+    name: "GBP Blitz",
+    description: "Find local packs where business profile gaps make the market easier to enter.",
+    status: "launch",
+    input_shape: "city_service",
+  },
+  keyword_hijack: {
+    strategy_id: "keyword_hijack",
+    name: "Keyword Hijack",
+    description: "Target focused service keywords where organic incumbents are weaker.",
+    status: "launch",
+    input_shape: "city_service_keyword",
+  },
+  expand_conquer: {
+    strategy_id: "expand_conquer",
+    name: "Expand & Conquer",
+    description: "Find lookalike expansion markets from a reference city and service.",
+    status: "launch",
+    input_shape: "reference_city_service",
+  },
+};
 const DASHBOARD_NEXT_ROUTES = new Set<string>([
   "/strategies",
   "/explore",
@@ -247,11 +279,7 @@ function strategyEntryById(
 ): StrategyCatalogEntry {
   return (
     catalog.strategies.find((strategy) => strategy.strategy_id === strategyId) ?? {
-      strategy_id: STARTER_FALLBACK,
-      name: "Easy Win",
-      description: "Find city and service pairs with useful demand and weaker competition.",
-      status: "launch",
-      input_shape: "city_service",
+      ...FALLBACK_STRATEGY_ENTRIES[strategyId],
     }
   );
 }
@@ -260,6 +288,18 @@ function canRunFreshReports(summary: AccountSummary, entitlement: AccountEntitle
   if (entitlement.fresh_report_quota_exempt) return true;
   if (entitlement.plan_key === "free") return false;
   return summary.fresh_reports_remaining > 0;
+}
+
+function canRunFreshReportsWithoutSummary(entitlement: AccountEntitlement) {
+  return entitlement.fresh_report_quota_exempt || entitlement.plan_key !== "free";
+}
+
+function summarizeEntitlement(entitlement: AccountEntitlement): DashboardEntitlementSummary {
+  return {
+    account_id: entitlement.account_id,
+    plan_key: entitlement.plan_key,
+    fresh_report_quota_exempt: entitlement.fresh_report_quota_exempt,
+  };
 }
 
 function resolveMultiMarketAvailability(options: LoadDashboardOptions) {
@@ -393,11 +433,7 @@ export async function loadDashboard(
         status: "ready",
         error: null,
         summary,
-        entitlement: {
-          account_id: entitlement.account_id,
-          plan_key: entitlement.plan_key,
-          fresh_report_quota_exempt: entitlement.fresh_report_quota_exempt,
-        },
+        entitlement: summarizeEntitlement(entitlement),
         can_run_fresh_reports: canRunFreshReports(summary, entitlement),
       };
     } catch (error) {
@@ -406,8 +442,8 @@ export async function loadDashboard(
         error: errorFromUnknown(error, "Account summary is unavailable."),
         blocking: false,
         summary: null,
-        entitlement: null,
-        can_run_fresh_reports: false,
+        entitlement: summarizeEntitlement(entitlement),
+        can_run_fresh_reports: canRunFreshReportsWithoutSummary(entitlement),
       };
     }
   } catch (error) {

@@ -224,6 +224,34 @@ describe("HomePage dashboard", () => {
     expect(screen.queryByRole("link", { name: "Or browse Explore first" })).not.toBeInTheDocument();
   });
 
+  it("keeps the first-run banner visible when recent rows are cached reports", async () => {
+    await renderHome(
+      dashboardFixture({
+        account: {
+          status: "ready",
+          error: null,
+          summary: {
+            ...readySummary,
+            fresh_reports_used: 0,
+            fresh_reports_remaining: 10,
+          },
+          entitlement: {
+            account_id: "account-1",
+            plan_key: "plus",
+            fresh_report_quota_exempt: false,
+          },
+          can_run_fresh_reports: true,
+        },
+      }),
+    );
+
+    expect(screen.getByText("Three steps to your first report.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Dallas, TX/i })).toHaveAttribute(
+      "href",
+      "/reports?open=report-123",
+    );
+  });
+
   it("renders usage values, recommended CTA, multi-market link, launch shortcuts, and recent report links", async () => {
     await renderHome(dashboardFixture());
 
@@ -326,8 +354,12 @@ describe("HomePage dashboard", () => {
           },
           blocking: false,
           summary: null,
-          entitlement: null,
-          can_run_fresh_reports: false,
+          entitlement: {
+            account_id: "account-1",
+            plan_key: "plus",
+            fresh_report_quota_exempt: false,
+          },
+          can_run_fresh_reports: true,
         },
       }),
     );
@@ -337,6 +369,10 @@ describe("HomePage dashboard", () => {
     );
     expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Recommended for you")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open recommended strategy GBP Blitz")).toHaveAttribute(
+      "href",
+      "/strategies/gbp_blitz",
+    );
     expect(screen.getByRole("link", { name: /Dallas, TX/i })).toHaveAttribute(
       "href",
       "/reports?open=report-123",

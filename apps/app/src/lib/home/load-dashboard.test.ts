@@ -330,8 +330,12 @@ describe("loadDashboard", () => {
       error: { message: "usage counters: relation unavailable" },
       blocking: false,
       summary: null,
-      entitlement: null,
-      can_run_fresh_reports: false,
+      entitlement: {
+        account_id: entitlement.account_id,
+        plan_key: "plus",
+        fresh_report_quota_exempt: false,
+      },
+      can_run_fresh_reports: true,
     });
     expect(dashboard.stats).toEqual(reportsDashboard.stats);
     expect(dashboard.recent).toEqual(reportsDashboard.recent);
@@ -379,6 +383,38 @@ describe("loadDashboard", () => {
     });
 
     expect(dashboard.multi_market_available).toBe(false);
+  });
+
+  it("preserves launch-safe strategy ids when catalog entries are missing", async () => {
+    const profile = {
+      id: "profile-1",
+      user_id: user.id,
+      account_id: entitlement.account_id,
+      recommended_strategy_id: "expand_conquer",
+      available_strategy_ids: ["expand_conquer", "gbp_blitz"],
+      next_route: "/strategies",
+    };
+    const supabase = createSupabaseMock({
+      profileResult: { data: profile, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.loadStrategyCatalog.mockResolvedValueOnce({
+      strategies: [strategyCatalog.strategies[0]],
+      global_modifiers: [],
+    });
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.strategies.starter).toMatchObject({
+      strategy_id: "expand_conquer",
+      name: "Expand & Conquer",
+    });
+    expect(dashboard.strategies.shortcuts.map((strategy) => strategy.strategy_id)).toEqual([
+      "expand_conquer",
+      "gbp_blitz",
+    ]);
   });
 
   it("returns usable account and strategy state when reports fetch fails", async () => {

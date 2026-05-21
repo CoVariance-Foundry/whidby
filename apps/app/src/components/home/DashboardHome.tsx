@@ -149,7 +149,7 @@ function AccountWarningNotice({ dashboard }: { dashboard: DashboardData }) {
 
 function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
   if (dashboard.account.status !== "ready") return null;
-  if (dashboard.account.summary.fresh_reports_used !== 0 || dashboard.recent.length > 0) {
+  if (dashboard.account.summary.fresh_reports_used !== 0) {
     return null;
   }
 
@@ -349,8 +349,7 @@ function UsageStrip({ dashboard }: { dashboard: DashboardData }) {
 
 function RecommendedHero({ dashboard }: { dashboard: DashboardData }) {
   const starter = dashboard.strategies.starter;
-  const canRunFresh =
-    dashboard.account.status === "ready" && dashboard.account.can_run_fresh_reports;
+  const canRunFresh = dashboard.account.can_run_fresh_reports;
   const primaryHref = canRunFresh ? `/strategies/${starter.strategy_id}` : "/explore";
 
   return (
