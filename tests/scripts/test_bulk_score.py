@@ -494,7 +494,7 @@ def test_run_bulk_score_records_persistence_verification_errors(
     result_dir.mkdir(parents=True)
     monkeypatch.setattr(bulk_score, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
-    monkeypatch.setattr(bulk_score, "_supabase_client", lambda: object())
+    monkeypatch.setattr(bulk_score, "_supabase_client", object)
     monkeypatch.setattr(
         bulk_score,
         "fetch_metros",
@@ -509,7 +509,7 @@ def test_run_bulk_score_records_persistence_verification_errors(
         ],
     )
     monkeypatch.setattr(bulk_score, "SERVICES", ["roofing"])
-    monkeypatch.setattr(bulk_score.httpx, "AsyncClient", lambda: FakeAsyncClient())
+    monkeypatch.setattr(bulk_score.httpx, "AsyncClient", FakeAsyncClient)
 
     async def score_success(*_args, **_kwargs):
         return {"report_id": "report-1", "opportunity_score": 72}
