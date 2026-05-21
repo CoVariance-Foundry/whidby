@@ -883,7 +883,7 @@ tests/integration/test_pipeline_orchestrator_live.py
 
 ### Supabase Persistence Adapter
 
-**What it does:** Writes an M9 report into the canonical schema at `supabase/migrations/001_core_schema.sql` (tables: `reports`, `report_keywords`, `metro_signals`, `metro_scores`). Pure row-builder helpers are pure functions (unit-testable without a live DB); `SupabasePersistence.persist_report(report)` executes the inserts in order and returns the report id.
+**What it does:** Writes an M9 report into the canonical schema at `supabase/migrations/001_core_schema.sql` (tables: `reports`, `report_keywords`, `metro_signals`, `metro_scores`) and writes V2 outputs to `metro_score_v2` plus keyword-grain `seo_facts` when V2 score vectors are present. Pure row-builder helpers are pure functions (unit-testable without a live DB); `SupabasePersistence.persist_report(report)` executes legacy inserts, V2 score upserts keyed by `report_id + cbsa_code`, and fact upserts keyed by niche, CBSA, keyword, and snapshot date before returning the report id.
 
 **Files:**
 ```
@@ -892,7 +892,7 @@ tests/unit/test_supabase_persistence.py
 ```
 
 **Public interface:**
-- `build_report_row(report) / build_keyword_rows(report) / build_metro_signal_rows(report) / build_metro_score_rows(report)` — pure mappers
+- `build_report_row(report) / build_keyword_rows(report) / build_metro_signal_rows(report) / build_metro_score_rows(report) / build_metro_score_v2_rows(report) / build_seo_fact_rows(report)` — pure mappers
 - `class SupabasePersistence(*, client=None).persist_report(report) -> str` — live writer
 
 ### FastAPI niche-scoring routes

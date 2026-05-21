@@ -26,10 +26,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.city_data_repository import SupabaseCityDataProvider
 from src.clients.kb_adapter import KBKnowledgeStore
 from src.clients.kb_persistence import KBPersistence
 from src.clients.llm.client import LLMClient
 from src.clients.explore_repository import SupabaseExploreRepository
+from src.clients.seo_benchmark_repository import SupabaseSeoBenchmarkRepository
 from src.clients.strategy_repository import StrategyRepository
 from src.clients.supabase_adapter import SupabaseMarketStore
 from src.clients.supabase_persistence import SupabaseExploreRefreshStore, SupabasePersistence
@@ -567,10 +569,21 @@ def _build_market_service() -> MarketService:
 
     store: Any = None
     kb: Any = None
+    benchmark_repository: Any = None
+    city_data_provider: Any = None
     try:
-        store = SupabaseMarketStore(SupabasePersistence())
+        persistence = SupabasePersistence()
+        store = SupabaseMarketStore(persistence)
+        benchmark_repository = SupabaseSeoBenchmarkRepository(
+            client=persistence.client
+        )
+        city_data_provider = SupabaseCityDataProvider(
+            client=persistence.client
+        )
     except Exception:
-        logger.warning("SupabaseMarketStore unavailable; persistence will fail")
+        logger.warning(
+            "Supabase unavailable; persistence and V2 Supabase scoring facts will fail"
+        )
     try:
         kb = KBKnowledgeStore(KBPersistence())
     except Exception:
@@ -582,6 +595,8 @@ def _build_market_service() -> MarketService:
         llm_client=llm,
         market_store=store,
         knowledge_store=kb,
+        benchmark_repository=benchmark_repository,
+        city_data_provider=city_data_provider,
     )
 
 

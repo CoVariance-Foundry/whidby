@@ -61,6 +61,16 @@
 
 V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.SeoBenchmarkRepository`. Scoring formulas must not query Supabase directly; Supabase access belongs in repository adapters such as `src.clients.seo_benchmark_repository.SupabaseSeoBenchmarkRepository`.
 
+### V2 Scoring Runtime Tables
+
+- `seo_facts` stores keyword-grain runtime observations by niche, CBSA, keyword, and observation date. V2 fact rows should include local-pack review facts, nullable top-organic competitor facts, and quality/confidence inputs used to recompute benchmarks.
+- `seo_benchmarks` stores population-class benchmark cells derived from `seo_facts`, `metros`, and `census_cbp_establishments`. V2 scoring reads these through `SeoBenchmarkRepository`; formulas do not query Supabase directly.
+- `metro_score_v2` stores persisted V2 score vectors, report lineage, benchmark confidence, and explanation facts for a city-service run. Explore and strategy read models prefer this table over legacy `metro_scores`.
+- `top3_review_count_min` is the minimum review count across ranked local top-3 listings with review data; missing review data persists as `null` and lowers confidence rather than becoming zero.
+- `top3_review_velocity_avg` is the average monthly review velocity across ranked local top-3 listings with velocity data; missing velocity data persists as `null`.
+- `avg_top5_da` is the nullable average domain authority across usable top-5 organic competitors after existing aggregator/missing-URL exclusions.
+- `avg_top5_lighthouse` is the nullable average Lighthouse/site quality score across usable top-5 organic competitors. `top5_da_coverage`, `top5_lighthouse_coverage`, and `top5_organic_data_confidence` record sparse top-5 evidence so missing measurements do not become easy zero-DA or zero-Lighthouse facts.
+
 
 ### Sonar Slice-Lite Entities
 

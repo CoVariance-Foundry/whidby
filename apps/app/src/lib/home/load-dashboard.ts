@@ -1,23 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
 import type { ActivityItem } from "@/components/home/RecentActivityFeed";
 import type { RecommendedItem } from "@/components/home/RecommendedMetros";
 import type { StatCard } from "@/components/home/StatCardRow";
-
-interface ReportRow {
-  id: string;
-  niche_keyword: string;
-  geo_target: string;
-  created_at: string;
-  spec_version: string;
-  metros: unknown;
-}
-
-function extractScore(metros: unknown): number | null {
-  if (!Array.isArray(metros) || metros.length === 0) return null;
-  const first = metros[0] as { scores?: { opportunity?: number } };
-  const raw = first?.scores?.opportunity;
-  return typeof raw === "number" ? Math.round(raw) : null;
-}
 
 export interface DashboardData {
   stats: {
@@ -31,63 +15,85 @@ export interface DashboardData {
   stat_cards: StatCard[];
 }
 
-export async function loadDashboard(client: SupabaseClient): Promise<DashboardData> {
-  let { data, error } = await client
-    .from("reports")
-    .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
-    .is("archived_at", null)
-    .order("created_at", { ascending: false })
-    .limit(10);
+interface LoadDashboardOptions {
+  app_base_url?: string;
+}
 
-  if (error?.message?.includes("archived_at")) {
-    ({ data, error } = await client
-      .from("reports")
-      .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
-      .order("created_at", { ascending: false })
-      .limit(10));
+const APP_BASE_ENV_KEYS = [
+  "WIDBY_APP_BASE_URL",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_SITE_URL",
+] as const;
+
+function normalizeAppBaseUrl(baseUrl: string) {
+  const trimmed = baseUrl.trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
+async function getAppRouteUrl(path: string, injectedBaseUrl?: string) {
+  const injected = injectedBaseUrl ? normalizeAppBaseUrl(injectedBaseUrl) : "";
+  if (injected) return `${injected}${path}`;
+
+  for (const key of APP_BASE_ENV_KEYS) {
+    const configured = process.env[key]?.trim();
+    if (configured) return `${normalizeAppBaseUrl(configured)}${path}`;
   }
 
-  if (error) {
-    throw new Error(`loadDashboard: ${error.message}`);
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `${normalizeAppBaseUrl(vercelUrl)}${path}`;
+
+  if (typeof window !== "undefined") return path;
+
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  if (!host) return path;
+  const proto = headerStore.get("x-forwarded-proto") ?? "http";
+  return `${proto}://${host}${path}`;
+}
+
+async function getIncomingCookieHeader(skipRequestHeaders = false) {
+  if (skipRequestHeaders || typeof window !== "undefined") return undefined;
+  const headerStore = await headers();
+  return headerStore.get("cookie") ?? undefined;
+}
+
+export async function loadDashboard(
+  options: LoadDashboardOptions = {},
+): Promise<DashboardData> {
+  const url = await getAppRouteUrl(
+    "/api/agent/reports?view=dashboard&limit=10",
+    options.app_base_url,
+  );
+  const cookie = await getIncomingCookieHeader(Boolean(options.app_base_url));
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      cache: "no-store",
+      ...(cookie ? { headers: { cookie } } : {}),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "request failed";
+    throw new Error(`loadDashboard: ${detail}`);
   }
 
-  const rows = (data ?? []) as ReportRow[];
-  const scored = rows.map((r) => ({ row: r, score: extractScore(r.metros) }));
-  const scoresOnly = scored
-    .map((s) => s.score)
-    .filter((s): s is number => typeof s === "number");
+  if (!response.ok) {
+    throw new Error(`loadDashboard: HTTP ${response.status}`);
+  }
 
-  const avg = scoresOnly.length
-    ? Math.round(scoresOnly.reduce((a, b) => a + b, 0) / scoresOnly.length)
-    : 0;
-
-  const recent: ActivityItem[] = scored.slice(0, 10).map((s) => ({
-    id: s.row.id,
-    niche: s.row.niche_keyword,
-    city: s.row.geo_target,
-    created_at: s.row.created_at,
-  }));
-
-  const recommended: RecommendedItem[] = scored.slice(0, 6).map((s) => ({
-    id: s.row.id,
-    niche: s.row.niche_keyword,
-    city: s.row.geo_target,
-    score: s.score,
-  }));
-
-  const stats = {
-    total_reports: rows.length,
-    avg_score: avg,
-    watchlist: 0,
-    niches_scored: rows.length,
+  const body = (await response.json()) as {
+    status?: string;
+    message?: string;
+    dashboard?: DashboardData;
   };
 
-  const stat_cards: StatCard[] = [
-    { label: "Niches scored", value: String(stats.niches_scored) },
-    { label: "Watchlist", value: String(stats.watchlist) },
-    { label: "Avg score", value: String(stats.avg_score) },
-    { label: "Reports", value: String(stats.total_reports) },
-  ];
+  if (body.status !== "success" || !body.dashboard) {
+    throw new Error(`loadDashboard: ${body.message ?? "invalid response"}`);
+  }
 
-  return { stats, recent, recommended, stat_cards };
+  return body.dashboard;
 }

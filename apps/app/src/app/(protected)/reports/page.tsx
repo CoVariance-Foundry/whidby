@@ -1,68 +1,75 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Icon, I } from "@/lib/icons";
-import { createClient } from "@/lib/supabase/server";
-import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
-import { mapReportRow } from "@/lib/niche-finder/reports-mapper";
-import { deriveArchetype } from "@/lib/niche-finder/derive-archetype";
 import type { TableRow } from "@/components/reports/ReportsTable";
 import ReportsPageClient from "./ReportsPageClient";
 
 export const dynamic = "force-dynamic";
 
-function archetypeShort(id: ArchetypeId): string {
-  return ARCHETYPES.find((a) => a.id === id)?.short ?? "Mixed";
+const APP_BASE_ENV_KEYS = [
+  "WIDBY_APP_BASE_URL",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_SITE_URL",
+] as const;
+
+type HeaderReader = {
+  get(name: string): string | null;
+};
+
+function normalizeAppBaseUrl(baseUrl: string) {
+  const trimmed = baseUrl.trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
 }
 
-function isMissingArchivedAtColumn(message: string | undefined): boolean {
-  if (!message) return false;
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("archived_at") &&
-    (normalized.includes("does not exist") || normalized.includes("not found"))
-  );
+function getAppRouteUrl(path: string, headerStore: HeaderReader) {
+  for (const key of APP_BASE_ENV_KEYS) {
+    const configured = process.env[key]?.trim();
+    if (configured) return `${normalizeAppBaseUrl(configured)}${path}`;
+  }
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `${normalizeAppBaseUrl(vercelUrl)}${path}`;
+
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  if (!host) return path;
+  const proto = headerStore.get("x-forwarded-proto") ?? "http";
+  return `${proto}://${host}${path}`;
+}
+
+async function loadReportRows(): Promise<TableRow[]> {
+  const headerStore = await headers();
+  const cookie = headerStore.get("cookie") ?? undefined;
+  const url = getAppRouteUrl("/api/agent/reports?limit=50", headerStore);
+  const response = await fetch(url, {
+    cache: "no-store",
+    ...(cookie ? { headers: { cookie } } : {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`reports list: HTTP ${response.status}`);
+  }
+
+  const body = (await response.json()) as {
+    status?: string;
+    message?: string;
+    reports?: TableRow[];
+  };
+
+  if (body.status !== "success" || !Array.isArray(body.reports)) {
+    throw new Error(`reports list: ${body.message ?? "invalid response"}`);
+  }
+
+  return body.reports;
 }
 
 export default async function ReportsPage() {
-  const supabase = await createClient();
-  let { data, error } = await supabase
-    .from("reports")
-    .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
-    .is("archived_at", null)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  // Some environments can lag the migration that adds `reports.archived_at`.
-  // If that column is missing, retry the list query without the filter.
-  if (isMissingArchivedAtColumn(error?.message)) {
-    ({ data, error } = await supabase
-      .from("reports")
-      .select("id, niche_keyword, geo_target, created_at, spec_version, metros")
-      .order("created_at", { ascending: false })
-      .limit(50));
-  }
-
-  if (error) {
-    throw new Error(`reports list: ${error.message}`);
-  }
-
-  const rows: TableRow[] = (data ?? []).map((raw) => {
-    const m = mapReportRow(raw);
-    const archetype_id = deriveArchetype({
-      opportunity_score: m.opportunity_score,
-    });
-    return {
-      id: m.id,
-      niche: m.niche_keyword,
-      city: m.geo_target,
-      archetype_id,
-      archetype_short: archetypeShort(archetype_id),
-      opportunity_score: m.opportunity_score,
-      spec_version: m.spec_version,
-      created_at: m.created_at,
-    };
-  });
+  const rows = await loadReportRows();
 
   return (
     <div className="app density-roomy">

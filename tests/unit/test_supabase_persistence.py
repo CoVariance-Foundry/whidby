@@ -1,7 +1,10 @@
 """Unit tests for the Supabase report persistence adapter."""
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
+
+import pytest
 
 from src.clients.supabase_persistence import (
     SupabasePersistence,
@@ -9,6 +12,8 @@ from src.clients.supabase_persistence import (
     build_keyword_rows,
     build_metro_signal_rows,
     build_metro_score_rows,
+    build_metro_score_v2_rows,
+    build_seo_fact_rows,
 )
 
 
@@ -46,7 +51,31 @@ def _sample_report() -> dict[str, Any]:
                 "serp_archetype": "local_first",
                 "ai_exposure": "low",
                 "difficulty_tier": "T2",
-                "signals": {"demand": {"tier_1_volume_effective": 4200}},
+                "signals": {
+                    "demand": {"tier_1_volume_effective": 4200},
+                    "organic_competition": {
+                        "aio_present": True,
+                        "aggregator_count": 3,
+                        "local_biz_count": 4,
+                        "avg_top5_da": 32.5,
+                        "avg_top5_lighthouse": 74.25,
+                        "top5_da_coverage": 0.8,
+                        "top5_lighthouse_coverage": 0.6,
+                        "top5_organic_data_confidence": "medium",
+                        "featured_snippet_present": False,
+                        "paa_count": 2,
+                    },
+                    "local_competition": {
+                        "local_pack_present": True,
+                        "local_pack_position": 2,
+                        "top3_review_count_min": 25.0,
+                        "top3_review_count_avg": 48.6,
+                        "top3_review_velocity_avg": 3.25,
+                        "top3_rating_avg": 4.6,
+                    },
+                    "monetization": {"ads_present": True, "lsa_present": False},
+                    "ai_resilience": {"aio_trigger_rate": 0.1},
+                },
                 "guidance": {"strategy": "lead with local"},
             }
         ],
@@ -57,6 +86,34 @@ def _sample_report() -> dict[str, Any]:
             "feedback_log_id": "22222222-2222-2222-2222-222222222222",
         },
     }
+
+
+def _sample_v2_report() -> dict[str, Any]:
+    report = deepcopy(_sample_report())
+    report["input"]["niche_keyword"] = " Roofing "
+    report["metros"][0]["v2_scores"] = {
+        "niche_normalized": "roof repair",
+        "cbsa_code": "38060",
+        "scores": {
+            "demand_strength": {"value": 140, "higher_is_better": True},
+            "organic_difficulty": {"value": 42, "higher_is_better": False},
+            "local_difficulty": {"value": 36, "higher_is_better": False},
+            "monetization_signal": {"value": 118, "higher_is_better": True},
+            "ai_resilience": {"value": 77, "higher_is_better": True},
+        },
+        "benchmark": {
+            "population_class": "metro_1m_5m",
+            "confidence_label": "medium",
+            "sample_size": 9,
+        },
+        "flags": {
+            "no_local_pack_detected": False,
+            "benchmark_undersampled": True,
+            "cbp_data_missing": False,
+        },
+        "spec_version": "2.0",
+    }
+    return report
 
 
 def test_build_report_row_maps_core_fields() -> None:
@@ -99,11 +156,176 @@ def test_build_metro_signal_and_score_rows() -> None:
     assert score_rows[0]["opportunity_score"] == 72
 
 
+def test_build_metro_score_v2_rows_maps_score_vector() -> None:
+    rows = build_metro_score_v2_rows(_sample_v2_report())
+    assert rows == [
+        {
+            "report_id": "11111111-1111-1111-1111-111111111111",
+            "niche_normalized": "roof repair",
+            "cbsa_code": "38060",
+            "serp_archetype": "local_first",
+            "ai_exposure": "low",
+            "spec_version": "2.0",
+            "demand_strength": 140,
+            "demand_strength_higher_is_better": True,
+            "organic_difficulty": 42,
+            "organic_difficulty_higher_is_better": False,
+            "local_difficulty": 36,
+            "local_difficulty_higher_is_better": False,
+            "monetization_signal": 118,
+            "monetization_signal_higher_is_better": True,
+            "ai_resilience": 77,
+            "ai_resilience_higher_is_better": True,
+            "benchmark_population_class": "metro_1m_5m",
+            "benchmark_confidence": "medium",
+            "benchmark_sample_size": 9,
+            "no_local_pack_detected": False,
+            "benchmark_undersampled": True,
+            "cbp_data_missing": False,
+        }
+    ]
+
+
+def test_build_metro_score_v2_rows_returns_empty_without_v2_scores() -> None:
+    assert build_metro_score_v2_rows(_sample_report()) == []
+
+
+def test_build_seo_fact_rows_maps_schema_columns_only() -> None:
+    rows = build_seo_fact_rows(_sample_v2_report())
+    assert len(rows) == 1
+    allowed_columns = {
+        "niche_keyword",
+        "niche_normalized",
+        "cbsa_code",
+        "keyword",
+        "keyword_tier",
+        "intent",
+        "search_volume_monthly",
+        "cpc_usd",
+        "aio_present",
+        "local_pack_present",
+        "local_pack_position",
+        "aggregator_count_top10",
+        "local_biz_count_top10",
+        "featured_snippet_present",
+        "paa_count",
+        "ads_present",
+        "lsa_present",
+        "top3_review_count_min",
+        "top3_review_count_avg",
+        "top3_review_velocity_avg",
+        "top3_rating_avg",
+        "avg_top5_da",
+        "avg_top5_lighthouse",
+        "top5_da_coverage",
+        "top5_lighthouse_coverage",
+        "top5_organic_data_confidence",
+        "snapshot_date",
+        "report_id",
+        "source",
+    }
+    assert set(rows[0]) == allowed_columns
+    assert rows[0]["niche_keyword"] == " Roofing "
+    assert rows[0]["niche_normalized"] == "roof repair"
+    assert rows[0]["keyword_tier"] == 1
+    assert rows[0]["search_volume_monthly"] == 2000
+    assert rows[0]["cpc_usd"] == 12.5
+    assert rows[0]["snapshot_date"] == "2026-04-20"
+    assert rows[0]["aggregator_count_top10"] == 3
+    assert rows[0]["local_biz_count_top10"] == 4
+    assert rows[0]["top3_review_count_min"] == 25
+    assert rows[0]["top3_review_count_avg"] == 49
+    assert rows[0]["avg_top5_da"] == 32.5
+    assert rows[0]["avg_top5_lighthouse"] == 74.25
+    assert rows[0]["top5_da_coverage"] == 0.8
+    assert rows[0]["top5_lighthouse_coverage"] == 0.6
+    assert rows[0]["top5_organic_data_confidence"] == "medium"
+    assert rows[0]["source"] == "orchestrator"
+
+
+def test_build_seo_fact_rows_preserves_missing_v2_facts_as_null() -> None:
+    report = _sample_v2_report()
+    local = report["metros"][0]["signals"]["local_competition"]
+    organic = report["metros"][0]["signals"]["organic_competition"]
+    local["top3_review_count_min"] = None
+    local["top3_review_velocity_avg"] = None
+    organic["avg_top5_da"] = None
+    organic["avg_top5_lighthouse"] = None
+    organic["top5_da_coverage"] = 0.0
+    organic["top5_lighthouse_coverage"] = 0.0
+    organic["top5_organic_data_confidence"] = "missing"
+
+    rows = build_seo_fact_rows(report)
+
+    assert rows[0]["top3_review_count_min"] is None
+    assert rows[0]["top3_review_velocity_avg"] is None
+    assert rows[0]["avg_top5_da"] is None
+    assert rows[0]["avg_top5_lighthouse"] is None
+    assert rows[0]["top5_da_coverage"] == 0.0
+    assert rows[0]["top5_lighthouse_coverage"] == 0.0
+    assert rows[0]["top5_organic_data_confidence"] == "missing"
+
+
+def test_build_seo_fact_rows_uses_utc_snapshot_date() -> None:
+    report = _sample_v2_report()
+    report["generated_at"] = "2026-04-20T23:30:00-07:00"
+
+    rows = build_seo_fact_rows(report)
+
+    assert rows[0]["snapshot_date"] == "2026-04-21"
+
+
+def test_build_seo_fact_rows_normalizes_keyword_tier_and_intent() -> None:
+    report = _sample_v2_report()
+    report["keyword_expansion"]["expanded_keywords"] = [
+        {"keyword": "bad tier", "tier": "5", "intent": "navigational"},
+        {"keyword": "missing metadata"},
+        {"keyword": "commercial kw", "tier": "2", "intent": " Commercial "},
+    ]
+
+    rows = build_seo_fact_rows(report)
+
+    assert [
+        (row["keyword"], row["keyword_tier"], row["intent"])
+        for row in rows
+    ] == [
+        ("bad tier", 3, "informational"),
+        ("missing metadata", 3, "informational"),
+        ("commercial kw", 2, "commercial"),
+    ]
+
+
+def test_build_seo_fact_rows_skips_legacy_metros_without_v2_scores() -> None:
+    report = _sample_v2_report()
+    legacy_metro = deepcopy(report["metros"][0])
+    legacy_metro["cbsa_code"] = "99999"
+    legacy_metro.pop("v2_scores")
+    report["metros"].append(legacy_metro)
+
+    rows = build_seo_fact_rows(report)
+
+    assert len(rows) == 1
+    assert rows[0]["cbsa_code"] == "38060"
+
+
 class _FakeTable:
-    def __init__(self, sink: list[dict]) -> None:
+    def __init__(self, sink: list[dict], calls: list[dict[str, Any]], name: str) -> None:
         self.sink = sink
+        self.calls = calls
+        self.name = name
 
     def insert(self, payload: Any) -> "_FakeTable":
+        self.calls.append({"table": self.name, "method": "insert", "payload": payload})
+        if isinstance(payload, list):
+            self.sink.extend(payload)
+        else:
+            self.sink.append(payload)
+        return self
+
+    def upsert(self, payload: Any, **kwargs: Any) -> "_FakeTable":
+        self.calls.append(
+            {"table": self.name, "method": "upsert", "payload": payload, "kwargs": kwargs}
+        )
         if isinstance(payload, list):
             self.sink.extend(payload)
         else:
@@ -119,18 +341,85 @@ class _FakeTable:
 class _FakeSupabase:
     def __init__(self) -> None:
         self.tables: dict[str, list[dict]] = {}
+        self.calls: list[dict[str, Any]] = []
 
     def table(self, name: str) -> _FakeTable:
         self.tables.setdefault(name, [])
-        return _FakeTable(self.tables[name])
+        return _FakeTable(self.tables[name], self.calls, name)
 
 
-def test_persist_report_writes_to_all_four_tables() -> None:
+class _FakeTableWithoutUpsert:
+    def __init__(self, sink: list[dict], calls: list[dict[str, Any]], name: str) -> None:
+        self.sink = sink
+        self.calls = calls
+        self.name = name
+
+    def insert(self, payload: Any) -> "_FakeTableWithoutUpsert":
+        self.calls.append({"table": self.name, "method": "insert", "payload": payload})
+        if isinstance(payload, list):
+            self.sink.extend(payload)
+        else:
+            self.sink.append(payload)
+        return self
+
+    def execute(self) -> Any:
+        class _R:
+            data = self.sink
+        return _R()
+
+
+class _FakeSupabaseWithoutSeoFactsUpsert(_FakeSupabase):
+    def table(self, name: str) -> _FakeTable | _FakeTableWithoutUpsert:
+        self.tables.setdefault(name, [])
+        if name == "seo_facts":
+            return _FakeTableWithoutUpsert(self.tables[name], self.calls, name)
+        return _FakeTable(self.tables[name], self.calls, name)
+
+
+def test_persist_report_writes_to_all_six_tables_when_v2_data_exists() -> None:
     fake = _FakeSupabase()
     adapter = SupabasePersistence(client=fake)
-    report_id = adapter.persist_report(_sample_report())
+    report_id = adapter.persist_report(_sample_v2_report())
     assert report_id == "11111111-1111-1111-1111-111111111111"
     assert len(fake.tables["reports"]) == 1
     assert len(fake.tables["report_keywords"]) == 1
     assert len(fake.tables["metro_signals"]) == 1
     assert len(fake.tables["metro_scores"]) == 1
+    assert len(fake.tables["metro_score_v2"]) == 1
+    assert len(fake.tables["seo_facts"]) == 1
+    score_v2_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "metro_score_v2" and call["method"] == "upsert"
+    )
+    assert score_v2_call["kwargs"] == {"on_conflict": "report_id,cbsa_code"}
+    fact_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "seo_facts" and call["method"] == "upsert"
+    )
+    assert fact_call["kwargs"] == {
+        "on_conflict": "niche_normalized,cbsa_code,keyword,snapshot_date"
+    }
+
+
+def test_persist_report_still_works_for_legacy_report_without_v2_scores() -> None:
+    fake = _FakeSupabase()
+    adapter = SupabasePersistence(client=fake)
+    report_id = adapter.persist_report(_sample_report())
+    assert report_id == "11111111-1111-1111-1111-111111111111"
+    assert "metro_score_v2" not in fake.tables
+    assert "seo_facts" not in fake.tables
+
+
+def test_persist_report_requires_upsert_for_seo_facts() -> None:
+    fake = _FakeSupabaseWithoutSeoFactsUpsert()
+    adapter = SupabasePersistence(client=fake)
+
+    with pytest.raises(RuntimeError, match="lacks upsert"):
+        adapter.persist_report(_sample_v2_report())
+
+    assert not any(
+        call["table"] == "seo_facts" and call["method"] == "insert"
+        for call in fake.calls
+    )

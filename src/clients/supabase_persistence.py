@@ -111,6 +111,82 @@ def _matching_metro(report: dict[str, Any], cbsa_code: str) -> dict[str, Any] | 
     return None
 
 
+def _expanded_keywords(report: dict[str, Any]) -> list[dict[str, Any]]:
+    keyword_expansion = report.get("keyword_expansion") or {}
+    keywords = keyword_expansion.get("expanded_keywords", [])
+    return keywords if isinstance(keywords, list) else []
+
+
+def _flatten_signal_buckets(signals: dict[str, Any]) -> dict[str, Any]:
+    flattened = dict(signals)
+    for key in (
+        "demand",
+        "organic_competition",
+        "local_competition",
+        "monetization",
+        "ai_resilience",
+    ):
+        value = signals.get(key)
+        if isinstance(value, dict):
+            flattened.update(value)
+    return flattened
+
+
+def _niche_normalized(report: dict[str, Any], metro: dict[str, Any] | None = None) -> str:
+    v2_scores = (metro or {}).get("v2_scores") or {}
+    v2_niche = v2_scores.get("niche_normalized")
+    if isinstance(v2_niche, str) and v2_niche.strip():
+        return v2_niche.strip().lower()
+    return str(report.get("input", {}).get("niche_keyword", "")).strip().lower()
+
+
+def _snapshot_date(report: dict[str, Any]) -> str | None:
+    try:
+        parsed = _parse_dt(report.get("generated_at"))
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).date().isoformat()
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(round(float(value)))
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _keyword_tier(value: Any) -> int:
+    try:
+        tier = int(value)
+    except (TypeError, ValueError):
+        return 3
+    return tier if tier in {1, 2, 3} else 3
+
+
+def _keyword_intent(value: Any) -> str:
+    if isinstance(value, str):
+        intent = value.strip().lower()
+        if intent in {"transactional", "commercial", "informational"}:
+            return intent
+    return "informational"
+
+
+def _score_value(v2_scores: dict[str, Any], dimension: str) -> Any:
+    dimension_score = (v2_scores.get("scores") or {}).get(dimension) or {}
+    if isinstance(dimension_score, dict):
+        return dimension_score.get("value")
+    return None
+
+
 def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
     run_input = report["input"]
     return {
@@ -140,7 +216,7 @@ def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
 
 def build_keyword_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     report_id = report["report_id"]
-    keywords = report["keyword_expansion"].get("expanded_keywords", [])
+    keywords = _expanded_keywords(report)
     rows: list[dict[str, Any]] = []
     for kw in keywords:
         rows.append(
@@ -215,6 +291,130 @@ def build_metro_score_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "guidance": metro.get("guidance"),
             }
         )
+    return rows
+
+
+def build_metro_score_v2_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build rows for public.metro_score_v2 from attached V2 score vectors."""
+    report_id = report["report_id"]
+    rows: list[dict[str, Any]] = []
+    dimensions = (
+        "demand_strength",
+        "organic_difficulty",
+        "local_difficulty",
+        "monetization_signal",
+        "ai_resilience",
+    )
+    for metro in report.get("metros", []):
+        v2_scores = metro.get("v2_scores")
+        if not isinstance(v2_scores, dict):
+            continue
+
+        row: dict[str, Any] = {
+            "report_id": report_id,
+            "niche_normalized": _niche_normalized(report, metro),
+            "cbsa_code": v2_scores.get("cbsa_code") or metro.get("cbsa_code"),
+            "serp_archetype": metro.get("serp_archetype"),
+            "ai_exposure": metro.get("ai_exposure"),
+            "spec_version": v2_scores.get("spec_version", "2.0"),
+        }
+
+        score_map = v2_scores.get("scores") or {}
+        for dimension in dimensions:
+            row[dimension] = _score_value(v2_scores, dimension)
+            dimension_score = score_map.get(dimension) or {}
+            if (
+                isinstance(dimension_score, dict)
+                and "higher_is_better" in dimension_score
+            ):
+                row[f"{dimension}_higher_is_better"] = bool(
+                    dimension_score["higher_is_better"]
+                )
+
+        benchmark = v2_scores.get("benchmark") or {}
+        if isinstance(benchmark, dict):
+            row["benchmark_population_class"] = benchmark.get("population_class")
+            row["benchmark_confidence"] = benchmark.get("confidence_label")
+            row["benchmark_sample_size"] = benchmark.get("sample_size")
+
+        flags = v2_scores.get("flags") or {}
+        if isinstance(flags, dict):
+            row["no_local_pack_detected"] = bool(
+                flags.get("no_local_pack_detected", False)
+            )
+            row["benchmark_undersampled"] = bool(
+                flags.get("benchmark_undersampled", False)
+            )
+            row["cbp_data_missing"] = bool(flags.get("cbp_data_missing", False))
+
+        rows.append(row)
+    return rows
+
+
+def build_seo_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build denormalized keyword-level facts for public.seo_facts."""
+    report_id = report["report_id"]
+    niche_keyword = report.get("input", {}).get("niche_keyword")
+    snapshot_date = _snapshot_date(report)
+    rows: list[dict[str, Any]] = []
+
+    for metro in report.get("metros", []):
+        if not isinstance(metro.get("v2_scores"), dict):
+            continue
+        signals = _flatten_signal_buckets(metro.get("signals") or {})
+        niche_normalized = _niche_normalized(report, metro)
+        for keyword in _expanded_keywords(report):
+            row = {
+                "niche_keyword": niche_keyword,
+                "niche_normalized": niche_normalized,
+                "cbsa_code": metro.get("cbsa_code"),
+                "keyword": keyword["keyword"],
+                "keyword_tier": _keyword_tier(keyword.get("tier")),
+                "intent": _keyword_intent(keyword.get("intent")),
+                "search_volume_monthly": keyword.get("search_volume"),
+                "cpc_usd": keyword.get("cpc"),
+                "aio_present": signals.get("aio_present"),
+                "local_pack_present": signals.get("local_pack_present"),
+                "local_pack_position": signals.get("local_pack_position"),
+                "aggregator_count_top10": _int_or_none(
+                    signals.get("aggregator_count_top10", signals.get("aggregator_count"))
+                ),
+                "local_biz_count_top10": _int_or_none(
+                    signals.get("local_biz_count_top10", signals.get("local_biz_count"))
+                ),
+                "featured_snippet_present": signals.get("featured_snippet_present"),
+                "paa_count": signals.get("paa_count"),
+                "ads_present": signals.get("ads_present", signals.get("ads_top_present")),
+                "lsa_present": signals.get("lsa_present"),
+                "top3_review_count_min": _int_or_none(
+                    signals.get("top3_review_count_min")
+                ),
+                "top3_review_count_avg": _int_or_none(
+                    signals.get(
+                        "top3_review_count_avg",
+                        signals.get("local_pack_review_count_avg"),
+                    )
+                ),
+                "top3_review_velocity_avg": signals.get("top3_review_velocity_avg"),
+                "top3_rating_avg": signals.get("top3_rating_avg"),
+                "avg_top5_da": _float_or_none(signals.get("avg_top5_da")),
+                "avg_top5_lighthouse": _float_or_none(
+                    signals.get("avg_top5_lighthouse")
+                ),
+                "top5_da_coverage": _float_or_none(signals.get("top5_da_coverage")),
+                "top5_lighthouse_coverage": _float_or_none(
+                    signals.get("top5_lighthouse_coverage")
+                ),
+                "top5_organic_data_confidence": signals.get(
+                    "top5_organic_data_confidence"
+                ),
+                "report_id": report_id,
+                "source": "orchestrator",
+            }
+            if snapshot_date is not None:
+                row["snapshot_date"] = snapshot_date
+            rows.append(row)
+
     return rows
 
 
@@ -622,6 +822,40 @@ class SupabasePersistence:
             score_ms = int((time.monotonic() - t0) * 1000)
             logger.info("persist_report inserted %d metro_scores rows duration_ms=%d",
                         len(score_rows), score_ms)
+
+        score_v2_rows = build_metro_score_v2_rows(report)
+        if score_v2_rows:
+            t0 = time.monotonic()
+            self._client.table("metro_score_v2").upsert(
+                score_v2_rows,
+                on_conflict="report_id,cbsa_code",
+            ).execute()
+            score_v2_ms = int((time.monotonic() - t0) * 1000)
+            logger.info(
+                "persist_report upserted %d metro_score_v2 rows duration_ms=%d",
+                len(score_v2_rows),
+                score_v2_ms,
+            )
+
+        fact_rows = build_seo_fact_rows(report)
+        if fact_rows:
+            t0 = time.monotonic()
+            facts_table = self._client.table("seo_facts")
+            if not hasattr(facts_table, "upsert"):
+                raise RuntimeError(
+                    "Cannot persist seo_facts: Supabase table client lacks upsert; "
+                    "idempotent writes are required."
+                )
+            facts_table.upsert(
+                fact_rows,
+                on_conflict="niche_normalized,cbsa_code,keyword,snapshot_date",
+            ).execute()
+            facts_ms = int((time.monotonic() - t0) * 1000)
+            logger.info(
+                "persist_report upserted %d seo_facts rows duration_ms=%d",
+                len(fact_rows),
+                facts_ms,
+            )
 
         total_ms = int((time.monotonic() - persist_start) * 1000)
         logger.info("persist_report DONE report_id=%s total_ms=%d", report_id, total_ms)

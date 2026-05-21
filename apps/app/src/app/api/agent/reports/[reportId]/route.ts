@@ -7,10 +7,33 @@ import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const UPSTREAM_TIMEOUT_MS = 4_500;
+const REPORT_SELECT =
+  "id, created_at, spec_version, niche_keyword, geo_scope, geo_target, report_depth, strategy_profile, resolved_weights, keyword_expansion, metros, meta, access_scope, owner_account_id" as const;
 
 type RouteContext = {
   params: Promise<{ reportId: string }>;
 };
+
+type SupabaseReportRow = {
+  id?: unknown;
+  created_at?: unknown;
+  spec_version?: unknown;
+  niche_keyword?: unknown;
+  geo_scope?: unknown;
+  geo_target?: unknown;
+  report_depth?: unknown;
+  strategy_profile?: unknown;
+  resolved_weights?: unknown;
+  keyword_expansion?: unknown;
+  metros?: unknown;
+  meta?: unknown;
+  access_scope?: unknown;
+  owner_account_id?: unknown;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 function normalizeReportPayload(payload: Record<string, unknown>) {
   const reportId = payload.report_id;
@@ -42,6 +65,29 @@ function normalizeReportPayload(payload: Record<string, unknown>) {
   };
 }
 
+function normalizeSupabaseReportRow(row: SupabaseReportRow) {
+  return {
+    id: typeof row.id === "string" ? row.id : "",
+    created_at: typeof row.created_at === "string" ? row.created_at : "",
+    spec_version: typeof row.spec_version === "string" ? row.spec_version : "1.1",
+    niche_keyword: typeof row.niche_keyword === "string" ? row.niche_keyword : "",
+    geo_scope: typeof row.geo_scope === "string" ? row.geo_scope : "city",
+    geo_target: typeof row.geo_target === "string" ? row.geo_target : "",
+    report_depth: typeof row.report_depth === "string" ? row.report_depth : "standard",
+    strategy_profile:
+      typeof row.strategy_profile === "string" ? row.strategy_profile : "balanced",
+    resolved_weights: isRecord(row.resolved_weights)
+      ? (row.resolved_weights as Record<string, number>)
+      : null,
+    keyword_expansion: isRecord(row.keyword_expansion) ? row.keyword_expansion : null,
+    metros: Array.isArray(row.metros) ? row.metros : [],
+    meta: isRecord(row.meta) ? row.meta : null,
+    access_scope: typeof row.access_scope === "string" ? row.access_scope : "account",
+    owner_account_id:
+      typeof row.owner_account_id === "string" ? row.owner_account_id : null,
+  };
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: RouteContext,
@@ -61,7 +107,7 @@ export async function GET(
     const { entitlement } = await resolveEntitlementContext(supabase);
     const { data: reportAccess, error: reportError } = await supabase
       .from("reports")
-      .select("id, access_scope, owner_account_id")
+      .select(REPORT_SELECT)
       .eq("id", reportId)
       .maybeSingle();
 
@@ -115,39 +161,40 @@ export async function GET(
         cache: "no-store",
         signal: controller.signal,
       });
-    } catch (error) {
-      const isAbort = error instanceof DOMException && error.name === "AbortError";
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          message: isAbort
-            ? `Report upstream timed out after ${UPSTREAM_TIMEOUT_MS}ms.`
-            : error instanceof Error
-              ? error.message
-              : "Failed to load report.",
-          duration_ms: Date.now() - startedAt,
-        },
-        { status: 502 },
-      );
+    } catch {
+      return NextResponse.json({
+        status: "success",
+        report: normalizeSupabaseReportRow(reportAccess),
+        duration_ms: Date.now() - startedAt,
+      });
     } finally {
       clearTimeout(timeout);
     }
 
     if (!upstream.ok) {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          message: "Failed to load report.",
-          upstream_status: upstream.status,
-          duration_ms: Date.now() - startedAt,
-        },
-        { status: 502 },
-      );
+      return NextResponse.json({
+        status: "success",
+        report: normalizeSupabaseReportRow(reportAccess),
+        upstream_status: upstream.status,
+        duration_ms: Date.now() - startedAt,
+      });
     }
 
-    const json = (await upstream.json()) as Record<string, unknown>;
-    const report = normalizeReportPayload(json);
-    return NextResponse.json({ status: "success", report, duration_ms: Date.now() - startedAt });
+    try {
+      const json = (await upstream.json()) as Record<string, unknown>;
+      const report = normalizeReportPayload(json);
+      return NextResponse.json({
+        status: "success",
+        report,
+        duration_ms: Date.now() - startedAt,
+      });
+    } catch {
+      return NextResponse.json({
+        status: "success",
+        report: normalizeSupabaseReportRow(reportAccess),
+        duration_ms: Date.now() - startedAt,
+      });
+    }
   } catch (error) {
     if (error instanceof EntitlementError) {
       return NextResponse.json(
