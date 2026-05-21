@@ -7,7 +7,7 @@ export type PaidPlanKey = "plus" | "pro";
 export function getStripeClient(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_RESTRICTED_KEY;
   if (!key) {
-    throw new Error("STRIPE_SECRET_KEY is not configured");
+    throw new Error("Neither STRIPE_SECRET_KEY nor STRIPE_RESTRICTED_KEY is configured");
   }
 
   if (!stripe) {
