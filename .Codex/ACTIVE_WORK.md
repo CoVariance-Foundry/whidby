@@ -1,5 +1,31 @@
 # Active Work
 
+## Proto -> Production Convergence: Epic 1 App Frame
+
+Status: implemented locally on `codex/whi-2-app-frame-navbar`; PR publication pending.
+
+Linear: `WHI-2` with `WHI-11`, `WHI-12`, and sub-issues `WHI-44` through `WHI-51`.
+
+Completed:
+
+- Replaced the protected consumer app sidebar/topbar shell with a single sticky `Navbar` from `(protected)/layout.tsx`.
+- Added authenticated primary navigation for Home, Strategies, Explore, Multi-market, and Reports.
+- Moved plan usage, account settings, password, admin dashboard, and sign-out into the navbar profile area.
+- Added a minimal app footer to the protected layout.
+- Removed page-local app chrome wrappers from protected pages; route actions now live in page headers or client surfaces.
+- Preserved the existing `/niche-finder` and `/recommendations` routes for deep links while removing them from primary authenticated navigation.
+
+Verification:
+
+- `npm --workspace apps/app test -- Navbar layout settings/page explore/page` passed 8 tests.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` exited 0 with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+
+Notes:
+
+- Linear `WHI-2` has the implementation assumptions for quota wording, hidden nav routes, onboarding suppression, and epic-level testing scope.
+- Project-level Linear status updates are disabled in the workspace, so progress notes live on the epic and sub-issue statuses.
+
 ## V2 Scoring System
 
 Status: implemented and under final verification on `codex/v2-scoring-system`.
@@ -49,7 +75,7 @@ Current blockers:
 
 - Account & Billing screen spec is active on `codex/accounts-and-billing`.
 - Spec: `specs/015-account-billing-screen/spec.md`
-- Next: implement the protected consumer account/settings surface from the spec, preserving the bottom-sidebar `UserMenu` account entry convention and canonical `free`/`plus`/`pro` quota rules.
+- Account/settings is implemented; future app-frame work should use the navbar profile dropdown instead of the removed bottom-sidebar user menu.
 
 ## Prior/Archived Context
 
@@ -69,7 +95,7 @@ Completed:
 
 - Added protected `/settings` and `/settings/password` consumer settings screens.
 - Routed billing checkout, portal return URLs, plan actions, invoices, payment methods, cancellation entry points, and scheduled-cancellation display through the settings surface.
-- Added account summary loading, fresh-report usage display, sidebar account entry, and password reset completion controls.
+- Added account summary loading, fresh-report usage display, account entry points, and password reset completion controls.
 - Preserved canonical `free` / `plus` / `pro` plan behavior and existing Stripe Checkout/Portal boundaries.
 
 ## Explore Cities Refactor

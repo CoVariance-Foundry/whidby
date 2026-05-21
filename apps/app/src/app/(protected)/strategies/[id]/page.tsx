@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
 import { Icon, I } from "@/lib/icons";
 import { loadStrategy } from "@/lib/strategies/catalog";
 import StrategyPageClient from "./StrategyPageClient";
@@ -17,28 +15,18 @@ export default async function StrategyPage({ params }: { params: Promise<{ id: s
   }
 
   return (
-    <div className="app density-roomy">
-      <Sidebar active="strategies" />
-      <div className="main">
-        <Topbar
-          crumbs={["Strategies", strategy.name]}
-          actions={
-            <Link href="/strategies" className="btn-ghost" style={{ textDecoration: "none" }}>
-              <Icon d={I.arrow} style={{ transform: "rotate(180deg)" }} /> Back
-            </Link>
-          }
-        />
-        <main
-          className="page"
-          style={{
-            maxWidth: 1180,
-            margin: "0 auto",
-            width: "100%",
-          }}
-        >
-          <StrategyPageClient strategy={strategy} />
-        </main>
-      </div>
-    </div>
+    <main
+      className="page"
+      style={{
+        maxWidth: 1180,
+        margin: "0 auto",
+        width: "100%",
+      }}
+    >
+      <Link href="/strategies" className="btn-ghost" style={{ textDecoration: "none", marginBottom: 16 }}>
+        <Icon d={I.arrow} style={{ transform: "rotate(180deg)" }} /> Back
+      </Link>
+      <StrategyPageClient strategy={strategy} />
+    </main>
   );
 }

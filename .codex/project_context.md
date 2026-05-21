@@ -1,10 +1,16 @@
 # Project Context
 
+## Consumer App Frame
+
+The protected consumer app frame now lives in `apps/app/src/app/(protected)/layout.tsx`. It renders a sticky `Navbar`, a minimal `Footer`, and the route content for authenticated app pages. The navbar resolves the Supabase user, attempts account entitlement and usage loading, and falls back to `Free` with `0/0 scans` if account summary data is unavailable.
+
+Primary authenticated nav is Home, Strategies, Explore, Multi-market, and Reports. `/niche-finder` and `/recommendations` remain valid routes/deep links but are no longer primary nav items. Account settings, password, admin dashboard, and sign-out live in the navbar profile dropdown. Do not reintroduce page-local `Sidebar`/`Topbar` shells; protected pages should render route content and put actions in page headers or client surfaces.
+
 ## Account and Billing Settings
 
 Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, and Stripe scheduled-cancellation state, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.
 
-The bottom-sidebar user menu now links Account settings to `/settings`, shows the signed-in email plus live plan label, and marks settings pages active. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs now land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
+The navbar profile menu now links Account settings to `/settings`, shows the signed-in email plus live plan label, exposes `/settings/password`, and preserves the admin dashboard link plus Supabase sign-out. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs now land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
 
 ## AI Review and Visual QA CI/CD
 

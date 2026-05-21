@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
 import { Icon, I } from "@/lib/icons";
 import type { TableRow } from "@/components/reports/ReportsTable";
 import ReportsPageClient from "./ReportsPageClient";
@@ -72,54 +70,54 @@ export default async function ReportsPage() {
   const rows = await loadReportRows();
 
   return (
-    <div className="app density-roomy">
-      <Sidebar active="reports" />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Topbar
-          crumbs={["Reports"]}
-          actions={
-            <Link href="/niche-finder" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex" }}>
-              <Icon d={I.plus} /> New report
-            </Link>
-          }
-        />
-        <main
-          style={{
-            padding: "24px 32px",
-            maxWidth: 1280,
-            margin: "0 auto",
-            width: "100%",
-            display: "flex",
-            flexDirection: "column",
-            gap: 20,
-          }}
-        >
-          <header>
-            <h1
-              style={{
-                fontFamily: "var(--serif)",
-                fontSize: 28,
-                fontWeight: 600,
-                color: "var(--ink)",
-                margin: 0,
-              }}
-            >
-              Reports
-            </h1>
-            <p
-              style={{
-                fontFamily: "var(--sans)",
-                fontSize: 14,
-                color: "var(--ink-2)",
-                margin: "4px 0 0",
-              }}
-            >
-              Every niche score you&apos;ve run, most recent first.
-            </p>
-          </header>
-          <ReportsPageClient rows={rows} />
-        </main>
-      </div>
-    </div>
+    <main
+      className="page"
+      style={{
+        maxWidth: 1280,
+        margin: "0 auto",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+      }}
+    >
+      <header
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: 18,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 28,
+              fontWeight: 600,
+              color: "var(--ink)",
+              margin: 0,
+            }}
+          >
+            Reports
+          </h1>
+          <p
+            style={{
+              fontFamily: "var(--sans)",
+              fontSize: 14,
+              color: "var(--ink-2)",
+              margin: "4px 0 0",
+            }}
+          >
+            Every niche score you&apos;ve run, most recent first.
+          </p>
+        </div>
+        <Link href="/niche-finder" className="btn-primary" style={{ textDecoration: "none" }}>
+          <Icon d={I.plus} /> New report
+        </Link>
+      </header>
+      <ReportsPageClient rows={rows} />
+    </main>
   );
 }

@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.5.1` |
-| **Last Updated** | 2026-05-18 |
+| **Version** | `1.5.2` |
+| **Last Updated** | 2026-05-21 |
 | **Owner** | @widby-team |
 
 ---
@@ -31,6 +31,8 @@ Five subsystems compose the platform:
 6. **Consumer Product** (`apps/app/`) — Next.js 16 light-theme consumer surface (niche finder, Explore Cities, saved reports). Port 3002 local, separate Vercel project.
 
 **Production split:** The FastAPI bridge (`src/research_agent/api.py`) is hosted on **Render** as a Docker web service (e.g. `https://whidby-1.onrender.com`). Vercel server routes under `apps/admin/src/app/api/agent/` and `apps/app/src/app/api/agent/` both proxy to the Render URL via **`NEXT_PUBLIC_API_URL`**. Email/password sign-in callbacks redirect to each frontend via **`NEXT_PUBLIC_APP_FRONTEND_URL`** (the Vercel origin, not the API). Supabase backs auth and product data for both apps. Details: `docs/research_agent_design.md` §12.
+
+**Consumer app frame:** Protected consumer routes inherit a single sticky `Navbar` plus minimal app `Footer` from `apps/app/src/app/(protected)/layout.tsx`. The frame resolves the Supabase user, attempts account entitlement/usage loading, and falls back to a free-plan usage pill if entitlement summary data is unavailable. Primary authenticated navigation is Home, Strategies, Explore, Multi-market, and Reports; account settings, password, admin dashboard, and sign-out live in the profile dropdown. Page-level actions belong in page headers or client surfaces, not in a reintroduced sidebar/topbar shell.
 
 ### Consumer User Management and Entitlements
 
@@ -209,7 +211,7 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Response Tracking (M14) | Event collection + reply classification | `src/experiment/` | `tests/unit/test_response_tracking.py` |
 | Experiment Analysis (M15) | A/B analysis + rentability signal | `src/experiment/` | `tests/unit/test_experiment_analysis.py` |
 | Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments | `apps/admin/` | Admin vitest + Playwright |
-| Consumer Frontend | Light-theme scoring + reports consumer surface | `apps/app/` | Consumer vitest |
+| Consumer Frontend | Light-theme scoring + reports consumer surface with protected Navbar/Footer app frame | `apps/app/` | Consumer vitest |
 | Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags | `apps/app/src/lib/account/`, `apps/app/src/app/api/billing/` | Consumer vitest |
 | Consumer Onboarding | Signup intent, strategy recommendation, target capture, resume state, and first-report handoff | `apps/app/src/app/(auth)/`, `apps/app/src/app/onboarding/`, `apps/app/src/app/api/onboarding/`, `apps/app/src/lib/onboarding/` | Consumer vitest + Playwright smoke |
 | Strategy Discovery | Strategy projections over cached market intelligence, account-gated strategy run creation, and FastAPI discovery proxying | `src/domain/services/discovery_service.py`, `src/clients/strategy_repository.py`, `apps/app/src/app/api/strategies/runs/` | `tests/unit/test_strategy_projection.py`, `tests/unit/test_discovery_service_strategies.py`, `tests/unit/test_api_strategy_discovery.py`, `apps/app/src/app/api/strategies/runs/route.test.ts` |
