@@ -1,5 +1,8 @@
--- 021_v2_top5_fact_fields.sql
--- Add nullable top-5 organic fact fields for V2 benchmark inputs.
+-- 022_v2_scoring_persistence_contract.sql
+-- Add nullable top-5 organic fact fields and V2 score idempotency support.
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_score_v2_report_cbsa_unique
+    ON public.metro_score_v2(report_id, cbsa_code);
 
 ALTER TABLE public.seo_facts
     ADD COLUMN IF NOT EXISTS avg_top5_da NUMERIC(6,2),

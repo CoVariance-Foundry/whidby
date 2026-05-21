@@ -387,6 +387,12 @@ def test_persist_report_writes_to_all_six_tables_when_v2_data_exists() -> None:
     assert len(fake.tables["metro_scores"]) == 1
     assert len(fake.tables["metro_score_v2"]) == 1
     assert len(fake.tables["seo_facts"]) == 1
+    score_v2_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "metro_score_v2" and call["method"] == "upsert"
+    )
+    assert score_v2_call["kwargs"] == {"on_conflict": "report_id,cbsa_code"}
     fact_call = next(
         call
         for call in fake.calls

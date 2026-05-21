@@ -59,8 +59,11 @@ def compute_v2_scores(
     benchmark_confidence = benchmark.confidence_label if benchmark else "insufficient"
     benchmark_sample_size = benchmark.sample_size_metros if benchmark else 0
     top3_review_data_low_coverage = (
-        _number(signals.get("top3_review_count_coverage")) < 0.67
-        or _number(signals.get("top3_review_velocity_coverage")) < 0.67
+        not no_local_pack
+        and (
+            _number(signals.get("top3_review_count_coverage")) < 0.67
+            or _number(signals.get("top3_review_velocity_coverage")) < 0.67
+        )
     )
 
     return {

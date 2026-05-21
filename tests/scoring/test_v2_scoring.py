@@ -116,12 +116,17 @@ def test_local_difficulty_is_null_when_no_local_pack_is_detected() -> None:
     result = compute_v2_scores(
         niche_normalized="plumber",
         cbsa_code="31080",
-        metro_signals=signal_fixture(local_pack_present=False),
+        metro_signals=signal_fixture(
+            local_pack_present=False,
+            top3_review_count_coverage=0.0,
+            top3_review_velocity_coverage=0.0,
+        ),
         benchmark=benchmark_cell(),
     )
 
     assert result["scores"]["local_difficulty"]["value"] is None
     assert result["flags"]["no_local_pack_detected"] is True
+    assert result["flags"]["top3_review_data_low_coverage"] is False
 
 
 def test_missing_top3_review_data_uses_benchmark_neutral_fallback() -> None:

@@ -826,10 +826,13 @@ class SupabasePersistence:
         score_v2_rows = build_metro_score_v2_rows(report)
         if score_v2_rows:
             t0 = time.monotonic()
-            self._client.table("metro_score_v2").insert(score_v2_rows).execute()
+            self._client.table("metro_score_v2").upsert(
+                score_v2_rows,
+                on_conflict="report_id,cbsa_code",
+            ).execute()
             score_v2_ms = int((time.monotonic() - t0) * 1000)
             logger.info(
-                "persist_report inserted %d metro_score_v2 rows duration_ms=%d",
+                "persist_report upserted %d metro_score_v2 rows duration_ms=%d",
                 len(score_v2_rows),
                 score_v2_ms,
             )

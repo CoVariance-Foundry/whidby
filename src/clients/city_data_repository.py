@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class _SupabaseLike(Protocol):
     def table(self, name: str) -> Any:
         """Return a PostgREST query builder."""
-        ...
+        raise NotImplementedError
 
 
 _CBP_COLUMNS = "cbsa_code,naics_code,naics_label,year,est,suppressed,loaded_at"
