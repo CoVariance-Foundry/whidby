@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
-import type { ActivityItem } from "@/components/home/RecentActivityFeed";
-import type { RecommendedItem } from "@/components/home/RecommendedMetros";
-import type { StatCard } from "@/components/home/StatCardRow";
 import type { TableRow } from "@/components/reports/ReportsTable";
 import { deriveArchetype } from "@/lib/niche-finder/derive-archetype";
+import type { ActivityItem, RecommendedItem, StatCard } from "@/lib/home/types";
 import { mapReportRow } from "@/lib/niche-finder/reports-mapper";
 import {
   EntitlementError,

@@ -1,5 +1,34 @@
 # Active Work
 
+## Proto -> Production Convergence: Epic 2 Dashboard
+
+Status: implemented and verified locally on `codex/whi-3-dashboard-phase-2`.
+
+Linear: `WHI-3` Dashboard with implementation slices `WHI-13` through `WHI-20`.
+
+Completed:
+
+- Replaced the protected `/` home dashboard with a strategy-first dashboard while preserving the Epic 1 navbar-first app frame.
+- Expanded `apps/app/src/lib/home/load-dashboard.ts` into the dashboard aggregator for account usage, onboarding profile/target context, launch-safe strategy selection, strategy catalog copy, recent reports, and soft report/onboarding errors.
+- Kept dashboard strategy entry points launch-safe: `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; unsupported onboarding recommendations fall back to `easy_win`.
+- Added the Phase 2 dashboard component surface: first-run banner, four-card usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports.
+- Preserved `/` as the authenticated home route and recent report links as `/reports?open=<report_id>`.
+- Removed deprecated old `components/home/*` dashboard widgets and moved shared report-dashboard types into `apps/app/src/lib/home/types.ts`.
+
+Verification:
+
+- Subagent spec and code-quality reviews approved the latest diff.
+- `npm --workspace apps/app test -- page load-dashboard api/agent/reports` passed 61 tests.
+- `npm --workspace apps/app test -- load-dashboard dashboard reports Navbar` passed 56 tests.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` exited 0 with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- `npx docguard-cli guard` completed with warning-only repo hygiene findings and exit code 2; no new dashboard-specific guard failure was identified.
+
+Not verified:
+
+- Local protected-page visual smoke is auth/env-blocked in `/private/tmp/whidby-pr52-repair` because this temporary worktree has no `.env` or app `.env.local` file.
+
 ## Proto -> Production Convergence: Epic 1 App Frame
 
 Status: implemented locally on `codex/whi-2-app-frame-navbar`; PR publication pending.
