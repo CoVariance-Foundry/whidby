@@ -8,17 +8,7 @@ import { resolveEntitlementContext } from "@/lib/account/entitlements";
 import { loadAccountSummary } from "@/lib/account/summary";
 
 const mocks = vi.hoisted(() => ({
-  sidebar: vi.fn(({ active }: { active: string }) => <aside data-active={active}>Sidebar</aside>),
-  topbar: vi.fn(({ crumbs }: { crumbs: string[] }) => <nav>{crumbs.join(" / ")}</nav>),
   client: vi.fn(({ summary }) => <section>Settings for {summary.email}</section>),
-}));
-
-vi.mock("@/components/Sidebar", () => ({
-  default: mocks.sidebar,
-}));
-
-vi.mock("@/components/Topbar", () => ({
-  default: mocks.topbar,
 }));
 
 vi.mock("./AccountSettingsClient", () => ({
@@ -91,12 +81,8 @@ describe("SettingsPage", () => {
   it("loads account summary and renders the settings surface", async () => {
     render(await SettingsPage());
 
-    expect(screen.getByText("Settings / Account & billing")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account & billing" })).toBeInTheDocument();
     expect(screen.getByText("Settings for owner@example.com")).toBeInTheDocument();
-    expect(mocks.sidebar).toHaveBeenCalledWith(
-      expect.objectContaining({ active: "settings", planLabel: "Plus" }),
-      undefined,
-    );
   });
 
   it("renders an account unavailable state when entitlement resolution fails", async () => {

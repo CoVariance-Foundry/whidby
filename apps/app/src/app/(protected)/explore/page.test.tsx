@@ -22,26 +22,6 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/components/Sidebar", () => ({
-  default: ({ active }: { active: string }) => (
-    <nav data-testid="sidebar" data-active={active} />
-  ),
-}));
-
-vi.mock("@/components/Topbar", () => ({
-  default: ({
-    crumbs,
-    actions,
-  }: {
-    crumbs: string[];
-    actions?: React.ReactNode;
-  }) => (
-    <header data-testid="topbar" data-crumbs={crumbs.join("/")}>
-      {actions}
-    </header>
-  ),
-}));
-
 vi.mock("@/components/explore/ExplorePageClient", () => ({
   default: ({ data }: { data: ExploreData }) => (
     <section data-testid="explore-client" data-city-count={data.cities.length} />
@@ -107,11 +87,6 @@ describe("ExplorePage", () => {
       states: ["AZ", "CO"],
       limit: 25,
     });
-    expect(screen.getByTestId("sidebar").getAttribute("data-active")).toBe("explore");
-    expect(screen.getByTestId("topbar").getAttribute("data-crumbs")).toBe("Explore");
     expect(screen.getByTestId("explore-client").getAttribute("data-city-count")).toBe("1");
-    expect(screen.getByRole("link", { name: /new report/i }).getAttribute("href")).toBe(
-      "/niche-finder",
-    );
   });
 });

@@ -15,6 +15,7 @@ apps/app/
   src/
     app/
       (protected)/
+        layout.tsx               Protected app frame (Navbar + app footer)
         page.tsx                 Home dashboard (SSR — loadDashboard)
         niche-finder/
           page.tsx               Variation B command center
@@ -23,17 +24,17 @@ apps/app/
           ReportsPageClient.tsx  Client filter/search/summary + table
           ReportsView.tsx        Legacy 014 client table (unused by Foundation)
         recommendations/         Coming-soon stub
-        layout.tsx               Sidebar + Topbar shell
       api/agent/                 scoring + places/suggest + metros/suggest + health proxies
       auth/                      Supabase auth callback
       login/                     Sign-in flow
     components/
+      Navbar.tsx / Footer.tsx    Authenticated app frame chrome
       home/                      StatCardRow, HeroQuickSearch, RecommendedMetros,
                                   RecentActivityFeed, SavedSearchesBlock
       niche-finder/              CityAutocomplete, NicheFinderTabs,
                                   StrategyPresetRail, PinnedRecentRail
       reports/                   ArchetypeChipFilter, ReportsTable
-      Sidebar.tsx / Topbar.tsx / StatusPill.tsx
+      StatusPill.tsx
     lib/
       archetypes.ts              8-archetype registry (id/short/glyph/hint/strat)
       home/load-dashboard.ts     Supabase → DashboardData loader
@@ -102,5 +103,6 @@ Two layers of protection on the login form:
 ## Design conventions
 
 - **Light academic theme** — Source Serif 4 for headings, Inter for body, JetBrains Mono for data/code. Respect the visual contrast with admin's dark theme; these are intentionally separate design systems.
+- **Navbar-first app frame** — protected app routes inherit sticky `Navbar` and minimal `Footer` from `(protected)/layout.tsx`. Do not reintroduce page-local `Sidebar`/`Topbar` shells; put route-level actions in page headers or client surfaces.
 - **Display-layer first** — pages should feel fast even before backend wiring lands. Use skeletons / sample data where appropriate, but label mock state clearly in component-internal comments.
 - **Shared Supabase auth** — same users auth against both apps. Sign-out on one app signs out the other via shared cookies.

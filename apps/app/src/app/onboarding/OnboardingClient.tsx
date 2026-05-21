@@ -217,8 +217,8 @@ export default function OnboardingClient() {
               marginBottom: 28,
             }}
           >
-            <div className="sidebar-brand" style={{ padding: 0 }}>
-              <span className="sidebar-brand-mark">W</span>
+            <div className="navbar-brand">
+              <span className="navbar-mark">W</span>
               Widby
             </div>
             <div

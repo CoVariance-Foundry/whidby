@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.6.0 -->
+<!-- docguard:version 1.6.1 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -33,6 +33,8 @@
 | `apps/app/src/app/api/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
 | `apps/app/src/lib/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
 | `apps/app/src/app/onboarding/**/*.tsx` | colocated `*.test.tsx` | Component |
+| `apps/app/src/app/(protected)/layout.tsx` | colocated `layout.test.tsx` | Module/integration |
+| `apps/app/src/components/Navbar.tsx` | colocated `Navbar.test.tsx` | Module |
 | `scripts/supabase/**/*.py` | `tests/scripts/test_*.py` | Unit/contract |
 
 ## Test Rules (Constitution-Mandated)
@@ -134,6 +136,13 @@ Additional contract checks for scoring/autocomplete:
 | First-report handoff | Saved target lookup, free-tier cached-route handling, city target delegation to `/api/agent/scoring`, broad target cached Explore routing, and quota/upgrade responses | `apps/app/src/app/api/onboarding/start-report/route.test.ts`, `apps/app/src/app/api/agent/scoring/route.test.ts` |
 | Onboarding UI | Resume load, profile defaults, service selection, city/state target selection, confirmation state, CTA behavior, and accessible production location input labels | `apps/app/src/app/onboarding/OnboardingClient.test.tsx`, `apps/app/src/components/niche-finder/CityAutocomplete.test.tsx` |
 | Auth resume | Supabase auth callback redirects new/incomplete users to onboarding, respects safe explicit `next`, ignores unsafe `next`, and routes terminal onboarding states to reports | `apps/app/src/app/auth/callback/route.test.ts` |
+
+## Consumer App Frame Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Protected app frame | Authenticated protected layout renders sticky Navbar, account usage pill, profile dropdown entry points, app footer, and child route content; entitlement-summary failures keep the frame usable with free-plan fallback | `apps/app/src/app/(protected)/layout.test.tsx`, `apps/app/src/components/Navbar.test.tsx` |
+| Epic-level route shell | Protected route pages rely on `(protected)/layout.tsx` for app chrome and render route content without page-local sidebar/topbar shells | representative protected page tests such as `apps/app/src/app/(protected)/explore/page.test.tsx` and `apps/app/src/app/(protected)/settings/page.test.tsx` |
 
 ## Strategy Discovery Tests
 

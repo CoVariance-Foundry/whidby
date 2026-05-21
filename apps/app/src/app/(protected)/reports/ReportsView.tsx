@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
 import { Icon, I } from "@/lib/icons";
 import type { ReportListRow } from "@/lib/niche-finder/reports-mapper";
 
@@ -99,11 +97,7 @@ export default function ReportsView({ rows }: ReportsViewProps) {
   const total = rows.length;
 
   return (
-    <div className="app density-roomy">
-      <Sidebar active="reports" />
-      <div className="main">
-        <Topbar crumbs={["Reports"]} />
-        <div className="page">
+    <div className="page">
           <div
             style={{
               display: "flex",
@@ -349,8 +343,6 @@ export default function ReportsView({ rows }: ReportsViewProps) {
           >
             Showing {filtered.length} of {total} reports
           </div>
-        </div>
-      </div>
     </div>
   );
 }

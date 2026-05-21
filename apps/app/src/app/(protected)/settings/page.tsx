@@ -1,5 +1,3 @@
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
 import { EntitlementError, resolveEntitlementContext } from "@/lib/account/entitlements";
 import { loadAccountSummary } from "@/lib/account/summary";
 import { createClient } from "@/lib/supabase/server";
@@ -21,24 +19,18 @@ export default async function SettingsPage() {
 
   if (summary) {
     return (
-      <div className="app">
-        <Sidebar active="settings" planLabel={summary.plan_label} />
-        <div className="main">
-          <Topbar crumbs={["Settings", "Account & billing"]} />
-          <main className="page" style={{ maxWidth: 1120, margin: "0 auto", width: "100%" }}>
-            <header style={{ marginBottom: 26 }}>
-              <div className="kicker">Settings</div>
-              <h1 className="page-h1" style={{ margin: "4px 0 0" }}>
-                Account & billing
-              </h1>
-              <p className="page-sub">
-                Manage your subscription, usage, payment method, and password.
-              </p>
-            </header>
-            <AccountSettingsClient summary={summary} />
-          </main>
-        </div>
-      </div>
+      <main className="page" style={{ maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+        <header style={{ marginBottom: 26 }}>
+          <div className="kicker">Settings</div>
+          <h1 className="page-h1" style={{ margin: "4px 0 0" }}>
+            Account & billing
+          </h1>
+          <p className="page-sub">
+            Manage your subscription, usage, payment method, and password.
+          </p>
+        </header>
+        <AccountSettingsClient summary={summary} />
+      </main>
     );
   }
 
@@ -47,22 +39,16 @@ export default async function SettingsPage() {
       ? loadError.message
       : "Account settings are unavailable right now.";
   return (
-    <div className="app">
-      <Sidebar active="settings" />
-      <div className="main">
-        <Topbar crumbs={["Settings", "Account & billing"]} />
-        <main className="page" style={{ maxWidth: 840, margin: "0 auto", width: "100%" }}>
-          <section className="settings-card" role="alert" style={{ padding: 24 }}>
-            <div className="kicker">Account unavailable</div>
-            <h1 className="page-h1" style={{ margin: "4px 0 8px" }}>
-              We could not load billing details.
-            </h1>
-            <p className="page-sub" style={{ fontStyle: "normal" }}>
-              {message}
-            </p>
-          </section>
-        </main>
-      </div>
-    </div>
+    <main className="page" style={{ maxWidth: 840, margin: "0 auto", width: "100%" }}>
+      <section className="settings-card" role="alert" style={{ padding: 24 }}>
+        <div className="kicker">Account unavailable</div>
+        <h1 className="page-h1" style={{ margin: "4px 0 8px" }}>
+          We could not load billing details.
+        </h1>
+        <p className="page-sub" style={{ fontStyle: "normal" }}>
+          {message}
+        </p>
+      </section>
+    </main>
   );
 }
