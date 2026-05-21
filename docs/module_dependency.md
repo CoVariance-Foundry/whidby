@@ -82,6 +82,8 @@ apps/app route handlers ──→ apps/app/src/lib/api/upstream.ts ──→ Ren
 
 src/research_agent/api.py ──→ SupabasePersistence.client
                                    │
+                                   ├──→ SupabaseSeoBenchmarkRepository
+                                   ├──→ SupabaseCityDataProvider
                                    ├──→ SupabaseExploreRepository
                                    ├──→ StrategyRepository
                                    └──→ SupabaseMarketStore
@@ -91,6 +93,8 @@ src/research_agent/api.py ──→ SupabasePersistence.client
 |--------|-----------|----------------|
 | Upstream proxy helpers (`apps/app/src/lib/api/upstream.ts`) | Next.js request/response primitives | Consumer Explore, billing, and refresh route handlers |
 | Supabase persistence client accessor (`src/clients/supabase_persistence.py`) | Configured Supabase client | FastAPI repository adapters for persistence, Explore reads, and strategy reads |
+| Supabase benchmark repository (`src/clients/seo_benchmark_repository.py`) | Supabase `seo_benchmarks` | V2 scoring orchestration via `MarketService` |
+| Supabase city data provider (`src/clients/city_data_repository.py`) | Supabase `census_cbp_establishments` | V2 monetization/business-density enrichment via `MarketService` |
 | Explore repository (`src/clients/explore_repository.py`) | Supabase `explore_market_cells`, canonical niche normalization | FastAPI Explore city list/detail endpoints |
 
 The consumer helpers own request-origin resolution, bounded upstream response reads, optional JSON parsing, and unavailable/upstream-error responses. FastAPI adapters must use the public persistence client accessor instead of reaching into private adapter state when sharing the configured Supabase client.

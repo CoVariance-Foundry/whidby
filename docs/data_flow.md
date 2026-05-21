@@ -104,19 +104,21 @@ SupabasePersistence.persist_report(report) in src/clients/supabase_persistence.p
      ├──→ report_keywords (N rows, one per expanded keyword)
      ├──→ metro_signals (N rows, one per scored metro)
      ├──→ metro_scores (N rows, one per scored metro)
+     ├──→ metro_score_v2 (upsert by report_id + cbsa_code when V2 scores exist)
+     ├──→ seo_facts (upsert by niche + CBSA + keyword + UTC snapshot date when V2 scores exist)
      └──→ feedback_log (future — not yet wired; M9 returns a feedback_log_id placeholder)
 
 Consumer /reports read path (not shown above):
-     Supabase `reports` table (authenticated SELECT via migration 005)
+     apps/app Next BFF `/api/agent/reports`
              │
              ▼
-     mapReportRow (apps/app/src/lib/niche-finder/reports-mapper.ts)
+     Supabase `reports` + `metro_score_v2` read model with entitlement filtering
              │
              ▼
-     ReportsView (apps/app/src/app/(protected)/reports/ReportsView.tsx)
+     dashboard/reports client surfaces
 ```
 
-The write path above is triggered by the FastAPI `POST /api/niches/score` handler after `score_niche_for_metro` returns a report. The read path is a direct SSR Supabase fetch from the consumer app — no FastAPI round-trip for the list view. Per-report detail retrieval goes through FastAPI `GET /api/niches/{report_id}`.
+The write path above is triggered by the FastAPI `POST /api/niches/score` handler after `score_niche_for_metro` returns a report. V2 score persistence is idempotent on `report_id + cbsa_code`; keyword-grain facts preserve nullable top-3/top-5 fields for benchmark recompute. Consumer report list/detail reads go through app-owned Next route handlers so entitlement and V2 read-model logic stays server-side.
 
 ## Consumer Account, Billing, and Quota Flow
 
