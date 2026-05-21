@@ -59,7 +59,8 @@ export default async function ProtectedLayout({
         scansUsed: summary.fresh_reports_used,
         scansLimit: summary.monthly_report_limit,
       };
-    } catch {
+    } catch (error) {
+      if (isRedirectError(error)) throw error;
       navbarUser = {
         ...navbarUser,
         planLabel: "Free",

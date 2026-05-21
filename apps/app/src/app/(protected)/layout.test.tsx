@@ -33,6 +33,11 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("next/dist/client/components/redirect-error", () => ({
+  isRedirectError: (error: unknown) =>
+    error instanceof Error && error.message.startsWith("redirect:"),
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
@@ -131,5 +136,15 @@ describe("ProtectedLayout app frame", () => {
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("0/0 scans");
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("Free");
     expect(screen.getByText("Fallback child")).toBeInTheDocument();
+  });
+
+  it("rethrows redirect errors from entitlement loading", async () => {
+    vi.mocked(resolveEntitlementContext).mockRejectedValueOnce(new Error("redirect:/settings"));
+
+    await expect(
+      ProtectedLayout({
+        children: <section>Redirect child</section>,
+      }),
+    ).rejects.toThrow("redirect:/settings");
   });
 });

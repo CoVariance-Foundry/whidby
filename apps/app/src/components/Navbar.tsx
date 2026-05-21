@@ -167,9 +167,16 @@ function ProfileMenu({ user }: { user: NavbarUser }) {
 
   async function handleSignOut() {
     setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.push("/login");
+    } catch {
+      // Keep the menu usable so a transient auth/network failure can be retried.
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   return (

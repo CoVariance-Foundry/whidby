@@ -102,6 +102,24 @@ describe("Navbar", () => {
     expect(routerPush).toHaveBeenCalledWith("/login");
   });
 
+  it("keeps sign-out available when Supabase sign-out fails", async () => {
+    const signOut = vi.fn().mockRejectedValue(new Error("network unavailable"));
+    vi.mocked(createClient).mockReturnValue({
+      auth: { signOut },
+    } as never);
+
+    render(<Navbar user={user} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open account menu/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Sign out" })).not.toBeDisabled(),
+    );
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("suppresses primary navigation during onboarding routes", () => {
     pathname = "/onboarding";
 
