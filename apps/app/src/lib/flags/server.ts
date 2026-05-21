@@ -47,7 +47,7 @@ export async function getServerFeatureFlag(
 }
 
 function readBooleanEnv(key: string): boolean | null {
-  const value = process.env[key.toUpperCase()];
+  const value = process.env[key.toUpperCase().replace(/-/g, "_")];
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
