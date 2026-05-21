@@ -15,8 +15,49 @@ class FakeQuery:
     def __init__(self, rows):
         self._rows = rows
         self.ranges: list[tuple[int, int]] = []
+        self.filters: list[tuple[str, str, object]] = []
+        self._limit: int | None = None
 
-    def select(self, _columns):
+    @property
+    def not_(self):
+        self._negate_next = True
+        return self
+
+    def select(self, _columns, **_kwargs):
+        return self
+
+    def eq(self, column, value):
+        self.filters.append(("eq", column, value))
+        return self
+
+    def in_(self, column, value):
+        self.filters.append(("in", column, value))
+        return self
+
+    def gte(self, column, value):
+        self.filters.append(("gte", column, value))
+        return self
+
+    def lte(self, column, value):
+        self.filters.append(("lte", column, value))
+        return self
+
+    def is_(self, column, value):
+        op = "not_is" if getattr(self, "_negate_next", False) else "is"
+        self.filters.append((op, column, value))
+        self._negate_next = False
+        return self
+
+    def order(self, column, desc=False):
+        self._rows = sorted(
+            self._rows,
+            key=lambda row: row.get(column) or 0,
+            reverse=desc,
+        )
+        return self
+
+    def limit(self, value):
+        self._limit = value
         return self
 
     def range(self, start, end):
@@ -25,8 +66,28 @@ class FakeQuery:
         return self
 
     def execute(self):
+        rows = [row for row in self._rows if self._matches(row)]
+        if self._limit is not None:
+            rows = rows[: self._limit]
         start, end = getattr(self, "_range", (0, len(self._rows) - 1))
-        return FakeResponse(self._rows[start : end + 1])
+        return FakeResponse(rows[start : end + 1])
+
+    def _matches(self, row):
+        for op, column, value in self.filters:
+            row_value = row.get(column)
+            if op == "eq" and row_value != value:
+                return False
+            if op == "in" and row_value not in value:
+                return False
+            if op == "gte" and row_value < value:
+                return False
+            if op == "lte" and row_value > value:
+                return False
+            if op == "is" and value == "null" and row_value is not None:
+                return False
+            if op == "not_is" and value == "null" and row_value is None:
+                return False
+        return True
 
 
 class FakeSupabase:
@@ -46,6 +107,106 @@ def test_api_url_defaults_to_local_fastapi_port(monkeypatch):
     assert bulk_score._api_url(SimpleNamespace(api_url=None)) == "http://localhost:8000"
 
 
+def test_fetch_metros_prioritizes_rank_and_rent_classes_and_caps_mega():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "metros": [
+                {
+                    "cbsa_code": "10000",
+                    "cbsa_name": "New York-Newark-Jersey City, NY-NJ-PA",
+                    "state": "NY",
+                    "population": 19_000_000,
+                    "population_class": "mega_5m_plus",
+                    "dataforseo_location_codes": [1],
+                },
+                {
+                    "cbsa_code": "20000",
+                    "cbsa_name": "Los Angeles-Long Beach-Anaheim, CA",
+                    "state": "CA",
+                    "population": 12_000_000,
+                    "population_class": "mega_5m_plus",
+                    "dataforseo_location_codes": [2],
+                },
+                {
+                    "cbsa_code": "30000",
+                    "cbsa_name": "Greenville-Anderson, SC",
+                    "state": "SC",
+                    "population": 950_000,
+                    "population_class": "large_300k_1m",
+                    "dataforseo_location_codes": [3],
+                },
+                {
+                    "cbsa_code": "40000",
+                    "cbsa_name": "Waco, TX",
+                    "state": "TX",
+                    "population": 280_000,
+                    "population_class": "medium_100_300k",
+                    "dataforseo_location_codes": [4],
+                },
+                {
+                    "cbsa_code": "50000",
+                    "cbsa_name": "No DFS, OH",
+                    "state": "OH",
+                    "population": 800_000,
+                    "population_class": "large_300k_1m",
+                    "dataforseo_location_codes": [],
+                },
+            ]
+        }
+    )
+
+    metros = bulk_score.fetch_metros(
+        supabase,
+        limit=4,
+        strategy="rank-and-rent",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=True,
+        mega_cap=1,
+    )
+
+    assert [metro["cbsa_code"] for metro in metros] == ["30000", "40000", "10000"]
+
+
+def test_fetch_metros_supports_population_class_filters():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "metros": [
+                {
+                    "cbsa_code": "30000",
+                    "cbsa_name": "Greenville-Anderson, SC",
+                    "state": "SC",
+                    "population": 950_000,
+                    "population_class": "large_300k_1m",
+                    "dataforseo_location_codes": [3],
+                },
+                {
+                    "cbsa_code": "40000",
+                    "cbsa_name": "Waco, TX",
+                    "state": "TX",
+                    "population": 280_000,
+                    "population_class": "medium_100_300k",
+                    "dataforseo_location_codes": [4],
+                },
+            ]
+        }
+    )
+
+    metros = bulk_score.fetch_metros(
+        supabase,
+        limit=5,
+        strategy="rank-and-rent",
+        population_classes=["medium_100_300k"],
+        min_population=100_000,
+        max_population=300_000,
+        require_dfs=True,
+        mega_cap=5,
+    )
+
+    assert [metro["cbsa_code"] for metro in metros] == ["40000"]
+
+
 def test_fetch_scored_pairs_paginates_scores_and_reports():
     metro_scores = [
         {"cbsa_code": f"{index:05d}", "report_id": f"report-{index}"}
@@ -61,7 +222,7 @@ def test_fetch_scored_pairs_paginates_scores_and_reports():
 
     pairs = bulk_score.fetch_scored_pairs(supabase)
 
-    assert ("01004", "service 1004") in pairs
+    assert ("01004", "1004") in pairs
     assert len(pairs) == 1005
     assert [query.ranges[0] for query in supabase.queries["metro_scores"]] == [
         (0, 999),
@@ -71,6 +232,110 @@ def test_fetch_scored_pairs_paginates_scores_and_reports():
         (0, 999),
         (1000, 1999),
     ]
+
+
+def test_fetch_scored_pairs_prefers_explore_market_cells_and_normalizes_service():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "explore_market_cells": [
+                {
+                    "cbsa_code": "11111",
+                    "niche_normalized": "Roofing Services",
+                    "report_id": "report-1",
+                },
+                {
+                    "cbsa_code": "22222",
+                    "niche_normalized": "plumbing",
+                    "report_id": None,
+                },
+            ],
+            "metro_scores": [
+                {"cbsa_code": "33333", "report_id": "legacy-report"}
+            ],
+            "reports": [
+                {"id": "legacy-report", "niche_keyword": "legacy"}
+            ],
+        }
+    )
+
+    assert bulk_score.fetch_scored_pairs(supabase) == {("11111", "roofing")}
+
+
+def test_verify_persistence_requires_v2_rows_when_enabled():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "reports": [{"id": "report-1"}],
+            "metro_scores": [{"report_id": "report-1", "cbsa_code": "11111"}],
+            "metro_score_v2": [],
+            "seo_facts": [],
+        }
+    )
+
+    result = bulk_score.verify_persistence(
+        supabase,
+        report_id="report-1",
+        cbsa_code="11111",
+        require_v2=True,
+    )
+
+    assert result["ok"] is False
+    assert result["missing"] == ["metro_score_v2", "seo_facts"]
+
+
+def test_status_treats_persist_warning_as_partial_failure():
+    persistence = {
+        "ok": True,
+        "report_exists": True,
+        "metro_scores_count": 1,
+        "metro_score_v2_count": 1,
+        "seo_facts_count": 3,
+        "missing": [],
+    }
+
+    assert (
+        bulk_score._status_for_result(
+            {"report_id": "report-1", "persist_warning": "save failed"},
+            persistence,
+        )
+        == "partial_failure"
+    )
+
+
+def test_audit_record_omits_full_report_body_and_keeps_recovery_fields():
+    record = bulk_score.build_audit_record(
+        status="success",
+        metro={
+            "cbsa_code": "11111",
+            "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+            "state": "TX",
+            "population": 2_300_000,
+            "population_class": "metro_1m_5m",
+        },
+        city_name="Austin",
+        service="Roofing Services",
+        api_url="http://localhost:8000",
+        started_at=bulk_score.datetime(2026, 5, 21, tzinfo=bulk_score.timezone.utc),
+        elapsed_ms=1200,
+        result={
+            "report_id": "report-1",
+            "opportunity_score": 72,
+            "classification_label": "Medium",
+            "report": {"metros": [{"v2_scores": {"demand_strength": 100}}]},
+        },
+        persistence={
+            "ok": True,
+            "report_exists": True,
+            "metro_scores_count": 1,
+            "metro_score_v2_count": 1,
+            "seo_facts_count": 3,
+            "missing": [],
+        },
+    )
+
+    assert "report" not in record
+    assert record["request"]["niche_normalized"] == "roofing"
+    assert record["score"]["score_system"] == "v2"
+    assert record["persistence"]["seo_facts_count"] == 3
 
 
 class FakeHealthResponse:
@@ -93,13 +358,14 @@ def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
     monkeypatch.setattr(bulk_score, "_supabase_client", lambda: object())
     monkeypatch.setattr(
         bulk_score,
-        "fetch_top_metros",
-        lambda _supabase, _limit: [
+        "fetch_metros",
+        lambda *_args, **_kwargs: [
             {
                 "cbsa_code": "11111",
                 "cbsa_name": "Austin-Round Rock-Georgetown, TX",
                 "state": "TX",
                 "population": 2_300_000,
+                "population_class": "metro_1m_5m",
             }
         ],
     )
@@ -116,6 +382,13 @@ def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
         resume=False,
         preview=False,
         concurrency=1,
+        strategy="rank-and-rent",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=True,
+        mega_cap=5,
+        require_v2_persistence=True,
     )
 
     with pytest.raises(RuntimeError, match="disk write failed"):

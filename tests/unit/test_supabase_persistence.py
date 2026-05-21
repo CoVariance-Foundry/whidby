@@ -275,6 +275,14 @@ def test_build_seo_fact_rows_uses_utc_snapshot_date() -> None:
     assert rows[0]["snapshot_date"] == "2026-04-21"
 
 
+def test_build_seo_fact_rows_requires_snapshot_date_for_v2_rows() -> None:
+    report = _sample_v2_report()
+    report["generated_at"] = "not a date"
+
+    with pytest.raises(ValueError, match="generated_at is required"):
+        build_seo_fact_rows(report)
+
+
 def test_build_seo_fact_rows_normalizes_keyword_tier_and_intent() -> None:
     report = _sample_v2_report()
     report["keyword_expansion"]["expanded_keywords"] = [
@@ -419,7 +427,21 @@ def test_persist_report_requires_upsert_for_seo_facts() -> None:
     with pytest.raises(RuntimeError, match="lacks upsert"):
         adapter.persist_report(_sample_v2_report())
 
+    assert not any(call["method"] == "insert" for call in fake.calls)
     assert not any(
         call["table"] == "seo_facts" and call["method"] == "insert"
         for call in fake.calls
     )
+
+
+def test_persist_report_validates_v2_facts_before_partial_writes() -> None:
+    fake = _FakeSupabase()
+    adapter = SupabasePersistence(client=fake)
+    report = _sample_v2_report()
+    report["generated_at"] = None
+
+    with pytest.raises(ValueError, match="generated_at is required"):
+        adapter.persist_report(report)
+
+    assert fake.calls == []
+    assert fake.tables == {}

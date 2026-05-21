@@ -1,5 +1,24 @@
 # Active Work
 
+## Bulk Scoring Data Buildout
+
+Status: implementation in progress on `codex/bulk-scoring-followups`.
+
+Goal: turn `scripts/explore/bulk_score.py` into a trustworthy Explore data-build runner rather than a loose cached-report seeder.
+
+Completed in this slice:
+
+- Default metro selection now follows rank-and-rent population-class ordering, requires DataForSEO-ready metros by default, and caps `mega_5m_plus` markets.
+- Bulk scoring audit output now records every attempted pair with status, request metadata, score summary, persistence counts, warnings, timing, and rerun-friendly error details.
+- Successful pairs now require verified Supabase persistence across `reports`, legacy `metro_scores`, and V2 `metro_score_v2` / `seo_facts` rows.
+- Resume state prefers `explore_market_cells` and falls back to legacy report/score tables with normalized service keys.
+- V2 `seo_facts` row building now requires a valid `generated_at` snapshot date and validates rows before report persistence writes begin.
+
+Next:
+
+- Run targeted Python tests for bulk scoring and Supabase persistence.
+- Review diff and decide whether to extend the runner with a live dry-run/preflight mode before paid scoring.
+
 ## V2 Scoring System
 
 Status: implemented and under final verification on `codex/v2-scoring-system`.
