@@ -182,6 +182,14 @@ apps/app strategy gallery and detail screens
 
 V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_facts, ACS-backed metros, and CBP-backed census_cbp_establishments. Scoring reads benchmark cells through `src.scoring.benchmark_repository.SeoBenchmarkRepository`; the Supabase adapter is `src.clients.seo_benchmark_repository.SupabaseSeoBenchmarkRepository`. Scoring formulas stay repository-backed so tests can use fixtures without network access.
 
+### V2 Scoring Runtime Layers
+
+- **BFF boundary:** `apps/app` route handlers own Supabase session resolution, account entitlement, quota consumption, and UI-facing error mapping before forwarding scoring/report requests.
+- **Application boundary:** FastAPI services compose the M4-M9 orchestrator, report reads, Explore reads, and strategy reads with explicit repository dependencies.
+- **Domain boundary:** `src/scoring/v2.py` owns deterministic V2 formulas over supplied signal DTOs and benchmark cells; it must not instantiate Supabase, DataForSEO, Census, or CBP clients.
+- **Infrastructure boundary:** adapters under `src/clients/` own Supabase/DataForSEO/Census access and receive the shared configured Supabase client through public persistence accessors.
+- **Persistence boundary:** V2 runs write facts to `seo_facts`, benchmark-backed score vectors to `metro_score_v2`, and report lineage through canonical report tables while legacy `metro_scores` remains a read fallback during transition.
+
 | Component | Responsibility | Location | Tests |
 |-----------|---------------|----------|-------|
 | DataForSEO Client (M0) | API auth, rate limiting, caching, cost tracking | `src/clients/dataforseo/` | `tests/unit/test_dataforseo_client.py` |

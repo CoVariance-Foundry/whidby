@@ -11,8 +11,10 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
+from src.domain.ports import CityDataProvider
 from src.pipeline.canonical_key import resolve_canonical_key
 from src.pipeline.feedback_logger import log_feedback
+from src.scoring.benchmark_repository import SeoBenchmarkRepository
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +79,16 @@ class MarketService:
         llm_client: Any | None = None,
         market_store: Any,
         knowledge_store: Any,
+        benchmark_repository: SeoBenchmarkRepository | None = None,
+        city_data_provider: CityDataProvider | None = None,
     ) -> None:
         self._pipeline = pipeline_fn
         self._dfs = dfs_client
         self._llm = llm_client
         self._store = market_store
         self._kb = knowledge_store
+        self._benchmark_repository = benchmark_repository
+        self._city_data_provider = city_data_provider
 
     async def score(self, request: ScoreRequest) -> ScoreResult:
         request_id = request.request_id or str(uuid4())
@@ -119,6 +125,8 @@ class MarketService:
                 dataforseo_client=None,
                 dry_run=True,
                 request_id=request_id,
+                benchmark_repository=None,
+                city_data_provider=None,
             )
         else:
             result = await self._pipeline(
@@ -131,6 +139,8 @@ class MarketService:
                 llm_client=self._llm,
                 dataforseo_client=self._dfs,
                 request_id=request_id,
+                benchmark_repository=self._benchmark_repository,
+                city_data_provider=self._city_data_provider,
             )
 
         pipeline_ms = int((time.monotonic() - handler_start) * 1000)

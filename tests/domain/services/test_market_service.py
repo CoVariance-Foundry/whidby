@@ -18,6 +18,18 @@ from tests.domain.services.fakes import (
 )
 
 
+class FakeBenchmarkRepository:
+    def get(self, *, niche_normalized: str, population_class: str) -> None:
+        return None
+
+
+class FakeCityDataProvider:
+    def get_business_density(
+        self, city_id: str, naics: str | None = None
+    ) -> dict[str, Any]:
+        return {"establishments": 12}
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -156,6 +168,70 @@ def test_score_flushes_dfs_costs(
     req = ScoreRequest(niche="plumbing", city="Boise", state="ID")
     asyncio.run(service.score(req))
     assert dfs.cost_tracker.flushed_report_ids == ["rpt-1"]
+
+
+def test_score_passes_v2_dependencies_to_pipeline(
+    store: FakeMarketStore, kb: FakeKnowledgeStore, dfs: FakeDFSClient
+) -> None:
+    calls: list[dict[str, Any]] = []
+    benchmark_repository = FakeBenchmarkRepository()
+    city_data_provider = FakeCityDataProvider()
+
+    async def recording_pipeline(**kwargs: Any) -> FakePipelineResult:
+        calls.append(kwargs)
+        return await fake_pipeline(**kwargs)
+
+    svc = MarketService(
+        pipeline_fn=recording_pipeline,
+        dfs_client=dfs,
+        llm_client=None,
+        market_store=store,
+        knowledge_store=kb,
+        benchmark_repository=benchmark_repository,
+        city_data_provider=city_data_provider,
+    )
+
+    asyncio.run(svc.score(ScoreRequest(niche="plumbing", city="Boise", state="ID")))
+
+    assert calls[0]["benchmark_repository"] is benchmark_repository
+    assert calls[0]["city_data_provider"] is city_data_provider
+
+
+def test_dry_run_does_not_pass_v2_dependencies_to_pipeline(
+    store: FakeMarketStore, kb: FakeKnowledgeStore, dfs: FakeDFSClient
+) -> None:
+    calls: list[dict[str, Any]] = []
+    benchmark_repository = FakeBenchmarkRepository()
+    city_data_provider = FakeCityDataProvider()
+
+    async def recording_pipeline(**kwargs: Any) -> FakePipelineResult:
+        calls.append(kwargs)
+        return await fake_pipeline(**kwargs)
+
+    svc = MarketService(
+        pipeline_fn=recording_pipeline,
+        dfs_client=dfs,
+        llm_client=None,
+        market_store=store,
+        knowledge_store=kb,
+        benchmark_repository=benchmark_repository,
+        city_data_provider=city_data_provider,
+    )
+
+    asyncio.run(
+        svc.score(
+            ScoreRequest(
+                niche="plumbing",
+                city="Boise",
+                state="ID",
+                dry_run=True,
+            )
+        )
+    )
+
+    assert calls[0]["dry_run"] is True
+    assert calls[0]["benchmark_repository"] is None
+    assert calls[0]["city_data_provider"] is None
 
 
 def test_score_logs_feedback(

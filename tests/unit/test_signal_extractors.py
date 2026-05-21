@@ -57,10 +57,56 @@ def test_extract_organic_competition_signals_counts_aggregators() -> None:
         "aggregator_count",
         "local_biz_count",
         "avg_lighthouse_performance",
+        "avg_top5_lighthouse",
+        "top5_da_coverage",
+        "top5_lighthouse_coverage",
+        "top5_organic_data_confidence",
         "schema_adoption_rate",
         "title_keyword_match_rate",
     }
     assert organic["aggregator_count"] >= 1
+
+
+def test_extract_organic_competition_omits_missing_top5_values_from_averages() -> None:
+    organic = extract_organic_competition_signals(
+        backlinks_rows=[
+            {"domain_authority": 40},
+            {},
+            {"da": None},
+            {"da": 20},
+        ],
+        lighthouse_rows=[
+            {"performance_score": 80},
+            {},
+            {"performance": None},
+            {"performance": 60},
+        ],
+        serp_context={"organic_domains": ["local.example"]},
+        keyword_expansion=[],
+    )
+
+    assert organic["avg_top5_da"] == 30.0
+    assert organic["avg_top5_lighthouse"] == 70.0
+    assert organic["avg_lighthouse_performance"] == 70.0
+    assert organic["top5_da_coverage"] == 0.4
+    assert organic["top5_lighthouse_coverage"] == 0.4
+    assert organic["top5_organic_data_confidence"] == "low"
+
+
+def test_extract_organic_competition_reports_missing_top5_values_as_null() -> None:
+    organic = extract_organic_competition_signals(
+        backlinks_rows=[{}, {"domain_authority": None}],
+        lighthouse_rows=[{}, {"performance_score": None}],
+        serp_context={"organic_domains": []},
+        keyword_expansion=[],
+    )
+
+    assert organic["avg_top5_da"] is None
+    assert organic["avg_top5_lighthouse"] is None
+    assert organic["avg_lighthouse_performance"] is None
+    assert organic["top5_da_coverage"] == 0.0
+    assert organic["top5_lighthouse_coverage"] == 0.0
+    assert organic["top5_organic_data_confidence"] == "missing"
 
 
 def test_extract_local_competition_handles_missing_local_pack_defaults() -> None:
@@ -99,6 +145,121 @@ def test_extract_local_competition_produces_nonzero_values_with_data() -> None:
     assert local["gbp_photo_count_avg"] > 0
     assert local["gbp_posting_activity"] > 0
     assert local["citation_consistency"] > 0
+
+
+def test_extract_local_competition_uses_top3_review_floor_not_average() -> None:
+    local = extract_local_competition_signals(
+        serp_context={"local_pack_present": True, "local_pack_position": 1},
+        serp_maps_rows=[
+            {"position": 2, "rating": 4.9, "review_count": 200, "reviews_per_month": 8.0},
+            {"position": 1, "rating": 4.6, "review_count": 20, "reviews_per_month": 2.0},
+            {"position": 4, "rating": 4.2, "review_count": 400, "reviews_per_month": 12.0},
+            {"position": 3, "rating": 4.8, "review_count": 120, "reviews_per_month": 6.0},
+        ],
+        google_reviews_rows=[],
+        gbp_info_rows=[],
+        business_listings_rows=[],
+    )
+
+    assert local["local_pack_review_count_avg"] == 185.0
+    assert local["top3_review_count_min"] == 20.0
+    assert local["top3_review_count_min"] < local["local_pack_review_count_avg"]
+    assert local["top3_review_velocity_avg"] == 5.3333
+    assert local["top3_review_count_coverage"] == 1.0
+    assert local["top3_review_velocity_coverage"] == 1.0
+    assert local["top3_review_data_confidence"] == "high"
+
+
+def test_extract_local_competition_reports_top3_review_coverage() -> None:
+    local = extract_local_competition_signals(
+        serp_context={"local_pack_present": True, "local_pack_position": 1},
+        serp_maps_rows=[
+            {"position": 1, "rating": 4.6, "reviews_per_month": 2.0},
+            {"position": 2, "rating": 4.9, "review_count": 200},
+            {"position": 3, "rating": 4.8},
+        ],
+        google_reviews_rows=[],
+        gbp_info_rows=[],
+        business_listings_rows=[],
+    )
+
+    assert local["top3_review_count_min"] == 200.0
+    assert local["top3_review_velocity_avg"] == 2.0
+    assert local["top3_review_count_coverage"] == 0.3333
+    assert local["top3_review_velocity_coverage"] == 0.3333
+    assert local["top3_review_data_confidence"] == "low"
+
+
+def test_extract_local_competition_uses_expected_top3_slots_for_single_row() -> None:
+    local = extract_local_competition_signals(
+        serp_context={"local_pack_present": True, "local_pack_position": 1},
+        serp_maps_rows=[
+            {"position": 1, "rating": 4.6, "review_count": 200, "reviews_per_month": 2.0},
+        ],
+        google_reviews_rows=[],
+        gbp_info_rows=[],
+        business_listings_rows=[],
+    )
+
+    assert local["top3_review_count_min"] == 200.0
+    assert local["top3_review_velocity_avg"] == 2.0
+    assert local["top3_review_count_coverage"] == 0.3333
+    assert local["top3_review_velocity_coverage"] == 0.3333
+    assert local["top3_review_data_confidence"] == "low"
+
+
+def test_extract_local_competition_reports_medium_confidence_without_velocity_coverage() -> None:
+    local = extract_local_competition_signals(
+        serp_context={"local_pack_present": True, "local_pack_position": 1},
+        serp_maps_rows=[
+            {"position": 1, "rating": 4.6, "review_count": 100},
+            {"position": 2, "rating": 4.9, "review_count": 200},
+            {"position": 3, "rating": 4.8, "review_count": 300},
+        ],
+        google_reviews_rows=[],
+        gbp_info_rows=[],
+        business_listings_rows=[],
+    )
+
+    assert local["top3_review_count_coverage"] == 1.0
+    assert local["top3_review_velocity_coverage"] == 0.0
+    assert local["top3_review_data_confidence"] == "medium"
+
+
+def test_extract_local_competition_reports_zero_coverage_when_top3_counts_missing() -> None:
+    local = extract_local_competition_signals(
+        serp_context={"local_pack_present": True, "local_pack_position": 1},
+        serp_maps_rows=[
+            {"position": 1, "rating": 4.6},
+            {"position": 2, "rating": 4.9},
+            {"position": 3, "rating": 4.8},
+        ],
+        google_reviews_rows=[],
+        gbp_info_rows=[],
+        business_listings_rows=[],
+    )
+
+    assert local["top3_review_count_min"] is None
+    assert local["top3_review_velocity_avg"] is None
+    assert local["top3_review_count_coverage"] == 0.0
+    assert local["top3_review_data_confidence"] == "missing"
+
+
+def test_extract_local_competition_prefers_rank_group_for_top3_selection() -> None:
+    local = extract_local_competition_signals(
+        serp_context={"local_pack_present": True, "local_pack_position": 1},
+        serp_maps_rows=[
+            {"rank_group": 4, "position": 1, "rating": 4.9, "review_count": 4},
+            {"rank_group": 1, "position": 4, "rating": 4.6, "review_count": 100},
+            {"rank_group": 2, "position": 5, "rating": 4.8, "review_count": 90},
+            {"rank_group": 3, "position": 6, "rating": 4.2, "review_count": 80},
+        ],
+        google_reviews_rows=[],
+        gbp_info_rows=[],
+        business_listings_rows=[],
+    )
+
+    assert local["top3_review_count_min"] == 80.0
 
 
 def test_extract_demand_signals_handles_nested_dfs_keyword_volume() -> None:

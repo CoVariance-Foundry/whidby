@@ -1,22 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  headerGet: vi.fn(),
+}));
+
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get: mocks.headerGet,
+  })),
+}));
+
 import {
   fromSearchParams,
-  loadExploreData,
   toExploreSearchParams,
-} from "./load-explore-data";
+} from "./normalize-explore-data";
+import { loadExploreData } from "./load-explore-data";
 
 const originalFetch = global.fetch;
-const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
-const originalNodeEnv = process.env.NODE_ENV;
 
 afterEach(() => {
   global.fetch = originalFetch;
-  if (originalApiUrl === undefined) {
-    delete process.env.NEXT_PUBLIC_API_URL;
-  } else {
-    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
-  }
-  process.env.NODE_ENV = originalNodeEnv;
+  delete process.env.WIDBY_APP_BASE_URL;
+  delete process.env.NEXT_PUBLIC_APP_URL;
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+  delete process.env.VERCEL_URL;
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -66,8 +74,7 @@ describe("fromSearchParams", () => {
 });
 
 describe("loadExploreData", () => {
-  it("fetches the upstream explore cities endpoint with no-store caching", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test/";
+  it("fetches the app explore cities BFF route with no-store caching", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ cities: [] }), {
         status: 200,
@@ -76,17 +83,18 @@ describe("loadExploreData", () => {
     );
     global.fetch = fetchMock;
 
-    await loadExploreData({ service: "roofing", states: ["AZ", "CO"], limit: 25 });
+    await loadExploreData(
+      { service: "roofing", states: ["AZ", "CO"], limit: 25 },
+      { app_base_url: "https://app.example.test/" },
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.test/api/explore/cities?service=roofing&state=AZ&state=CO&limit=25",
+      "https://app.example.test/api/explore/cities?service=roofing&state=AZ&state=CO&limit=25",
       { cache: "no-store" },
     );
   });
 
-  it("uses the localhost FastAPI bridge fallback outside production", async () => {
-    process.env.NODE_ENV = "development";
-    delete process.env.NEXT_PUBLIC_API_URL;
+  it("allows relative app route fetches in browser-safe contexts", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ cities: [] }), {
         status: 200,
@@ -94,27 +102,44 @@ describe("loadExploreData", () => {
       }),
     );
     global.fetch = fetchMock;
+    vi.stubGlobal("window", {});
 
     await loadExploreData();
 
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/api/explore/cities", {
+    expect(fetchMock).toHaveBeenCalledWith("/api/explore/cities", {
       cache: "no-store",
     });
   });
 
-  it("fails explicitly when no upstream API URL is configured in production", async () => {
-    process.env.NODE_ENV = "production";
-    delete process.env.NEXT_PUBLIC_API_URL;
-    const fetchMock = vi.fn();
+  it("forwards server cookies to an app route derived from request headers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ cities: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
     global.fetch = fetchMock;
+    mocks.headerGet.mockImplementation((name: string) => {
+      const values: Record<string, string> = {
+        "x-forwarded-host": "preview.whidby.test",
+        "x-forwarded-proto": "https",
+        cookie: "sb-access-token=abc; sb-refresh-token=def",
+      };
+      return values[name] ?? null;
+    });
 
-    await expect(loadExploreData()).rejects.toThrow("loadExploreData requires NEXT_PUBLIC_API_URL");
+    await loadExploreData({ service: "roofing" });
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://preview.whidby.test/api/explore/cities?service=roofing",
+      {
+        cache: "no-store",
+        headers: { cookie: "sb-access-token=abc; sb-refresh-token=def" },
+      },
+    );
   });
 
   it("maps backend rows to compatibility aliases for existing components", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -164,7 +189,10 @@ describe("loadExploreData", () => {
       ),
     );
 
-    const data = await loadExploreData({ service: "roofing" });
+    const data = await loadExploreData(
+      { service: "roofing" },
+      { app_base_url: "https://app.example.test" },
+    );
 
     expect(data).toMatchObject({
       next_cursor: "cursor-2",
@@ -202,19 +230,21 @@ describe("loadExploreData", () => {
   });
 
   it("throws an HTTP-specific error for non-ok proxy responses", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
     global.fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 502 }));
 
-    await expect(loadExploreData()).rejects.toThrow(
+    await expect(
+      loadExploreData({}, { app_base_url: "https://app.example.test" }),
+    ).rejects.toThrow(
       "loadExploreData explore cities: HTTP 502",
     );
   });
 
   it("throws when the upstream request fails before a response is received", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
     global.fetch = vi.fn().mockRejectedValue(new Error("connection refused"));
 
-    await expect(loadExploreData()).rejects.toThrow(
+    await expect(
+      loadExploreData({}, { app_base_url: "https://app.example.test" }),
+    ).rejects.toThrow(
       "loadExploreData explore cities: connection refused",
     );
   });

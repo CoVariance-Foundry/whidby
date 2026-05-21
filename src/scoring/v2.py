@@ -58,6 +58,10 @@ def compute_v2_scores(
     cbp_missing = signals.get("cbp_establishments") is None and signals.get("establishments") is None
     benchmark_confidence = benchmark.confidence_label if benchmark else "insufficient"
     benchmark_sample_size = benchmark.sample_size_metros if benchmark else 0
+    top3_review_data_low_coverage = (
+        _number(signals.get("top3_review_count_coverage")) < 0.67
+        or _number(signals.get("top3_review_velocity_coverage")) < 0.67
+    )
 
     return {
         "niche_normalized": niche_normalized,
@@ -98,6 +102,7 @@ def compute_v2_scores(
             "no_local_pack_detected": no_local_pack,
             "benchmark_undersampled": benchmark is None or benchmark.is_undersampled,
             "cbp_data_missing": cbp_missing,
+            "top3_review_data_low_coverage": top3_review_data_low_coverage,
         },
         "spec_version": "2.0",
     }
@@ -130,6 +135,15 @@ def _number(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _optional_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _bool(value: Any) -> bool:
@@ -181,24 +195,19 @@ def _demand_strength(signals: Mapping[str, Any], benchmark: SeoBenchmarkCell | N
 def _organic_difficulty(signals: Mapping[str, Any]) -> int:
     aggregator_count = _number(signals.get("aggregator_count"))
     local_biz_count = _number(signals.get("local_biz_count"))
-    avg_top5_da = signals.get("avg_top5_da")
+    avg_top5_da = _optional_number(signals.get("avg_top5_da"))
 
     aggregator_pressure = clamp(aggregator_count / 10.0, 0.0, 1.0)
     local_density = clamp(local_biz_count / 10.0, 0.0, 1.0)
     raw = (aggregator_pressure * 0.55 + local_density * 0.30) * 100.0
 
     if avg_top5_da is not None:
-        da_score = clamp(_number(avg_top5_da) / 60.0, 0.0, 1.0) * 100.0
+        da_score = clamp(avg_top5_da / 60.0, 0.0, 1.0) * 100.0
         raw = raw * 0.85 + da_score * 0.15
     return int(round(clamp(raw)))
 
 
 def _local_difficulty(signals: Mapping[str, Any], benchmark: SeoBenchmarkCell | None) -> int:
-    review_floor = _number(
-        signals.get("top3_review_count_min"),
-        _number(signals.get("local_pack_review_count_avg")),
-    )
-    velocity = _number(signals.get("top3_review_velocity_avg"), _number(signals.get("review_velocity_avg")))
     benchmark_floor = _positive(
         float(benchmark.median_top3_review_count_min)
         if benchmark and benchmark.median_top3_review_count_min is not None
@@ -209,11 +218,29 @@ def _local_difficulty(signals: Mapping[str, Any], benchmark: SeoBenchmarkCell | 
         benchmark.median_top3_review_velocity if benchmark else None,
         DEFAULT_REVIEW_VELOCITY,
     )
+    review_floor = _first_positive(
+        signals.get("top3_review_count_min"),
+        signals.get("local_pack_review_count_avg"),
+        default=benchmark_floor,
+    )
+    velocity = _first_positive(
+        signals.get("top3_review_velocity_avg"),
+        signals.get("review_velocity_avg"),
+        default=benchmark_velocity,
+    )
 
     review_pressure = min(review_floor / max(benchmark_floor, 1.0), 3.0)
     velocity_pressure = min(velocity / max(benchmark_velocity, 0.1), 3.0)
     raw = (review_pressure / 3.0) * 60.0 + (velocity_pressure / 3.0) * 40.0
     return int(round(clamp(raw)))
+
+
+def _first_positive(*values: Any, default: float) -> float:
+    for value in values:
+        numeric = _optional_number(value)
+        if numeric is not None and numeric > 0:
+            return numeric
+    return default
 
 
 def _monetization_signal(signals: Mapping[str, Any], benchmark: SeoBenchmarkCell | None) -> int:

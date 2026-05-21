@@ -92,6 +92,16 @@ tests/
 | Readiness audit | `metros`, CBP, NAICS mapping, scores | Fails clearly when canonical tables are missing, empty, or hidden from PostgREST schema cache |
 | Explore E2E smoke | Explore table, filters, drawer, run-report control | Loads from backend API and exposes run report even when a city has no cached services |
 
+## V2 Scoring Test Obligations
+
+| Scope | Required Coverage | Required Tests |
+|-------|-------------------|----------------|
+| Dependency wiring | FastAPI/orchestrator scoring receives benchmark repositories by injection and never instantiates Supabase in formulas | `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py`, `tests/scoring/test_benchmark_repository_contract.py` |
+| Signal semantics | `top3_review_count_min`, `top3_review_velocity_avg`, CBP density/growth, missing-data confidence penalties, and benchmark confidence | `tests/scoring/test_v2_scoring.py`, `tests/unit/test_strategy_projection.py` |
+| Top-5 organic facts | `avg_top5_da` and `avg_top5_lighthouse` use canonical top-5 organic competitors and exclude aggregators/missing URLs | `tests/unit/test_batch_executor.py`, `tests/unit/test_signal_extraction.py`, `tests/unit/test_signal_extractors.py`, `tests/scoring/test_v2_scoring.py` |
+| V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
+| Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
+
 ## E2E Scoring Tests (Playwright)
 
 | Spec File | Scope | Requires Backend? |

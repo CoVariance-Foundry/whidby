@@ -40,15 +40,27 @@ describe("GET /api/agent/reports/[reportId]", () => {
   };
 
   let maybeSingle: ReturnType<typeof vi.fn>;
+  const reportRow = {
+    id: "r1",
+    created_at: "2026-05-14T18:00:00Z",
+    spec_version: "1.1",
+    niche_keyword: "roofing",
+    geo_scope: "city",
+    geo_target: "Phoenix, AZ",
+    report_depth: "standard",
+    strategy_profile: "balanced",
+    resolved_weights: { organic: 0.6, local: 0.4 },
+    keyword_expansion: { expanded_keywords: [] },
+    metros: [],
+    meta: { source: "supabase" },
+    access_scope: "account",
+    owner_account_id: entitlement.account_id,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     maybeSingle = vi.fn().mockResolvedValue({
-      data: {
-        id: "r1",
-        access_scope: "account",
-        owner_account_id: entitlement.account_id,
-      },
+      data: reportRow,
       error: null,
     });
     mocks.createClient.mockResolvedValue({
@@ -100,12 +112,11 @@ describe("GET /api/agent/reports/[reportId]", () => {
     });
   });
 
-  it("returns 502 envelope when upstream request fails", async () => {
+  it("falls back to the Supabase report row when upstream returns non-ok", async () => {
     maybeSingle.mockResolvedValueOnce({
       data: {
+        ...reportRow,
         id: "missing",
-        access_scope: "account",
-        owner_account_id: entitlement.account_id,
       },
       error: null,
     });
@@ -117,21 +128,57 @@ describe("GET /api/agent/reports/[reportId]", () => {
     const res = await GET(req, { params: Promise.resolve({ reportId: "missing" }) });
     const body = await res.json();
 
-    expect(res.status).toBe(502);
-    expect(body.status).toBe("unavailable");
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("success");
     expect(body.upstream_status).toBe(404);
+    expect(body.report).toMatchObject({
+      id: "missing",
+      niche_keyword: "roofing",
+      geo_target: "Phoenix, AZ",
+      resolved_weights: { organic: 0.6, local: 0.4 },
+      access_scope: "account",
+      owner_account_id: entitlement.account_id,
+    });
   });
 
-  it("returns 502 envelope when upstream request times out", async () => {
+  it("falls back to the Supabase report row when upstream returns invalid JSON", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response("this is not json", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const req = new NextRequest("http://localhost/api/agent/reports/r1");
+    const res = await GET(req, { params: Promise.resolve({ reportId: "r1" }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("success");
+    expect(body.report).toMatchObject({
+      id: "r1",
+      niche_keyword: "roofing",
+      geo_target: "Phoenix, AZ",
+      resolved_weights: { organic: 0.6, local: 0.4 },
+      access_scope: "account",
+      owner_account_id: entitlement.account_id,
+    });
+  });
+
+  it("falls back to the Supabase report row when upstream request times out", async () => {
     global.fetch = vi.fn().mockRejectedValue(new DOMException("aborted", "AbortError"));
 
     const req = new NextRequest("http://localhost/api/agent/reports/r1");
     const res = await GET(req, { params: Promise.resolve({ reportId: "r1" }) });
     const body = await res.json();
 
-    expect(res.status).toBe(502);
-    expect(body.status).toBe("unavailable");
-    expect(body.message).toContain("timed out");
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("success");
+    expect(body.report).toMatchObject({
+      id: "r1",
+      niche_keyword: "roofing",
+      geo_target: "Phoenix, AZ",
+    });
   });
 
   it("does not proxy reports owned by another account", async () => {

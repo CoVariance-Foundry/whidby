@@ -23,8 +23,8 @@ def test_extract_signals_returns_all_categories_and_required_keys() -> None:
         "monetization",
     }
     assert len(signals["demand"]) == 8
-    assert len(signals["organic_competition"]) == 8
-    assert len(signals["local_competition"]) == 10
+    assert len(signals["organic_competition"]) == 12
+    assert len(signals["local_competition"]) == 15
     assert len(signals["ai_resilience"]) == 5
     assert len(signals["monetization"]) == 6
 
@@ -32,9 +32,23 @@ def test_extract_signals_returns_all_categories_and_required_keys() -> None:
     assert signals["demand"]["avg_cpc"] > 0
 
     assert signals["organic_competition"]["avg_top5_da"] > 0
+    assert signals["organic_competition"]["avg_top5_lighthouse"] > 0
+    assert signals["organic_competition"]["top5_organic_data_confidence"] in {
+        "high",
+        "medium",
+        "low",
+        "missing",
+    }
     assert signals["organic_competition"]["title_keyword_match_rate"] > 0
 
     assert signals["local_competition"]["local_pack_review_count_avg"] > 0
+    assert signals["local_competition"]["top3_review_count_min"] is not None
+    assert signals["local_competition"]["top3_review_data_confidence"] in {
+        "high",
+        "medium",
+        "low",
+        "missing",
+    }
     assert signals["local_competition"]["local_pack_rating_avg"] > 0
     assert signals["local_competition"]["gbp_completeness_avg"] > 0
     assert signals["local_competition"]["citation_consistency"] > 0

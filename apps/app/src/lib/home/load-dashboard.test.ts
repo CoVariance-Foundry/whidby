@@ -1,48 +1,80 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadDashboard } from "./load-dashboard";
 
-function makeClient(rows: Array<Record<string, unknown>>) {
-  const limit = vi.fn().mockResolvedValue({ data: rows, error: null });
-  const order = vi.fn().mockReturnValue({ limit });
-  const is = vi.fn().mockReturnValue({ order });
-  const select = vi.fn().mockReturnValue({ is });
-  const from = vi.fn().mockReturnValue({ select });
-  return { from } as never;
-}
+const originalFetch = global.fetch;
+
+afterEach(() => {
+  global.fetch = originalFetch;
+  vi.restoreAllMocks();
+});
 
 describe("loadDashboard", () => {
-  it("returns stats + recent + recommended from reports table", async () => {
-    const rows = [
-      {
-        id: "r1",
-        niche_keyword: "roofing",
-        geo_target: "Phoenix, AZ",
-        created_at: "2026-04-20T12:00:00Z",
-        spec_version: "1.1",
-        metros: [{ scores: { opportunity: 78 } }],
+  it("loads dashboard DTOs from the reports BFF route", async () => {
+    const dashboard = {
+      stats: {
+        total_reports: 2,
+        avg_score: 75,
+        watchlist: 0,
+        niches_scored: 2,
       },
-      {
-        id: "r2",
-        niche_keyword: "plumbing",
-        geo_target: "Austin, TX",
-        created_at: "2026-04-19T09:00:00Z",
-        spec_version: "1.1",
-        metros: [{ scores: { opportunity: 71 } }],
-      },
-    ];
-    const dashboard = await loadDashboard(makeClient(rows));
-    expect(dashboard.stats.total_reports).toBe(2);
-    expect(dashboard.stats.avg_score).toBe(75); // (78+71)/2 rounded
-    expect(dashboard.recent.length).toBe(2);
-    expect(dashboard.recent[0].niche).toBe("roofing");
-    expect(dashboard.recommended.length).toBe(2);
+      recent: [
+        {
+          id: "r1",
+          niche: "roofing",
+          city: "Phoenix, AZ",
+          created_at: "2026-04-20T12:00:00Z",
+        },
+      ],
+      recommended: [
+        {
+          id: "r1",
+          niche: "roofing",
+          city: "Phoenix, AZ",
+          score: 78,
+        },
+      ],
+      stat_cards: [
+        { label: "Niches scored", value: "2" },
+        { label: "Watchlist", value: "0" },
+        { label: "Avg score", value: "75" },
+        { label: "Reports", value: "2" },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "success", dashboard }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    global.fetch = fetchMock;
+
+    await expect(
+      loadDashboard({ app_base_url: "https://app.example.test/" }),
+    ).resolves.toEqual(dashboard);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://app.example.test/api/agent/reports?view=dashboard&limit=10",
+      { cache: "no-store" },
+    );
   });
 
-  it("handles empty reports gracefully", async () => {
-    const dashboard = await loadDashboard(makeClient([]));
-    expect(dashboard.stats.total_reports).toBe(0);
-    expect(dashboard.stats.avg_score).toBe(0);
-    expect(dashboard.recent).toEqual([]);
-    expect(dashboard.recommended).toEqual([]);
+  it("throws a bounded loader error when the BFF route rejects the request", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "unavailable" }), { status: 502 }),
+    );
+
+    await expect(
+      loadDashboard({ app_base_url: "https://app.example.test" }),
+    ).rejects.toThrow("loadDashboard: HTTP 502");
+  });
+
+  it("throws when the reports BFF response is malformed", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "success" }), { status: 200 }),
+    );
+
+    await expect(
+      loadDashboard({ app_base_url: "https://app.example.test" }),
+    ).rejects.toThrow("loadDashboard: invalid response");
   });
 });

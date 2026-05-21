@@ -1,5 +1,25 @@
 # Active Work
 
+## V2 Scoring System
+
+Status: implemented and under final verification on `codex/v2-scoring-system`.
+
+Current plan: `docs/superpowers/plans/2026-05-20-v2-scoring-system.md`.
+
+Completed:
+
+- Wired `MarketService` and FastAPI construction to inject `SeoBenchmarkRepository` and Supabase-backed CBP city density into the orchestrator.
+- Corrected V2 top-3 local review semantics with nullable missing facts, coverage, and confidence so missing data no longer becomes zero competition.
+- Expanded M5 backlinks and Lighthouse dependent collection to top-5 non-aggregator organic competitors with dedupe/cost controls.
+- Persisted `metro_score_v2` rows and V2-only `seo_facts` rows with idempotent upsert and nullable top-5 organic fact fields.
+- Moved Explore/report/dashboard reads behind Next BFF routes; report detail fallback now happens server-side after access checks.
+
+Verification notes:
+
+- Python targeted suites, app route/loader Vitest suites, targeted ruff, targeted ESLint, and `git diff --check` pass locally.
+- `npx docguard-cli guard` runs with warning-only status from existing traceability/freshness/TODO/doc-drift issues.
+- `next build` compiles past app code after network access, but full build remains blocked in this worktree by dependency-resolution/typecheck noise around `vitest/config`.
+
 ## Supabase Staging Auth and Entitlements
 
 Status: staging schema and seeded personas verified; GitHub Environment secret upload still requires explicit user approval.

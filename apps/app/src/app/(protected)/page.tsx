@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import { Icon, I } from "@/lib/icons";
@@ -11,8 +10,7 @@ import SavedSearchesBlock from "@/components/home/SavedSearchesBlock";
 import { loadDashboard } from "@/lib/home/load-dashboard";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const dashboard = await loadDashboard(supabase);
+  const dashboard = await loadDashboard();
 
   return (
     <div className="app density-roomy">

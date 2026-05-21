@@ -31,53 +31,31 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
     setModal({ kind: "loading" });
     try {
       const routeResponse = await fetch(`/api/agent/reports/${encodeURIComponent(reportId)}`);
-      if (routeResponse.ok) {
-        const routeJson = (await routeResponse.json()) as {
-          status: string;
-          message?: string;
-          report?: FullReportData;
-        };
-        if (routeJson.status === "success" && routeJson.report) {
-          setModal({
-            kind: "open",
-            report: {
-              ...routeJson.report,
-              metros: Array.isArray(routeJson.report.metros) ? routeJson.report.metros : [],
-              keyword_expansion:
-                routeJson.report.keyword_expansion as FullReportData["keyword_expansion"],
-              resolved_weights:
-                routeJson.report.resolved_weights as Record<string, number> | null,
-              meta: routeJson.report.meta as Record<string, unknown> | null,
-            },
-          });
-          return;
-        }
-      }
+      const routeJson = (await routeResponse.json().catch(() => null)) as {
+        status?: string;
+        message?: string;
+        report?: FullReportData;
+      } | null;
 
-      // Fallback path for environments without reachable API bridge.
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("reports")
-        .select(
-          "id, created_at, spec_version, niche_keyword, geo_scope, geo_target, report_depth, strategy_profile, resolved_weights, keyword_expansion, metros, meta",
-        )
-        .eq("id", reportId)
-        .maybeSingle();
-
-      if (error || !data) {
-        setModal({ kind: "error", message: error?.message ?? "Report not found." });
+      if (routeResponse.ok && routeJson?.status === "success" && routeJson.report) {
+        setModal({
+          kind: "open",
+          report: {
+            ...routeJson.report,
+            metros: Array.isArray(routeJson.report.metros) ? routeJson.report.metros : [],
+            keyword_expansion:
+              routeJson.report.keyword_expansion as FullReportData["keyword_expansion"],
+            resolved_weights:
+              routeJson.report.resolved_weights as Record<string, number> | null,
+            meta: routeJson.report.meta as Record<string, unknown> | null,
+          },
+        });
         return;
       }
 
       setModal({
-        kind: "open",
-        report: {
-          ...data,
-          metros: Array.isArray(data.metros) ? data.metros : [],
-          keyword_expansion: data.keyword_expansion as FullReportData["keyword_expansion"],
-          resolved_weights: data.resolved_weights as Record<string, number> | null,
-          meta: data.meta as Record<string, unknown> | null,
-        },
+        kind: "error",
+        message: routeJson?.message ?? `Failed to load report (HTTP ${routeResponse.status}).`,
       });
     } catch (err) {
       setModal({

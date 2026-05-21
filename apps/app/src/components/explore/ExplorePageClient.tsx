@@ -8,7 +8,7 @@ import type {
   ExploreData,
   ExploreScanTarget,
 } from "@/lib/explore/types";
-import { normalizeExploreCity } from "@/lib/explore/load-explore-data";
+import { normalizeExploreCity } from "@/lib/explore/normalize-explore-data";
 import type {
   ExploreRefreshRunRequest,
   ExploreRefreshRunResponse,
