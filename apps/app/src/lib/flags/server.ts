@@ -26,6 +26,9 @@ export async function getServerFeatureFlag(
   distinctId: string,
   properties: Record<string, string | number | boolean | null> = {},
 ): Promise<boolean> {
+  const envOverride = readBooleanEnv(key);
+  if (envOverride !== null) return envOverride;
+
   const client = getPostHogClient();
   if (!client) return defaultValue;
 
@@ -41,6 +44,16 @@ export async function getServerFeatureFlag(
     });
     return defaultValue;
   }
+}
+
+function readBooleanEnv(key: string): boolean | null {
+  const value = process.env[key.toUpperCase()];
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return null;
 }
 
 function stringifyProperties(

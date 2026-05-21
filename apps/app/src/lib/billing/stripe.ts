@@ -5,13 +5,15 @@ let stripe: Stripe | null = null;
 export type PaidPlanKey = "plus" | "pro";
 
 export function getStripeClient(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_RESTRICTED_KEY;
   if (!key) {
     throw new Error("STRIPE_SECRET_KEY is not configured");
   }
 
   if (!stripe) {
-    stripe = new Stripe(key);
+    stripe = new Stripe(key, {
+      maxNetworkRetries: 2,
+    });
   }
 
   return stripe;

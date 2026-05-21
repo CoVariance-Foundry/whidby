@@ -4,7 +4,7 @@ import { isSafeNext } from "@/lib/auth/safe-next";
 
 // Routes bypassed by the auth gate. Default API routes through the gate;
 // only add explicit opt-outs here (e.g. webhooks).
-const PUBLIC_ROUTES = ["/login", "/auth/callback"];
+const PUBLIC_ROUTES = ["/login", "/auth/callback", "/api/billing/webhook"];
 
 const isPublicRoute = (pathname: string) =>
   PUBLIC_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
