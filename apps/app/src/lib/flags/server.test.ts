@@ -27,4 +27,15 @@ describe("server feature flags", () => {
     expect(PRODUCT_FLAGS.freshReportGenerationEnabled.defaultValue).toBe(true);
     expect(PRODUCT_FLAGS.cachedReportsEnabled.defaultValue).toBe(true);
   });
+
+  it("reads hyphenated feature flag keys from underscore env vars", async () => {
+    process.env.BILLING_CHECKOUT_ENABLED = "true";
+    const enabled = await getServerFeatureFlag(
+      "billing-checkout-enabled",
+      false,
+      "user-1",
+    );
+    expect(enabled).toBe(true);
+    delete process.env.BILLING_CHECKOUT_ENABLED;
+  });
 });

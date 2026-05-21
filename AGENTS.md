@@ -80,19 +80,15 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby] recent context, 2026-05-17 8:20pm PDT
+# [whidby] recent context, 2026-05-20 8:55pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (24,359t read) | 1,796,565t work | 99% savings
+Stats: 50 obs (19,633t read) | 816,928t work | 98% savings
 
-### Apr 26, 2026
-S188 Run pilot benchmark (scripts.benchmarks.run_pilot) against DataForSEO and Anthropic APIs for two niches across 200 metro slots (Apr 26 at 7:11 PM)
-S203 Phase 6 CI Enforcement — implement domain layer import guardrails via lint script, CI job, pre-push hook, and pytest architecture tests (Apr 26 at 7:30 PM)
 ### Apr 29, 2026
-S205 Phase 6 CI Enforcement Branch Entering Finishing Workflow (Apr 29 at 2:57 PM)
 S213 vitest Fix Verified Stable After Root package.json Cleanup (Apr 29 at 2:59 PM)
 S215 Fix "Cannot find module 'vitest'" TypeScript error in apps/app/src/app/api/agent/health/route.test.ts (Apr 29 at 3:07 PM)
 S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 3:07 PM)
@@ -101,58 +97,61 @@ S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
 S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:09 PM)
 S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:10 PM)
 ### May 15, 2026
-S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fetch/checkout/pull sequence (May 15 at 8:52 PM)
-### May 17, 2026
-892 3:39p ✅ Lint Clean — 0 Errors, 2 Pre-existing Warnings Only
-895 3:41p 🔵 Settings Route Auth Gate Confirmed — Redirects to /login?next=/settings
-897 3:44p 🔵 Dev Server Logs — Local Login Failing with "Invalid Credentials" and Auth Rate Limit
-898 3:45p 🔵 Sandbox Network Egress Blocks Live Supabase Probe — fetch failed for All Tables
-899 " 🔵 Task 8 Documentation Review — Supabase Staging Accounts Worktree
-900 3:46p 🔵 Supabase Staging — Tables Exist but `get_account_entitlement` RPC Missing from Schema Cache
-901 " 🔵 Task 8 Documentation Review — All Four Files Approved with One Version Gap Note
-902 " 🔵 InternalUserEntitlement — Full Schema and Access Policy Now Canonical
-903 " 🔵 Staging Deployment State — Two Blockers Remain After Task 8
-904 3:48p 🔵 Migration 014 Not Applied to Staging — Billing Tables and RPCs Are Completely Absent
-905 " 🔵 Task 8 Spec Compliance Review — Supabase Staging Docs Audit Initiated
-909 3:50p 🟣 Supabase Staging Test Accounts Branch — Full Implementation Complete and Branch-Reviewed
-910 " 🔐 GitHub Staging Environment Secrets Blocked — Manual Upload Required
-917 3:52p 🟣 Migration 018 — internal_user_entitlements Schema, Admin Bootstrap RPC, and Updated Entitlement Surface
-918 " 🟣 App Entitlement Gate — fresh_report_quota_exempt Bypass Added to All Three Fresh-Report Routes
-919 " 🟣 seed_test_accounts.py — stdlib-Only Staging Account Seeder with Five Named Personas
-920 " 🟣 GitHub Actions Staging Workflows — supabase-staging.yml and supabase-seed-test-accounts.yml
-921 " 🔵 Migration 014 get_account_entitlement() Redefined in 018 — Safe Sequential Override Pattern
-922 " ✅ Canonical Docs Updated — DATA-MODEL, ENVIRONMENT, TEST-SPEC, ACTIVE_WORK, project_context All Include 018 and Staging Seeding
-926 3:55p 🔵 Accounts and Billing — Migration and Hydration Gap Investigation Initiated
-927 " 🔵 Migration 014 Confirmed Never Applied — Billing Tables Absent from Staging Supabase
-928 " 🔵 ENVIRONMENT.md Migration Table Incomplete — Migrations 006, 009–013, 016, 017 Not Listed
-929 4:31p 🔴 Explore API Sort Mapping Gap Fixed — cached_services Now Properly Routed
-930 " 🔵 Explore Sort Fix a11e938 Verified — 19 Tests Pass, Worktree Clean
-931 " 🔵 Task 5 Explore Cities Proxy — Orientation and Directory Creation
-936 4:33p 🟣 Task 5 Initiated — Explore Cities Proxy Routes and Loader Replacement
-938 4:34p 🔴 Explore Cities Route — req.nextUrl Unavailable in Vitest, Fixed with new URL(req.url).search
-939 " 🟣 Explore Cities Proxy Routes and Loader — All 11 Tests Passing, ESLint Clean
-940 " 🔴 explore/page.test.tsx — vi.mock Factory Must Explicitly Export fromSearchParams
-942 4:35p 🟣 Task 5 Initiated — Explore Cities Proxy Routes and Backend Loader Replacement
-945 " 🟣 Explore Cities Proxy Routes — Implementation Confirmed with Bounded Error Handling
-946 " 🟣 Explore Cities Loader — Supabase Removed, Backend DTO Normalization Layer Added
-947 " ✅ ExplorePageClient Test Fixtures Updated with New DTO Fields
-948 " 🔵 Task 5 Validation — TypeScript Clean, ESLint Warnings Pre-Existing, No Whitespace Errors
-950 4:36p 🟣 Task 5 Committed — Explore Cities Proxy Loader on Branch codex/whi-1-explore-cities-refactor
-953 4:37p 🔵 Task 5 Spec Compliance Review Initiated — Commit ad7463e
-954 " 🔵 Task 5 Commit ad7463e — Scope Confirmed: 10 Files, Net 700-Line Reduction
-955 " 🔵 Zsh Glob Expansion Blocks git show for [cbsaCode] Bracket Paths
-956 4:38p 🔵 Task 5 Core Deliverables Verified — All Spec Files Present and Structurally Correct
-957 " 🔵 Query Param Name Mismatch — Frontend Uses min_population/min_income, Backend Expects population_min/income_min
-958 4:39p 🔵 Task 5 Code Quality Review Initiated — Explore Cities Proxy Refactor at Commit ad7463e
-974 4:45p 🔴 Explore Cities Loader Contract Fixes — Commit 93dd683
-975 4:46p 🔵 Task 5 Re-Review APPROVED — All Four Contract Bugs Verified Fixed in Commit 93dd683
-992 4:56p 🔵 Task 6 Spec Compliance Review Initiated — Explore Cities UI Refactor at Commit f65b3f6
-996 4:57p 🔵 Explore Cities Proxy Refactor — Code Review Initiated for Commit f65b3f6
-1016 5:08p 🔵 Commit 79d8da2 Code Review Initiated — Explore Cities Refactor Branch
-1019 5:10p 🔵 Task 7 Spec Compliance Review Initiated — Explore Cities Refactor at Commit 79d8da2
-1028 5:16p 🔵 Task 8 Spec Compliance Review Initiated — Commit f44a832 in whi-1-explore-cities-refactor
-1031 " 🔵 Task 8 Spec Compliance — APPROVED with One Residual Risk at Commit f44a832
-1032 5:17p 🔵 Task 7 Final State Re-Review Initiated — Prior Findings Tracked Through Commit f64e4d1
+S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fetch/checkout/pull sequence (May 15 at 8:50 PM)
+S522 Diagnose git branch divergence between origin/dev and origin/main in the whidby project (May 15 at 8:52 PM)
+### May 20, 2026
+S523 Sync origin/dev with main — merge origin/main into local dev branch and resolve conflicts (May 20 at 12:41 PM)
+S524 Sync origin/dev with main — merge, resolve conflict, and push to GitHub (May 20 at 12:48 PM)
+1452 7:41p 🔵 PR #50 True Diff Scope is 73 Files vs Main — Far Larger Than PR Description Implies
+1453 " 🔵 Code Inspection Confirms metro_score_v2 INSERT Bug; seo_facts Upsert Is Correct but NULL-Vulnerable
+1454 " 🟣 New bulk_score.py Script for Populating explore_market_cells Materialized View
+1456 7:42p 🔵 PR #50 Supabase Branch Migration Failure: Duplicate Migration Version 021
+1457 7:43p 🔵 Earlier 73-File Diff Was Against Stale main; True PR #50 Scope Is 36 Files Matching PR Metadata
+1458 " 🔵 NULL snapshot_date Bug in build_seo_fact_rows Confirmed by Source Read
+1459 " 🔵 top3_review_data_low_coverage Vacuous True Bug Confirmed in v2.py Lines 61-64
+1460 " 🔵 V2 Implementation Plan Fully Completed Except next build Typecheck Blocker
+1461 " 🟣 New /api/agent/reports Route Consolidates Report Listing with V2 Detection and Dashboard Assembly
+1462 " 🔄 load-explore-data.ts Gutted; Normalization Logic Extracted to normalize-explore-data.ts
+1463 " 🔵 persist_report Test Suite Explicitly Validates seo_facts Upsert Requirement and 6-Table Write Path
+1464 7:45p 🔴 PR #50 V2 Scoring: Three Bot-Flagged Issues Resolved on codex/v2-scoring-system
+1465 " 🔵 Supabase Branch Deployment Failure: Duplicate Migration Version 021
+1466 " ✅ PR #50 Review Threads Replied To and Resolved on GitHub
+1467 " 🔵 PR #50 Final State: All Review Threads Resolved, Supabase Branch Deployment Successful
+1468 " 🔵 PR #50 CI Check Status: Docs Sync Gate Failing, All Other Checks Passing
+1469 7:46p ⚖️ Docs Sync Gate Failure Is a Known Recurring Issue — Not a PR Blocker
+1470 7:47p 🔵 Docs Sync Gate: How It Works and How to Bypass It
+1471 " 🔵 Docs Sync Gate Script Logic and Architecture Doc Coverage of V2 Scoring
+1472 " 🔵 Architecture Docs Still Describe V1 Four-Table Persistence — V2 Tables Missing
+1473 7:48p ✅ Architecture Docs Updated to Document V2 Scoring Persistence and New Module Dependencies
+1474 " 🔵 Docs Sync Gate Script Checks Committed Files Only — Unstaged Changes Not Detected
+1475 " ✅ Docs Sync Gate Now Passes Locally and Pushed — PR #50 Branch at d155663
+1476 " 🔵 New CI Run Triggered for Commit d155663 — Docs Sync Gate Now Pending on Fresh Run
+1477 7:49p 🔵 PR #50 CI Checks All Passing After Doc Update Commit d155663
+1478 7:50p 🔵 PR #50 All Automated CI Checks Passing — Only Greptile Review Pending
+1479 7:55p 🔵 MarketService Infrastructure Connected but Not Wired in api.py
+1480 " 🔵 V2 Local Competition Extractor Still Computes V1.1 Averages
+1481 " 🔵 Backlinks and Lighthouse Extractors Only Process First Result Instead of Top-5
+1482 7:56p ✅ Architecture Docs Updated for V2 Scoring Persistence Layer
+1483 " 🔴 Docs Sync Gate Fixed on PR #50 After V2 Doc Commit
+1484 " 🔵 V2 Scoring System PR #50 CI All Green Except Greptile Review Pending
+1485 8:42p 🔴 V2 Scoring PR Review Comments Addressed
+1486 " 🔵 PR #50 CI Checks Status — All Passing
+1487 " 🔴 PR #50 v2 Scoring — Four Issues Fixed in Commit 5641ddb
+1488 8:43p 🔵 Greptile Review Check-Run Payload — 39 Files, 0 Comments
+1489 8:45p 🔵 Codex Agent Git State Mismatch in whidby Repo
+1490 8:46p 🟣 PR #50 "Implement V2 Scoring System Wiring" Merged to Main
+1491 " 🔵 dev Branch Has Post-PR-50 Explore Fixes Not Yet in Main
+1492 8:47p 🔵 dev Branch Is Behind main Post-PR-50; Needs Merge Before Follow-up PRs
+1493 " 🔵 dev Is a Clean Fast-Forward Candidate to origin/main — No Merge Conflicts
+1494 8:48p ⚖️ User Chose to Fast-Forward dev to origin/main to Sync PR #50
+1495 8:54p ✅ Fast-Forward `dev` Branch to Match Merged PR #50 State
+1496 " 🔵 Pre-Merge `dev` Branch State Confirmed in whidby Repo
+1497 " 🔵 `git fetch` Blocked by Permissions Error on `.git/FETCH_HEAD`
+1498 " 🔵 `git fetch` Succeeded with Escalated Sandbox Permissions
+1499 " 🔵 Stripe Integration Resume Point: Keys Added, Prior Architecture Confirmed
+1500 8:55p 🔵 Branch Graph Fully Mapped After Fetch — `dev` and `origin/dev` Both 5 Behind
+1501 " ✅ Remote `dev` Updated via Direct Refspec Push `origin/main:dev`
+1502 " 🔵 Stripe Billing API Routes Fully Implemented — Keys Were the Only Missing Piece
 
-Access 1797k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 817k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
