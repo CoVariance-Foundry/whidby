@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -207,6 +208,60 @@ def test_fetch_metros_supports_population_class_filters():
     assert [metro["cbsa_code"] for metro in metros] == ["40000"]
 
 
+def test_fetch_metros_top_population_uses_true_top_n_without_mega_cap():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "metros": [
+                {
+                    "cbsa_code": "10000",
+                    "cbsa_name": "New York-Newark-Jersey City, NY-NJ-PA",
+                    "state": "NY",
+                    "population": 19_000_000,
+                    "population_class": "mega_5m_plus",
+                    "dataforseo_location_codes": [1],
+                },
+                {
+                    "cbsa_code": "20000",
+                    "cbsa_name": "Los Angeles-Long Beach-Anaheim, CA",
+                    "state": "CA",
+                    "population": 12_000_000,
+                    "population_class": "mega_5m_plus",
+                    "dataforseo_location_codes": [2],
+                },
+                {
+                    "cbsa_code": "30000",
+                    "cbsa_name": "Greenville-Anderson, SC",
+                    "state": "SC",
+                    "population": 950_000,
+                    "population_class": "large_300k_1m",
+                    "dataforseo_location_codes": [3],
+                },
+            ]
+        }
+    )
+
+    metros = bulk_score.fetch_metros(
+        supabase,
+        limit=2,
+        strategy="top-population",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=True,
+        mega_cap=1,
+    )
+
+    assert [metro["cbsa_code"] for metro in metros] == ["10000", "20000"]
+
+
+def test_normalize_service_key_preserves_catalog_service_names():
+    assert bulk_score.normalize_service_key("tree service") == "tree service"
+    assert bulk_score.normalize_service_key("Tree   Service") == "tree service"
+    assert bulk_score.normalize_service_key("Roofing Service") == "roofing"
+    assert bulk_score.normalize_service_key("Roofing Services") == "roofing"
+    assert bulk_score.normalize_service_key("roofing contractors") == "roofing"
+
+
 def test_fetch_scored_pairs_paginates_scores_and_reports():
     metro_scores = [
         {"cbsa_code": f"{index:05d}", "report_id": f"report-{index}"}
@@ -222,7 +277,7 @@ def test_fetch_scored_pairs_paginates_scores_and_reports():
 
     pairs = bulk_score.fetch_scored_pairs(supabase)
 
-    assert ("01004", "1004") in pairs
+    assert ("01004", "service 1004") in pairs
     assert len(pairs) == 1005
     assert [query.ranges[0] for query in supabase.queries["metro_scores"]] == [
         (0, 999),
@@ -234,7 +289,7 @@ def test_fetch_scored_pairs_paginates_scores_and_reports():
     ]
 
 
-def test_fetch_scored_pairs_prefers_explore_market_cells_and_normalizes_service():
+def test_fetch_scored_pairs_merges_explore_market_cells_and_legacy_reports():
     supabase = FakeSupabase(
         rows_by_table={
             "explore_market_cells": [
@@ -258,7 +313,10 @@ def test_fetch_scored_pairs_prefers_explore_market_cells_and_normalizes_service(
         }
     )
 
-    assert bulk_score.fetch_scored_pairs(supabase) == {("11111", "roofing")}
+    assert bulk_score.fetch_scored_pairs(supabase) == {
+        ("11111", "roofing"),
+        ("33333", "legacy"),
+    }
 
 
 def test_verify_persistence_requires_v2_rows_when_enabled():
@@ -299,6 +357,40 @@ def test_status_treats_persist_warning_as_partial_failure():
         )
         == "partial_failure"
     )
+
+
+def test_persistence_verification_error_records_query_failures():
+    result = bulk_score.persistence_verification_error(RuntimeError("network failed"))
+
+    assert result == {
+        "ok": False,
+        "report_exists": False,
+        "metro_scores_count": 0,
+        "metro_score_v2_count": 0,
+        "seo_facts_count": 0,
+        "missing": ["persistence_verification"],
+        "error": "network failed",
+    }
+
+
+def test_error_for_status_distinguishes_api_and_persistence_failures():
+    assert (
+        bulk_score._error_for_status("failed", None, {})
+        == "Scoring API request failed before returning a response."
+    )
+    assert (
+        bulk_score._error_for_status("failed", {"foo": "bar"}, {})
+        == "Scoring API returned a response without report_id."
+    )
+    assert (
+        bulk_score._error_for_status(
+            "partial_failure",
+            {"report_id": "report-1", "persist_warning": "save failed"},
+            {"missing": ["seo_facts"], "error": "query timed out"},
+        )
+        == "save failed; persistence verification failed: query timed out; missing seo_facts"
+    )
+    assert bulk_score._error_for_status("success", {"report_id": "report-1"}, {}) is None
 
 
 def test_audit_record_omits_full_report_body_and_keeps_recovery_fields():
@@ -393,6 +485,76 @@ def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
 
     with pytest.raises(RuntimeError, match="disk write failed"):
         asyncio.run(bulk_score.run_bulk_score(args))
+
+
+def test_run_bulk_score_records_persistence_verification_errors(
+    monkeypatch, tmp_path
+):
+    result_dir = tmp_path / "scripts" / "explore"
+    result_dir.mkdir(parents=True)
+    monkeypatch.setattr(bulk_score, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
+    monkeypatch.setattr(bulk_score, "_supabase_client", lambda: object())
+    monkeypatch.setattr(
+        bulk_score,
+        "fetch_metros",
+        lambda *_args, **_kwargs: [
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "state": "TX",
+                "population": 2_300_000,
+                "population_class": "metro_1m_5m",
+            }
+        ],
+    )
+    monkeypatch.setattr(bulk_score, "SERVICES", ["roofing"])
+    monkeypatch.setattr(bulk_score.httpx, "AsyncClient", lambda: FakeAsyncClient())
+
+    async def score_success(*_args, **_kwargs):
+        return {"report_id": "report-1", "opportunity_score": 72}
+
+    def fail_verify(*_args, **_kwargs):
+        raise RuntimeError("query timed out")
+
+    to_thread_calls = []
+
+    async def fake_to_thread(func, *args, **kwargs):
+        to_thread_calls.append(func)
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(bulk_score, "score_one", score_success)
+    monkeypatch.setattr(bulk_score, "verify_persistence", fail_verify)
+    monkeypatch.setattr(bulk_score.asyncio, "to_thread", fake_to_thread)
+    args = SimpleNamespace(
+        api_url=None,
+        cities=1,
+        services=1,
+        resume=False,
+        preview=False,
+        concurrency=1,
+        strategy="rank-and-rent",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=True,
+        mega_cap=5,
+        require_v2_persistence=True,
+    )
+
+    asyncio.run(bulk_score.run_bulk_score(args))
+
+    records = [
+        json.loads(line)
+        for line in (result_dir / "bulk_score_results.jsonl").read_text().splitlines()
+    ]
+    assert to_thread_calls == [fail_verify]
+    assert records[0]["status"] == "partial_failure"
+    assert records[0]["persistence"]["missing"] == ["persistence_verification"]
+    assert records[0]["error"] == (
+        "persistence verification failed: query timed out; "
+        "missing persistence_verification"
+    )
 
 
 class FakeRpcCall:

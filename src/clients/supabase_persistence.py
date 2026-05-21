@@ -851,7 +851,11 @@ class SupabasePersistence:
 
         if fact_rows:
             t0 = time.monotonic()
-            assert facts_table is not None
+            if facts_table is None:
+                raise RuntimeError(
+                    "Cannot persist seo_facts: facts_table client was not initialized. "
+                    "This is a bug; please report it."
+                )
             facts_table.upsert(
                 fact_rows,
                 on_conflict="niche_normalized,cbsa_code,keyword,snapshot_date",

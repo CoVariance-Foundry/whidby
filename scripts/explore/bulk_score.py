@@ -78,11 +78,12 @@ RANK_AND_RENT_CLASS_ORDER = (
     "small_50_100k",
     "mega_5m_plus",
 )
-STRIP_SERVICE_SUFFIXES = re.compile(
-    r"\b(near me|services?|company|companies|contractors?|pros?|experts?)\b",
+STRIP_TRAILING_SERVICE_SUFFIXES = re.compile(
+    r"\s+\b(near me|services?|company|companies|contractors?|pros?|experts?)\b$",
     re.IGNORECASE,
 )
 MULTI_SPACE = re.compile(r"\s+")
+CATALOG_SERVICE_KEYS = {MULTI_SPACE.sub(" ", service.strip().lower()) for service in SERVICES}
 
 
 def _load_env() -> None:
@@ -174,7 +175,7 @@ def fetch_metros(
                 str(metro.get("cbsa_code") or ""),
             ),
         )
-        return _apply_mega_cap(ordered, limit=limit, mega_cap=mega_cap)
+        return ordered[:limit]
 
     ordered = _rank_and_rent_order(filtered)
     return _apply_mega_cap(ordered, limit=limit, mega_cap=mega_cap)
@@ -247,25 +248,25 @@ def summarize_metro_selection(metros: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def normalize_service_key(raw: str) -> str:
-    text = raw.strip().lower()
-    text = STRIP_SERVICE_SUFFIXES.sub("", text)
-    return MULTI_SPACE.sub(" ", text).strip()
+    text = MULTI_SPACE.sub(" ", raw.strip().lower()).strip()
+    if text in CATALOG_SERVICE_KEYS:
+        return text
+    return STRIP_TRAILING_SERVICE_SUFFIXES.sub("", text).strip()
 
 
 def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
     try:
         market_cells = _fetch_pages(
             supabase,
             "explore_market_cells",
             "cbsa_code,niche_normalized,report_id",
         )
-        pairs = {
+        pairs.update(
             (str(row["cbsa_code"]), normalize_service_key(str(row["niche_normalized"])))
             for row in market_cells
             if row.get("cbsa_code") and row.get("niche_normalized") and row.get("report_id")
-        }
-        if pairs:
-            return pairs
+        )
     except Exception as exc:
         logger.info(
             "Could not read explore_market_cells for resume state; falling back to reports + metro_scores: %s",
@@ -276,12 +277,11 @@ def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
     scored_cbsa = {row["cbsa_code"] for row in all_rows}
 
     if not scored_cbsa:
-        return set()
+        return pairs
 
     all_reports = _fetch_pages(supabase, "reports", "id, niche_keyword")
     report_niche = {row["id"]: row["niche_keyword"] for row in all_reports}
 
-    pairs = set()
     for row in all_rows:
         niche = report_niche.get(row["report_id"])
         if niche:
@@ -408,6 +408,18 @@ def verify_persistence(
     }
 
 
+def persistence_verification_error(exc: Exception) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "report_exists": False,
+        "metro_scores_count": 0,
+        "metro_score_v2_count": 0,
+        "seo_facts_count": 0,
+        "missing": ["persistence_verification"],
+        "error": str(exc),
+    }
+
+
 def _select_rows(
     supabase: Any,
     table: str,
@@ -497,6 +509,29 @@ def _status_for_result(
     if result.get("persist_warning") or not persistence.get("ok"):
         return "partial_failure"
     return "success"
+
+
+def _error_for_status(
+    status: str,
+    result: dict[str, Any] | None,
+    persistence: dict[str, Any],
+) -> str | None:
+    if status == "failed":
+        if result is None:
+            return "Scoring API request failed before returning a response."
+        return "Scoring API returned a response without report_id."
+    if status != "partial_failure":
+        return None
+
+    errors = []
+    if result and result.get("persist_warning"):
+        errors.append(str(result["persist_warning"]))
+    if persistence.get("error"):
+        errors.append(f"persistence verification failed: {persistence['error']}")
+    missing = ", ".join(persistence.get("missing") or [])
+    if missing:
+        errors.append(f"missing {missing}")
+    return "; ".join(errors) if errors else None
 
 
 def refresh_matview(supabase: Any) -> None:
@@ -662,8 +697,6 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
         nonlocal succeeded, failed, partial_failed, completed
         city_name = city_short_name(metro["cbsa_name"])
         state = metro["state"]
-        attempt_started_at = datetime.now(timezone.utc)
-        attempt_start = time.monotonic()
 
         async with sem:
             elapsed = time.monotonic() - started
@@ -673,16 +706,22 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
                 idx, len(pairs), city_name, state, service, succeeded, failed, rate,
             )
 
+            attempt_started_at = datetime.now(timezone.utc)
+            attempt_start = time.monotonic()
             result = await score_one(client, api_url, city_name, state, service)
 
         completed += 1
         elapsed_ms = int((time.monotonic() - attempt_start) * 1000)
-        persistence = verify_persistence(
-            sb,
-            report_id=result.get("report_id") if result else None,
-            cbsa_code=metro["cbsa_code"],
-            require_v2=args.require_v2_persistence,
-        )
+        try:
+            persistence = await asyncio.to_thread(
+                verify_persistence,
+                sb,
+                report_id=result.get("report_id") if result else None,
+                cbsa_code=metro["cbsa_code"],
+                require_v2=args.require_v2_persistence,
+            )
+        except Exception as exc:
+            persistence = persistence_verification_error(exc)
         status = _status_for_result(result, persistence)
         if status == "success":
             succeeded += 1
@@ -690,15 +729,6 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             partial_failed += 1
         else:
             failed += 1
-
-        error = None
-        if status == "failed":
-            error = "Scoring API returned no persisted report id."
-        elif status == "partial_failure":
-            missing = ", ".join(persistence.get("missing") or [])
-            error = result.get("persist_warning") if result else None
-            if missing:
-                error = f"{error}; missing {missing}" if error else f"missing {missing}"
 
         audit_record = build_audit_record(
             status=status,
@@ -710,7 +740,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             elapsed_ms=elapsed_ms,
             result=result,
             persistence=persistence,
-            error=error,
+            error=_error_for_status(status, result, persistence),
         )
         async with write_lock:
             with open(results_path, "a") as f:
