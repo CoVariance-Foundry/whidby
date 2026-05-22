@@ -113,6 +113,207 @@ describe("AgencyPage", () => {
     });
   });
 
+  it("queues custom targets without selecting cached services", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          run_id: "run-custom",
+          status: "queued",
+          target_count: 1,
+        }),
+        { status: 200 },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Tulsa");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "OK");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "Water damage");
+    await user.type(
+      screen.getByLabelText("Custom target 1 primary keyword"),
+      "water mitigation",
+    );
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Confirm the batch" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Tulsa, OK")).toBeInTheDocument();
+    expect(screen.getByLabelText("Source custom/live")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Queue batch/i }));
+
+    expect(await screen.findByRole("heading", { name: "Scan queued" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/strategies/runs");
+    const runPayload = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+    expect(runPayload).toMatchObject({
+      mode: "fresh",
+      strategy_id: "easy_win",
+      targets: [
+        {
+          cbsa_code: "custom:tulsa:ok",
+          niche_normalized: "water_damage",
+          niche_keyword: "Water damage",
+          primary_keyword: "water mitigation",
+        },
+      ],
+    });
+  });
+
+  it("reviews and queues cached and custom targets together with source labels", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            markets: [
+              {
+                rank: 1,
+                opportunity_score: 82,
+                city: { city_id: "12420", name: "Austin", state: "TX" },
+                service: { service_id: "roofing", name: "Roofing" },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ run_id: "run-mixed", status: "queued", target_count: 2 }),
+          { status: 200 },
+        ),
+      );
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: /Roofing/i }));
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Boise");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "ID");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "Roof repair");
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Confirm the batch" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Austin, TX")).toBeInTheDocument();
+    expect(screen.getByText("Boise, ID")).toBeInTheDocument();
+    expect(screen.getByLabelText("Source cached")).toBeInTheDocument();
+    expect(screen.getByLabelText("Source custom/live")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Queue batch/i }));
+
+    const runPayload = JSON.parse(fetchMock.mock.calls[1][1]?.body as string);
+    expect(runPayload.targets).toEqual([
+      {
+        cbsa_code: "12420",
+        niche_normalized: "roofing",
+        niche_keyword: "Roofing",
+      },
+      {
+        cbsa_code: "custom:boise:id",
+        niche_normalized: "roof_repair",
+        niche_keyword: "Roof repair",
+      },
+    ]);
+  });
+
+  it("shows cached discovery zero-result recovery instead of a generic wall", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: /Plumbing/i }));
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+
+    expect(
+      await screen.findByText("No cached markets matched this configuration."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Add custom city-service targets to queue live research/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Add city-service targets/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Confirm the batch" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders upgrade-path copy and settings link for tier-limit queue responses", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: "tier_limit",
+          code: "fresh_strategy_runs_not_included",
+        }),
+        { status: 402 },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Savannah");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "GA");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "Pest control");
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+    await user.click(await screen.findByRole("button", { name: /Queue batch/i }));
+
+    expect(
+      await screen.findByText("Fresh multi-market scans are an upgrade path."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/live batch runs require Plus or Pro/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open settings/i })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+  });
+
+  it("renders quota-specific copy and settings link for quota exhaustion responses", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: "quota_exceeded",
+          code: "monthly_report_quota_exceeded",
+        }),
+        { status: 402 },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Madison");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "WI");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "HVAC");
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+    await user.click(await screen.findByRole("button", { name: /Queue batch/i }));
+
+    expect(await screen.findByText("Monthly report quota reached.")).toBeInTheDocument();
+    expect(screen.getByText(/needs one report credit/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open settings/i })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+  });
+
   it("includes selected states in target discovery filters", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(
@@ -167,7 +368,9 @@ describe("AgencyPage", () => {
   it("blocks review until a service is selected", () => {
     render(<AgencyPage />);
 
-    expect(screen.getByText("Select at least one service.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Select cached services or add a custom city-service target."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
   });
 });
