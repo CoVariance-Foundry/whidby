@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ExploreCachedScore, ExploreCitySummary } from "@/lib/explore/types";
 import { Icon, I } from "@/lib/icons";
+import { scoreToneForValue } from "@/lib/design-tokens";
 import {
   formatCurrency,
   formatDecimal,
@@ -47,13 +48,6 @@ const COLUMNS: Array<{ key: ExploreSortKey; label: string; align?: "right" }> = 
   { key: "best_opportunity", label: "Best score", align: "right" },
   { key: "cached_services", label: "Services", align: "right" },
 ];
-
-function scoreColor(score: number | null | undefined): string {
-  if (score == null) return "var(--ink-3)";
-  if (score >= 70) return "var(--green, #2d7a3a)";
-  if (score >= 40) return "var(--amber, #b08600)";
-  return "var(--danger, #c0392b)";
-}
 
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "-";
@@ -155,7 +149,7 @@ function ServiceDetailRow({
           textAlign: "right",
           fontFamily: "var(--mono)",
           fontWeight: 700,
-          color: scoreColor(score.opportunity_score),
+          color: scoreToneForValue(score.opportunity_score).text,
         }}
       >
         {displayScore(score.opportunity_score)}
@@ -300,7 +294,7 @@ function CityRow({
           style={{
             textAlign: "right",
             fontFamily: "var(--mono)",
-            color: scoreColor(city.best_opportunity_score),
+            color: scoreToneForValue(city.best_opportunity_score).text,
             fontWeight: 700,
           }}
         >

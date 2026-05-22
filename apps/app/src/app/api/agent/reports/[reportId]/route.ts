@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const UPSTREAM_TIMEOUT_MS = 4_500;
 const REPORT_SELECT =
-  "id, created_at, spec_version, niche_keyword, geo_scope, geo_target, report_depth, strategy_profile, resolved_weights, keyword_expansion, metros, meta, access_scope, owner_account_id" as const;
+  "id, created_at, spec_version, niche_keyword, geo_scope, geo_target, report_depth, strategy_profile, resolved_weights, keyword_expansion, metros, access_scope, owner_account_id" as const;
 
 type RouteContext = {
   params: Promise<{ reportId: string }>;
@@ -26,7 +26,6 @@ type SupabaseReportRow = {
   resolved_weights?: unknown;
   keyword_expansion?: unknown;
   metros?: unknown;
-  meta?: unknown;
   access_scope?: unknown;
   owner_account_id?: unknown;
 };
@@ -61,7 +60,7 @@ function normalizeReportPayload(payload: Record<string, unknown>) {
         ? payload.keyword_expansion
         : null,
     metros: Array.isArray(payload.metros) ? payload.metros : [],
-    meta: payload.meta && typeof payload.meta === "object" ? payload.meta : null,
+    meta: null,
   };
 }
 
@@ -81,7 +80,7 @@ function normalizeSupabaseReportRow(row: SupabaseReportRow) {
       : null,
     keyword_expansion: isRecord(row.keyword_expansion) ? row.keyword_expansion : null,
     metros: Array.isArray(row.metros) ? row.metros : [],
-    meta: isRecord(row.meta) ? row.meta : null,
+    meta: null,
     access_scope: typeof row.access_scope === "string" ? row.access_scope : "account",
     owner_account_id:
       typeof row.owner_account_id === "string" ? row.owner_account_id : null,

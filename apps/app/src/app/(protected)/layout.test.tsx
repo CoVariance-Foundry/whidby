@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProtectedLayout from "./layout";
 import { createClient } from "@/lib/supabase/server";
@@ -135,7 +135,49 @@ describe("ProtectedLayout app frame", () => {
 
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("0/0 scans");
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("Free");
+    fireEvent.click(screen.getByRole("button", { name: /open account menu/i }));
+    expect(screen.queryByRole("menuitem", { name: "Admin dashboard" })).not.toBeInTheDocument();
     expect(screen.getByText("Fallback child")).toBeInTheDocument();
+  });
+
+  it("shows the admin dashboard action only when entitlement resolves to admin", async () => {
+    vi.mocked(resolveEntitlementContext).mockResolvedValueOnce({
+      user: { id: "user-1", email: "owner@example.com" },
+      entitlement: {
+        account_id: "account-1",
+        member_role: "admin",
+        plan_key: "plus",
+        monthly_report_limit: 10,
+        subscription_status: "active",
+        current_period_start: "2026-05-01T00:00:00.000Z",
+        current_period_end: "2026-06-01T00:00:00.000Z",
+      },
+    } as never);
+
+    render(
+      await ProtectedLayout({
+        children: <section>Admin child</section>,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open account menu/i }));
+
+    expect(screen.getByRole("menuitem", { name: "Admin dashboard" })).toHaveAttribute(
+      "href",
+      "http://localhost:3001",
+    );
+  });
+
+  it("hides the admin dashboard action when entitlement resolves to a non-admin role", async () => {
+    render(
+      await ProtectedLayout({
+        children: <section>Member child</section>,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open account menu/i }));
+
+    expect(screen.queryByRole("menuitem", { name: "Admin dashboard" })).not.toBeInTheDocument();
   });
 
   it("rethrows redirect errors from entitlement loading", async () => {

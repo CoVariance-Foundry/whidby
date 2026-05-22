@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Icon, I } from "@/lib/icons";
 import type { StrategyCatalogEntry, StrategyDiscoverRequest } from "@/lib/strategies/types";
+import { ScoreCircle } from "@/components/ScoreVisuals";
 
 interface StrategyResultCard {
   id: string;
@@ -190,24 +191,7 @@ function ResultCard({ result }: { result: StrategyResultCard }) {
           </div>
         ) : null}
       </div>
-      <div
-        aria-label="Strategy score"
-        style={{
-          width: 68,
-          height: 68,
-          borderRadius: 8,
-          border: "1px solid var(--rule-strong)",
-          display: "grid",
-          placeItems: "center",
-          color: "var(--accent)",
-          background: "var(--accent-soft)",
-          fontFamily: "var(--mono)",
-          fontSize: 22,
-          fontWeight: 800,
-        }}
-      >
-        {result.score === null ? "—" : Math.round(result.score)}
-      </div>
+      <ScoreCircle value={result.score} label="Strategy score" size={68} />
     </article>
   );
 }

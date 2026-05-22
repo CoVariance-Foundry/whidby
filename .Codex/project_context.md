@@ -1,5 +1,11 @@
 # Project Context
 
+## Consumer Visual System
+
+The consumer app now has shared WHI-10 score primitives in `apps/app/src/lib/design-tokens.ts` and `apps/app/src/components/ScoreVisuals.tsx`. Use `scoreToneForValue` for 80/60/40 score tone decisions and `ScoreCircle` / `ScoreBar` for visible score displays before adding route-local threshold helpers. Numeric score displays should stay on `var(--mono)` with no negative letter spacing.
+
+Report breakdowns, the report detail modal, strategy discovery result cards, Explore score cells, service score rows, and Reports table scores now consume the shared score tone/visual path. Dashboard destination cards use `NextMoveCard` where the pattern is a simple next action rather than a bespoke content card.
+
 ## Consumer App Frame
 
 The protected consumer app frame now lives in `apps/app/src/app/(protected)/layout.tsx`. It renders a sticky `Navbar`, a minimal `Footer`, and the route content for authenticated app pages. The navbar resolves the Supabase user, attempts account entitlement and usage loading, and falls back to `Free` with `0/0 scans` if account summary data is unavailable.
@@ -14,6 +20,11 @@ Dashboard starter and shortcut strategies are launch-safe only: `easy_win`, `gbp
 
 The new dashboard component surface lives in `apps/app/src/components/home/DashboardHome.tsx` and includes the first-run banner, usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports. Free/no-quota users are routed to cached Explore/settings CTAs; paid or quota-exempt users are routed to the launch-safe starter strategy. Recent report rows link to `/reports?open=<report_id>` so they reuse the existing report modal behavior. The old home widget components were removed; shared dashboard report item types now live in `apps/app/src/lib/home/types.ts`.
 
+## Consumer Reports
+
+Epic 6 reports convergence is in progress on `codex/whi-7-reports-proto-layout`. The protected `/reports` page now uses the prototype history framing, summary stats, search, sort, empty state, and card-list rows. Rows from the reports list link to `/reports/[reportId]`; existing dashboard, Explore, and Niche Finder deep links to `/reports?open=<report_id>` still open the legacy modal for compatibility.
+
+`apps/app/src/app/(protected)/reports/[reportId]/page.tsx` is the new detail-page surface for the remaining Epic 6 work. It loads the existing `/api/agent/reports/[reportId]` BFF with the active cookies, renders headline score bands, score tabs, strategy guidance when report guidance exists, safe Next Moves, and keyword expansion. Continue `WHI-33` through `WHI-35` against this page rather than expanding the modal.
 ## Consumer Multi-market
 
 The protected `/agency` route is now the Epic 5 Multi-market batch configuration flow instead of a placeholder. It uses the shared protected app frame, exposes a batch-cost indicator, and moves users through configure, confirm, and complete states. Configuration includes launch-safe strategy lenses, state/population filters, service selection, and a 100 target cap.
@@ -24,9 +35,11 @@ Target review resolves cached city-service pairs through `apps/app /api/strategi
 
 ## Account and Billing Settings
 
-Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, and Stripe scheduled-cancellation state, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.
+Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, Stripe scheduled-cancellation state, Supabase auth metadata, and the latest account-visible reports. It renders profile metadata, plan status, cycle reset dates, usage remaining, saved reports preview, plan change actions, payment/invoice rows, password reset controls, and session sign-out.
 
-The navbar profile menu now links Account settings to `/settings`, shows the signed-in email plus live plan label, exposes `/settings/password`, and preserves the admin dashboard link plus Supabase sign-out. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs now land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
+Saved reports on `/settings` are loaded server-side through the existing `/api/agent/reports?limit=5` route with cookie forwarding, so cached/account-owned visibility stays aligned with the Reports surface. Rows open through `/reports?open=<report_id>`.
+
+The navbar profile menu links Account settings to `/settings`, shows the signed-in email plus live plan label, exposes `/settings/password`, and preserves Supabase sign-out. The external Admin dashboard link is shown only when the resolved account entitlement has `member_role === "admin"`; fallback or non-admin account loading states do not show it. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
 
 ## AI Review and Visual QA CI/CD
 
@@ -51,6 +64,12 @@ Strategy Discovery is implemented as a consumer product surface on branch `codex
 Migration `016_strategy_discovery_system.sql` adds `strategy_runs`, `strategy_run_items`, `local_pack_listing_facts`, `metro_feature_vectors`, and `strategy_score_cache`. Domain projection logic lives in `src/domain/strategy_projection.py`, cached market access and run lineage live in `src/clients/strategy_repository.py`, and FastAPI now serves `/api/strategies`, strategy-aware `/api/discover`, and `/api/strategy-runs`. The consumer app adds protected `/strategies` gallery/detail screens, shared strategy types/API helpers, and proxy routes under `apps/app/src/app/api/strategies/*` with existing entitlement/quota checks for fresh runs.
 
 Fresh strategy run creation is validated and lineage-backed: free users remain cached-only via the app proxy, fresh runs are capped at 100 targets, backend write failures return non-success responses so quota can be refunded, and queued runs persist `quota_consumed = 1`. Full async report fanout and run-status/report detail endpoints are still follow-up work.
+
+## Competitor Intel
+
+WHI-9 adds a protected `/competitor-intel` route as a paid Plus/Pro dossier surface. Free users receive an upgrade state; paid users can view durable dossier data or create a two-scan run record when durable aggregate/dossier facts already exist. Until the live DataForSEO collector is wired, `ready_to_run` targets refuse and refund instead of charging for a dead queued job. The UI renders upgrade, ready, running, aggregate-only, dossier, and error states using the existing Widby warm paper design system.
+
+Migration `20260522184933_whi9_competitor_intel_schema_quota.sql` adds `organic_competitor_facts`, `competitor_intel_runs`, and generic multi-unit `consume_usage_quota` / `refund_usage_quota` RPCs while preserving one-unit consume wrappers and moving refund wrappers to service-role-only access. `SupabasePersistence` now writes durable organic and local-pack competitor facts when report payloads contain those rows; `api_response_cache` remains cache/cost infrastructure only. `CompetitorIntelService` reads `organic_competitor_facts`, `local_pack_listing_facts`, `seo_facts`, `metro_score_v2`, and `reports` to assemble ready, aggregate-only, or dossier states, and service-role reads drop competitor fact rows without visible report lineage.
 
 ## Consumer User Management and Billing
 

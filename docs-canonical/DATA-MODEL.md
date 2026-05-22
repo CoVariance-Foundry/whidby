@@ -7,7 +7,7 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.6.1`     |
+| **Version**      | `1.7.1`     |
 | **Last Updated** | 2026-05-22  |
 | **Owner**        | @widby-team |
 
@@ -33,6 +33,8 @@
 | StrategyRun | Supabase `strategy_runs` table | id (UUID) | Cached/fresh strategy run envelope for account-scoped lineage |
 | StrategyRunItem | Supabase `strategy_run_items` table | id (UUID) | Ranked strategy result row for a city/service/keyword |
 | LocalPackListingFact | Supabase `local_pack_listing_facts` table | id (UUID) | Keyword + CBSA local pack listing evidence used by GBP Blitz and Keyword Hijack |
+| OrganicCompetitorFact | Supabase `organic_competitor_facts` table | cbsa + niche + keyword + rank + result type + date | Durable organic SERP competitor rows for Competitor Intel |
+| CompetitorIntelRun | Supabase `competitor_intel_runs` table | id (UUID) | Paid competitor-intel run lineage, quota usage, status, and summary |
 | MetroFeatureVector | Supabase `metro_feature_vectors` table | cbsa_code + feature_version | Derived metro similarity vector used by Expand & Conquer |
 | StrategyScoreCache | Supabase `strategy_score_cache` table | strategy_id + cbsa_code + niche + keyword | Optional read-optimized strategy projection cache |
 | FeedbackLog         | Supabase `feedback_log` table        | log_id (UUID)    | Input context + scores for future optimization (legacy)            |
@@ -71,6 +73,9 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 - `avg_top5_da` is the nullable average domain authority across usable top-5 organic competitors after existing aggregator/missing-URL exclusions.
 - `avg_top5_lighthouse` is the nullable average Lighthouse/site quality score across usable top-5 organic competitors. `top5_da_coverage`, `top5_lighthouse_coverage`, and `top5_organic_data_confidence` record sparse top-5 evidence so missing measurements do not become easy zero-DA or zero-Lighthouse facts.
 - During the coverage-first production seed audit, top-5 DA and Lighthouse are optional telemetry. `null` values lower confidence/evidence completeness only; they must not block V2 scoring, guidance classification, persistence, benchmark recompute, or Explore cache reads.
+- `organic_competitor_facts` stores durable per-result organic evidence for Competitor Intel. Its grain is `(cbsa_code, niche_normalized, keyword, result_rank, result_type, snapshot_date)` and it preserves rank, result type, title, domain, URL, DA, backlinks/referring-domain counts, Lighthouse score, schema/title-match signals, aggregator/local-business flags, source, and optional report lineage. Competitor Intel service-role reads should enforce visible report lineage when `report_id` is present and may include `report_id IS NULL` rows as shared report-agnostic facts.
+- `competitor_intel_runs` stores paid run lineage for account/user/report context, service/niche/keyword input, quota consumed, status, durable result summary, and error payloads. It is a lineage table, not the primary fact table; dossier reconstruction reads durable fact tables.
+- Multi-unit quota is handled by `consume_usage_quota(account, metric_key, units)` and `refund_usage_quota(account, metric_key, units)`. Existing report quota RPCs remain one-unit wrappers over the same `fresh_report` usage counter; consume is callable by authenticated account members, while refunds are service-role only so browser-authenticated clients cannot reset their own counters.
 
 ### Coverage-First Seed Data Contract
 
@@ -600,3 +605,5 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.4.0   | 2026-05-16 | Strategy Discovery system design | Added strategy run/cache entities, local pack and metro vector facts, and StrategyResult DTO |
 | 1.6.0   | 2026-05-17 | Internal entitlements | Added internal quota-exempt user entitlement model and staging test personas |
 | 1.6.1   | 2026-05-22 | Coverage-first seed data contract | Documented nullable top-5 telemetry posture and production seed acceptance sequence |
+| 1.7.0   | 2026-05-22 | Competitor Intel | Added organic competitor facts, competitor-intel run lineage, and multi-unit quota model |
+| 1.7.1   | 2026-05-22 | Merge sync | Preserved coverage-first seed contract alongside Competitor Intel schema lineage |

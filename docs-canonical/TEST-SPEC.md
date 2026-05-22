@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.6.2 -->
+<!-- docguard:version 1.7.1 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -103,6 +103,9 @@ tests/
 | Top-5 organic facts | `avg_top5_da` and `avg_top5_lighthouse` use canonical top-5 organic competitors and exclude aggregators/missing URLs | `tests/unit/test_batch_executor.py`, `tests/unit/test_signal_extraction.py`, `tests/unit/test_signal_extractors.py`, `tests/scoring/test_v2_scoring.py` |
 | V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
 | Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
+| Competitor Intel persistence | Organic/local competitor facts are persisted as durable read-model rows without reading `api_response_cache`; run lineage records account/user/quota/status | `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py` |
+| Competitor Intel APIs | Free users receive upgrade state; Plus/Pro users can read/run; run creation consumes/refunds two `fresh_report` units atomically; service-role reads enforce account visibility | `apps/app/src/app/api/competitor-intel/route.test.ts`, `apps/app/src/app/api/competitor-intel/runs/route.test.ts`, `tests/unit/test_api_competitor_intel.py`, `tests/unit/test_competitor_intel_service.py` |
+| Competitor Intel UI | Locked, ready, running, aggregate-only, dossier, and error states render without leaking paid details or null-heavy cards | `apps/app/src/components/competitor-intel/CompetitorIntelClient.test.tsx` |
 
 ## Coverage-First Production Seed Acceptance
 
@@ -155,6 +158,13 @@ Additional contract checks for scoring/autocomplete:
 | --- | --- | --- |
 | Protected app frame | Authenticated protected layout renders sticky Navbar, account usage pill, profile dropdown entry points, app footer, and child route content; entitlement-summary failures keep the frame usable with free-plan fallback | `apps/app/src/app/(protected)/layout.test.tsx`, `apps/app/src/components/Navbar.test.tsx` |
 | Epic-level route shell | Protected route pages rely on `(protected)/layout.tsx` for app chrome and render route content without page-local sidebar/topbar shells | representative protected page tests such as `apps/app/src/app/(protected)/explore/page.test.tsx` and `apps/app/src/app/(protected)/settings/page.test.tsx` |
+
+## Consumer Design System Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Typography baseline | Root app layout exposes Inter, DM Serif Display, and JetBrains Mono font variables; shared CSS maps headings/italic metadata to the serif token and numeric displays to the mono token without negative display tracking | focused component/style tests when shared typography primitives are extracted; `apps/app` typecheck for font import regressions |
+| Score visuals | Shared score tone thresholds remain 80/60/40; `ScoreCircle` and `ScoreBar` preserve accessible labels, meter/img semantics, clamped fills, mono numeric display, and hidden-label variants used by compact report surfaces | `apps/app/src/components/ScoreVisuals.test.tsx`; affected surface tests such as `StrategyPageClient.test.tsx`, report table/modal tests, and Explore component tests when markup changes |
 
 ## Multi-Market Tests
 
@@ -252,3 +262,5 @@ npm run lint
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
 | 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |
 | 1.6.2 | 2026-05-22 | Coverage-first production seed acceptance | Added schema parity, expected-project guard, canary, pilot, benchmark, Explore cache, and full-seed gates |
+| 1.7.0 | 2026-05-22 | Competitor Intel | Added paid dossier, durable competitor facts, two-scan quota, and UI/API test obligations |
+| 1.7.1 | 2026-05-22 | Merge sync | Preserved coverage-first seed gates alongside Competitor Intel test obligations |

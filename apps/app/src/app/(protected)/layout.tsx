@@ -47,6 +47,7 @@ export default async function ProtectedLayout({
       scansUsed: 0,
       scansLimit: 0,
       adminUrl,
+      isAdmin: false,
     };
 
     try {
@@ -58,6 +59,7 @@ export default async function ProtectedLayout({
         planLabel: summary.plan_label,
         scansUsed: summary.fresh_reports_used,
         scansLimit: summary.monthly_report_limit,
+        isAdmin: entitlement.member_role === "admin",
       };
     } catch (error) {
       if (isRedirectError(error)) throw error;
@@ -66,6 +68,7 @@ export default async function ProtectedLayout({
         planLabel: "Free",
         scansUsed: 0,
         scansLimit: 0,
+        isAdmin: false,
       };
     }
   } catch (error) {

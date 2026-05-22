@@ -37,10 +37,10 @@ test.describe("Reports page smoke test", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByRole("heading", { name: /^explore cities$/i }),
+      page.getByRole("heading", { name: /^cities & service data$/i }),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByLabel("Explore filters")).toBeVisible();
-    await expect(page.getByText(/cached market signals/i)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Explore filters" })).toBeVisible();
+    await expect(page.getByRole("table", { name: /^explore cities$/i })).toBeVisible();
   });
 
   test("home page renders after sign-in", async ({ page }) => {

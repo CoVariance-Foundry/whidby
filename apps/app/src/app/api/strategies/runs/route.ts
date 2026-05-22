@@ -5,6 +5,7 @@ import {
   refundReportQuota,
   resolveEntitlementContext,
 } from "@/lib/account/entitlements";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   proxyStrategyJsonResponse,
@@ -14,6 +15,17 @@ import {
 import type { StrategyRunRequest } from "@/lib/strategies/types";
 
 const MAX_FRESH_TARGETS = 100;
+
+async function refundFreshReportQuota(accountId: string): Promise<void> {
+  try {
+    await refundReportQuota(createAdminClient(), accountId);
+  } catch (error) {
+    console.warn(
+      "[strategies] quota refund failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   let body: StrategyRunRequest;
@@ -100,14 +112,14 @@ export async function POST(req: NextRequest) {
     });
 
     if (!upstream.ok && quotaConsumedForAccount) {
-      await refundReportQuota(supabase, quotaConsumedForAccount);
+      await refundFreshReportQuota(quotaConsumedForAccount);
       quotaConsumedForAccount = null;
     }
 
     return proxyStrategyJsonResponse(upstream);
   } catch (err) {
     if (quotaConsumedForAccount && supabase) {
-      await refundReportQuota(supabase, quotaConsumedForAccount);
+      await refundFreshReportQuota(quotaConsumedForAccount);
     }
 
     if (err instanceof EntitlementError) {

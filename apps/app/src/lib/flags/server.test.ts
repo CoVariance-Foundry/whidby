@@ -17,12 +17,12 @@ describe("server feature flags", () => {
     }
   });
 
-  it("defines the initial product rollout flags with secure defaults", () => {
+  it("defines the initial product rollout flags", () => {
     expect(PRODUCT_FLAGS.userManagementEnabled).toMatchObject({
       key: "user_management_enabled",
       defaultValue: false,
     });
-    expect(PRODUCT_FLAGS.billingCheckoutEnabled.defaultValue).toBe(false);
+    expect(PRODUCT_FLAGS.billingCheckoutEnabled.defaultValue).toBe(true);
     expect(PRODUCT_FLAGS.reportQuotaEnforcementEnabled.defaultValue).toBe(true);
     expect(PRODUCT_FLAGS.freshReportGenerationEnabled.defaultValue).toBe(true);
     expect(PRODUCT_FLAGS.cachedReportsEnabled.defaultValue).toBe(true);
