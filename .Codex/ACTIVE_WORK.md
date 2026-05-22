@@ -1,5 +1,25 @@
 # Active Work
 
+## WHI-9 Competitor Intel
+
+Status: implemented locally on `codex/whi-9-competitor-intel`; focused verification complete, browser/auth QA pending.
+
+Linear: `WHI-9`.
+
+Completed in this slice:
+
+- Added protected `/competitor-intel` as a direct-link Plus/Pro dossier route with upgrade, ready, running, aggregate-only, dossier, and error states.
+- Added Next BFF routes and FastAPI routes for `GET /api/competitor-intel` and `POST /api/competitor-intel/runs`.
+- Added `organic_competitor_facts` and `competitor_intel_runs`, reused `local_pack_listing_facts`, and persisted competitor-level facts when report payloads carry them.
+- Added atomic multi-unit quota RPCs so Competitor Intel consumes/refunds two `fresh_report` units without two separate one-scan calls; refunds are service-role-only.
+- Updated canonical docs and focused tests for persistence, schema, API gates, and frontend states.
+
+Next:
+
+- Add the live DataForSEO collector/worker that turns a `ready_to_run` target into newly persisted competitor facts. This slice refuses and refunds runs when no durable aggregate/dossier can be materialized.
+- Run browser/visual QA once local auth/API wiring is available.
+- Add strategy/report entrypoint CTAs after the route is validated behind rollout controls.
+
 ## Proto -> Production Convergence: Epic 5 Multi-market
 
 Status: started on `codex/whi-6-multi-market-page`.

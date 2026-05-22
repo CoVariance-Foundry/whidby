@@ -8,6 +8,8 @@ import pytest
 
 from src.clients.supabase_persistence import (
     SupabasePersistence,
+    build_organic_competitor_fact_rows,
+    build_local_pack_listing_fact_rows,
     build_report_row,
     build_keyword_rows,
     build_metro_signal_rows,
@@ -113,6 +115,59 @@ def _sample_v2_report() -> dict[str, Any]:
         },
         "spec_version": "2.0",
     }
+    return report
+
+
+def _sample_competitor_report() -> dict[str, Any]:
+    report = _sample_v2_report()
+    report["metros"][0]["signals"]["organic_competition"]["top_organic_results"] = [
+        {
+            "keyword": "roof repair phoenix",
+            "result_rank": 1,
+            "title": "Phoenix Roof Repair Pros",
+            "domain": "example-roofing.com",
+            "url": "https://example-roofing.com/roof-repair",
+            "domain_authority": 24.5,
+            "backlinks_count": 320,
+            "referring_domains_count": 42,
+            "performance_score": 72,
+            "has_localbusiness_schema": False,
+            "schema_types": ["WebPage"],
+            "title_keyword_match": True,
+            "is_local_business": True,
+            "snippet": "Emergency roof repair in Phoenix.",
+        },
+        {
+            "keyword": "roof repair phoenix",
+            "rank_group": 2,
+            "title": "Yelp Roof Repair",
+            "domain": "yelp.com",
+            "url": "https://www.yelp.com/search?find_desc=roof+repair",
+        },
+    ]
+    report["metros"][0]["signals"]["local_competition"]["top_local_pack_items"] = [
+        {
+            "keyword": "roof repair phoenix",
+            "listing_rank": 1,
+            "business_name": "Phoenix Roof Repair Pros",
+            "exact_match_name": True,
+            "review_count": 88,
+            "review_velocity_monthly": 4.25,
+            "rating": 4.7,
+            "gbp_completeness": 0.8,
+            "photo_count": 12,
+            "has_recent_post": True,
+            "categories": ["Roofing contractor"],
+        },
+        {
+            "keyword": "roof repair phoenix",
+            "rank_group": 2,
+            "title": "Desert Roofing",
+            "rating": {"value": 4.4, "votes_count": 51},
+            "category": "Roofing contractor",
+            "total_photos": 8,
+        },
+    ]
     return report
 
 
@@ -316,6 +371,77 @@ def test_build_seo_fact_rows_skips_legacy_metros_without_v2_scores() -> None:
     assert rows[0]["cbsa_code"] == "38060"
 
 
+def test_build_organic_competitor_fact_rows_maps_compact_signal_items() -> None:
+    rows = build_organic_competitor_fact_rows(_sample_competitor_report())
+
+    assert len(rows) == 2
+    assert rows[0] == {
+        "cbsa_code": "38060",
+        "niche_normalized": "roof repair",
+        "keyword": "roof repair phoenix",
+        "result_rank": 1,
+        "title": "Phoenix Roof Repair Pros",
+        "domain": "example-roofing.com",
+        "url": "https://example-roofing.com/roof-repair",
+        "result_type": "organic",
+        "domain_authority": 24.5,
+        "backlinks_count": 320,
+        "referring_domains_count": 42,
+        "lighthouse_score": 72.0,
+        "has_localbusiness_schema": False,
+        "schema_types": ["WebPage"],
+        "title_keyword_match": True,
+        "is_aggregator": False,
+        "is_local_business": True,
+        "evidence": {"snippet": "Emergency roof repair in Phoenix."},
+        "source": "dataforseo",
+        "snapshot_date": "2026-04-20",
+        "report_id": "11111111-1111-1111-1111-111111111111",
+    }
+    assert rows[1]["result_rank"] == 2
+    assert rows[1]["domain"] == "yelp.com"
+    assert rows[1]["is_aggregator"] is True
+
+
+def test_build_local_pack_listing_fact_rows_maps_existing_fact_shape() -> None:
+    rows = build_local_pack_listing_fact_rows(_sample_competitor_report())
+
+    assert len(rows) == 2
+    assert rows[0] == {
+        "cbsa_code": "38060",
+        "niche_normalized": "roof repair",
+        "keyword": "roof repair phoenix",
+        "listing_rank": 1,
+        "business_name": "Phoenix Roof Repair Pros",
+        "exact_match_name": True,
+        "review_count": 88,
+        "review_velocity_monthly": 4.25,
+        "rating": 4.7,
+        "gbp_completeness": 0.8,
+        "photo_count": 12,
+        "has_recent_post": True,
+        "categories": ["Roofing contractor"],
+        "source": "dataforseo",
+        "snapshot_date": "2026-04-20",
+        "report_id": "11111111-1111-1111-1111-111111111111",
+    }
+    assert rows[1]["business_name"] == "Desert Roofing"
+    assert rows[1]["review_count"] == 51
+    assert rows[1]["rating"] == 4.4
+    assert rows[1]["categories"] == ["Roofing contractor"]
+
+
+def test_competitor_fact_builders_require_snapshot_date_only_when_rows_exist() -> None:
+    report = _sample_competitor_report()
+    report["generated_at"] = "not a date"
+
+    with pytest.raises(ValueError, match="organic_competitor_facts"):
+        build_organic_competitor_fact_rows(report)
+
+    with pytest.raises(ValueError, match="local_pack_listing_facts"):
+        build_local_pack_listing_fact_rows(report)
+
+
 class _FakeTable:
     def __init__(self, sink: list[dict], calls: list[dict[str, Any]], name: str) -> None:
         self.sink = sink
@@ -408,6 +534,32 @@ def test_persist_report_writes_to_all_six_tables_when_v2_data_exists() -> None:
     )
     assert fact_call["kwargs"] == {
         "on_conflict": "niche_normalized,cbsa_code,keyword,snapshot_date"
+    }
+
+
+def test_persist_report_upserts_competitor_read_model_facts() -> None:
+    fake = _FakeSupabase()
+    adapter = SupabasePersistence(client=fake)
+
+    adapter.persist_report(_sample_competitor_report())
+
+    assert len(fake.tables["organic_competitor_facts"]) == 2
+    assert len(fake.tables["local_pack_listing_facts"]) == 2
+    organic_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "organic_competitor_facts" and call["method"] == "upsert"
+    )
+    assert organic_call["kwargs"] == {
+        "on_conflict": "cbsa_code,niche_normalized,keyword,result_rank,snapshot_date"
+    }
+    local_pack_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "local_pack_listing_facts" and call["method"] == "upsert"
+    )
+    assert local_pack_call["kwargs"] == {
+        "on_conflict": "cbsa_code,niche_normalized,keyword,listing_rank,snapshot_date"
     }
 
 

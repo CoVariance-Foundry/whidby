@@ -9,6 +9,7 @@ import { getServerFeatureFlag, captureServerEvent } from "@/lib/flags/server";
 import { PRODUCT_FLAGS } from "@/lib/flags/product-flags";
 import { validateNicheQueryInput } from "@/lib/niche-finder/request-validation";
 import type { FallbackPath, MetadataSource } from "@/lib/niche-finder/types";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -42,14 +43,23 @@ function normalizeMetadataSource(value: unknown): MetadataSource {
   return "typed";
 }
 
+async function refundFreshReportQuota(accountId: string): Promise<void> {
+  try {
+    await refundReportQuota(createAdminClient(), accountId);
+  } catch (error) {
+    console.warn(
+      "[scoring-proxy] quota refund failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   const proxyStart = Date.now();
   const requestId = req.headers.get("x-request-id") || createRequestId();
   let quotaConsumedForAccount: string | null = null;
-  let supabaseForRefund: Awaited<ReturnType<typeof createClient>> | null = null;
   try {
     const supabase = await createClient();
-    supabaseForRefund = supabase;
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     const flagProperties = {
       account_id: entitlement.account_id,
@@ -116,7 +126,7 @@ export async function POST(req: NextRequest) {
     const validation = validateNicheQueryInput(body);
     if (!validation.ok) {
       if (quotaConsumedForAccount) {
-        await refundReportQuota(supabase, quotaConsumedForAccount);
+        await refundFreshReportQuota(quotaConsumedForAccount);
         quotaConsumedForAccount = null;
       }
       return NextResponse.json(
@@ -177,7 +187,7 @@ export async function POST(req: NextRequest) {
 
     if (!upstream.ok) {
       if (quotaConsumedForAccount) {
-        await refundReportQuota(supabase, quotaConsumedForAccount);
+        await refundFreshReportQuota(quotaConsumedForAccount);
         quotaConsumedForAccount = null;
       }
       const upstreamBody = await upstream.text();
@@ -249,8 +259,8 @@ export async function POST(req: NextRequest) {
       status: "success",
     });
   } catch (err) {
-    if (quotaConsumedForAccount && supabaseForRefund) {
-      await refundReportQuota(supabaseForRefund, quotaConsumedForAccount);
+    if (quotaConsumedForAccount) {
+      await refundFreshReportQuota(quotaConsumedForAccount);
     }
     const proxyMs = Date.now() - proxyStart;
     if (err instanceof EntitlementError) {

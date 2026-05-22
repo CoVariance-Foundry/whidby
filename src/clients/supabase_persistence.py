@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from src.domain.services.explore_refresh_service import RefreshTarget
+from src.pipeline.domain_classifier import is_aggregator, normalize_domain
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,139 @@ def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _str_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _bool_or_false(value: Any) -> bool:
+    return bool(value) if value is not None else False
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return bool(value)
+
+
+def _list_or_empty(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _string_list(value: Any) -> list[str]:
+    return [
+        text
+        for item in _list_or_empty(value)
+        if (text := _str_or_none(item))
+    ]
+
+
+def _categories_from_item(item: dict[str, Any]) -> list[str]:
+    categories: list[str] = []
+    for key in ("categories", "additional_categories", "services"):
+        for category in _list_or_empty(item.get(key)):
+            text = _str_or_none(category)
+            if text:
+                categories.append(text)
+
+    category = _str_or_none(item.get("category"))
+    if category:
+        categories.append(category)
+
+    return list(dict.fromkeys(categories))
+
+
+def _rank_or_index(item: dict[str, Any], index: int, *keys: str) -> int:
+    for key in keys:
+        value = item.get(key)
+        if value is None:
+            continue
+        try:
+            rank = int(value)
+        except (TypeError, ValueError):
+            continue
+        if rank > 0:
+            return rank
+    return index
+
+
+def _rating_value(value: Any) -> float | None:
+    if isinstance(value, dict):
+        value = value.get("value")
+    return _float_or_none(value)
+
+
+def _review_count(item: dict[str, Any]) -> int | None:
+    rating = item.get("rating")
+    if isinstance(rating, dict) and rating.get("votes_count") is not None:
+        return _int_or_none(rating.get("votes_count"))
+    return _int_or_none(
+        item.get(
+            "review_count",
+            item.get("reviews_count", item.get("votes_count")),
+        )
+    )
+
+
+def _source_fact_items(
+    sources: list[Any],
+    *,
+    default_keyword: str | None,
+    accepted_types: set[str] | None = None,
+) -> list[tuple[dict[str, Any], str | None]]:
+    items: list[tuple[dict[str, Any], str | None]] = []
+    for source in sources:
+        if isinstance(source, dict) and isinstance(source.get("items"), list):
+            source_keyword = _str_or_none(source.get("keyword")) or default_keyword
+            for item in source["items"]:
+                if not isinstance(item, dict):
+                    continue
+                item_type = str(item.get("type", "")).lower()
+                if accepted_types and item_type and item_type not in accepted_types:
+                    continue
+                items.append((item, _str_or_none(item.get("keyword")) or source_keyword))
+        elif isinstance(source, dict):
+            item_type = str(source.get("type", "")).lower()
+            if accepted_types and item_type and item_type not in accepted_types:
+                continue
+            items.append((source, _str_or_none(source.get("keyword")) or default_keyword))
+        elif isinstance(source, list):
+            items.extend(
+                _source_fact_items(
+                    source,
+                    default_keyword=default_keyword,
+                    accepted_types=accepted_types,
+                )
+            )
+    return items
+
+
+def _primary_keyword(report: dict[str, Any]) -> str | None:
+    keywords = _expanded_keywords(report)
+    if keywords:
+        return _str_or_none(keywords[0].get("keyword"))
+    return _str_or_none(report.get("input", {}).get("niche_keyword"))
+
+
+def _require_upsert(table: Any, table_name: str) -> Any:
+    if not hasattr(table, "upsert"):
+        raise RuntimeError(
+            f"Cannot persist {table_name}: Supabase table client lacks upsert; "
+            "idempotent writes are required."
+        )
+    return table
 
 
 def _keyword_tier(value: Any) -> int:
@@ -415,6 +549,199 @@ def build_seo_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "source": "orchestrator",
             }
             rows.append(row)
+
+    return rows
+
+
+def build_organic_competitor_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build top organic competitor read-model facts from compact report payloads."""
+    report_id = report["report_id"]
+    snapshot_date = _snapshot_date(report)
+    default_keyword = _primary_keyword(report)
+    rows: list[dict[str, Any]] = []
+
+    for metro in report.get("metros", []):
+        signals = metro.get("signals") or {}
+        organic_signals = signals.get("organic_competition") or {}
+        sources = [
+            metro.get("organic_competitor_facts"),
+            metro.get("organic_competitors"),
+            metro.get("organic_results"),
+            organic_signals.get("organic_competitor_facts"),
+            organic_signals.get("organic_competitors"),
+            organic_signals.get("top_organic_results"),
+            organic_signals.get("organic_results"),
+        ]
+        items = _source_fact_items(
+            sources,
+            default_keyword=default_keyword,
+            accepted_types={"organic", "featured_snippet"},
+        )
+        if items and snapshot_date is None:
+            raise ValueError(
+                "generated_at is required for organic_competitor_facts snapshot_date"
+            )
+
+        niche_normalized = _niche_normalized(report, metro)
+        for index, (item, item_keyword) in enumerate(items, start=1):
+            keyword = item_keyword or default_keyword
+            if not keyword:
+                continue
+
+            domain = normalize_domain(
+                str(item.get("domain") or item.get("url") or item.get("target") or "")
+            )
+            result_type = _str_or_none(item.get("type")) or "organic"
+            evidence = {
+                key: item[key]
+                for key in ("breadcrumb", "description", "snippet")
+                if item.get(key) not in (None, "")
+            }
+            rows.append(
+                {
+                    "cbsa_code": metro.get("cbsa_code"),
+                    "niche_normalized": niche_normalized,
+                    "keyword": keyword,
+                    "result_rank": _rank_or_index(
+                        item,
+                        index,
+                        "result_rank",
+                        "rank_group",
+                        "rank_absolute",
+                        "position",
+                        "rank",
+                    ),
+                    "title": _str_or_none(item.get("title")),
+                    "domain": domain or None,
+                    "url": _str_or_none(item.get("url")),
+                    "result_type": result_type,
+                    "domain_authority": _float_or_none(
+                        item.get("domain_authority", item.get("da"))
+                    ),
+                    "backlinks_count": _int_or_none(
+                        item.get(
+                            "backlinks_count",
+                            item.get("backlink_count", item.get("backlinks")),
+                        )
+                    ),
+                    "referring_domains_count": _int_or_none(
+                        item.get(
+                            "referring_domains_count",
+                            item.get("referring_domains", item.get("referringDomains")),
+                        )
+                    ),
+                    "lighthouse_score": _float_or_none(
+                        item.get(
+                            "lighthouse_score",
+                            item.get("performance_score", item.get("performance")),
+                        )
+                    ),
+                    "has_localbusiness_schema": _bool_or_none(
+                        item.get(
+                            "has_localbusiness_schema",
+                            item.get("schema_adoption", item.get("has_schema")),
+                        )
+                    ),
+                    "schema_types": _string_list(
+                        item.get("schema_types", item.get("schemaTypes"))
+                    ),
+                    "title_keyword_match": _bool_or_none(
+                        item.get("title_keyword_match")
+                    ),
+                    "is_aggregator": _bool_or_false(
+                        item.get("is_aggregator")
+                    ) or is_aggregator(domain),
+                    "is_local_business": _bool_or_false(item.get("is_local_business")),
+                    "evidence": evidence,
+                    "source": _str_or_none(item.get("source")) or "dataforseo",
+                    "snapshot_date": snapshot_date,
+                    "report_id": report_id,
+                }
+            )
+
+    return rows
+
+
+def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build local pack listing facts without reading the raw API cache table."""
+    report_id = report["report_id"]
+    snapshot_date = _snapshot_date(report)
+    default_keyword = _primary_keyword(report)
+    rows: list[dict[str, Any]] = []
+
+    for metro in report.get("metros", []):
+        signals = metro.get("signals") or {}
+        local_signals = signals.get("local_competition") or {}
+        sources = [
+            metro.get("local_pack_listing_facts"),
+            metro.get("local_pack_listings"),
+            metro.get("serp_maps"),
+            local_signals.get("local_pack_listing_facts"),
+            local_signals.get("local_pack_listings"),
+            local_signals.get("top_local_pack_items"),
+            local_signals.get("serp_maps"),
+        ]
+        items = _source_fact_items(
+            sources,
+            default_keyword=default_keyword,
+            accepted_types={"local_pack", "maps_search", "google_business_info"},
+        )
+        if items and snapshot_date is None:
+            raise ValueError(
+                "generated_at is required for local_pack_listing_facts snapshot_date"
+            )
+
+        niche_normalized = _niche_normalized(report, metro)
+        for index, (item, item_keyword) in enumerate(items, start=1):
+            keyword = item_keyword or default_keyword
+            business_name = _str_or_none(
+                item.get("business_name", item.get("title", item.get("name")))
+            )
+            if not keyword or not business_name:
+                continue
+
+            photos = item.get("photos")
+            rows.append(
+                {
+                    "cbsa_code": metro.get("cbsa_code"),
+                    "niche_normalized": niche_normalized,
+                    "keyword": keyword,
+                    "listing_rank": _rank_or_index(
+                        item,
+                        index,
+                        "listing_rank",
+                        "rank_group",
+                        "rank_absolute",
+                        "position",
+                        "rank",
+                    ),
+                    "business_name": business_name,
+                    "exact_match_name": _bool_or_false(item.get("exact_match_name")),
+                    "review_count": _review_count(item),
+                    "review_velocity_monthly": _float_or_none(
+                        item.get(
+                            "review_velocity_monthly",
+                            item.get("review_velocity_avg"),
+                        )
+                    ),
+                    "rating": _rating_value(item.get("rating")),
+                    "gbp_completeness": _float_or_none(item.get("gbp_completeness")),
+                    "photo_count": _int_or_none(
+                        item.get(
+                            "photo_count",
+                            item.get(
+                                "total_photos",
+                                len(photos) if isinstance(photos, list) else None,
+                            ),
+                        )
+                    ),
+                    "has_recent_post": item.get("has_recent_post"),
+                    "categories": _categories_from_item(item),
+                    "source": _str_or_none(item.get("source")) or "dataforseo",
+                    "snapshot_date": snapshot_date,
+                    "report_id": report_id,
+                }
+            )
 
     return rows
 
@@ -800,14 +1127,23 @@ class SupabasePersistence:
         score_rows = build_metro_score_rows(report)
         score_v2_rows = build_metro_score_v2_rows(report)
         fact_rows = build_seo_fact_rows(report)
+        organic_competitor_rows = build_organic_competitor_fact_rows(report)
+        local_pack_rows = build_local_pack_listing_fact_rows(report)
         facts_table = None
+        organic_competitor_table = None
+        local_pack_table = None
         if fact_rows:
-            facts_table = self._client.table("seo_facts")
-            if not hasattr(facts_table, "upsert"):
-                raise RuntimeError(
-                    "Cannot persist seo_facts: Supabase table client lacks upsert; "
-                    "idempotent writes are required."
-                )
+            facts_table = _require_upsert(self._client.table("seo_facts"), "seo_facts")
+        if organic_competitor_rows:
+            organic_competitor_table = _require_upsert(
+                self._client.table("organic_competitor_facts"),
+                "organic_competitor_facts",
+            )
+        if local_pack_rows:
+            local_pack_table = _require_upsert(
+                self._client.table("local_pack_listing_facts"),
+                "local_pack_listing_facts",
+            )
 
         t0 = time.monotonic()
         self._client.table("reports").insert(report_row).execute()
@@ -865,6 +1201,47 @@ class SupabasePersistence:
                 "persist_report upserted %d seo_facts rows duration_ms=%d",
                 len(fact_rows),
                 facts_ms,
+            )
+
+        if organic_competitor_rows:
+            t0 = time.monotonic()
+            if organic_competitor_table is None:
+                raise RuntimeError(
+                    "Cannot persist organic_competitor_facts: table client was not "
+                    "initialized. This is a bug; please report it."
+                )
+            organic_competitor_table.upsert(
+                organic_competitor_rows,
+                on_conflict=(
+                    "cbsa_code,niche_normalized,keyword,result_rank,snapshot_date"
+                ),
+            ).execute()
+            organic_ms = int((time.monotonic() - t0) * 1000)
+            logger.info(
+                "persist_report upserted %d organic_competitor_facts rows "
+                "duration_ms=%d",
+                len(organic_competitor_rows),
+                organic_ms,
+            )
+
+        if local_pack_rows:
+            t0 = time.monotonic()
+            if local_pack_table is None:
+                raise RuntimeError(
+                    "Cannot persist local_pack_listing_facts: table client was not "
+                    "initialized. This is a bug; please report it."
+                )
+            local_pack_table.upsert(
+                local_pack_rows,
+                on_conflict=(
+                    "cbsa_code,niche_normalized,keyword,listing_rank,snapshot_date"
+                ),
+            ).execute()
+            local_pack_ms = int((time.monotonic() - t0) * 1000)
+            logger.info(
+                "persist_report upserted %d local_pack_listing_facts rows duration_ms=%d",
+                len(local_pack_rows),
+                local_pack_ms,
             )
 
         total_ms = int((time.monotonic() - persist_start) * 1000)
