@@ -37,11 +37,11 @@ class FakeCompetitorIntelService:
         self.run_requests.append(request)
         return {
             "run_id": str(uuid.UUID("55555555-5555-5555-5555-555555555555")),
-            "status": "queued",
-            "state": "ready_to_run",
+            "status": "succeeded",
+            "state": "aggregate_only",
             "quota_consumed": request.get("quota_consumed", 0),
             "target": {"niche_normalized": "roofing"},
-            "result": None,
+            "result": {"status": "aggregate_only"},
         }
 
 
@@ -182,11 +182,11 @@ def test_post_competitor_intel_runs_returns_run_shape(
     assert response.status_code == 200
     assert response.json() == {
         "run_id": "55555555-5555-5555-5555-555555555555",
-        "status": "queued",
-        "state": "ready_to_run",
+        "status": "succeeded",
+        "state": "aggregate_only",
         "quota_consumed": 2,
         "target": {"niche_normalized": "roofing"},
-        "result": None,
+        "result": {"status": "aggregate_only"},
     }
     assert fake_service.run_requests[0]["account_id"] == ("33333333-3333-3333-3333-333333333333")
 

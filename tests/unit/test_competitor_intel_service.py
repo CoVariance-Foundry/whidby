@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from src.domain.competitor_intel import CompetitorIntelService
 
 
@@ -273,21 +275,19 @@ def test_competitor_intel_run_shape_uses_deterministic_read_model() -> None:
     assert repo.run_records[0]["status"] == "succeeded"
 
 
-def test_competitor_intel_run_queues_without_durable_result() -> None:
+def test_competitor_intel_run_refuses_without_durable_result() -> None:
     repo = FakeCompetitorIntelRepository()
     service = CompetitorIntelService(repo)
 
-    result = service.create_run(
-        {"city": "Boise", "state": "ID", "service": "roofing", "quota_consumed": 2}
-    )
+    with pytest.raises(RuntimeError, match="Fresh competitor intel collection"):
+        service.create_run(
+            {"city": "Boise", "state": "ID", "service": "roofing", "quota_consumed": 2}
+        )
 
-    assert result["status"] == "queued"
-    assert result["state"] == "ready_to_run"
-    assert result["result"] is None
-    assert repo.run_records[0]["status"] == "queued"
+    assert repo.run_records == []
 
 
-def test_report_context_only_run_queues_without_durable_result() -> None:
+def test_report_context_only_run_refuses_without_durable_result() -> None:
     repo = FakeCompetitorIntelRepository()
     repo.report_context = {
         "id": "report-1",
@@ -305,15 +305,13 @@ def test_report_context_only_run_queues_without_durable_result() -> None:
     }
     service = CompetitorIntelService(repo)
 
-    result = service.create_run(
-        {
-            "report_id": "report-1",
-            "account_id": "33333333-3333-3333-3333-333333333333",
-            "quota_consumed": 2,
-        }
-    )
+    with pytest.raises(RuntimeError, match="Fresh competitor intel collection"):
+        service.create_run(
+            {
+                "report_id": "report-1",
+                "account_id": "33333333-3333-3333-3333-333333333333",
+                "quota_consumed": 2,
+            }
+        )
 
-    assert result["status"] == "queued"
-    assert result["state"] == "ready_to_run"
-    assert result["result"] is None
-    assert repo.run_records[0]["report_id"] == "report-1"
+    assert repo.run_records == []

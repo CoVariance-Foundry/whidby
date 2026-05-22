@@ -65,8 +65,8 @@ describe("POST /api/competitor-intel/runs", () => {
       new Response(
         JSON.stringify({
           run_id: "competitor-run-1",
-          status: "queued",
-          state: "ready_to_run",
+          status: "succeeded",
+          state: "aggregate_only",
           quota_consumed: 2,
         }),
         { status: 200 },

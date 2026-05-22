@@ -191,12 +191,12 @@ class CompetitorIntelService:
     def create_run(self, request: dict[str, Any]) -> dict[str, Any]:
         read_model = self.get_read_model(request)
         state = str(read_model.get("status") or "ready_to_run")
-        if state not in {"dossier", "aggregate_only", "ready_to_run"}:
+        if state not in {"dossier", "aggregate_only"}:
             raise RuntimeError(
                 "Fresh competitor intel collection is not available for this target yet."
             )
-        run_status = "succeeded" if state in {"dossier", "aggregate_only"} else "queued"
-        result = read_model if run_status == "succeeded" else None
+        run_status = "succeeded"
+        result = read_model
         run_id = self._repository.create_run_record(
             {
                 "account_id": _string_or_none(request.get("account_id")),
