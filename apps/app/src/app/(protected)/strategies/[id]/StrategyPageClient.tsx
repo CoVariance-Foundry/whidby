@@ -2,7 +2,12 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { Icon, I } from "@/lib/icons";
-import type { StrategyCatalogEntry, StrategyDiscoverRequest } from "@/lib/strategies/types";
+import type {
+  StrategyCatalogEntry,
+  StrategyDiscoverRequest,
+  StrategyInputShape,
+  StrategyRunRequest,
+} from "@/lib/strategies/types";
 
 interface StrategyResultCard {
   id: string;
@@ -18,6 +23,36 @@ interface DiscoverResponse {
   markets?: unknown[];
   results?: unknown[];
 }
+
+interface LiveReportTarget {
+  strategyId: string;
+  inputShape: StrategyInputShape;
+  city: string;
+  service: string;
+  primaryKeyword: string;
+  referenceCityId: string;
+  aiResilienceFilter: boolean;
+  limit: number;
+}
+
+interface StrategyRunResponse {
+  status?: string;
+  code?: string;
+  message?: string;
+  detail?: string;
+  run_id?: string;
+  report_id?: string;
+  tier?: string;
+  monthly_report_limit?: number;
+}
+
+type LiveRunState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; response: StrategyRunResponse }
+  | { status: "upgrade"; message: string }
+  | { status: "quota"; message: string }
+  | { status: "error"; message: string };
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -134,6 +169,82 @@ function buildPayload({
   };
 }
 
+function liveReportTarget({
+  strategy,
+  city,
+  service,
+  primaryKeyword,
+  referenceCityId,
+  aiResilienceFilter,
+  limit,
+}: {
+  strategy: StrategyCatalogEntry;
+  city: string;
+  service: string;
+  primaryKeyword: string;
+  referenceCityId: string;
+  aiResilienceFilter: boolean;
+  limit: number;
+}): LiveReportTarget {
+  return {
+    strategyId: strategy.strategy_id,
+    inputShape: strategy.input_shape,
+    city: strategy.input_shape === "reference_city_service" ? "" : city.trim(),
+    service: service.trim(),
+    primaryKeyword:
+      strategy.input_shape === "city_service_keyword" ? primaryKeyword.trim() : "",
+    referenceCityId:
+      strategy.input_shape === "reference_city_service" ? referenceCityId.trim() : "",
+    aiResilienceFilter,
+    limit,
+  };
+}
+
+function liveReportTargetLabel(target: LiveReportTarget) {
+  if (target.inputShape === "reference_city_service") {
+    return `${target.referenceCityId} + ${target.service}`;
+  }
+  return `${target.city} + ${target.service}`;
+}
+
+function buildFreshRunPayload(target: LiveReportTarget): StrategyRunRequest {
+  const payload: StrategyRunRequest = {
+    mode: "fresh",
+    strategy_id: target.strategyId,
+    service: target.service,
+    ai_resilience_filter: target.aiResilienceFilter,
+    limit: target.limit,
+  };
+
+  if (target.inputShape === "reference_city_service") {
+    payload.reference_city_id = target.referenceCityId;
+  } else {
+    payload.city = target.city;
+  }
+
+  if (target.inputShape === "city_service_keyword") {
+    payload.primary_keyword = target.primaryKeyword;
+  }
+
+  return payload;
+}
+
+function responseMessage(body: StrategyRunResponse, fallback: string) {
+  return body.message ?? body.detail ?? fallback;
+}
+
+function isUpgradePath(body: StrategyRunResponse) {
+  return body.code === "fresh_strategy_runs_not_included" || body.status === "tier_limit";
+}
+
+function isQuotaExhausted(body: StrategyRunResponse) {
+  return (
+    body.code === "monthly_report_quota_exceeded" ||
+    body.code === "quota_exceeded" ||
+    body.status === "quota_exceeded"
+  );
+}
+
 function ResultCard({ result }: { result: StrategyResultCard }) {
   return (
     <article
@@ -212,6 +323,203 @@ function ResultCard({ result }: { result: StrategyResultCard }) {
   );
 }
 
+function LiveReportRecoveryCard({
+  target,
+  state,
+  onRun,
+}: {
+  target: LiveReportTarget;
+  state: LiveRunState;
+  onRun: () => void;
+}) {
+  const targetLabel = liveReportTargetLabel(target);
+  const isRunning = state.status === "loading";
+  const reportId = state.status === "success" ? state.response.report_id : null;
+  const runId = state.status === "success" ? state.response.run_id : null;
+
+  return (
+    <article
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--rule-strong)",
+        borderRadius: 8,
+        padding: 18,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div
+          aria-hidden="true"
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            display: "grid",
+            placeItems: "center",
+            color: "var(--accent-ink)",
+            background: "var(--accent-soft)",
+            flex: "0 0 auto",
+          }}
+        >
+          <Icon d={I.sparkle} size={18} />
+        </div>
+        <div>
+          <div style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: 12, marginBottom: 6 }}>
+            Live report option
+          </div>
+          <h3 style={{ margin: 0, color: "var(--ink)", fontSize: 17 }}>
+            Run a fresh report for this target
+          </h3>
+          <p style={{ margin: "8px 0 0", color: "var(--ink-2)", fontSize: 13, lineHeight: 1.55 }}>
+            Cached discovery did not have a match for {targetLabel}. Generate fresh data and open the report when it is ready.
+          </p>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            padding: 10,
+            background: "color-mix(in srgb, var(--accent-soft) 18%, var(--card))",
+          }}
+        >
+          <div style={{ color: "var(--ink-3)", fontSize: 12 }}>Target</div>
+          <strong style={{ color: "var(--ink)", fontSize: 13 }}>{targetLabel}</strong>
+        </div>
+        {target.inputShape === "city_service_keyword" ? (
+          <div
+            style={{
+              border: "1px solid var(--rule)",
+              borderRadius: 8,
+              padding: 10,
+              background: "color-mix(in srgb, var(--accent-soft) 18%, var(--card))",
+            }}
+          >
+            <div style={{ color: "var(--ink-3)", fontSize: 12 }}>Primary keyword</div>
+            <strong style={{ color: "var(--ink)", fontSize: 13 }}>{target.primaryKeyword}</strong>
+          </div>
+        ) : null}
+        <div
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            padding: 10,
+            background: "color-mix(in srgb, var(--accent-soft) 18%, var(--card))",
+          }}
+        >
+          <div style={{ color: "var(--ink-3)", fontSize: 12 }}>Paid plan cost</div>
+          <strong style={{ color: "var(--ink)", fontSize: 13 }}>1 report credit</strong>
+        </div>
+      </div>
+
+      <p style={{ margin: 0, color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5 }}>
+        Live report generation uses 1 monthly report credit for paid users. Free users can keep browsing cached results or upgrade from Settings.
+      </p>
+
+      {state.status === "upgrade" ? (
+        <div
+          role="alert"
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            background: "var(--warn-soft)",
+            color: "var(--warn)",
+            padding: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {state.message}{" "}
+          <a href="/settings" style={{ color: "inherit", fontWeight: 800 }}>
+            Upgrade to run live
+          </a>
+          .
+        </div>
+      ) : null}
+
+      {state.status === "quota" ? (
+        <div
+          role="alert"
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            background: "var(--warn-soft)",
+            color: "var(--warn)",
+            padding: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {state.message}{" "}
+          <a href="/settings" style={{ color: "inherit", fontWeight: 800 }}>
+            Manage your plan in Settings
+          </a>
+          .
+        </div>
+      ) : null}
+
+      {state.status === "error" ? (
+        <div
+          role="alert"
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            background: "var(--danger-soft)",
+            color: "var(--danger)",
+            padding: 12,
+            fontSize: 13,
+          }}
+        >
+          {state.message}
+        </div>
+      ) : null}
+
+      {state.status === "success" ? (
+        <div
+          role="status"
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            background: "var(--accent-soft)",
+            color: "var(--accent-ink)",
+            padding: 12,
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          Live report queued.
+          {runId ? (
+            <> Run id <span style={{ fontFamily: "var(--mono)", color: "var(--ink)" }}>{runId}</span>.</>
+          ) : null}
+          {reportId ? (
+            <>
+              {" "}
+              <a href={`/reports?open=${encodeURIComponent(reportId)}`} style={{ color: "inherit", fontWeight: 800 }}>
+                Open report
+              </a>
+              .
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      <button type="button" className="btn-primary" onClick={onRun} disabled={isRunning || state.status === "success"}>
+        {isRunning ? "Queueing live report..." : "Run live report"} <Icon d={I.arrow} />
+      </button>
+    </article>
+  );
+}
+
 export default function StrategyPageClient({ strategy }: { strategy: StrategyCatalogEntry }) {
   const [city, setCity] = useState("");
   const [service, setService] = useState("");
@@ -222,6 +530,8 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<StrategyResultCard[]>([]);
+  const [zeroResultTarget, setZeroResultTarget] = useState<LiveReportTarget | null>(null);
+  const [liveRunState, setLiveRunState] = useState<LiveRunState>({ status: "idle" });
 
   const isPhase2Unavailable = strategy.status === "phase_2";
   const isUnavailable = isPhase2Unavailable;
@@ -250,10 +560,21 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       aiResilienceFilter,
       limit,
     });
+    const requestedTarget = liveReportTarget({
+      strategy,
+      city,
+      service,
+      primaryKeyword,
+      referenceCityId,
+      aiResilienceFilter,
+      limit,
+    });
 
     setIsLoading(true);
     setError(null);
     setResults([]);
+    setZeroResultTarget(null);
+    setLiveRunState({ status: "idle" });
 
     try {
       const res = await fetch("/api/strategies/discover", {
@@ -274,12 +595,63 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       const rawResults = Array.isArray(body.markets) ? body.markets : Array.isArray(body.results) ? body.results : [];
       setResults(rawResults.map(normalizeResult));
       if (rawResults.length === 0) {
-        setError("No matching cached markets were returned for this lens.");
+        setZeroResultTarget(requestedTarget);
+        setError(`No matching cached markets were returned for ${liveReportTargetLabel(requestedTarget)}.`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Strategy discovery request failed.");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function runLiveReport() {
+    if (!zeroResultTarget || liveRunState.status === "loading") return;
+
+    setLiveRunState({ status: "loading" });
+
+    try {
+      const response = await fetch("/api/strategies/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildFreshRunPayload(zeroResultTarget)),
+      });
+      const body = (await response.json().catch(() => ({}))) as StrategyRunResponse;
+
+      if (!response.ok) {
+        if (isUpgradePath(body)) {
+          setLiveRunState({
+            status: "upgrade",
+            message: responseMessage(
+              body,
+              "Live reports are available on paid plans. Upgrade to run this fresh report.",
+            ),
+          });
+          return;
+        }
+        if (isQuotaExhausted(body)) {
+          setLiveRunState({
+            status: "quota",
+            message: responseMessage(
+              body,
+              "This account has used its monthly live report credits.",
+            ),
+          });
+          return;
+        }
+        setLiveRunState({
+          status: "error",
+          message: responseMessage(body, "Live report could not be queued."),
+        });
+        return;
+      }
+
+      setLiveRunState({ status: "success", response: body });
+    } catch (err) {
+      setLiveRunState({
+        status: "error",
+        message: err instanceof Error ? err.message : "Live report could not be queued.",
+      });
     }
   }
 
@@ -459,6 +831,23 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
               <ResultCard key={result.id} result={result} />
             ))}
           </div>
+        ) : zeroResultTarget ? (
+          <>
+            <LiveReportRecoveryCard target={zeroResultTarget} state={liveRunState} onRun={runLiveReport} />
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--rule)",
+                borderRadius: 8,
+                padding: 16,
+                color: "var(--ink-3)",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              Cached discovery returned zero rows for this strategy lens and target.
+            </div>
+          </>
         ) : (
           <div
             style={{

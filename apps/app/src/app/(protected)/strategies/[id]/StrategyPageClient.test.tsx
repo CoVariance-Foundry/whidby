@@ -13,6 +13,156 @@ afterEach(() => {
 });
 
 describe("StrategyPageClient", () => {
+  it("shows a live report recovery card after cached discovery returns zero results", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    expect(await screen.findByText("Live report option")).toBeInTheDocument();
+    expect(screen.getByText("Run a fresh report for this target")).toBeInTheDocument();
+    expect(screen.getAllByText("Boise + plumbing").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Live report generation uses 1 monthly report credit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cached discovery returned zero rows/i)).toBeInTheDocument();
+  });
+
+  it("sends a fresh strategy run payload from the zero-state live report card", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "keyword_hijack",
+      name: "Keyword Hijack",
+      description: "Keyword-led markets.",
+      status: "launch",
+      input_shape: "city_service_keyword",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ markets: [] }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ run_id: "strategy-run-1", status: "queued" }), {
+          status: 200,
+        }),
+      );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("Primary keyword"), {
+      target: { value: "boise plumber" },
+    });
+    fireEvent.click(screen.getByLabelText("Add AI resilience warning filter"));
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await screen.findByText("Live report option");
+    fireEvent.click(screen.getByRole("button", { name: /run live report/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/strategies/runs");
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(body).toEqual({
+      mode: "fresh",
+      strategy_id: "keyword_hijack",
+      city: "Boise",
+      service: "plumbing",
+      primary_keyword: "boise plumber",
+      ai_resilience_filter: true,
+      limit: 10,
+    });
+  });
+
+  it("renders upgrade-path copy and settings link when fresh runs are not included", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ markets: [] }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: "fresh_strategy_runs_not_included",
+            status: "tier_limit",
+            message: "Your current plan can browse cached strategy results but cannot run fresh strategy discovery.",
+            tier: "free",
+            monthly_report_limit: 0,
+          }),
+          { status: 403 },
+        ),
+      );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await screen.findByText("Live report option");
+    fireEvent.click(screen.getByRole("button", { name: /run live report/i }));
+
+    expect(await screen.findByText(/cannot run fresh strategy discovery/i)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /upgrade to run live/i });
+    expect(link).toHaveAttribute("href", "/settings");
+  });
+
+  it("renders queued state with the run id after a live report run succeeds", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ markets: [] }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            run_id: "strategy-run-1",
+            report_id: "report-1",
+            status: "queued",
+          }),
+          { status: 200 },
+        ),
+      );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await screen.findByText("Live report option");
+    fireEvent.click(screen.getByRole("button", { name: /run live report/i }));
+
+    expect(await screen.findByText(/Live report queued/i)).toBeInTheDocument();
+    expect(screen.getByText("strategy-run-1")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open report/i })).toHaveAttribute(
+      "href",
+      "/reports?open=report-1",
+    );
+  });
+
   it("sends primary_keyword for keyword_hijack and renders a returned result", async () => {
     const strategy: StrategyCatalogEntry = {
       strategy_id: "keyword_hijack",
