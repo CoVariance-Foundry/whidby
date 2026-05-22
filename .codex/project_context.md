@@ -6,6 +6,14 @@ The protected consumer app frame now lives in `apps/app/src/app/(protected)/layo
 
 Primary authenticated nav is Home, Strategies, Explore, Multi-market, and Reports. `/niche-finder` and `/recommendations` remain valid routes/deep links but are no longer primary nav items. Account settings, password, admin dashboard, and sign-out live in the navbar profile dropdown. Do not reintroduce page-local `Sidebar`/`Topbar` shells; protected pages should render route content and put actions in page headers or client surfaces.
 
+## Consumer Dashboard
+
+The authenticated `/` home route is now the Phase 2 strategy-first dashboard. `apps/app/src/lib/home/load-dashboard.ts` aggregates the report dashboard BFF, account entitlement/usage summary, onboarding profile/target context, and the strategy catalog into one internal dashboard data shape. Report fetch and onboarding failures are soft dashboard notices; entitlement/auth failures render an actionable blocking account card.
+
+Dashboard starter and shortcut strategies are launch-safe only: `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`. Deprecated or future onboarding recommendations such as `cash_cow`, `blue_ocean`, `portfolio_builder`, and `seasonal_arbitrage` fall back to `easy_win`, so dashboard links do not point users into unavailable strategy routes.
+
+The new dashboard component surface lives in `apps/app/src/components/home/DashboardHome.tsx` and includes the first-run banner, usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports. Free/no-quota users are routed to cached Explore/settings CTAs; paid or quota-exempt users are routed to the launch-safe starter strategy. Recent report rows link to `/reports?open=<report_id>` so they reuse the existing report modal behavior. The old home widget components were removed; shared dashboard report item types now live in `apps/app/src/lib/home/types.ts`.
+
 ## Account and Billing Settings
 
 Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, and Stripe scheduled-cancellation state, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.

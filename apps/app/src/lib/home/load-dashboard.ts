@@ -1,7 +1,99 @@
 import { headers } from "next/headers";
-import type { ActivityItem } from "@/components/home/RecentActivityFeed";
-import type { RecommendedItem } from "@/components/home/RecommendedMetros";
-import type { StatCard } from "@/components/home/StatCardRow";
+import type { User } from "@supabase/supabase-js";
+import {
+  EntitlementError,
+  type AccountEntitlement,
+  type PlanKey,
+  resolveEntitlementContext,
+} from "@/lib/account/entitlements";
+import { type AccountSummary, loadAccountSummary } from "@/lib/account/summary";
+import type { ActivityItem, RecommendedItem, StatCard } from "@/lib/home/types";
+import { loadStrategyCatalog } from "@/lib/strategies/catalog";
+import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strategies/types";
+import { createClient } from "@/lib/supabase/server";
+
+type LaunchSafeStrategyId =
+  | "easy_win"
+  | "gbp_blitz"
+  | "keyword_hijack"
+  | "expand_conquer";
+type DashboardNextRoute = "/strategies" | "/explore" | "/agency";
+
+interface DashboardError {
+  message: string;
+  code?: string;
+  status?: number;
+}
+
+interface DashboardAccountReady {
+  status: "ready";
+  error: null;
+  summary: AccountSummary;
+  entitlement: DashboardEntitlementSummary;
+  can_run_fresh_reports: boolean;
+}
+
+interface DashboardAccountError {
+  status: "error";
+  error: DashboardError;
+  blocking: boolean;
+  summary: null;
+  entitlement: DashboardEntitlementSummary | null;
+  can_run_fresh_reports: boolean;
+}
+
+type DashboardAccountState = DashboardAccountReady | DashboardAccountError;
+
+interface DashboardEntitlementSummary {
+  account_id: string;
+  plan_key: PlanKey;
+  fresh_report_quota_exempt: boolean;
+}
+
+interface OnboardingProfileRow {
+  id: string;
+  user_id?: string | null;
+  account_id?: string | null;
+  recommended_strategy_id?: string | null;
+  available_strategy_ids?: string[] | null;
+  next_route?: string | null;
+  status?: string | null;
+  [key: string]: unknown;
+}
+
+interface OnboardingTargetRow {
+  id: string;
+  onboarding_profile_id?: string | null;
+  strategy_id?: string | null;
+  niche_keyword?: string | null;
+  geo_scope?: string | null;
+  city?: string | null;
+  state?: string | null;
+  resolved_label?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+interface DashboardOnboardingContext {
+  profile: OnboardingProfileRow | null;
+  target: OnboardingTargetRow | null;
+  starter_strategy_id: LaunchSafeStrategyId;
+  shortcut_strategy_ids: LaunchSafeStrategyId[];
+  next_route: DashboardNextRoute;
+  error: DashboardError | null;
+}
+
+interface DashboardStrategyContext {
+  catalog: StrategyCatalogResponse;
+  starter: StrategyCatalogEntry;
+  shortcuts: StrategyCatalogEntry[];
+}
+
+type ReportsDashboardBody = {
+  status?: string;
+  message?: string;
+  dashboard?: Pick<DashboardData, "stats" | "recent" | "recommended" | "stat_cards">;
+};
 
 export interface DashboardData {
   stats: {
@@ -13,10 +105,16 @@ export interface DashboardData {
   recent: ActivityItem[];
   recommended: RecommendedItem[];
   stat_cards: StatCard[];
+  account: DashboardAccountState;
+  onboarding: DashboardOnboardingContext;
+  strategies: DashboardStrategyContext;
+  report_error: DashboardError | null;
+  multi_market_available: boolean;
 }
 
 interface LoadDashboardOptions {
   app_base_url?: string;
+  multi_market_available?: boolean;
 }
 
 const APP_BASE_ENV_KEYS = [
@@ -24,6 +122,52 @@ const APP_BASE_ENV_KEYS = [
   "NEXT_PUBLIC_APP_URL",
   "NEXT_PUBLIC_SITE_URL",
 ] as const;
+const STARTER_FALLBACK: LaunchSafeStrategyId = "easy_win";
+const LAUNCH_SAFE_STRATEGY_IDS = [
+  "easy_win",
+  "gbp_blitz",
+  "keyword_hijack",
+  "expand_conquer",
+] as const satisfies readonly LaunchSafeStrategyId[];
+const LAUNCH_SAFE_STRATEGY_SET = new Set<string>(LAUNCH_SAFE_STRATEGY_IDS);
+// Phase 2 route-gates Multi-market only. This branch already includes /agency,
+// so production defaults to enabled while tests can still cover the disabled card.
+const DEFAULT_MULTI_MARKET_AVAILABLE = true;
+const FALLBACK_STRATEGY_ENTRIES: Record<LaunchSafeStrategyId, StrategyCatalogEntry> = {
+  easy_win: {
+    strategy_id: "easy_win",
+    name: "Easy Win",
+    description: "Find city and service pairs with useful demand and weaker competition.",
+    status: "launch",
+    input_shape: "city_service",
+  },
+  gbp_blitz: {
+    strategy_id: "gbp_blitz",
+    name: "GBP Blitz",
+    description: "Find local packs where business profile gaps make the market easier to enter.",
+    status: "launch",
+    input_shape: "city_service",
+  },
+  keyword_hijack: {
+    strategy_id: "keyword_hijack",
+    name: "Keyword Hijack",
+    description: "Target focused service keywords where organic incumbents are weaker.",
+    status: "launch",
+    input_shape: "city_service_keyword",
+  },
+  expand_conquer: {
+    strategy_id: "expand_conquer",
+    name: "Expand & Conquer",
+    description: "Find lookalike expansion markets from a reference city and service.",
+    status: "launch",
+    input_shape: "reference_city_service",
+  },
+};
+const DASHBOARD_NEXT_ROUTES = new Set<string>([
+  "/strategies",
+  "/explore",
+  "/agency",
+]);
 
 function normalizeAppBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim().replace(/\/$/, "");
@@ -61,9 +205,163 @@ async function getIncomingCookieHeader(skipRequestHeaders = false) {
   return headerStore.get("cookie") ?? undefined;
 }
 
-export async function loadDashboard(
-  options: LoadDashboardOptions = {},
-): Promise<DashboardData> {
+function emptyReportsDashboard() {
+  return {
+    stats: {
+      total_reports: 0,
+      avg_score: 0,
+      watchlist: 0,
+      niches_scored: 0,
+    },
+    recent: [] satisfies ActivityItem[],
+    recommended: [] satisfies RecommendedItem[],
+    stat_cards: [
+      { label: "Niches scored", value: "0" },
+      { label: "Watchlist", value: "0" },
+      { label: "Avg score", value: "0" },
+      { label: "Reports", value: "0" },
+    ] satisfies StatCard[],
+  };
+}
+
+function errorFromUnknown(error: unknown, fallbackMessage: string): DashboardError {
+  if (error instanceof EntitlementError) {
+    return {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+    };
+  }
+
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+
+  return { message: fallbackMessage };
+}
+
+function normalizeLaunchSafeStrategyId(value: unknown): LaunchSafeStrategyId | null {
+  if (typeof value !== "string") return null;
+  return LAUNCH_SAFE_STRATEGY_SET.has(value) ? (value as LaunchSafeStrategyId) : null;
+}
+
+function normalizeShortcutStrategyIds(
+  starter: LaunchSafeStrategyId,
+  values: unknown,
+): LaunchSafeStrategyId[] {
+  const shortcuts = Array.isArray(values)
+    ? values
+        .map((value) => normalizeLaunchSafeStrategyId(value))
+        .filter((value): value is LaunchSafeStrategyId => Boolean(value))
+    : [];
+  const unique = Array.from(new Set([starter, ...shortcuts]));
+  return unique.length ? unique : [STARTER_FALLBACK];
+}
+
+function normalizeDashboardNextRoute(value: unknown): DashboardNextRoute {
+  if (typeof value !== "string") return "/strategies";
+  return DASHBOARD_NEXT_ROUTES.has(value) ? (value as DashboardNextRoute) : "/strategies";
+}
+
+function filterLaunchCatalog(catalog: StrategyCatalogResponse): StrategyCatalogResponse {
+  const strategies = catalog.strategies.filter((strategy) =>
+    LAUNCH_SAFE_STRATEGY_SET.has(strategy.strategy_id),
+  );
+  return {
+    ...catalog,
+    strategies,
+  };
+}
+
+function strategyEntryById(
+  catalog: StrategyCatalogResponse,
+  strategyId: LaunchSafeStrategyId,
+): StrategyCatalogEntry {
+  return (
+    catalog.strategies.find((strategy) => strategy.strategy_id === strategyId) ?? {
+      ...FALLBACK_STRATEGY_ENTRIES[strategyId],
+    }
+  );
+}
+
+function canRunFreshReports(summary: AccountSummary, entitlement: AccountEntitlement) {
+  if (entitlement.fresh_report_quota_exempt) return true;
+  if (entitlement.plan_key === "free") return false;
+  return summary.fresh_reports_remaining > 0;
+}
+
+function canRunFreshReportsWithoutSummary(entitlement: AccountEntitlement) {
+  return entitlement.fresh_report_quota_exempt || entitlement.plan_key !== "free";
+}
+
+function summarizeEntitlement(entitlement: AccountEntitlement): DashboardEntitlementSummary {
+  return {
+    account_id: entitlement.account_id,
+    plan_key: entitlement.plan_key,
+    fresh_report_quota_exempt: entitlement.fresh_report_quota_exempt,
+  };
+}
+
+function resolveMultiMarketAvailability(options: LoadDashboardOptions) {
+  return options.multi_market_available ?? DEFAULT_MULTI_MARKET_AVAILABLE;
+}
+
+async function loadOnboardingContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: User,
+): Promise<{
+  profile: OnboardingProfileRow | null;
+  target: OnboardingTargetRow | null;
+  error: DashboardError | null;
+}> {
+  const { data: profile, error: profileError } = await supabase
+    .from("onboarding_profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    return {
+      profile: null,
+      target: null,
+      error: { message: profileError.message },
+    };
+  }
+
+  if (!profile) {
+    return { profile: null, target: null, error: null };
+  }
+
+  const { data: target, error: targetError } = await supabase
+    .from("onboarding_targets")
+    .select("*")
+    .eq("onboarding_profile_id", (profile as OnboardingProfileRow).id)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (targetError) {
+    return {
+      profile: profile as OnboardingProfileRow,
+      target: null,
+      error: { message: targetError.message },
+    };
+  }
+
+  return {
+    profile: profile as OnboardingProfileRow,
+    target: (target as OnboardingTargetRow | null) ?? null,
+    error: null,
+  };
+}
+
+async function loadReportsDashboard(
+  options: LoadDashboardOptions,
+): Promise<{
+  reports: Pick<DashboardData, "stats" | "recent" | "recommended" | "stat_cards">;
+  report_error: DashboardError | null;
+}> {
+  const fallback = emptyReportsDashboard();
   const url = await getAppRouteUrl(
     "/api/agent/reports?view=dashboard&limit=10",
     options.app_base_url,
@@ -77,23 +375,119 @@ export async function loadDashboard(
       ...(cookie ? { headers: { cookie } } : {}),
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "request failed";
-    throw new Error(`loadDashboard: ${detail}`);
+    return {
+      reports: fallback,
+      report_error: errorFromUnknown(error, "Reports request failed."),
+    };
   }
 
   if (!response.ok) {
-    throw new Error(`loadDashboard: HTTP ${response.status}`);
+    return {
+      reports: fallback,
+      report_error: { message: `Reports request failed with HTTP ${response.status}.` },
+    };
   }
 
-  const body = (await response.json()) as {
-    status?: string;
-    message?: string;
-    dashboard?: DashboardData;
-  };
+  let body: ReportsDashboardBody;
+  try {
+    body = (await response.json()) as ReportsDashboardBody;
+  } catch {
+    return {
+      reports: fallback,
+      report_error: { message: "Reports response was invalid JSON." },
+    };
+  }
 
   if (body.status !== "success" || !body.dashboard) {
-    throw new Error(`loadDashboard: ${body.message ?? "invalid response"}`);
+    return {
+      reports: fallback,
+      report_error: { message: body.message ?? "Reports response was invalid." },
+    };
   }
 
-  return body.dashboard;
+  return { reports: body.dashboard, report_error: null };
+}
+
+export async function loadDashboard(
+  options: LoadDashboardOptions = {},
+): Promise<DashboardData> {
+  const catalog = filterLaunchCatalog(await loadStrategyCatalog());
+
+  let account: DashboardAccountState;
+  let canLoadReports = false;
+  let onboardingRows: Awaited<ReturnType<typeof loadOnboardingContext>> = {
+    profile: null,
+    target: null,
+    error: null,
+  };
+
+  try {
+    const supabase = await createClient();
+    const { user, entitlement } = await resolveEntitlementContext(supabase);
+    onboardingRows = await loadOnboardingContext(supabase, user);
+    canLoadReports = true;
+
+    try {
+      const summary = await loadAccountSummary({ supabase, user, entitlement });
+      account = {
+        status: "ready",
+        error: null,
+        summary,
+        entitlement: summarizeEntitlement(entitlement),
+        can_run_fresh_reports: canRunFreshReports(summary, entitlement),
+      };
+    } catch (error) {
+      account = {
+        status: "error",
+        error: errorFromUnknown(error, "Account summary is unavailable."),
+        blocking: false,
+        summary: null,
+        entitlement: summarizeEntitlement(entitlement),
+        can_run_fresh_reports: canRunFreshReportsWithoutSummary(entitlement),
+      };
+    }
+  } catch (error) {
+    account = {
+      status: "error",
+      error: errorFromUnknown(error, "Account context is unavailable."),
+      blocking: true,
+      summary: null,
+      entitlement: null,
+      can_run_fresh_reports: false,
+    };
+  }
+
+  const starter =
+    normalizeLaunchSafeStrategyId(onboardingRows.profile?.recommended_strategy_id) ??
+    STARTER_FALLBACK;
+  const shortcutIds = normalizeShortcutStrategyIds(
+    starter,
+    onboardingRows.profile?.available_strategy_ids,
+  );
+  const strategyContext: DashboardStrategyContext = {
+    catalog,
+    starter: strategyEntryById(catalog, starter),
+    shortcuts: shortcutIds.map((strategyId) => strategyEntryById(catalog, strategyId)),
+  };
+  const onboarding: DashboardOnboardingContext = {
+    profile: onboardingRows.profile,
+    target: onboardingRows.target,
+    starter_strategy_id: starter,
+    shortcut_strategy_ids: shortcutIds,
+    next_route: normalizeDashboardNextRoute(onboardingRows.profile?.next_route),
+    error: onboardingRows.error,
+  };
+  const { reports, report_error } =
+    canLoadReports
+      ? await loadReportsDashboard(options)
+      : { reports: emptyReportsDashboard(), report_error: null };
+
+  return {
+    ...reports,
+    account,
+    onboarding,
+    strategies: strategyContext,
+    report_error,
+    multi_market_available: resolveMultiMarketAvailability(options),
+  };
 }
