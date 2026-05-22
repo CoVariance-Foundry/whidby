@@ -145,6 +145,16 @@ Required (see `.env.example`):
 - `MAPBOX_ACCESS_TOKEN` — Mapbox Geocoding API (required for `/api/places/suggest` global autocomplete; endpoint returns 503 if missing). Must be present in local `.env` and Render API service env vars.
 - `ACTIVECAMPAIGN_API_URL`, `ACTIVECAMPAIGN_API_KEY` — Email CRM (web app only)
 
+### Production App Reports 401 Gotcha
+
+The authenticated app at `https://app.thewidby.com` is Vercel project `whidby-agent`, not the marketing `whidby` project. A production dashboard banner saying "Reports are temporarily unavailable" with `Reports request failed with HTTP 401`, or a `/reports` server error with `reports list: HTTP 401`, usually means one of these `whidby-agent` Production env vars is wrong:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
+- `WIDBY_APP_BASE_URL=https://app.thewidby.com`
+
+The first two must match the production Supabase project. The last one prevents server-side self-fetches from using `VERCEL_URL`; deployment URLs can be protected by Vercel SSO and return `401` before `/api/agent/reports` reaches app code. After fixing Vercel env, redeploy production and verify with an authenticated smoke against `https://app.thewidby.com`.
+
 ## Auth & Test Accounts
 
 Login uses email + password via `signInWithPassword` (no magic link). The auth callback route is kept as a legacy fallback for OAuth/in-flight links.
