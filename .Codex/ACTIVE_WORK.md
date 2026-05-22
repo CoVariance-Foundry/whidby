@@ -32,32 +32,21 @@ Verification:
 
 ## Proto -> Production Convergence: Epic 2 Dashboard
 
-Status: implemented and verified locally on `codex/whi-3-dashboard-phase-2`.
+Status: implemented on `codex/bulk-scoring-followups`; draft PR open.
 
-Linear: `WHI-3` Dashboard with implementation slices `WHI-13` through `WHI-20`.
+Goal: turn `scripts/explore/bulk_score.py` into a trustworthy Explore data-build runner rather than a loose cached-report seeder.
 
-Completed:
+Completed in this slice:
 
-- Replaced the protected `/` home dashboard with a strategy-first dashboard while preserving the Epic 1 navbar-first app frame.
-- Expanded `apps/app/src/lib/home/load-dashboard.ts` into the dashboard aggregator for account usage, onboarding profile/target context, launch-safe strategy selection, strategy catalog copy, recent reports, and soft report/onboarding errors.
-- Kept dashboard strategy entry points launch-safe: `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; unsupported onboarding recommendations fall back to `easy_win`.
-- Added the Phase 2 dashboard component surface: first-run banner, four-card usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports.
-- Preserved `/` as the authenticated home route and recent report links as `/reports?open=<report_id>`.
-- Removed deprecated old `components/home/*` dashboard widgets and moved shared report-dashboard types into `apps/app/src/lib/home/types.ts`.
+- Default metro selection now follows rank-and-rent population-class ordering, requires DataForSEO-ready metros by default, and caps `mega_5m_plus` markets.
+- Bulk scoring audit output now records every attempted pair with status, request metadata, score summary, persistence counts, warnings, timing, and rerun-friendly error details.
+- Successful pairs now require verified Supabase persistence across `reports`, legacy `metro_scores`, and V2 `metro_score_v2` / `seo_facts` rows.
+- Resume state prefers `explore_market_cells` and falls back to legacy report/score tables with normalized service keys.
+- V2 `seo_facts` row building now requires a valid `generated_at` snapshot date and validates rows before report persistence writes begin.
 
-Verification:
+Next:
 
-- Subagent spec and code-quality reviews approved the latest diff.
-- `npm --workspace apps/app test -- page load-dashboard api/agent/reports` passed 61 tests.
-- `npm --workspace apps/app test -- load-dashboard dashboard reports Navbar` passed 56 tests.
-- `npx --no-install tsc --noEmit` passed from `apps/app`.
-- `npm --workspace apps/app run lint` exited 0 with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
-- `git diff --check` passed.
-- `npx docguard-cli guard` completed with warning-only repo hygiene findings and exit code 2; no new dashboard-specific guard failure was identified.
-
-Not verified:
-
-- Local protected-page visual smoke is auth/env-blocked in `/private/tmp/whidby-pr52-repair` because this temporary worktree has no `.env` or app `.env.local` file.
+- Review diff and decide whether to extend the runner with a live dry-run/preflight mode before paid scoring.
 
 ## Proto -> Production Convergence: Epic 1 App Frame
 
