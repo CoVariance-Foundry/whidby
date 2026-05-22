@@ -107,6 +107,14 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+function parsePopulationInput(value: string) {
+  const normalized = value.trim();
+  if (normalized.length === 0) return 0;
+  if (!/^\d+$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 function requestMessage(body: DiscoveryResponse | RunResponse, fallback: string) {
   return body.message ?? body.detail ?? body.code ?? fallback;
 }
@@ -253,8 +261,8 @@ export default function AgencyPage() {
   const [strategyLens, setStrategyLens] = useState<StrategyId>("easy_win");
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [populationMin, setPopulationMin] = useState(50000);
-  const [populationMax, setPopulationMax] = useState(750000);
+  const [populationMin, setPopulationMin] = useState("50000");
+  const [populationMax, setPopulationMax] = useState("750000");
   const [maxMarkets, setMaxMarkets] = useState(25);
   const [primaryKeyword, setPrimaryKeyword] = useState("");
   const [targets, setTargets] = useState<QueuedTarget[]>([]);
@@ -268,11 +276,19 @@ export default function AgencyPage() {
     [selectedServiceIds],
   );
   const maxTargetPairs = selectedServices.length * maxMarkets;
-  const rangeInvalid = populationMin > populationMax;
+  const populationMinValue = parsePopulationInput(populationMin);
+  const populationMaxValue = parsePopulationInput(populationMax);
+  const populationInvalid = populationMinValue === null || populationMaxValue === null;
+  const rangeInvalid =
+    !populationInvalid && populationMinValue > populationMaxValue;
   const keywordRequired = strategyLens === "keyword_hijack" && primaryKeyword.trim().length < 2;
   const targetCapExceeded = maxTargetPairs > TARGET_CAP;
   const readyToReview =
-    selectedServices.length > 0 && !rangeInvalid && !keywordRequired && !targetCapExceeded;
+    selectedServices.length > 0 &&
+    !populationInvalid &&
+    !rangeInvalid &&
+    !keywordRequired &&
+    !targetCapExceeded;
 
   function toggleService(id: string) {
     setSelectedServiceIds((current) =>
@@ -283,15 +299,15 @@ export default function AgencyPage() {
   }
 
   async function prepareTargets() {
-    if (!readyToReview) return;
+    if (!readyToReview || populationMinValue === null || populationMaxValue === null) return;
     setError(null);
     setRunResult(null);
     setIsPreparing(true);
 
     try {
       const cityFilters: Record<string, unknown>[] = [
-        { field: "population", operator: ">=", value: populationMin },
-        { field: "population", operator: "<=", value: populationMax },
+        { field: "population", operator: ">=", value: populationMinValue },
+        { field: "population", operator: "<=", value: populationMaxValue },
       ];
       if (selectedStates.length > 0) {
         cityFilters.push({ field: "state", operator: "in", value: selectedStates });
@@ -394,6 +410,7 @@ export default function AgencyPage() {
 
   const statusMessage = (() => {
     if (selectedServices.length === 0) return "Select at least one service.";
+    if (populationInvalid) return "Population filters need whole numbers only.";
     if (rangeInvalid) return "Population minimum must be lower than the maximum.";
     if (keywordRequired) return "Keyword Hijack needs a primary keyword.";
     if (targetCapExceeded) {
@@ -576,9 +593,10 @@ export default function AgencyPage() {
                   <Icon d={I.filter} />
                   <input
                     aria-label="Minimum population"
+                    aria-invalid={populationMinValue === null}
                     inputMode="numeric"
                     value={populationMin}
-                    onChange={(event) => setPopulationMin(Number(event.target.value))}
+                    onChange={(event) => setPopulationMin(event.target.value)}
                   />
                 </div>
               </label>
@@ -588,9 +606,10 @@ export default function AgencyPage() {
                   <Icon d={I.filter} />
                   <input
                     aria-label="Maximum population"
+                    aria-invalid={populationMaxValue === null}
                     inputMode="numeric"
                     value={populationMax}
-                    onChange={(event) => setPopulationMax(Number(event.target.value))}
+                    onChange={(event) => setPopulationMax(event.target.value)}
                   />
                 </div>
               </label>

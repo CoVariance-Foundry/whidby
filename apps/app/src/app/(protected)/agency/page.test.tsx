@@ -147,6 +147,23 @@ describe("AgencyPage", () => {
     });
   });
 
+  it("validates population filters before target discovery", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    const minInput = screen.getByLabelText("Minimum population");
+    await user.clear(minInput);
+    await user.type(minInput, "50,000");
+    await user.click(screen.getByRole("button", { name: /Plumbing/i }));
+
+    expect(screen.getByText("Population filters need whole numbers only.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("blocks review until a service is selected", () => {
     render(<AgencyPage />);
 
