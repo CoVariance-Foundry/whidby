@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Source_Serif_4, JetBrains_Mono } from "next/font/google";
+import { Inter, DM_Serif_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -9,11 +9,11 @@ const inter = Inter({
   display: "swap",
 });
 
-const sourceSerif = Source_Serif_4({
+const dmSerif = DM_Serif_Display({
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
+  weight: "400",
   style: ["normal", "italic"],
-  variable: "--font-source-serif",
+  variable: "--font-serif",
   display: "swap",
 });
 
@@ -37,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${sourceSerif.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${dmSerif.variable} ${jetbrainsMono.variable}`}
     >
       <body>{children}</body>
     </html>

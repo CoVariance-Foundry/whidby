@@ -155,7 +155,7 @@ function LoginForm() {
               color: "var(--paper)",
               fontFamily: "var(--serif)",
               fontStyle: "italic",
-              fontWeight: 700,
+              fontWeight: 400,
               fontSize: 18,
               marginBottom: 12,
             }}
@@ -166,8 +166,8 @@ function LoginForm() {
             style={{
               fontFamily: "var(--serif)",
               fontSize: 22,
-              fontWeight: 600,
-              letterSpacing: "-0.3px",
+              fontWeight: 400,
+              letterSpacing: 0,
               color: "var(--ink)",
             }}
           >

@@ -147,6 +147,13 @@ Additional contract checks for scoring/autocomplete:
 | Protected app frame | Authenticated protected layout renders sticky Navbar, account usage pill, profile dropdown entry points, app footer, and child route content; entitlement-summary failures keep the frame usable with free-plan fallback | `apps/app/src/app/(protected)/layout.test.tsx`, `apps/app/src/components/Navbar.test.tsx` |
 | Epic-level route shell | Protected route pages rely on `(protected)/layout.tsx` for app chrome and render route content without page-local sidebar/topbar shells | representative protected page tests such as `apps/app/src/app/(protected)/explore/page.test.tsx` and `apps/app/src/app/(protected)/settings/page.test.tsx` |
 
+## Consumer Design System Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Typography baseline | Root app layout exposes Inter, DM Serif Display, and JetBrains Mono font variables; shared CSS maps headings/italic metadata to the serif token and numeric displays to the mono token without negative display tracking | focused component/style tests when shared typography primitives are extracted; `apps/app` typecheck for font import regressions |
+| Score visuals | Shared score tone thresholds remain 80/60/40; `ScoreCircle` and `ScoreBar` preserve accessible labels, meter/img semantics, clamped fills, mono numeric display, and hidden-label variants used by compact report surfaces | `apps/app/src/components/ScoreVisuals.test.tsx`; affected surface tests such as `StrategyPageClient.test.tsx`, report table/modal tests, and Explore component tests when markup changes |
+
 ## Multi-Market Tests
 
 | Scope | Required Coverage | Required Tests |

@@ -2,7 +2,7 @@
 
 /* Widby — light, academic styling.
    Warm paper background, ink text, restrained emerald accent,
-   serif display type + Inter UI. */
+   DM Serif Display headings + Inter UI. */
 
 :root {
   --paper:        #fbf8f1;   /* warm off-white page */
@@ -16,9 +16,11 @@
   --ink-2:        #58503f;   /* secondary */
   --ink-3:        #8a806a;   /* muted */
 
-  --accent:       #0f7a57;   /* deep emerald */
-  --accent-soft:  #e4efe7;
-  --accent-ink:   #0a5a3f;
+  --accent:       #10b981;   /* prototype emerald */
+  --accent-hover: #059669;
+  --accent-dark:  #047857;
+  --accent-soft:  #d1fae5;
+  --accent-ink:   #047857;
 
   --warn:         #a05a00;
   --warn-soft:    #f6ebd4;
@@ -27,7 +29,48 @@
   --info:         #1f4f8b;
   --info-soft:    #e3ecf7;
 
-  --serif: var(--font-source-serif), "Source Serif 4", "Iowan Old Style", "Charter", Georgia, serif;
+  --score-high:        #10b981;
+  --score-high-soft:   #d1fae5;
+  --score-high-border: #6ee7b7;
+  --score-good:        #0ea5e9;
+  --score-good-soft:   #e0f2fe;
+  --score-good-border: #7dd3fc;
+  --score-warning:        #f59e0b;
+  --score-warning-soft:   #fef3c7;
+  --score-warning-border: #fcd34d;
+  --score-danger:        #ef4444;
+  --score-danger-soft:   #fee2e2;
+  --score-danger-border: #fca5a5;
+  --score-muted:        var(--ink-3);
+  --score-muted-soft:   var(--paper-alt);
+  --score-muted-border: var(--rule);
+
+  --strategy-easy-win:        #10b981;
+  --strategy-easy-win-soft:   #d1fae5;
+  --strategy-easy-win-border: #6ee7b7;
+  --strategy-cash-cow:        #f59e0b;
+  --strategy-cash-cow-soft:   #fef3c7;
+  --strategy-cash-cow-border: #fcd34d;
+  --strategy-blue-ocean:        #0ea5e9;
+  --strategy-blue-ocean-soft:   #e0f2fe;
+  --strategy-blue-ocean-border: #7dd3fc;
+  --strategy-expand-conquer:        #6366f1;
+  --strategy-expand-conquer-soft:   #e0e7ff;
+  --strategy-expand-conquer-border: #a5b4fc;
+  --strategy-portfolio-builder:        #8b5cf6;
+  --strategy-portfolio-builder-soft:   #ede9fe;
+  --strategy-portfolio-builder-border: #c4b5fd;
+  --strategy-seasonal-arbitrage:        #14b8a6;
+  --strategy-seasonal-arbitrage-soft:   #ccfbf1;
+  --strategy-seasonal-arbitrage-border: #5eead4;
+  --strategy-gbp-blitz:        #e11d48;
+  --strategy-gbp-blitz-soft:   #ffe4e6;
+  --strategy-gbp-blitz-border: #fda4af;
+  --strategy-keyword-hijack:        var(--strategy-easy-win);
+  --strategy-keyword-hijack-soft:   var(--strategy-easy-win-soft);
+  --strategy-keyword-hijack-border: var(--strategy-easy-win-border);
+
+  --serif: var(--font-serif), "DM Serif Display", Georgia, serif;
   --sans:  var(--font-inter), "Inter", system-ui, sans-serif;
   --mono:  var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
 }
@@ -328,8 +371,8 @@ button { font-family: inherit; }
 .page-h1 {
   font-family: var(--serif);
   font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+  font-weight: 400;
+  letter-spacing: 0;
   line-height: 1.1;
 }
 .page-sub {
@@ -446,11 +489,11 @@ button { font-family: inherit; }
 }
 
 .score {
-  font-family: var(--serif);
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 20px;
-  letter-spacing: -0.4px;
+  letter-spacing: 0;
   color: var(--ink);
   line-height: 1;
 }
@@ -550,8 +593,8 @@ button { font-family: inherit; }
   margin: 4px 0 0;
   font-family: var(--serif);
   font-size: 34px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+  font-weight: 400;
+  letter-spacing: 0;
   color: var(--ink);
 }
 .settings-muted,
@@ -602,7 +645,8 @@ button { font-family: inherit; }
 .settings-usage-count {
   margin-top: 10px;
   color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 34px;
   font-weight: 600;
   line-height: 1;
@@ -675,7 +719,7 @@ button { font-family: inherit; }
 .settings-plan-price {
   margin-top: 14px;
   color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--mono);
   font-size: 26px;
   font-weight: 600;
 }
