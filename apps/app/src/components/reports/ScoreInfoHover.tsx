@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Icon, I } from "@/lib/icons";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
 import { SCORE_EXPLAINERS } from "@/lib/reports/score-explainers";
@@ -24,11 +17,7 @@ export default function ScoreInfoHover({ scoreKey }: Props) {
   const [hovered, setHovered] = useState(false);
   const open = pinned || hovered;
 
-  const handleClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setPinned((p) => !p);
-  }, []);
+  const handleClick = useCallback(() => setPinned((p) => !p), []);
 
   useEffect(() => {
     if (!pinned) return;

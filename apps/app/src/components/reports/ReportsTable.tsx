@@ -82,8 +82,91 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
       }}
     >
       {rows.map((r) => {
-        const content = (
-          <article
+        const href = getRowHref?.(r.id);
+        const openLabel = `Open report for ${r.niche} in ${r.city}`;
+        const titleBlock = (
+          <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 5 }}>
+              <h2
+                title={`${r.niche} · ${r.city}`}
+                style={{
+                  margin: 0,
+                  fontFamily: "var(--serif)",
+                  fontSize: 18,
+                  fontWeight: 600,
+                  lineHeight: 1.2,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {r.niche}
+              </h2>
+              <span
+                className={archetypeGlyphClass(r.archetype_id)}
+                style={{
+                  display: "inline-block",
+                  padding: "2px 9px",
+                  borderRadius: 999,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {r.archetype_short}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+                fontFamily: "var(--sans)",
+                fontSize: 12.5,
+                color: "var(--ink-2)",
+              }}
+            >
+              <span>{r.city}</span>
+              <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>·</span>
+              <span>{formatDate(r.created_at)}</span>
+              <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>·</span>
+              <span>Spec v{r.spec_version}</span>
+            </div>
+          </>
+        );
+        const scoreBlock = (
+          <>
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 24,
+                fontWeight: 800,
+                lineHeight: 1,
+                color: scoreColor(r.opportunity_score),
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {r.opportunity_score ?? "—"}
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--sans)",
+                fontSize: 11,
+                color: "var(--ink-3)",
+                marginTop: 4,
+              }}
+            >
+              {scoreLabel(r.opportunity_score)}
+            </div>
+          </>
+        );
+
+        return (
+          <div key={r.id} role="listitem">
+            <article
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(0, 1fr) auto",
@@ -97,55 +180,37 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 5 }}>
-                <h2
-                  title={`${r.niche} · ${r.city}`}
+              {href ? (
+                <Link
+                  href={href}
+                  aria-label={openLabel}
                   style={{
-                    margin: 0,
-                    fontFamily: "var(--serif)",
-                    fontSize: 18,
-                    fontWeight: 600,
-                    lineHeight: 1.2,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    display: "block",
+                    color: "inherit",
+                    textDecoration: "none",
                   }}
                 >
-                  {r.niche}
-                </h2>
-                <span
-                  className={archetypeGlyphClass(r.archetype_id)}
-                  style={{
-                    display: "inline-block",
-                    padding: "2px 9px",
-                    borderRadius: 999,
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
+                  {titleBlock}
+                </Link>
+              ) : onRowClick ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onRowClick(r.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onRowClick(r.id);
+                    }
                   }}
+                  style={{ cursor: "pointer" }}
+                  aria-label={openLabel}
                 >
-                  {r.archetype_short}
-                </span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  fontFamily: "var(--sans)",
-                  fontSize: 12.5,
-                  color: "var(--ink-2)",
-                }}
-              >
-                <span>{r.city}</span>
-                <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>·</span>
-                <span>{formatDate(r.created_at)}</span>
-                <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>·</span>
-                <span>Spec v{r.spec_version}</span>
-              </div>
+                  {titleBlock}
+                </div>
+              ) : (
+                titleBlock
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ textAlign: "right" }}>
@@ -164,72 +229,52 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
                   Top score
                   <ScoreInfoHover scoreKey="opportunity" />
                 </div>
-                <div
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 24,
-                    fontWeight: 800,
-                    lineHeight: 1,
-                    color: scoreColor(r.opportunity_score),
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {r.opportunity_score ?? "—"}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "var(--sans)",
-                    fontSize: 11,
-                    color: "var(--ink-3)",
-                    marginTop: 4,
-                  }}
-                >
-                  {scoreLabel(r.opportunity_score)}
-                </div>
+                {href ? (
+                  <Link
+                    href={href}
+                    aria-label={`${openLabel} from top score`}
+                    style={{ display: "block", color: "inherit", textDecoration: "none" }}
+                  >
+                    {scoreBlock}
+                  </Link>
+                ) : onRowClick ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onRowClick(r.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onRowClick(r.id);
+                      }
+                    }}
+                    style={{ cursor: "pointer" }}
+                    aria-label={`${openLabel} from top score`}
+                  >
+                    {scoreBlock}
+                  </div>
+                ) : (
+                  scoreBlock
+                )}
               </div>
-              <Icon d={I.arrow} style={{ color: "var(--ink-3)" }} />
+              {href ? (
+                <Link href={href} aria-label={`${openLabel} from row arrow`} style={{ color: "var(--ink-3)" }}>
+                  <Icon d={I.arrow} />
+                </Link>
+              ) : onRowClick ? (
+                <button
+                  type="button"
+                  onClick={() => onRowClick(r.id)}
+                  aria-label={`${openLabel} from row arrow`}
+                  style={{ color: "var(--ink-3)", padding: 0, border: "none", background: "transparent" }}
+                >
+                  <Icon d={I.arrow} />
+                </button>
+              ) : (
+                <Icon d={I.arrow} style={{ color: "var(--ink-3)" }} />
+              )}
             </div>
           </article>
-        );
-
-        if (getRowHref) {
-          return (
-            <Link
-              key={r.id}
-              role="listitem"
-              href={getRowHref(r.id)}
-              style={{ display: "block", textDecoration: "none" }}
-            >
-              {content}
-            </Link>
-          );
-        }
-
-        if (onRowClick) {
-          return (
-            <button
-              key={r.id}
-              role="listitem"
-              type="button"
-              onClick={() => onRowClick(r.id)}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: 0,
-                border: "none",
-                background: "transparent",
-                textAlign: "left",
-                cursor: "pointer",
-              }}
-            >
-              {content}
-            </button>
-          );
-        }
-
-        return (
-          <div key={r.id} role="listitem">
-            {content}
           </div>
         );
       })}
