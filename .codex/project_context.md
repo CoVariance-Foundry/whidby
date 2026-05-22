@@ -14,6 +14,12 @@ Dashboard starter and shortcut strategies are launch-safe only: `easy_win`, `gbp
 
 The new dashboard component surface lives in `apps/app/src/components/home/DashboardHome.tsx` and includes the first-run banner, usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports. Free/no-quota users are routed to cached Explore/settings CTAs; paid or quota-exempt users are routed to the launch-safe starter strategy. Recent report rows link to `/reports?open=<report_id>` so they reuse the existing report modal behavior. The old home widget components were removed; shared dashboard report item types now live in `apps/app/src/lib/home/types.ts`.
 
+## Consumer Reports
+
+Epic 6 reports convergence is in progress on `codex/whi-7-reports-proto-layout`. The protected `/reports` page now uses the prototype history framing, summary stats, search, sort, empty state, and card-list rows. Rows from the reports list link to `/reports/[reportId]`; existing dashboard, Explore, and Niche Finder deep links to `/reports?open=<report_id>` still open the legacy modal for compatibility.
+
+`apps/app/src/app/(protected)/reports/[reportId]/page.tsx` is the new detail-page surface for the remaining Epic 6 work. It loads the existing `/api/agent/reports/[reportId]` BFF with the active cookies, renders headline score bands, score tabs, strategy guidance when report guidance exists, safe Next Moves, and keyword expansion. Continue `WHI-33` through `WHI-35` against this page rather than expanding the modal.
+
 ## Account and Billing Settings
 
 Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, and Stripe scheduled-cancellation state, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.
