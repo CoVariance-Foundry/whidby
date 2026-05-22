@@ -14,6 +14,14 @@ Dashboard starter and shortcut strategies are launch-safe only: `easy_win`, `gbp
 
 The new dashboard component surface lives in `apps/app/src/components/home/DashboardHome.tsx` and includes the first-run banner, usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports. Free/no-quota users are routed to cached Explore/settings CTAs; paid or quota-exempt users are routed to the launch-safe starter strategy. Recent report rows link to `/reports?open=<report_id>` so they reuse the existing report modal behavior. The old home widget components were removed; shared dashboard report item types now live in `apps/app/src/lib/home/types.ts`.
 
+## Consumer Multi-market
+
+The protected `/agency` route is now the Epic 5 Multi-market batch configuration flow instead of a placeholder. It uses the shared protected app frame, exposes a batch-cost indicator, and moves users through configure, confirm, and complete states. Configuration includes launch-safe strategy lenses, state/population filters, service selection, and a 100 target cap.
+
+Target review resolves cached city-service pairs through `apps/app /api/strategies/discover`; queueing sends explicit targets to `apps/app /api/strategies/runs` in fresh mode. The current quota model is one fresh-report scan per queued batch, using the existing strategy-run account/user injection, quota consume/refund behavior, and `strategy_runs` lineage. Target-level execution progress and report fanout remain the backend follow-up for WHI-30.
+
+`apps/app/src/components/StateMultiselect.tsx` is the shared state selector for Multi-market and Explore filters. Do not reintroduce route-local state dropdown copies unless a page needs behavior the shared selector cannot express.
+
 ## Account and Billing Settings
 
 Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, Stripe scheduled-cancellation state, Supabase auth metadata, and the latest account-visible reports. It renders profile metadata, plan status, cycle reset dates, usage remaining, saved reports preview, plan change actions, payment/invoice rows, password reset controls, and session sign-out.
@@ -59,6 +67,8 @@ Operational sync is migration-first, not Terraform-first: schema/RLS/RPCs live i
 ## Consumer Explore
 
 Consumer `/explore` is now a backend-backed, city-first market discovery surface. Migration `020_explore_market_cells.sql` defines `public.explore_market_cells` as a derived materialized read model over `metros`, CBP establishments, service mappings, V2/legacy score rows, and refresh targets. `src/clients/explore_repository.py` and `ExploreCityService` provide the repository/domain boundary, and FastAPI exposes `GET /api/explore/cities` plus `GET /api/explore/cities/{cbsa_code}` for paginated list/detail reads.
+
+WHI-5 / Epic 4 updated the Explore header copy to match the prototype subheader and added the `/strategies` jump link from the Explore subheader. Keep the cross-link as header-level navigation; do not move it into the filter or table controls.
 
 Explore refresh control is implemented for cached report upkeep. Migration `015_explore_refresh_control.sql` adds policy, target, run, run-item, and snapshot tables with a default 30-day cadence; `ExploreRefreshService` and `SupabaseExploreRefreshStore` resolve due/manual targets, queue FastAPI scoring runs, update target freshness, and preserve `explore_report_snapshots` for trends. FastAPI exposes manual run, due-run, and run-status endpoints under `/api/explore/refresh/*`; the consumer app proxies those through bounded Next route handlers, displays refresh controls/status plus freshness fields on `/explore`, reads deltas from `explore_latest_target_scores`/`explore_target_trends`, and schedules due checks from app-scoped `apps/app/vercel.json`.
 

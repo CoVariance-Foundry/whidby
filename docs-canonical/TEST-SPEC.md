@@ -144,6 +144,14 @@ Additional contract checks for scoring/autocomplete:
 | Protected app frame | Authenticated protected layout renders sticky Navbar, account usage pill, profile dropdown entry points, app footer, and child route content; entitlement-summary failures keep the frame usable with free-plan fallback | `apps/app/src/app/(protected)/layout.test.tsx`, `apps/app/src/components/Navbar.test.tsx` |
 | Epic-level route shell | Protected route pages rely on `(protected)/layout.tsx` for app chrome and render route content without page-local sidebar/topbar shells | representative protected page tests such as `apps/app/src/app/(protected)/explore/page.test.tsx` and `apps/app/src/app/(protected)/settings/page.test.tsx` |
 
+## Multi-Market Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Multi-market page flow | `/agency` renders the batch-cost indicator, configure/confirm/complete states, service and state filters, target discovery payloads, and fresh strategy-run queue payloads | `apps/app/src/app/(protected)/agency/page.test.tsx` |
+| Shared state selector | State multiselect keeps Explore and Multi-market state filtering accessible and preserves selected-state query behavior | `apps/app/src/app/(protected)/agency/page.test.tsx`, `apps/app/src/components/explore/ExplorePageClient.test.tsx` |
+| Backend queue boundary | Fresh strategy runs cap targets at 100, inject account/user ids, consume or refund one fresh-report quota, and forward explicit targets to FastAPI `/api/strategy-runs` | `apps/app/src/app/api/strategies/runs/route.test.ts`, `tests/unit/test_api_strategy_runs.py` |
+
 ## Strategy Discovery Tests
 
 | Scope | Required Coverage | Required Tests |
