@@ -370,7 +370,7 @@ export default function AgencyPage() {
   const cachedRangeInvalid = selectedServices.length > 0 && rangeInvalid;
   const keywordRequired =
     strategyLens === "keyword_hijack" &&
-    selectedServices.length > 0 &&
+    (selectedServices.length > 0 || validCustomTargets.length > 0) &&
     primaryKeyword.trim().length < 2;
   const targetCapExceeded = totalTargetPairs > TARGET_CAP;
   const readyToReview =
@@ -569,7 +569,9 @@ export default function AgencyPage() {
     }
     if (cachedFiltersInvalid) return "Population filters need whole numbers only.";
     if (cachedRangeInvalid) return "Population minimum must be lower than the maximum.";
-    if (keywordRequired) return "Keyword Hijack needs a primary keyword.";
+    if (keywordRequired) {
+      return "Keyword Hijack needs a primary keyword for cached and custom targets.";
+    }
     if (targetCapExceeded) {
       return `This configuration can queue up to ${totalTargetPairs} targets. Keep it at ${TARGET_CAP} or fewer.`;
     }

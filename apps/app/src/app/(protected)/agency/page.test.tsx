@@ -202,6 +202,63 @@ describe("AgencyPage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("requires a primary keyword before reviewing Keyword Hijack custom-only targets", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          run_id: "run-keyword",
+          status: "queued",
+          target_count: 1,
+        }),
+        { status: 200 },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: /Keyword Hijack/i }));
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Tulsa");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "OK");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "Water damage");
+
+    expect(
+      screen.getByText(
+        "Keyword Hijack needs a primary keyword for cached and custom targets.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.type(screen.getByPlaceholderText("e.g. emergency plumber"), "water mitigation");
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Confirm the batch" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Queue batch/i }));
+
+    expect(await screen.findByRole("heading", { name: "Scan queued" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const runPayload = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+    expect(runPayload).toMatchObject({
+      mode: "fresh",
+      strategy_id: "keyword_hijack",
+      primary_keyword: "water mitigation",
+      targets: [
+        {
+          cbsa_code: "custom:tulsa:ok",
+          niche_normalized: "water_damage",
+          niche_keyword: "Water damage",
+          primary_keyword: "water mitigation",
+        },
+      ],
+    });
+  });
+
   it("reviews and queues cached and custom targets together with source labels", async () => {
     const user = userEvent.setup();
     const fetchMock = vi
