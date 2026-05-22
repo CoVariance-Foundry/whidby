@@ -155,6 +155,23 @@ describe("CompetitorIntelClient", () => {
     expect(await screen.findByText(/market-level evidence is available/i)).toBeInTheDocument();
   });
 
+  it("renders backend not-found states as errors instead of run prompts", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "not_found",
+          message: "Report context is unavailable for competitor intel.",
+        }),
+      ) as never,
+    );
+
+    renderClient();
+
+    expect(await screen.findByRole("heading", { name: /competitor intel is unavailable/i })).toBeInTheDocument();
+    expect(screen.getByText("Report context is unavailable for competitor intel.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /run competitor intel/i })).not.toBeInTheDocument();
+  });
+
   it("renders aggregate-only evidence without dossier sections", () => {
     renderClient({
       initialState: {

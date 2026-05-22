@@ -404,7 +404,12 @@ export function normalizeCompetitorIntelState(
       message: envelope.message,
     };
   }
-  if (status === "error" || status === "validation_error" || status === "quota_exceeded") {
+  if (
+    status === "error" ||
+    status === "validation_error" ||
+    status === "quota_exceeded" ||
+    status === "not_found"
+  ) {
     return { kind: "error", message: envelope.message ?? "Competitor Intel is unavailable." };
   }
   if (payload) {
