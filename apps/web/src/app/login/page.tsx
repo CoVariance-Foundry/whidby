@@ -1,4 +1,4 @@
-import { permanentRedirect } from "next/navigation";
+import { permanentRedirect, redirect } from "next/navigation";
 import { isSafeNext } from "@/lib/auth/safe-next";
 
 type SearchParams =
@@ -30,7 +30,7 @@ export default async function LoginPage({
     console.error(
       "[apps/web/login] NEXT_PUBLIC_CONSUMER_APP_URL is unset; redirecting to home",
     );
-    permanentRedirect("/");
+    redirect("/");
   }
 
   const loginUrl = new URL("/login", consumerOrigin);
