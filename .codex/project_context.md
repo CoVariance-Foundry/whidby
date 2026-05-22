@@ -59,6 +59,12 @@ Migration `016_strategy_discovery_system.sql` adds `strategy_runs`, `strategy_ru
 
 Fresh strategy run creation is validated and lineage-backed: free users remain cached-only via the app proxy, fresh runs are capped at 100 targets, backend write failures return non-success responses so quota can be refunded, and queued runs persist `quota_consumed = 1`. Full async report fanout and run-status/report detail endpoints are still follow-up work.
 
+## Competitor Intel
+
+WHI-9 adds a protected `/competitor-intel` route as a paid Plus/Pro dossier surface. Free users receive an upgrade state; paid users can view durable dossier data or create a two-scan run record when durable aggregate/dossier facts already exist. Until the live DataForSEO collector is wired, `ready_to_run` targets refuse and refund instead of charging for a dead queued job. The UI renders upgrade, ready, running, aggregate-only, dossier, and error states using the existing Widby warm paper design system.
+
+Migration `20260522184933_whi9_competitor_intel_schema_quota.sql` adds `organic_competitor_facts`, `competitor_intel_runs`, and generic multi-unit `consume_usage_quota` / `refund_usage_quota` RPCs while preserving one-unit consume wrappers and moving refund wrappers to service-role-only access. `SupabasePersistence` now writes durable organic and local-pack competitor facts when report payloads contain those rows; `api_response_cache` remains cache/cost infrastructure only. `CompetitorIntelService` reads `organic_competitor_facts`, `local_pack_listing_facts`, `seo_facts`, `metro_score_v2`, and `reports` to assemble ready, aggregate-only, or dossier states, and service-role reads drop competitor fact rows without visible report lineage.
+
 ## Consumer User Management and Billing
 
 Consumer user management now has a first implementation slice in code and schema. Supabase migration `014_user_management_billing.sql` defines profiles, accounts, memberships, subscriptions, billing customer mappings, usage counters, report ownership columns, cached/account report visibility, account-scoped report RLS, account bootstrap RPCs, and atomic report quota RPCs. Existing ownerless reports are treated as shared cached reports; fresh generated reports should persist with `owner_account_id`, `created_by_user_id`, and `access_scope = account`.
