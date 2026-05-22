@@ -2,21 +2,62 @@
 
 ## WHI-10 Design System Alignment
 
-Status: integration worker implemented shared primitive wiring on `codex/whi-10-design-system-alignment`; controller review/parent closeout still pending.
+Status: PR open at `https://github.com/CoVariance-Foundry/whidby/pull/64` on `codex/whi-10-design-system-alignment`; local implementation, review gates, and merge-conflict repair passed. GitHub CI/review is still pending and WHI-10 should not be marked Done until the PR merges.
 
 Completed in this slice:
 
-- Reused shared score tone thresholds/components across report breakdowns, report detail modal scores, strategy discovery result scores, Explore score text, service score rows, and report table score text.
+- Adopted DM Serif Display as the consumer display serif while keeping numeric displays on mono and display tracking at `0`.
+- Added shared score tone thresholds/components across report breakdowns, report detail modal scores, strategy discovery result scores, Explore score text, service score rows, and report table score text.
+- Added shared `NextMoveCard`, `ScoreCircle`, and `ScoreBar` primitives with focused tests.
 - Removed local report `scoreColor` / `scoreBarBg` helpers from `BreakdownPanel` and `ReportDetailModal`.
-- Kept touched score numbers on mono typography and removed negative score display tracking from the report modal score cells/top opportunity score.
+- Repaired the post-`main` merge Reports table conflict by preserving the new card-list layout and applying WHI-10 shared score tones/labels to it.
 - Reused `NextMoveCard` for the dashboard Explore/Multi-market destination cards where it matched the existing next-move pattern.
 - Updated canonical design-system architecture/test obligations for shared score visuals.
 
+Verified:
+
+- `npm --workspace apps/app test -- src/lib/design-tokens.test.ts src/lib/strategies/catalog.test.ts src/lib/explore/load-explore-data.test.ts src/components/NextMoveCard.test.tsx src/components/ScoreVisuals.test.tsx src/components/StateMultiselect.test.tsx src/components/reports/ScoreInfoHover.test.tsx src/components/reports/ReportsTable.test.tsx src/components/reports/ScoreBreakdownTabs.test.tsx src/components/explore/ExplorePageClient.test.tsx 'src/app/(protected)/strategies/[id]/StrategyPageClient.test.tsx'` passed 84 tests before the `main` merge; rerun the focused reports tests after any further conflict repair.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings.
+- `git diff --check origin/main...HEAD` passed before merging latest `main`.
+- `npm run runtime:check` passed service-role checks, but local Supabase publishable keys are invalid.
+- Playwright smoke rendered `/login`; protected routes redirected to `/login?next=...`.
+
 Next:
 
-- Controller should review the WHI-10 worker diffs together, run broader app lint/typecheck when dependencies are available, and decide parent issue status.
-- Do not mark WHI-10 parent issues complete until the controller has integrated peer review and PR verification.
+- Push the merge-conflict repair, wait for GitHub checks/review, then merge PR #64.
+- Mark `WHI-10` Done only after the PR merges.
+- Authenticated visual QA of protected routes remains blocked locally until publishable Supabase keys are refreshed.
 
+## Proto -> Production Convergence: Epic 6 Reports Page
+
+Status: merged to `main` through PR #59. Follow-up visual QA with authenticated report data remains useful.
+
+Linear: `WHI-7` with first child `WHI-32` in progress. Remaining child issues are `WHI-33` strategy guidance refinement, `WHI-34` Next Moves refinement, and `WHI-35` report detail header/export/delete polish.
+
+Completed in the first slice:
+
+- Opened Epic 6 and `WHI-32` in Linear.
+- Updated `/reports` header copy to match the prototype history framing.
+- Reworked the reports list into prototype-style summary stats, search, sort, empty state, and card-list rows.
+- Kept existing `/reports?open=<report_id>` modal behavior for dashboard/explore deep links.
+- Added `/reports/[reportId]` as the page-based report detail entry point used by list rows, including headline score band, score tabs, strategy guidance when present, safe Next Moves, and keyword expansion.
+
+Verified:
+
+- `npm ci` completed for this worktree.
+- `npm --workspace apps/app test -- ReportsTable` passed.
+- `cd apps/app && npx --no-install tsc --noEmit` passed.
+- `cd apps/app && npx --no-install eslint 'src/app/(protected)/reports/ReportsPageClient.tsx' 'src/components/reports/ReportsTable.tsx' 'src/app/(protected)/reports/[reportId]/page.tsx'` passed.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- `npx docguard-cli guard` ran after network escalation; it exited warn-only with existing repository warnings around traceability, freshness, TODO tracking, and unrelated config/doc drift.
+- Local app server is running at `http://localhost:3002`; Playwright navigation to `/reports` redirected to `/login` as expected for the protected route. The browser console only showed the existing missing `/favicon.ico`; server logs also reported missing Supabase env vars, so authenticated report-page visual QA is still blocked in this worktree.
+
+Next:
+
+- Use an authenticated local session or preview to visually verify `/reports` and `/reports/[reportId]` with real report data.
+- Continue `WHI-33`/`WHI-34`/`WHI-35` polish on the new detail page rather than the legacy modal.
 ## Proto -> Production Convergence: Epic 7 Account & Settings
 
 Status: implemented on `codex/whi-8-account-settings-epic`; ready for PR/review closeout.

@@ -102,15 +102,28 @@ export default async function ReportsPage() {
           >
             Reports
           </h1>
+          <div
+            style={{
+              fontFamily: "var(--sans)",
+              fontSize: 11,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--ink-3)",
+              marginTop: 4,
+            }}
+          >
+            History
+          </div>
           <p
             style={{
               fontFamily: "var(--sans)",
               fontSize: 14,
               color: "var(--ink-2)",
               margin: "4px 0 0",
+              maxWidth: 660,
             }}
           >
-            Every niche score you&apos;ve run, most recent first.
+            Every scan you run produces a report. Come back anytime; saved reports do not cost additional scans to revisit.
           </p>
         </div>
         <Link href="/niche-finder" className="btn-primary" style={{ textDecoration: "none" }}>

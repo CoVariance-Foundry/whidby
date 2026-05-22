@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ArchetypeChipFilter from "@/components/reports/ArchetypeChipFilter";
@@ -8,12 +9,15 @@ import ReportDetailModal from "@/components/reports/ReportDetailModal";
 import { createClient } from "@/lib/supabase/client";
 import type { ArchetypeId } from "@/lib/archetypes";
 import type { FullReportData } from "@/lib/niche-finder/types";
+import { Icon, I } from "@/lib/icons";
 
 type ModalState =
   | { kind: "closed" }
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "open"; report: FullReportData };
+
+type SortKey = "newest" | "oldest" | "score_desc" | "score_asc";
 
 interface Props {
   rows: TableRow[];
@@ -23,6 +27,7 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState(initialRows);
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("newest");
   const [selected, setSelected] = useState<ArchetypeId[]>([]);
   const [modal, setModal] = useState<ModalState>({ kind: "closed" });
   const autoOpened = useRef(false);
@@ -90,7 +95,7 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    const matches = rows.filter((r) => {
       if (selected.length > 0 && !selected.includes(r.archetype_id))
         return false;
       if (!q) return true;
@@ -100,10 +105,28 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
         r.archetype_short.toLowerCase().includes(q)
       );
     });
-  }, [rows, query, selected]);
+
+    matches.sort((a, b) => {
+      if (sort === "oldest") {
+        return a.created_at.localeCompare(b.created_at);
+      }
+      if (sort === "score_desc") {
+        return (b.opportunity_score ?? -1) - (a.opportunity_score ?? -1);
+      }
+      if (sort === "score_asc") {
+        return (a.opportunity_score ?? 101) - (b.opportunity_score ?? 101);
+      }
+      return b.created_at.localeCompare(a.created_at);
+    });
+
+    return matches;
+  }, [rows, query, selected, sort]);
 
   const summary = useMemo(() => {
     const byArchetype = new Map<string, number>();
+    const scored = rows
+      .map((r) => r.opportunity_score)
+      .filter((score): score is number => typeof score === "number");
     for (const r of rows) {
       byArchetype.set(
         r.archetype_short,
@@ -112,6 +135,9 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
     }
     return {
       total: rows.length,
+      average_score: scored.length
+        ? Math.round(scored.reduce((sum, score) => sum + score, 0) / scored.length)
+        : null,
       top_strategy:
         [...byArchetype.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—",
     };
@@ -123,104 +149,199 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
         aria-label="Summary"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
           gap: 12,
         }}
       >
-        <div
-          style={{
-            background: "var(--card)",
-            border: "1px solid var(--rule)",
-            borderRadius: 12,
-            padding: "14px 18px",
-          }}
-        >
+        {[
+          { label: "Total reports", value: String(summary.total) },
+          { label: "Showing", value: String(filtered.length) },
+          {
+            label: "Avg score",
+            value: summary.average_score === null ? "—" : String(summary.average_score),
+          },
+          { label: "Common lens", value: summary.top_strategy },
+        ].map((item) => (
           <div
+            key={item.label}
             style={{
-              fontFamily: "var(--sans)",
-              fontSize: 11.5,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "var(--ink-3)",
-              marginBottom: 4,
+              background: "var(--card)",
+              border: "1px solid var(--rule)",
+              borderRadius: 8,
+              padding: "14px 16px",
             }}
           >
-            Total reports
+            <div
+              style={{
+                fontFamily: "var(--sans)",
+                fontSize: 11,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--ink-3)",
+                marginBottom: 6,
+              }}
+            >
+              {item.label}
+            </div>
+            <div
+              style={{
+                fontFamily: item.value.length > 12 ? "var(--sans)" : "var(--serif)",
+                fontSize: item.value.length > 12 ? 17 : 26,
+                fontWeight: 600,
+                color: "var(--ink)",
+                lineHeight: 1.05,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {item.value}
+            </div>
           </div>
-          <div
-            style={{
-              fontFamily: "var(--serif)",
-              fontSize: 24,
-              fontWeight: 600,
-              color: "var(--ink)",
-            }}
-          >
-            {summary.total}
-          </div>
-        </div>
-        <div
-          style={{
-            background: "var(--card)",
-            border: "1px solid var(--rule)",
-            borderRadius: 12,
-            padding: "14px 18px",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: "var(--sans)",
-              fontSize: 11.5,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              color: "var(--ink-3)",
-              marginBottom: 4,
-            }}
-          >
-            Most common strategy
-          </div>
-          <div
-            style={{
-              fontFamily: "var(--serif)",
-              fontSize: 20,
-              fontWeight: 600,
-              color: "var(--ink)",
-            }}
-          >
-            {summary.top_strategy}
-          </div>
-        </div>
+        ))}
       </section>
 
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Filter by niche, city, or strategy…"
-        aria-label="Search reports"
-        style={{
-          padding: "10px 14px",
-          border: "1px solid var(--rule)",
-          borderRadius: 10,
-          fontFamily: "var(--sans)",
-          fontSize: 13.5,
-          background: "var(--card)",
-          color: "var(--ink)",
-        }}
-      />
+      {rows.length === 0 ? (
+        <section
+          aria-label="No reports"
+          style={{
+            background: "var(--card)",
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            padding: "44px 22px",
+            textAlign: "center",
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 22,
+              color: "var(--ink)",
+              margin: 0,
+            }}
+          >
+            No reports yet
+          </h2>
+          <p
+            style={{
+              fontFamily: "var(--sans)",
+              fontSize: 14,
+              color: "var(--ink-2)",
+              lineHeight: 1.5,
+              maxWidth: 520,
+              margin: "8px auto 20px",
+            }}
+          >
+            Run your first scan from a strategy, Explore query, or niche search. Saved reports land here automatically.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/strategies" className="btn-primary" style={{ textDecoration: "none" }}>
+              Pick a strategy <Icon d={I.arrow} />
+            </Link>
+            <Link href="/explore" className="btn-ghost" style={{ textDecoration: "none" }}>
+              Browse Explore
+            </Link>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section
+            aria-label="Report controls"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 220px)",
+              gap: 12,
+              background: "var(--card)",
+              border: "1px solid var(--rule)",
+              borderRadius: 8,
+              padding: 12,
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                minWidth: 0,
+              }}
+            >
+              <Icon d={I.search} style={{ color: "var(--ink-3)", flexShrink: 0 }} />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search reports"
+                placeholder="Search by niche, metro, or strategy..."
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: "none",
+                  outline: "none",
+                  fontFamily: "var(--sans)",
+                  fontSize: 13.5,
+                  background: "transparent",
+                  color: "var(--ink)",
+                }}
+              />
+            </label>
 
-      <ArchetypeChipFilter selected={selected} onChange={setSelected} />
-      <ReportsTable rows={filtered} onRowClick={openReport} />
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                justifyContent: "flex-end",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--sans)",
+                  fontSize: 12,
+                  color: "var(--ink-3)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Sort
+              </span>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                aria-label="Sort reports"
+                style={{
+                  width: "100%",
+                  border: "1px solid var(--rule)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  background: "var(--card)",
+                  color: "var(--ink)",
+                  fontFamily: "var(--sans)",
+                  fontSize: 13,
+                }}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="score_desc">Highest score</option>
+                <option value="score_asc">Lowest score</option>
+              </select>
+            </label>
+          </section>
 
-      <div
-        aria-live="polite"
-        style={{
-          fontFamily: "var(--sans)",
-          fontSize: 12.5,
-          color: "var(--ink-3)",
-        }}
-      >
-        Showing {filtered.length} of {rows.length}
-      </div>
+          <ArchetypeChipFilter selected={selected} onChange={setSelected} />
+          <ReportsTable
+            rows={filtered}
+            getRowHref={(id) => `/reports/${encodeURIComponent(id)}`}
+          />
+
+          <div
+            aria-live="polite"
+            style={{
+              fontFamily: "var(--sans)",
+              fontSize: 12.5,
+              color: "var(--ink-3)",
+            }}
+          >
+            Showing {filtered.length} of {rows.length} reports
+          </div>
+        </>
+      )}
 
       {modal.kind === "loading" && (
         <div
