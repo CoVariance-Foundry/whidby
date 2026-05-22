@@ -19,6 +19,13 @@ The new dashboard component surface lives in `apps/app/src/components/home/Dashb
 Epic 6 reports convergence is in progress on `codex/whi-7-reports-proto-layout`. The protected `/reports` page now uses the prototype history framing, summary stats, search, sort, empty state, and card-list rows. Rows from the reports list link to `/reports/[reportId]`; existing dashboard, Explore, and Niche Finder deep links to `/reports?open=<report_id>` still open the legacy modal for compatibility.
 
 `apps/app/src/app/(protected)/reports/[reportId]/page.tsx` is the new detail-page surface for the remaining Epic 6 work. It loads the existing `/api/agent/reports/[reportId]` BFF with the active cookies, renders headline score bands, score tabs, strategy guidance when report guidance exists, safe Next Moves, and keyword expansion. Continue `WHI-33` through `WHI-35` against this page rather than expanding the modal.
+## Consumer Multi-market
+
+The protected `/agency` route is now the Epic 5 Multi-market batch configuration flow instead of a placeholder. It uses the shared protected app frame, exposes a batch-cost indicator, and moves users through configure, confirm, and complete states. Configuration includes launch-safe strategy lenses, state/population filters, service selection, and a 100 target cap.
+
+Target review resolves cached city-service pairs through `apps/app /api/strategies/discover`; queueing sends explicit targets to `apps/app /api/strategies/runs` in fresh mode. The current quota model is one fresh-report scan per queued batch, using the existing strategy-run account/user injection, quota consume/refund behavior, and `strategy_runs` lineage. Target-level execution progress and report fanout remain the backend follow-up for WHI-30.
+
+`apps/app/src/components/StateMultiselect.tsx` is the shared state selector for Multi-market and Explore filters. Do not reintroduce route-local state dropdown copies unless a page needs behavior the shared selector cannot express.
 
 ## Account and Billing Settings
 
@@ -63,6 +70,8 @@ Operational sync is migration-first, not Terraform-first: schema/RLS/RPCs live i
 ## Consumer Explore
 
 Consumer `/explore` is now a backend-backed, city-first market discovery surface. Migration `020_explore_market_cells.sql` defines `public.explore_market_cells` as a derived materialized read model over `metros`, CBP establishments, service mappings, V2/legacy score rows, and refresh targets. `src/clients/explore_repository.py` and `ExploreCityService` provide the repository/domain boundary, and FastAPI exposes `GET /api/explore/cities` plus `GET /api/explore/cities/{cbsa_code}` for paginated list/detail reads.
+
+WHI-5 / Epic 4 updated the Explore header copy to match the prototype subheader and added the `/strategies` jump link from the Explore subheader. Keep the cross-link as header-level navigation; do not move it into the filter or table controls.
 
 Explore refresh control is implemented for cached report upkeep. Migration `015_explore_refresh_control.sql` adds policy, target, run, run-item, and snapshot tables with a default 30-day cadence; `ExploreRefreshService` and `SupabaseExploreRefreshStore` resolve due/manual targets, queue FastAPI scoring runs, update target freshness, and preserve `explore_report_snapshots` for trends. FastAPI exposes manual run, due-run, and run-status endpoints under `/api/explore/refresh/*`; the consumer app proxies those through bounded Next route handlers, displays refresh controls/status plus freshness fields on `/explore`, reads deltas from `explore_latest_target_scores`/`explore_target_trends`, and schedules due checks from app-scoped `apps/app/vercel.json`.
 

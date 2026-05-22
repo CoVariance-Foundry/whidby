@@ -29,6 +29,24 @@ Next:
 
 - Use an authenticated local session or preview to visually verify `/reports` and `/reports/[reportId]` with real report data.
 - Continue `WHI-33`/`WHI-34`/`WHI-35` polish on the new detail page rather than the legacy modal.
+## Proto -> Production Convergence: Epic 5 Multi-market
+
+Status: started on `codex/whi-6-multi-market-page`.
+
+Linear: `WHI-6` with child issues `WHI-27` through `WHI-31`. `WHI-6`, `WHI-27`, `WHI-28`, `WHI-29`, and `WHI-31` are in progress; `WHI-30` remains the deeper backend follow-up.
+
+Completed in this slice:
+
+- Replaced the protected `/agency` placeholder with a configure → confirm → complete Multi-market batch flow.
+- Added launch-safe strategy lens selection, population/state criteria, service selection, target caps, target preview, and completion state.
+- Ported a shared `StateMultiselect` component and wired Explore filters to use it.
+- Connected target review to `apps/app /api/strategies/discover` and queued batches to `apps/app /api/strategies/runs` fresh mode with explicit targets.
+- Documented the current quota assumption: one fresh-report scan per queued batch through the existing strategy-run quota boundary.
+
+Next:
+
+- Implement WHI-30 backend depth beyond queue creation: target-level processing progress, run item/report linkage, and surfaced run status once FastAPI has durable fanout semantics.
+- Decide whether batch cost should remain one fresh-report scan per batch or become target-scaled before changing schema/RPCs.
 
 ## Bulk Scoring Data Buildout
 

@@ -14,6 +14,7 @@
     "dev:admin": "turbo dev --filter=widby-admin",
     "dev:api": "docker compose up api --build",
     "dev:api:local": "arch -arm64 uvicorn src.research_agent.api:app --reload --port 8000",
+    "env:sync:local": "node scripts/dev/sync_worktree_env.mjs",
     "env:check": "node scripts/ci/env_manifest_check.mjs",
     "env:plan:vercel": "node scripts/ci/sync_vercel_env.mjs --dry-run",
     "env:plan:github": "node scripts/ci/sync_github_env.mjs",
@@ -25,6 +26,7 @@
     "qa:run": "node scripts/qa/run_visual_qa.mjs",
     "qa:agent": "node scripts/qa/agent_review.mjs",
     "qa:post": "node scripts/qa/post_pr_feedback.mjs",
+    "test:e2e:app:local": "node scripts/dev/sync_worktree_env.mjs -- npm --workspace apps/app run test:e2e --",
     "qa:visual:app": "playwright test --config=apps/app/playwright.config.ts apps/app/e2e/visual-qa.spec.ts --project=chromium",
     "qa:visual:admin": "playwright test --config=apps/admin/playwright.config.ts apps/admin/e2e/visual-qa.spec.ts --project=chromium"
   },
