@@ -28,7 +28,7 @@ function normalizeAppBaseUrl(baseUrl: string) {
   return `https://${trimmed}`;
 }
 
-function getAppRouteUrl(path: string, headerStore: HeaderReader) {
+function getAppRouteUrl(path: string, headerStore: HeaderReader): string | null {
   for (const key of APP_BASE_ENV_KEYS) {
     const configured = process.env[key]?.trim();
     if (configured) return `${normalizeAppBaseUrl(configured)}${path}`;

@@ -84,6 +84,7 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
       {rows.map((r) => {
         const href = getRowHref?.(r.id);
         const openLabel = `Open report for ${r.niche} in ${r.city}`;
+        const isInteractive = Boolean(href || onRowClick);
         const titleBlock = (
           <>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 5 }}>
@@ -167,114 +168,86 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
         return (
           <div key={r.id} role="listitem">
             <article
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
-              gap: 18,
-              alignItems: "center",
-              background: "var(--card)",
-              border: "1px solid var(--rule)",
-              borderRadius: 8,
-              padding: "16px 18px",
-              color: "var(--ink)",
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
+              style={{
+                position: "relative",
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                gap: 18,
+                alignItems: "center",
+                background: "var(--card)",
+                border: "1px solid var(--rule)",
+                borderRadius: 8,
+                padding: "16px 18px",
+                color: "var(--ink)",
+                cursor: isInteractive ? "pointer" : "default",
+              }}
+            >
               {href ? (
                 <Link
                   href={href}
                   aria-label={openLabel}
                   style={{
-                    display: "block",
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 1,
+                    borderRadius: 8,
                     color: "inherit",
                     textDecoration: "none",
                   }}
-                >
-                  {titleBlock}
-                </Link>
-              ) : onRowClick ? (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onRowClick(r.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onRowClick(r.id);
-                    }
-                  }}
-                  style={{ cursor: "pointer" }}
-                  aria-label={openLabel}
-                >
-                  {titleBlock}
-                </div>
-              ) : (
-                titleBlock
-              )}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ textAlign: "right" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    fontFamily: "var(--serif)",
-                    fontStyle: "italic",
-                    fontSize: 11,
-                    color: "var(--ink-3)",
-                    marginBottom: 4,
-                  }}
-                >
-                  Top score
-                  <ScoreInfoHover scoreKey="opportunity" />
-                </div>
-                {href ? (
-                  <Link
-                    href={href}
-                    aria-label={`${openLabel} from top score`}
-                    style={{ display: "block", color: "inherit", textDecoration: "none" }}
-                  >
-                    {scoreBlock}
-                  </Link>
-                ) : onRowClick ? (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onRowClick(r.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onRowClick(r.id);
-                      }
-                    }}
-                    style={{ cursor: "pointer" }}
-                    aria-label={`${openLabel} from top score`}
-                  >
-                    {scoreBlock}
-                  </div>
-                ) : (
-                  scoreBlock
-                )}
-              </div>
-              {href ? (
-                <Link href={href} aria-label={`${openLabel} from row arrow`} style={{ color: "var(--ink-3)" }}>
-                  <Icon d={I.arrow} />
-                </Link>
+                />
               ) : onRowClick ? (
                 <button
                   type="button"
                   onClick={() => onRowClick(r.id)}
-                  aria-label={`${openLabel} from row arrow`}
-                  style={{ color: "var(--ink-3)", padding: 0, border: "none", background: "transparent" }}
-                >
-                  <Icon d={I.arrow} />
-                </button>
-              ) : (
+                  aria-label={openLabel}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 1,
+                    border: "none",
+                    borderRadius: 8,
+                    padding: 0,
+                    background: "transparent",
+                    cursor: "pointer",
+                  }}
+                />
+              ) : null}
+              <div style={{ minWidth: 0, position: "relative", zIndex: 0 }}>
+                {titleBlock}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  position: "relative",
+                  zIndex: 2,
+                  pointerEvents: "none",
+                }}
+              >
+                <div style={{ textAlign: "right" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "flex-end",
+                      fontFamily: "var(--serif)",
+                      fontStyle: "italic",
+                      fontSize: 11,
+                      color: "var(--ink-3)",
+                      marginBottom: 4,
+                    }}
+                  >
+                    Top score
+                    <span style={{ pointerEvents: "auto", cursor: "default" }}>
+                      <ScoreInfoHover scoreKey="opportunity" />
+                    </span>
+                  </div>
+                  {scoreBlock}
+                </div>
                 <Icon d={I.arrow} style={{ color: "var(--ink-3)" }} />
-              )}
-            </div>
-          </article>
+              </div>
+            </article>
           </div>
         );
       })}

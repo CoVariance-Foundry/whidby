@@ -48,6 +48,6 @@ describe("ReportsTable", () => {
     expect(infoButton.closest("a")).toBeNull();
     fireEvent.click(infoButton);
     expect(screen.getByRole("tooltip")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /open report for roofing/i })).not.toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: /open report for roofing/i })).toHaveLength(1);
   });
 });
