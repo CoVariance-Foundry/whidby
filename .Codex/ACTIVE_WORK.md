@@ -1,5 +1,34 @@
 # Active Work
 
+## Proto -> Production Convergence: Epic 6 Reports Page
+
+Status: in progress on `codex/whi-7-reports-proto-layout`.
+
+Linear: `WHI-7` with first child `WHI-32` in progress. Remaining child issues are `WHI-33` strategy guidance refinement, `WHI-34` Next Moves refinement, and `WHI-35` report detail header/export/delete polish.
+
+Completed in the first slice:
+
+- Opened Epic 6 and `WHI-32` in Linear.
+- Updated `/reports` header copy to match the prototype history framing.
+- Reworked the reports list into prototype-style summary stats, search, sort, empty state, and card-list rows.
+- Kept existing `/reports?open=<report_id>` modal behavior for dashboard/explore deep links.
+- Added `/reports/[reportId]` as the page-based report detail entry point used by list rows, including headline score band, score tabs, strategy guidance when present, safe Next Moves, and keyword expansion.
+
+Verified:
+
+- `npm ci` completed for this worktree.
+- `npm --workspace apps/app test -- ReportsTable` passed.
+- `cd apps/app && npx --no-install tsc --noEmit` passed.
+- `cd apps/app && npx --no-install eslint 'src/app/(protected)/reports/ReportsPageClient.tsx' 'src/components/reports/ReportsTable.tsx' 'src/app/(protected)/reports/[reportId]/page.tsx'` passed.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- `npx docguard-cli guard` ran after network escalation; it exited warn-only with existing repository warnings around traceability, freshness, TODO tracking, and unrelated config/doc drift.
+- Local app server is running at `http://localhost:3002`; Playwright navigation to `/reports` redirected to `/login` as expected for the protected route. The browser console only showed the existing missing `/favicon.ico`; server logs also reported missing Supabase env vars, so authenticated report-page visual QA is still blocked in this worktree.
+
+Next:
+
+- Use an authenticated local session or preview to visually verify `/reports` and `/reports/[reportId]` with real report data.
+- Continue `WHI-33`/`WHI-34`/`WHI-35` polish on the new detail page rather than the legacy modal.
 ## Proto -> Production Convergence: Epic 7 Account & Settings
 
 Status: implemented on `codex/whi-8-account-settings-epic`; ready for PR/review closeout.
