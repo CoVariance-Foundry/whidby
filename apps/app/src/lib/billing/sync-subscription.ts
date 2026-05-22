@@ -2,6 +2,19 @@ import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPlanForPriceId } from "./stripe";
 
+export type StripeEventContext = {
+  stripe_event_id: string;
+  stripe_event_created_at: string;
+};
+
+export type SubscriptionSyncResult =
+  | { applied: true }
+  | {
+      applied: false;
+      reason: "stale_event";
+      last_stripe_event_created_at: string | null;
+    };
+
 export async function upsertBillingCustomer(
   supabase: SupabaseClient,
   params: {
@@ -25,11 +38,15 @@ export async function upsertBillingCustomer(
 export async function syncStripeSubscription(
   supabase: SupabaseClient,
   subscription: Stripe.Subscription,
-) {
+  eventContext?: StripeEventContext,
+): Promise<SubscriptionSyncResult> {
   const accountId = subscription.metadata.account_id;
   if (!accountId) {
     throw new Error(`subscription ${subscription.id} missing account_id metadata`);
   }
+
+  const stale = await isStaleStripeEvent(supabase, accountId, eventContext);
+  if (stale) return stale;
 
   const item = subscription.items.data[0];
   const planKey = getPlanForPriceId(item?.price.id);
@@ -50,19 +67,26 @@ export async function syncStripeSubscription(
       current_period_start: currentPeriodStart,
       current_period_end: currentPeriodEnd,
       cancel_at_period_end: subscription.cancel_at_period_end,
+      last_stripe_event_id: eventContext?.stripe_event_id ?? null,
+      last_stripe_event_created_at: eventContext?.stripe_event_created_at ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "account_id" },
   );
   if (error) throw new Error(`subscription upsert failed: ${error.message}`);
+  return { applied: true };
 }
 
 export async function downgradeSubscriptionToFree(
   supabase: SupabaseClient,
   subscription: Stripe.Subscription,
-) {
+  eventContext?: StripeEventContext,
+): Promise<SubscriptionSyncResult> {
   const accountId = subscription.metadata.account_id;
-  if (!accountId) return;
+  if (!accountId) return { applied: true };
+
+  const stale = await isStaleStripeEvent(supabase, accountId, eventContext);
+  if (stale) return stale;
 
   const { error } = await supabase.from("subscriptions").upsert(
     {
@@ -78,9 +102,41 @@ export async function downgradeSubscriptionToFree(
         ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
         : null,
       cancel_at_period_end: subscription.cancel_at_period_end,
+      last_stripe_event_id: eventContext?.stripe_event_id ?? null,
+      last_stripe_event_created_at: eventContext?.stripe_event_created_at ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "account_id" },
   );
   if (error) throw new Error(`subscription downgrade failed: ${error.message}`);
+  return { applied: true };
+}
+
+async function isStaleStripeEvent(
+  supabase: SupabaseClient,
+  accountId: string,
+  eventContext?: StripeEventContext,
+): Promise<Extract<SubscriptionSyncResult, { applied: false }> | null> {
+  if (!eventContext?.stripe_event_created_at) return null;
+
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("last_stripe_event_created_at")
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (error) throw new Error(`subscription event read failed: ${error.message}`);
+
+  const lastCreatedAt =
+    typeof data?.last_stripe_event_created_at === "string"
+      ? data.last_stripe_event_created_at
+      : null;
+  if (lastCreatedAt && Date.parse(lastCreatedAt) > Date.parse(eventContext.stripe_event_created_at)) {
+    return {
+      applied: false,
+      reason: "stale_event",
+      last_stripe_event_created_at: lastCreatedAt,
+    };
+  }
+
+  return null;
 }

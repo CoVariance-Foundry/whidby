@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Compass,
   Search,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Niche Finder", icon: Search, testId: "nav-niche-finder" },
   { href: "/exploration", label: "Exploration", icon: Compass, testId: "nav-exploration" },
   { href: "/chat", label: "Agent", icon: MessageSquare, testId: "nav-agent" },
+  { href: "/billing", label: "Billing", icon: CreditCard, testId: "nav-billing" },
 ];
 
 export default function Sidebar() {

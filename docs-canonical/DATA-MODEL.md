@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.6.0`     |
-| **Last Updated** | 2026-05-17  |
+| **Version**      | `1.6.1`     |
+| **Last Updated** | 2026-05-22  |
 | **Owner**        | @widby-team |
 
 
@@ -55,6 +55,9 @@
 | Subscription        | Supabase `subscriptions` table        | subscription_id (UUID) | Active tier state synced from Stripe |
 | UsageCounter        | Supabase `usage_counters` table       | account + metric + period | Atomic monthly quota usage for fresh reports |
 | BillingCustomer     | Supabase `billing_customers` table    | account_id       | Stripe customer mapping |
+| BillingCheckoutSession | Supabase `billing_checkout_sessions` table | id (UUID) | Pending Stripe Checkout reservations and idempotency keys |
+| BillingOperationEvent | Supabase `billing_operation_events` table | id (UUID) | Admin-visible billing issue/event log |
+| BillingWebhookEvent | Supabase `billing_webhook_events` table | stripe_event_id | Stripe webhook delivery ledger and retry state |
 | InternalUserEntitlement | Supabase `internal_user_entitlements` table | user_id (UUID) | Internal operator/test override for quota exemption |
 | OnboardingProfile   | Supabase `onboarding_profiles` table  | id (UUID); unique user_id | Durable signup/onboarding answers, recommended strategy, and resume route |
 | OnboardingTarget    | Supabase `onboarding_targets` table   | id (UUID); unique profile + strategy | Selected strategy, service, and resolved geography for first-report handoff |
@@ -243,6 +246,23 @@ Reports have two visibility modes:
 
 Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report. Authenticated users do not receive direct `UPDATE` access to report payloads; account-owned soft archive is exposed only through `archive_account_report(report_id)`.
 
+### Billing Operations
+
+Billing operational state is service-role owned. Regular consumer users never read operational rows directly; admins access issue visibility through checked RPCs and `apps/admin` API routes.
+
+`billing_checkout_sessions` reserves a Stripe Checkout attempt before the Stripe call. There can be only one active pending reservation per account. A still-unexpired pending reservation for the same account and plan should be reused instead of creating a duplicate Stripe Checkout Session; stale pending reservations should move to `expired`.
+
+`billing_webhook_events` is a ledger keyed by Stripe `event.id`. Processed or ignored events are acknowledged without reprocessing. Failed events can be retried by Stripe and increment `attempt_count`. Subscription sync receives the Stripe event id and event creation timestamp, persists them on `subscriptions.last_stripe_event_id` and `subscriptions.last_stripe_event_created_at`, and skips older subscription events when a newer event has already been applied.
+
+`billing_operation_events` records issues and notable operational decisions for admins. User-facing API responses expose stable public error codes/messages only; raw exception text belongs in `internal_message` and structured context belongs in `metadata`.
+
+Admin RPCs:
+
+| RPC | Access | Responsibility |
+| --- | --- | --- |
+| `list_billing_operation_events(p_status text default 'open', p_severity text default null, p_limit int default 50)` | Authenticated account admin only | Returns recent billing events filtered by status/severity, capped at 100 rows. |
+| `resolve_billing_operation_event(p_event_id uuid)` | Authenticated account admin only | Marks an event resolved with `resolved_at` and `resolved_by`. |
+
 ### Internal User Entitlements
 
 Internal report-generation overrides are user-scoped, not paid-plan state. `internal_user_entitlements.fresh_report_quota_exempt = true` lets trusted admin/test users generate fresh reports without consuming monthly quota while their account can remain on `free`. The entitlement is folded into `get_account_entitlement()` as `fresh_report_quota_exempt` and is enforced by app-layer fresh-report gates before quota checks. The same entitlement RPC also exposes `subscriptions.cancel_at_period_end` so UI can distinguish active paid plans from paid plans scheduled to end at the current period boundary without locally mutating Stripe state.
@@ -295,6 +315,58 @@ Free users can persist onboarding state and cached-route choices, but fresh scor
 | `expires_at` | timestamptz | No | null or future timestamp | Optional expiry for temporary testing |
 | `created_at` | timestamptz | Yes | default now() | Creation timestamp |
 | `updated_at` | timestamptz | Yes | default now() | Last update timestamp |
+
+### BillingCheckoutSession (`billing_checkout_sessions`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Local reservation id |
+| `account_id` | UUID | Yes | references `accounts.id` | Account starting checkout |
+| `user_id` | UUID | No | references `auth.users.id` | User who initiated checkout |
+| `plan_key` | text | Yes | `plus` or `pro` | Target paid plan |
+| `status` | text | Yes | `pending`, `completed`, `cancelled`, or `expired` | Local checkout state |
+| `stripe_checkout_session_id` | text | No | unique | Stripe Checkout Session id once created |
+| `stripe_checkout_url` | text | No | - | Hosted checkout URL to reuse while pending |
+| `expires_at` | timestamptz | Yes | - | Expiry used to stop reusing old sessions |
+| `idempotency_key` | text | Yes | unique | Stripe idempotency key for Checkout Session creation |
+| `created_at` | timestamptz | Yes | default now() | Creation timestamp |
+| `updated_at` | timestamptz | Yes | default now() | Last update timestamp |
+
+### BillingOperationEvent (`billing_operation_events`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Stable event id |
+| `severity` | text | Yes | `critical`, `error`, `warning`, or `info` | Admin triage severity |
+| `status` | text | Yes | `open` or `resolved` | Admin resolution state |
+| `event_type` | text | Yes | non-empty | Event classifier such as `checkout_failed` |
+| `source` | text | Yes | non-empty | Route or worker that recorded the event |
+| `account_id` | UUID | No | references `accounts.id` | Related account when known |
+| `user_id` | UUID | No | references `auth.users.id` | Related user when known |
+| `stripe_customer_id` | text | No | - | Related Stripe customer |
+| `stripe_subscription_id` | text | No | - | Related Stripe subscription |
+| `stripe_checkout_session_id` | text | No | - | Related Stripe Checkout Session |
+| `stripe_event_id` | text | No | indexed when present | Related Stripe webhook event |
+| `public_message` | text | Yes | safe for UI | Sanitized user/admin summary |
+| `internal_message` | text | No | operational only | Raw exception/error detail |
+| `metadata` | jsonb | Yes | default `{}` | Structured diagnostic context |
+| `created_at` / `updated_at` | timestamptz | Yes | default now() | Event timestamps |
+| `resolved_at` | timestamptz | No | - | Resolution timestamp |
+| `resolved_by` | UUID | No | references `auth.users.id` | Admin who resolved the issue |
+
+### BillingWebhookEvent (`billing_webhook_events`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `stripe_event_id` | text | Yes | primary key | Stripe webhook event id |
+| `event_type` | text | Yes | non-empty | Stripe event type |
+| `stripe_created_at` | timestamptz | Yes | - | Stripe event creation time |
+| `processing_status` | text | Yes | `processing`, `processed`, `failed`, or `ignored` | Webhook processing state |
+| `attempt_count` | integer | Yes | `>= 0` | Number of processing attempts |
+| `last_error` | text | No | - | Most recent processing error |
+| `received_at` | timestamptz | Yes | default now() | First ledger timestamp |
+| `processed_at` | timestamptz | No | - | Completion timestamp for processed/ignored events |
+| `updated_at` | timestamptz | Yes | default now() | Last ledger update |
 
 ### OnboardingProfile (`onboarding_profiles`)
 

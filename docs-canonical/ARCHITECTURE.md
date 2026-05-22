@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.5.2` |
-| **Last Updated** | 2026-05-21 |
+| **Version** | `1.5.3` |
+| **Last Updated** | 2026-05-22 |
 | **Owner** | @widby-team |
 
 ---
@@ -45,6 +45,8 @@ The consumer product uses Supabase Auth plus account-scoped authorization. Every
 | `pro` | $100/mo | 50 reports/month | Yes |
 
 Fresh report generation is gated in `apps/app` route handlers before the Render/FastAPI scoring bridge is called. The route resolves the Supabase session, account entitlement, PostHog rollout flags, and monthly usage, then atomically consumes one `fresh_report` credit before forwarding the request. Generated reports are persisted with `owner_account_id` and `created_by_user_id`; existing ownerless reports remain shared cached reports. Stripe Checkout and the Stripe Customer Portal are the billing UI; Stripe webhooks update Supabase subscription state.
+
+Billing route handlers fail closed for users and fail open for admin visibility. Checkout reserves or reuses one pending `billing_checkout_sessions` row per account, sends deterministic Stripe idempotency keys, and returns only stable public `code`/`message` responses. Portal and webhook failures write admin-visible `billing_operation_events` rows with raw operational detail kept out of user responses. Stripe webhook delivery is tracked in `billing_webhook_events`; duplicate processed events are acknowledged without reprocessing, failed events remain retryable, and subscription updates compare `subscriptions.last_stripe_event_created_at` before applying Stripe state so stale webhook deliveries cannot roll accounts backward.
 
 RLS is the durable isolation boundary. PostHog flags may hide UI, stage quota enforcement, or disable fresh report generation, but they must never weaken account-scoped report policies.
 
@@ -105,6 +107,8 @@ Admin (`apps/admin`) hosts a **dual-surface niche finder**:
 
 - **Standard surface (`/`)**: city + service input returns an opportunity score for quick triage.
 - **Exploration surface (`/exploration`)**: same input and score pathway, plus evidence categories that explain score rationale and a follow-up chat assistant that pulls deeper signals via approved scoring/search tools while preserving active city/service context.
+
+Admin also hosts billing operations visibility at `/billing`. The page reads `billing_operation_events` through admin-checked RPCs and internal API routes, summarizes open/critical/warning counts, filters by severity/status, expands event metadata/internal detail, and lets admins resolve issues without direct database access or Vercel log lookup.
 
 Consumer (`apps/app`) hosts scoring and discovery surfaces:
 
@@ -211,9 +215,9 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Outreach Delivery (M13) | Email sequencing + compliance | `src/experiment/` | `tests/unit/test_outreach_delivery.py` |
 | Response Tracking (M14) | Event collection + reply classification | `src/experiment/` | `tests/unit/test_response_tracking.py` |
 | Experiment Analysis (M15) | A/B analysis + rentability signal | `src/experiment/` | `tests/unit/test_experiment_analysis.py` |
-| Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments | `apps/admin/` | Admin vitest + Playwright |
+| Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments, billing operations visibility | `apps/admin/` | Admin vitest + Playwright |
 | Consumer Frontend | Light-theme scoring + reports consumer surface with protected Navbar/Footer app frame | `apps/app/` | Consumer vitest |
-| Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags | `apps/app/src/lib/account/`, `apps/app/src/app/api/billing/` | Consumer vitest |
+| Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags, billing issue logging, checkout session idempotency, webhook event ordering | `apps/app/src/lib/account/`, `apps/app/src/lib/billing/`, `apps/app/src/app/api/billing/` | Consumer vitest |
 | Consumer Onboarding | Signup intent, strategy recommendation, target capture, resume state, and first-report handoff | `apps/app/src/app/(auth)/`, `apps/app/src/app/onboarding/`, `apps/app/src/app/api/onboarding/`, `apps/app/src/lib/onboarding/` | Consumer vitest + Playwright smoke |
 | Strategy Discovery | Strategy projections over cached market intelligence, account-gated strategy run creation, and FastAPI discovery proxying | `src/domain/services/discovery_service.py`, `src/clients/strategy_repository.py`, `apps/app/src/app/api/strategies/runs/` | `tests/unit/test_strategy_projection.py`, `tests/unit/test_discovery_service_strategies.py`, `tests/unit/test_api_strategy_discovery.py`, `apps/app/src/app/api/strategies/runs/route.test.ts` |
 | Consumer Explore Refresh | Cached Explore refresh orchestration, Next.js proxy routes, and refresh UI | `src/domain/services/explore_refresh_service.py`, `apps/app/src/app/api/explore/refresh/`, `apps/app/src/components/explore/` | Pytest, consumer vitest, Playwright smoke |
