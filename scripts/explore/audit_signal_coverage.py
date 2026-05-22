@@ -5,14 +5,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections import defaultdict
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.utils.supabase_guard import (  # noqa: E402
+    POSTGREST_API_ERROR_TYPES,
+    is_postgrest_missing_column_error,
+    supabase_project_ref,
+)
+
 PAGE_SIZE = 1000
 
 REQUIRED_COLUMNS = {
@@ -44,19 +53,6 @@ def load_env(env_path: Path | None = None) -> None:
             continue
         key, _, value = stripped.partition("=")
         os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
-
-
-def supabase_project_ref(supabase_url: str) -> str | None:
-    parsed = urlparse(supabase_url.strip())
-    if parsed.scheme != "https" or parsed.hostname is None:
-        return None
-    suffix = ".supabase.co"
-    if not parsed.hostname.endswith(suffix):
-        return None
-    project_ref = parsed.hostname[: -len(suffix)]
-    if not project_ref or "." in project_ref:
-        return None
-    return project_ref
 
 
 def validate_expected_project_ref(expected_project_ref: str | None) -> None:
@@ -103,7 +99,9 @@ def fetch_pages(supabase: Any, table: str, columns: tuple[str, ...]) -> list[dic
                 .range(offset, offset + PAGE_SIZE - 1)
                 .execute()
             )
-        except Exception as exc:
+        except POSTGREST_API_ERROR_TYPES as exc:
+            if not is_postgrest_missing_column_error(exc):
+                raise
             raise RuntimeError(f"{table} missing required column(s): {select_columns}") from exc
         page = list(response.data or [])
         rows.extend(page)

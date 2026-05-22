@@ -46,7 +46,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
@@ -58,6 +57,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
 
 SERVICES = [
     "roofing",
@@ -132,20 +135,6 @@ def _supabase_client() -> Any:
             "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required for matview refresh"
         )
     return create_client(url, key)
-
-
-def supabase_project_ref(supabase_url: str) -> str | None:
-    """Extract the Supabase project ref from a project URL."""
-    parsed = urlparse(supabase_url.strip())
-    if parsed.scheme != "https" or parsed.hostname is None:
-        return None
-    suffix = ".supabase.co"
-    if not parsed.hostname.endswith(suffix):
-        return None
-    project_ref = parsed.hostname[: -len(suffix)]
-    if not project_ref or "." in project_ref:
-        return None
-    return project_ref
 
 
 def validate_expected_project_ref(expected_project_ref: str | None) -> None:
@@ -291,21 +280,26 @@ def summarize_metro_selection(metros: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def normalize_service_key(raw: str, catalog_keys: set[str] | None = None) -> str:
-    text = MULTI_SPACE.sub(" ", raw.strip().lower()).strip()
+    text = service_key_text(raw)
     known_keys = catalog_keys or CATALOG_SERVICE_KEYS
     if text in known_keys:
         return text
     return STRIP_TRAILING_SERVICE_SUFFIXES.sub("", text).strip()
 
 
+def service_key_text(raw: str) -> str:
+    return MULTI_SPACE.sub(" ", raw.strip().lower()).strip()
+
+
 def select_services(args: argparse.Namespace) -> list[str]:
     """Resolve requested service labels into unique normalized scoring labels."""
     service_names = getattr(args, "service_names", None)
     raw_services = service_names if service_names else SERVICES[: args.services]
+    normalize = service_key_text if service_names else normalize_service_key
     services: list[str] = []
     seen: set[str] = set()
     for raw in raw_services:
-        service = normalize_service_key(raw)
+        service = normalize(raw)
         if not service:
             raise ValueError("Service names must be non-empty")
         if service in seen:
@@ -318,7 +312,7 @@ def select_services(args: argparse.Namespace) -> list[str]:
 def fetch_service_catalog_keys(supabase: Any) -> set[str]:
     rows = _fetch_pages(supabase, "niche_naics_mapping", "niche_normalized")
     return {
-        MULTI_SPACE.sub(" ", str(row.get("niche_normalized") or "").strip().lower())
+        service_key_text(str(row.get("niche_normalized") or ""))
         for row in rows
         if row.get("niche_normalized")
     }

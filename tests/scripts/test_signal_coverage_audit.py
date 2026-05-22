@@ -9,14 +9,14 @@ class FakeResponse:
 
 
 class FakeQuery:
-    def __init__(self, rows, *, fail=False):
+    def __init__(self, rows, *, failure=None):
         self._rows = rows
-        self._fail = fail
+        self._failure = failure
         self._range = (0, len(rows) - 1)
 
     def select(self, _columns):
-        if self._fail:
-            raise RuntimeError("column does not exist")
+        if self._failure:
+            raise self._failure
         return self
 
     def range(self, start, end):
@@ -31,12 +31,16 @@ class FakeQuery:
 class FakeSupabase:
     def __init__(self, rows_by_table, failing_tables=None):
         self.rows_by_table = rows_by_table
-        self.failing_tables = set(failing_tables or [])
+        self.failing_tables = failing_tables or {}
+        if not isinstance(self.failing_tables, dict):
+            self.failing_tables = {
+                table: RuntimeError("column does not exist") for table in self.failing_tables
+            }
 
     def table(self, table_name):
         return FakeQuery(
             self.rows_by_table.get(table_name, []),
-            fail=table_name in self.failing_tables,
+            failure=self.failing_tables.get(table_name),
         )
 
 
@@ -431,10 +435,59 @@ def test_explore_visibility_slice_gets_coverage_gate():
     )
 
 
-def test_audit_signal_coverage_fails_for_missing_required_schema_columns():
-    supabase = FakeSupabase(rows_by_table={"seo_facts": []}, failing_tables={"seo_facts"})
+def test_audit_signal_coverage_fails_for_missing_required_schema_columns(monkeypatch):
+    class FakePostgrestError(Exception):
+        code = "42703"
+
+    monkeypatch.setattr(
+        audit_signal_coverage,
+        "POSTGREST_API_ERROR_TYPES",
+        (FakePostgrestError,),
+    )
+    supabase = FakeSupabase(
+        rows_by_table={"seo_facts": []},
+        failing_tables={"seo_facts": FakePostgrestError("column does not exist")},
+    )
 
     with pytest.raises(RuntimeError, match="seo_facts missing required column"):
+        audit_signal_coverage.audit_signal_coverage(
+            supabase,
+            threshold=0.8,
+            min_benchmark_cells=1,
+            min_benchmark_sample_size=1,
+        )
+
+
+def test_audit_signal_coverage_preserves_non_schema_errors(monkeypatch):
+    class FakePostgrestError(Exception):
+        code = "PGRST301"
+
+    monkeypatch.setattr(
+        audit_signal_coverage,
+        "POSTGREST_API_ERROR_TYPES",
+        (FakePostgrestError,),
+    )
+    supabase = FakeSupabase(
+        rows_by_table={"seo_facts": []},
+        failing_tables={"seo_facts": FakePostgrestError("JWT expired")},
+    )
+
+    with pytest.raises(FakePostgrestError, match="JWT expired"):
+        audit_signal_coverage.audit_signal_coverage(
+            supabase,
+            threshold=0.8,
+            min_benchmark_cells=1,
+            min_benchmark_sample_size=1,
+        )
+
+
+def test_audit_signal_coverage_preserves_transport_errors():
+    supabase = FakeSupabase(
+        rows_by_table={"seo_facts": []},
+        failing_tables={"seo_facts": TimeoutError("request timed out")},
+    )
+
+    with pytest.raises(TimeoutError, match="request timed out"):
         audit_signal_coverage.audit_signal_coverage(
             supabase,
             threshold=0.8,

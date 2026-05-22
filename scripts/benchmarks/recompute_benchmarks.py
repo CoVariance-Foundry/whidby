@@ -8,10 +8,16 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from urllib import error as urlerror
 from urllib import request as urlreq
-from urllib.parse import urlparse
 
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
 
 SUPABASE_URL = os.environ.get(
     "BENCHMARK_SUPABASE_URL",
@@ -57,20 +63,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     return parser.parse_args(argv)
-
-
-def supabase_project_ref(supabase_url: str) -> str | None:
-    """Extract the Supabase project ref from a project URL."""
-    parsed = urlparse(supabase_url.strip())
-    if parsed.scheme != "https" or parsed.hostname is None:
-        return None
-    suffix = ".supabase.co"
-    if not parsed.hostname.endswith(suffix):
-        return None
-    project_ref = parsed.hostname[: -len(suffix)]
-    if not project_ref or "." in project_ref:
-        return None
-    return project_ref
 
 
 def validate_expected_project_ref(expected_project_ref: str | None) -> None:

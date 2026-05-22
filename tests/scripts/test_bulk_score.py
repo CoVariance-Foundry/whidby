@@ -291,13 +291,29 @@ def test_default_service_seed_replaces_missing_pest_control_with_auto_repair():
     assert "pest control" not in bulk_score.SERVICES
 
 
-def test_select_services_dedupes_explicit_service_names():
+def test_select_services_preserves_explicit_service_names_before_catalog_validation():
     args = SimpleNamespace(
         services=12,
-        service_names=["Roofing Services", "roofing", "Tree   Service"],
+        service_names=["Roofing Contractor", "Roofing Contractor", "Tree   Service"],
     )
 
-    assert bulk_score.select_services(args) == ["roofing", "tree service"]
+    assert bulk_score.select_services(args) == ["roofing contractor", "tree service"]
+
+
+def test_explicit_service_names_defer_suffix_stripping_to_live_catalog():
+    args = SimpleNamespace(services=12, service_names=["Roofing Contractor"])
+    supabase = FakeSupabase(
+        rows_by_table={
+            "niche_naics_mapping": [
+                {"niche_normalized": "roofing contractor"},
+            ]
+        }
+    )
+
+    assert bulk_score.validate_services_for_catalog(
+        supabase,
+        bulk_score.select_services(args),
+    ) == ["roofing contractor"]
 
 
 def test_validate_services_for_catalog_rejects_missing_services():
