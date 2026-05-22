@@ -8,7 +8,7 @@ class CompetitorIntelReadRepository(Protocol):
     """Read boundary for durable competitor-intel facts."""
 
     def find_metro(self, *, city: str | None, state: str | None) -> dict[str, Any] | None:
-        ...
+        raise NotImplementedError
 
     def fetch_score_context(
         self,
@@ -18,7 +18,7 @@ class CompetitorIntelReadRepository(Protocol):
         report_id: str | None,
         account_id: str | None,
     ) -> dict[str, Any] | None:
-        ...
+        raise NotImplementedError
 
     def fetch_keyword_facts(
         self,
@@ -29,7 +29,7 @@ class CompetitorIntelReadRepository(Protocol):
         account_id: str | None,
         limit: int,
     ) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def fetch_organic_competitor_facts(
         self,
@@ -40,7 +40,7 @@ class CompetitorIntelReadRepository(Protocol):
         account_id: str | None,
         limit: int,
     ) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def fetch_local_pack_facts(
         self,
@@ -51,7 +51,7 @@ class CompetitorIntelReadRepository(Protocol):
         account_id: str | None,
         limit: int,
     ) -> list[dict[str, Any]]:
-        ...
+        raise NotImplementedError
 
     def fetch_report_context(
         self,
@@ -59,10 +59,10 @@ class CompetitorIntelReadRepository(Protocol):
         report_id: str,
         account_id: str | None,
     ) -> dict[str, Any] | None:
-        ...
+        raise NotImplementedError
 
     def create_run_record(self, payload: dict[str, Any]) -> str:
-        ...
+        raise NotImplementedError
 
 
 class CompetitorIntelService:
@@ -191,7 +191,7 @@ class CompetitorIntelService:
     def create_run(self, request: dict[str, Any]) -> dict[str, Any]:
         read_model = self.get_read_model(request)
         state = str(read_model.get("status") or "ready_to_run")
-        if state not in {"dossier", "aggregate_only"}:
+        if state not in {"dossier", "aggregate_only", "ready_to_run"}:
             raise RuntimeError(
                 "Fresh competitor intel collection is not available for this target yet."
             )
@@ -314,7 +314,7 @@ def _normalize_niche(value: Any) -> str | None:
     text = _string_or_none(value)
     if not text:
         return None
-    return text.lower().replace("-", " ").replace("_", " ").strip().replace(" ", "_")
+    return " ".join(text.lower().replace("-", " ").replace("_", " ").split())
 
 
 def _string_or_none(value: Any) -> str | None:

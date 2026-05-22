@@ -10,7 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.research_agent.api as api_module
-from src.research_agent.api import _SupabaseCompetitorIntelRepository, app
 
 
 class FakeCompetitorIntelService:
@@ -71,6 +70,66 @@ class FakeReportsClient:
         return FakeReportsQuery(self.rows)
 
 
+class FakeQuery:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.eq_filters: list[tuple[str, Any]] = []
+        self.in_filters: list[tuple[str, list[str]]] = []
+        self.ilike_filters: list[tuple[str, str]] = []
+        self.limit_value: int | None = None
+        self.insert_payload: dict[str, Any] | None = None
+
+    def select(self, *_args: Any, **_kwargs: Any) -> "FakeQuery":
+        return self
+
+    def eq(self, column: str, value: Any) -> "FakeQuery":
+        self.eq_filters.append((column, value))
+        return self
+
+    def in_(self, column: str, values: list[str]) -> "FakeQuery":
+        self.in_filters.append((column, values))
+        return self
+
+    def ilike(self, column: str, pattern: str) -> "FakeQuery":
+        self.ilike_filters.append((column, pattern))
+        return self
+
+    def order(self, *_args: Any, **_kwargs: Any) -> "FakeQuery":
+        return self
+
+    def limit(self, value: int) -> "FakeQuery":
+        self.limit_value = value
+        return self
+
+    def insert(self, payload: dict[str, Any]) -> "FakeQuery":
+        self.insert_payload = payload
+        return self
+
+    def execute(self) -> SimpleNamespace:
+        rows = list(self.rows)
+        for column, value in self.eq_filters:
+            rows = [row for row in rows if row.get(column) == value]
+        for column, values in self.in_filters:
+            rows = [row for row in rows if str(row.get(column)) in values]
+        for column, pattern in self.ilike_filters:
+            prefix = pattern.removesuffix("%").lower()
+            rows = [row for row in rows if str(row.get(column, "")).lower().startswith(prefix)]
+        if self.limit_value is not None:
+            rows = rows[: self.limit_value]
+        return SimpleNamespace(data=rows)
+
+
+class FakeSupabaseClient:
+    def __init__(self, rows_by_table: dict[str, list[dict[str, Any]]]) -> None:
+        self.rows_by_table = rows_by_table
+        self.queries: dict[str, FakeQuery] = {}
+
+    def table(self, name: str) -> FakeQuery:
+        query = FakeQuery(self.rows_by_table.get(name, []))
+        self.queries[name] = query
+        return query
+
+
 @pytest.fixture()
 def fake_service(monkeypatch: pytest.MonkeyPatch) -> FakeCompetitorIntelService:
     service = FakeCompetitorIntelService()
@@ -80,7 +139,7 @@ def fake_service(monkeypatch: pytest.MonkeyPatch) -> FakeCompetitorIntelService:
 
 @pytest.fixture()
 def client() -> TestClient:
-    return TestClient(app)
+    return TestClient(api_module.app)
 
 
 def test_get_competitor_intel_returns_snake_case_status_shape(
@@ -129,9 +188,7 @@ def test_post_competitor_intel_runs_returns_run_shape(
         "target": {"niche_normalized": "roofing"},
         "result": None,
     }
-    assert fake_service.run_requests[0]["account_id"] == (
-        "33333333-3333-3333-3333-333333333333"
-    )
+    assert fake_service.run_requests[0]["account_id"] == ("33333333-3333-3333-3333-333333333333")
 
 
 def test_post_competitor_intel_runs_rejects_missing_target(
@@ -164,18 +221,18 @@ def test_get_competitor_intel_returns_error_friendly_shape(
 
 
 def test_competitor_intel_repository_visibility_matches_account_scope() -> None:
-    assert _SupabaseCompetitorIntelRepository._report_is_visible(
+    assert api_module._SupabaseCompetitorIntelRepository._report_is_visible(
         {"access_scope": "cached", "owner_account_id": None},
         account_id=None,
     )
-    assert _SupabaseCompetitorIntelRepository._report_is_visible(
+    assert api_module._SupabaseCompetitorIntelRepository._report_is_visible(
         {
             "access_scope": "account",
             "owner_account_id": "33333333-3333-3333-3333-333333333333",
         },
         account_id="33333333-3333-3333-3333-333333333333",
     )
-    assert not _SupabaseCompetitorIntelRepository._report_is_visible(
+    assert not api_module._SupabaseCompetitorIntelRepository._report_is_visible(
         {
             "access_scope": "account",
             "owner_account_id": "99999999-9999-9999-9999-999999999999",
@@ -184,19 +241,19 @@ def test_competitor_intel_repository_visibility_matches_account_scope() -> None:
     )
 
 
-def test_competitor_intel_repository_drops_unlinked_fact_rows() -> None:
-    repository = _SupabaseCompetitorIntelRepository(FakeReportsClient([]))
+def test_competitor_intel_repository_keeps_report_agnostic_fact_rows() -> None:
+    repository = api_module._SupabaseCompetitorIntelRepository(FakeReportsClient([]))
 
     rows = repository._filter_rows_by_report_visibility(
         [{"report_id": None, "domain": "orphan.test"}, {"report_id": "", "domain": "empty.test"}],
         account_id="33333333-3333-3333-3333-333333333333",
     )
 
-    assert rows == []
+    assert [row["domain"] for row in rows] == ["orphan.test", "empty.test"]
 
 
 def test_competitor_intel_repository_keeps_only_visible_report_rows() -> None:
-    repository = _SupabaseCompetitorIntelRepository(
+    repository = api_module._SupabaseCompetitorIntelRepository(
         FakeReportsClient(
             [
                 {"id": "cached-report", "access_scope": "cached", "owner_account_id": None},
@@ -224,4 +281,88 @@ def test_competitor_intel_repository_keeps_only_visible_report_rows() -> None:
         account_id="33333333-3333-3333-3333-333333333333",
     )
 
-    assert [row["domain"] for row in rows] == ["cached.test", "owned.test"]
+    assert [row["domain"] for row in rows] == ["cached.test", "owned.test", "orphan.test"]
+
+
+def test_competitor_intel_repository_filters_visibility_before_row_limit() -> None:
+    client = FakeSupabaseClient(
+        {
+            "seo_facts": [
+                {
+                    "report_id": "other-report",
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "keyword": "boise roofing",
+                },
+                {
+                    "report_id": "cached-report",
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "keyword": "boise roofing",
+                },
+            ],
+            "reports": [
+                {
+                    "id": "cached-report",
+                    "access_scope": "cached",
+                    "owner_account_id": None,
+                },
+                {
+                    "id": "other-report",
+                    "access_scope": "account",
+                    "owner_account_id": "99999999-9999-9999-9999-999999999999",
+                },
+            ],
+        }
+    )
+    repository = api_module._SupabaseCompetitorIntelRepository(client)
+
+    rows = repository.fetch_keyword_facts(
+        cbsa_code="13820",
+        niche_normalized="roofing",
+        keyword="boise roofing",
+        account_id="33333333-3333-3333-3333-333333333333",
+        limit=1,
+    )
+
+    assert [row["report_id"] for row in rows] == ["cached-report"]
+    assert client.queries["seo_facts"].limit_value is None
+
+
+def test_competitor_intel_repository_does_not_guess_ambiguous_metro() -> None:
+    client = FakeSupabaseClient(
+        {
+            "metros": [
+                {"cbsa_code": "11111", "cbsa_name": "Springfield, IL", "state": "IL"},
+                {"cbsa_code": "22222", "cbsa_name": "Springfield, MO", "state": "MO"},
+            ]
+        }
+    )
+    repository = api_module._SupabaseCompetitorIntelRepository(client)
+
+    assert repository.find_metro(city="Springfield", state=None) is None
+
+
+def test_competitor_intel_repository_uses_state_to_disambiguate_metro() -> None:
+    client = FakeSupabaseClient(
+        {
+            "metros": [
+                {"cbsa_code": "11111", "cbsa_name": "Springfield, IL", "state": "IL"},
+                {"cbsa_code": "22222", "cbsa_name": "Springfield, MO", "state": "MO"},
+            ]
+        }
+    )
+    repository = api_module._SupabaseCompetitorIntelRepository(client)
+
+    row = repository.find_metro(city="Springfield", state="MO")
+
+    assert row == {"cbsa_code": "22222", "cbsa_name": "Springfield, MO", "state": "MO"}
+
+
+def test_competitor_intel_repository_requires_persisted_run_id() -> None:
+    repository = api_module._SupabaseCompetitorIntelRepository(
+        FakeSupabaseClient({"competitor_intel_runs": [{}]})
+    )
+
+    with pytest.raises(RuntimeError, match="returned no run id"):
+        repository.create_run_record({"status": "queued"})

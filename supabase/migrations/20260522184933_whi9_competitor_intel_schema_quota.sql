@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.organic_competitor_facts (
     snapshot_date DATE NOT NULL DEFAULT CURRENT_DATE,
     report_id UUID REFERENCES public.reports(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (cbsa_code, niche_normalized, keyword, result_rank, snapshot_date)
+    UNIQUE (cbsa_code, niche_normalized, keyword, result_rank, result_type, snapshot_date)
 );
 
 CREATE INDEX IF NOT EXISTS idx_organic_competitor_facts_lookup

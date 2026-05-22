@@ -40,7 +40,7 @@ def test_whi9_competitor_intel_migration_adds_fact_and_run_tables() -> None:
     assert "CREATE TABLE IF NOT EXISTS public.organic_competitor_facts" in sql
     assert "CREATE TABLE IF NOT EXISTS public.competitor_intel_runs" in sql
     assert (
-        "UNIQUE (cbsa_code, niche_normalized, keyword, result_rank, snapshot_date)"
+        "UNIQUE (cbsa_code, niche_normalized, keyword, result_rank, result_type, snapshot_date)"
         in sql
     )
     assert "account_id UUID REFERENCES public.accounts(id) ON DELETE SET NULL" in sql

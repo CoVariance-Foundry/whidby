@@ -90,11 +90,11 @@ def test_competitor_intel_returns_not_found_without_runnable_target() -> None:
 def test_competitor_intel_returns_ready_to_run_without_durable_facts() -> None:
     service = CompetitorIntelService(FakeCompetitorIntelRepository())
 
-    result = service.get_read_model({"city": "Boise", "state": "ID", "service": "roofing"})
+    result = service.get_read_model({"city": "Boise", "state": "ID", "service": "Roof Repair"})
 
     assert result["status"] == "ready_to_run"
     assert result["target"]["cbsa_code"] == "13820"
-    assert result["target"]["niche_normalized"] == "roofing"
+    assert result["target"]["niche_normalized"] == "roof repair"
 
 
 def test_competitor_intel_resolves_report_id_only_target() -> None:
@@ -273,20 +273,21 @@ def test_competitor_intel_run_shape_uses_deterministic_read_model() -> None:
     assert repo.run_records[0]["status"] == "succeeded"
 
 
-def test_competitor_intel_run_fails_without_durable_result() -> None:
-    service = CompetitorIntelService(FakeCompetitorIntelRepository())
+def test_competitor_intel_run_queues_without_durable_result() -> None:
+    repo = FakeCompetitorIntelRepository()
+    service = CompetitorIntelService(repo)
 
-    try:
-        service.create_run(
-            {"city": "Boise", "state": "ID", "service": "roofing", "quota_consumed": 2}
-        )
-    except RuntimeError as exc:
-        assert "Fresh competitor intel collection is not available" in str(exc)
-    else:
-        raise AssertionError("Expected run creation to fail without durable facts")
+    result = service.create_run(
+        {"city": "Boise", "state": "ID", "service": "roofing", "quota_consumed": 2}
+    )
+
+    assert result["status"] == "queued"
+    assert result["state"] == "ready_to_run"
+    assert result["result"] is None
+    assert repo.run_records[0]["status"] == "queued"
 
 
-def test_report_context_only_run_fails_without_charging_result() -> None:
+def test_report_context_only_run_queues_without_durable_result() -> None:
     repo = FakeCompetitorIntelRepository()
     repo.report_context = {
         "id": "report-1",
@@ -304,17 +305,15 @@ def test_report_context_only_run_fails_without_charging_result() -> None:
     }
     service = CompetitorIntelService(repo)
 
-    try:
-        service.create_run(
-            {
-                "report_id": "report-1",
-                "account_id": "33333333-3333-3333-3333-333333333333",
-                "quota_consumed": 2,
-            }
-        )
-    except RuntimeError as exc:
-        assert "Fresh competitor intel collection is not available" in str(exc)
-    else:
-        raise AssertionError("Expected report-only shell run to fail")
+    result = service.create_run(
+        {
+            "report_id": "report-1",
+            "account_id": "33333333-3333-3333-3333-333333333333",
+            "quota_consumed": 2,
+        }
+    )
 
-    assert repo.run_records == []
+    assert result["status"] == "queued"
+    assert result["state"] == "ready_to_run"
+    assert result["result"] is None
+    assert repo.run_records[0]["report_id"] == "report-1"

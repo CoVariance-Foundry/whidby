@@ -551,7 +551,7 @@ def test_persist_report_upserts_competitor_read_model_facts() -> None:
         if call["table"] == "organic_competitor_facts" and call["method"] == "upsert"
     )
     assert organic_call["kwargs"] == {
-        "on_conflict": "cbsa_code,niche_normalized,keyword,result_rank,snapshot_date"
+        "on_conflict": "cbsa_code,niche_normalized,keyword,result_rank,result_type,snapshot_date"
     }
     local_pack_call = next(
         call

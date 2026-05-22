@@ -41,11 +41,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
   let quotaConsumedForAccount: string | null = null;
 
   try {
-    supabase = await createClient();
+    const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
 
     if (entitlement.plan_key === "free") {
@@ -104,7 +103,7 @@ export async function POST(req: NextRequest) {
 
     return proxyStrategyJsonResponse(upstream);
   } catch (err) {
-    if (quotaConsumedForAccount && supabase) {
+    if (quotaConsumedForAccount) {
       await refundCompetitorIntelQuota(quotaConsumedForAccount);
     }
 

@@ -223,11 +223,16 @@ class _SupabaseCompetitorIntelRepository:
         if not city:
             return None
         query = self._client.table("metros").select("cbsa_code, cbsa_name, state")
+        state_filter = state.upper() if state else None
         if state:
-            query = query.eq("state", state.upper())
+            query = query.eq("state", state_filter)
         if hasattr(query, "ilike"):
             query = query.ilike("cbsa_name", f"{city}%")
-        rows = _rows(query.limit(1).execute())
+        if hasattr(query, "order"):
+            query = query.order("cbsa_name").order("state")
+        rows = _rows(query.limit(1 if state_filter else 10).execute())
+        if not state_filter and len(rows) > 1:
+            return None
         return rows[0] if rows else None
 
     def fetch_score_context(
@@ -246,7 +251,7 @@ class _SupabaseCompetitorIntelRepository:
         )
         if report_id:
             query = query.eq("report_id", report_id)
-        rows = _rows(query.order("scored_at", desc=True).limit(1).execute())
+        rows = _rows(query.order("scored_at", desc=True).execute())
         rows = self._filter_rows_by_report_visibility(rows, account_id=account_id)
         return rows[0] if rows else None
 
@@ -267,8 +272,8 @@ class _SupabaseCompetitorIntelRepository:
         )
         if keyword:
             query = query.eq("keyword", keyword)
-        rows = _rows(query.order("snapshot_date", desc=True).limit(limit).execute())
-        return self._filter_rows_by_report_visibility(rows, account_id=account_id)
+        rows = _rows(query.order("snapshot_date", desc=True).execute())
+        return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
 
     def fetch_organic_competitor_facts(
         self,
@@ -290,10 +295,9 @@ class _SupabaseCompetitorIntelRepository:
         rows = _rows(
             query.order("snapshot_date", desc=True)
             .order("result_rank")
-            .limit(limit)
             .execute()
         )
-        return self._filter_rows_by_report_visibility(rows, account_id=account_id)
+        return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
 
     def fetch_local_pack_facts(
         self,
@@ -313,9 +317,9 @@ class _SupabaseCompetitorIntelRepository:
         if keyword:
             query = query.eq("keyword", keyword)
         rows = _rows(
-            query.order("snapshot_date", desc=True).order("listing_rank").limit(limit).execute()
+            query.order("snapshot_date", desc=True).order("listing_rank").execute()
         )
-        return self._filter_rows_by_report_visibility(rows, account_id=account_id)
+        return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
 
     def fetch_report_context(
         self,
@@ -364,7 +368,9 @@ class _SupabaseCompetitorIntelRepository:
             .execute()
         )
         rows = _rows(result)
-        return str(rows[0]["id"]) if rows and rows[0].get("id") else str(uuid.uuid4())
+        if not rows or not rows[0].get("id"):
+            raise RuntimeError("Supabase competitor_intel_runs insert returned no run id")
+        return str(rows[0]["id"])
 
     def _filter_rows_by_report_visibility(
         self,
@@ -380,7 +386,7 @@ class _SupabaseCompetitorIntelRepository:
             }
         )
         if not report_ids:
-            return []
+            return list(rows)
 
         report_rows = _rows(
             self._client.table("reports")
@@ -396,7 +402,7 @@ class _SupabaseCompetitorIntelRepository:
         return [
             row
             for row in rows
-            if row.get("report_id") not in (None, "") and str(row["report_id"]) in visible_ids
+            if row.get("report_id") in (None, "") or str(row["report_id"]) in visible_ids
         ]
 
     @staticmethod

@@ -1213,7 +1213,7 @@ class SupabasePersistence:
             organic_competitor_table.upsert(
                 organic_competitor_rows,
                 on_conflict=(
-                    "cbsa_code,niche_normalized,keyword,result_rank,snapshot_date"
+                    "cbsa_code,niche_normalized,keyword,result_rank,result_type,snapshot_date"
                 ),
             ).execute()
             organic_ms = int((time.monotonic() - t0) * 1000)
