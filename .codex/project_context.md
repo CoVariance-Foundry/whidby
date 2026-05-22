@@ -14,6 +14,11 @@ Dashboard starter and shortcut strategies are launch-safe only: `easy_win`, `gbp
 
 The new dashboard component surface lives in `apps/app/src/components/home/DashboardHome.tsx` and includes the first-run banner, usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports. Free/no-quota users are routed to cached Explore/settings CTAs; paid or quota-exempt users are routed to the launch-safe starter strategy. Recent report rows link to `/reports?open=<report_id>` so they reuse the existing report modal behavior. The old home widget components were removed; shared dashboard report item types now live in `apps/app/src/lib/home/types.ts`.
 
+## Consumer Reports
+
+Epic 6 reports convergence is in progress on `codex/whi-7-reports-proto-layout`. The protected `/reports` page now uses the prototype history framing, summary stats, search, sort, empty state, and card-list rows. Rows from the reports list link to `/reports/[reportId]`; existing dashboard, Explore, and Niche Finder deep links to `/reports?open=<report_id>` still open the legacy modal for compatibility.
+
+`apps/app/src/app/(protected)/reports/[reportId]/page.tsx` is the new detail-page surface for the remaining Epic 6 work. It loads the existing `/api/agent/reports/[reportId]` BFF with the active cookies, renders headline score bands, score tabs, strategy guidance when report guidance exists, safe Next Moves, and keyword expansion. Continue `WHI-33` through `WHI-35` against this page rather than expanding the modal.
 ## Consumer Multi-market
 
 The protected `/agency` route is now the Epic 5 Multi-market batch configuration flow instead of a placeholder. It uses the shared protected app frame, exposes a batch-cost indicator, and moves users through configure, confirm, and complete states. Configuration includes launch-safe strategy lenses, state/population filters, service selection, and a 100 target cap.
@@ -24,9 +29,11 @@ Target review resolves cached city-service pairs through `apps/app /api/strategi
 
 ## Account and Billing Settings
 
-Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, and Stripe scheduled-cancellation state, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.
+Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, Stripe scheduled-cancellation state, Supabase auth metadata, and the latest account-visible reports. It renders profile metadata, plan status, cycle reset dates, usage remaining, saved reports preview, plan change actions, payment/invoice rows, password reset controls, and session sign-out.
 
-The navbar profile menu now links Account settings to `/settings`, shows the signed-in email plus live plan label, exposes `/settings/password`, and preserves the admin dashboard link plus Supabase sign-out. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs now land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
+Saved reports on `/settings` are loaded server-side through the existing `/api/agent/reports?limit=5` route with cookie forwarding, so cached/account-owned visibility stays aligned with the Reports surface. Rows open through `/reports?open=<report_id>`.
+
+The navbar profile menu links Account settings to `/settings`, shows the signed-in email plus live plan label, exposes `/settings/password`, and preserves Supabase sign-out. The external Admin dashboard link is shown only when the resolved account entitlement has `member_role === "admin"`; fallback or non-admin account loading states do not show it. Free users start Plus/Pro upgrades through Stripe Checkout; existing paid plan changes, payment method updates, invoices, and cancellation route through the Stripe Customer Portal. Billing return URLs land on `/settings?billing=success|cancelled`. Password reset emails redirect through `/auth/callback?next=/settings/password`, where an authenticated completion form updates the Supabase password and returns to `/settings?password=updated`.
 
 ## AI Review and Visual QA CI/CD
 

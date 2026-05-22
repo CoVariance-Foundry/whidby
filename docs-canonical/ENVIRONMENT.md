@@ -81,6 +81,29 @@ See `docs/research_agent_design.md` §12 for production architecture, verified s
 | `apps/app/next.config.ts` | Consumer Next.js config | — |
 | `src/config/constants.py` | Scoring engine constants (AIO rates, weights, thresholds) | — |
 
+### Worktree Env Sync
+
+Git worktrees do not copy ignored local secret files such as `.env` or
+`apps/app/.env.local`. Before running app, API, Supabase, or E2E workflows from a
+fresh worktree, sync the canonical local env file from the main checkout:
+
+```bash
+npm run env:sync:local
+npm run runtime:check
+```
+
+`env:sync:local` copies
+`/Users/antwoineflowers/Desktop/development/covariance/whidby/.env` into the
+current worktree as `.env` and `apps/app/.env.local` with `0600` permissions.
+Use `WHIDBY_ENV_SOURCE=/path/to/.env npm run env:sync:local` or
+`npm run env:sync:local -- --source /path/to/.env` to override the source.
+
+`runtime:check` verifies the copied env files, service-role Supabase access, and
+the Python Supabase client runtime without printing secret values. Publishable
+key failures are reported as warnings because backend data-build scripts rely on
+service-role access, but browser login smoke still requires valid publishable
+keys.
+
 ### Vercel deployment checklist (`whidby-agent` — admin dashboard)
 
 The admin research-agent dashboard (`apps/admin/`, port 3001 locally) deploys to Vercel as project `whidby-agent` and serves `app.thewidby.com`. The consumer product (`apps/app/`, port 3002 locally) is a separate Vercel project — apply the same env-var checklist there with the consumer's own origin substituted into `NEXT_PUBLIC_APP_FRONTEND_URL`. The middleware requires these env vars at edge runtime — missing or invalid values cause `MIDDLEWARE_INVOCATION_FAILED`. Set them in the Vercel project settings for **both Production and Preview** environments:
@@ -230,12 +253,13 @@ Greptile is the code-review AI for PR-level source review. It runs through the G
 ## Setup Steps
 
 1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in required variables
-3. Install Python dependencies: `pip install -e ".[dev]"`
-4. Install Node dependencies: `npm install`
-5. Run Python tests: `python -m pytest tests/unit/ -v`
-6. Run frontend lint: `npm run lint`
-7. Start all apps in dev: `npm run dev`
+2. Copy `.env.example` to `.env` and fill in required variables, or run `npm run env:sync:local` from a worktree
+3. Run `npm run runtime:check` when local secrets or runtime dependencies are needed
+4. Install Python dependencies: `pip install -e ".[dev]"`
+5. Install Node dependencies: `npm install`
+6. Run Python tests: `python -m pytest tests/unit/ -v`
+7. Run frontend lint: `npm run lint`
+8. Start all apps in dev: `npm run dev`
 
 ### Individual App Development
 
