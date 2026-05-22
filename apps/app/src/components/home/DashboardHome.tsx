@@ -211,7 +211,7 @@ function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
               color: "var(--ink)",
               fontFamily: "var(--serif)",
               fontSize: 24,
-              fontWeight: 600,
+              fontWeight: 400,
               lineHeight: 1.15,
             }}
           >
@@ -330,7 +330,7 @@ function UsageStrip({ dashboard }: { dashboard: DashboardData }) {
               color: "var(--ink)",
               fontFamily: "var(--serif)",
               fontSize: 24,
-              fontWeight: 600,
+              fontWeight: 400,
               lineHeight: 1.1,
               overflowWrap: "anywhere",
             }}
@@ -392,7 +392,7 @@ function RecommendedHero({ dashboard }: { dashboard: DashboardData }) {
               color: "var(--paper)",
               fontFamily: "var(--serif)",
               fontSize: 32,
-              fontWeight: 600,
+              fontWeight: 400,
               lineHeight: 1.1,
             }}
           >
@@ -461,7 +461,7 @@ function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
         <Card ariaLabelledBy="multi-market-card-heading">
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
+              <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
                 Multi-market scan
               </h2>
               <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
@@ -494,7 +494,7 @@ function StrategyShortcuts({ dashboard }: { dashboard: DashboardData }) {
   return (
     <Card ariaLabelledBy="strategy-shortcuts-heading">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-        <h2 id="strategy-shortcuts-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
+        <h2 id="strategy-shortcuts-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
           Your strategy shortcuts
         </h2>
         <Link href="/strategies" className="settings-link">
@@ -537,7 +537,7 @@ function RecentReports({ dashboard }: { dashboard: DashboardData }) {
   return (
     <Card ariaLabelledBy="recent-reports-heading">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-        <h2 id="recent-reports-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
+        <h2 id="recent-reports-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
           Recent reports
         </h2>
         <Link href="/reports" className="settings-link">

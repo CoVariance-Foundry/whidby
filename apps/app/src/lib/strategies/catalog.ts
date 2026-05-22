@@ -7,11 +7,12 @@ import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strate
 
 function withStrategyAccent(strategy: StrategyCatalogEntry): StrategyCatalogEntry {
   const accent_id = strategy.accent_id ?? strategy.strategy_id;
+  const accent = strategyAccentForId(accent_id);
 
   return {
     ...strategy,
-    accent_id: strategyAccentForId(accent_id).accent_id,
-    accent: strategyAccentForId(accent_id),
+    accent_id: accent.accent_id,
+    accent,
   };
 }
 
