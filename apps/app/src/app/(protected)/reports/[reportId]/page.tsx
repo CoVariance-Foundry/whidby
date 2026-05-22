@@ -38,7 +38,7 @@ function getAppRouteUrl(path: string, headerStore: HeaderReader) {
   if (vercelUrl) return `${normalizeAppBaseUrl(vercelUrl)}${path}`;
 
   const host = headerStore.get("host")?.trim();
-  if (!host) return path;
+  if (!host) return null;
 
   try {
     const parsed = new URL(`http://${host}`);
@@ -47,12 +47,12 @@ function getAppRouteUrl(path: string, headerStore: HeaderReader) {
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
       hostname === "::1";
-    if (!isLocalHost) return path;
+    if (!isLocalHost) return null;
 
     const proto = headerStore.get("x-forwarded-proto") === "https" ? "https" : "http";
     return `${proto}://${parsed.host}${path}`;
   } catch {
-    return path;
+    return null;
   }
 }
 
@@ -63,6 +63,8 @@ async function loadReport(reportId: string): Promise<FullReportData | null> {
     `/api/agent/reports/${encodeURIComponent(reportId)}`,
     headerStore,
   );
+  if (!url) return null;
+
   const response = await fetch(url, {
     cache: "no-store",
     ...(cookie ? { headers: { cookie } } : {}),
