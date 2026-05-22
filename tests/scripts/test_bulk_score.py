@@ -262,6 +262,50 @@ def test_normalize_service_key_preserves_catalog_service_names():
     assert bulk_score.normalize_service_key("roofing contractors") == "roofing"
 
 
+def test_default_service_seed_replaces_missing_pest_control_with_auto_repair():
+    assert len(bulk_score.SERVICES) == 16
+    assert "auto repair" in bulk_score.SERVICES
+    assert "pest control" not in bulk_score.SERVICES
+
+
+def test_select_services_dedupes_explicit_service_names():
+    args = SimpleNamespace(
+        services=12,
+        service_names=["Roofing Services", "roofing", "Tree   Service"],
+    )
+
+    assert bulk_score.select_services(args) == ["roofing", "tree service"]
+
+
+def test_validate_services_for_catalog_rejects_missing_services():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "niche_naics_mapping": [
+                {"niche_normalized": "roofing"},
+                {"niche_normalized": "tree service"},
+            ]
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="pest control"):
+        bulk_score.validate_services_for_catalog(supabase, ["roofing", "pest control"])
+
+
+def test_validate_services_for_catalog_normalizes_against_live_catalog():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "niche_naics_mapping": [
+                {"niche_normalized": "roofing contractor"},
+                {"niche_normalized": "tree service"},
+            ]
+        }
+    )
+
+    assert bulk_score.validate_services_for_catalog(
+        supabase, ["Roofing Contractor", "Tree Service"]
+    ) == ["roofing contractor", "tree service"]
+
+
 def test_fetch_scored_pairs_paginates_scores_and_reports():
     metro_scores = [
         {"cbsa_code": f"{index:05d}", "report_id": f"report-{index}"}
@@ -316,6 +360,71 @@ def test_fetch_scored_pairs_merges_explore_market_cells_and_legacy_reports():
     assert bulk_score.fetch_scored_pairs(supabase) == {
         ("11111", "roofing"),
         ("33333", "legacy"),
+    }
+
+
+def test_fetch_v2_persisted_pairs_requires_scores_and_facts():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "metro_score_v2": [
+                {
+                    "cbsa_code": "11111",
+                    "niche_normalized": "roofing",
+                    "report_id": "report-1",
+                },
+                {
+                    "cbsa_code": "22222",
+                    "niche_normalized": "plumbing",
+                    "report_id": "report-2",
+                },
+            ],
+            "seo_facts": [
+                {
+                    "cbsa_code": "11111",
+                    "niche_normalized": "roofing",
+                    "report_id": "report-1",
+                }
+            ],
+        }
+    )
+
+    assert bulk_score.fetch_v2_persisted_pairs(supabase) == {("11111", "roofing")}
+
+
+def test_load_retry_pairs_reads_failed_and_partial_rows(tmp_path):
+    audit = tmp_path / "bulk_score_results.jsonl"
+    audit.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "status": "success",
+                        "request": {"cbsa_code": "11111", "service": "roofing"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "status": "partial_failure",
+                        "request": {
+                            "cbsa_code": "22222",
+                            "niche_normalized": "Plumbing Services",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "request": {"cbsa_code": "33333", "service": "Tree Service"},
+                    }
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert bulk_score.load_retry_pairs(audit) == {
+        ("22222", "plumbing"),
+        ("33333", "tree service"),
     }
 
 
@@ -461,6 +570,11 @@ def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
             }
         ],
     )
+    monkeypatch.setattr(
+        bulk_score,
+        "validate_services_for_catalog",
+        lambda _supabase, services: services,
+    )
     monkeypatch.setattr(bulk_score.httpx, "AsyncClient", lambda: FakeAsyncClient())
 
     async def fail_score(*_args, **_kwargs):
@@ -507,6 +621,11 @@ def test_run_bulk_score_records_persistence_verification_errors(
                 "population_class": "metro_1m_5m",
             }
         ],
+    )
+    monkeypatch.setattr(
+        bulk_score,
+        "validate_services_for_catalog",
+        lambda _supabase, services: services,
     )
     monkeypatch.setattr(bulk_score, "SERVICES", ["roofing"])
     monkeypatch.setattr(bulk_score.httpx, "AsyncClient", FakeAsyncClient)
