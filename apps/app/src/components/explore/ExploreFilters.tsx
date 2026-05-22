@@ -16,7 +16,6 @@ export interface ExploreFilterState {
 
 interface ExploreFiltersProps {
   filters: ExploreFilterState;
-  states: string[];
   services: string[];
   growthAvailable: boolean;
   onChange: (filters: ExploreFilterState) => void;

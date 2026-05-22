@@ -31,4 +31,15 @@ describe("StateMultiselect", () => {
 
     expect(screen.getByRole("option", { name: "PR Puerto Rico" })).toBeEnabled();
   });
+
+  it("keeps Puerto Rico selectable when availability is restricted to PR", async () => {
+    const user = userEvent.setup();
+
+    render(<StateMultiselect selected={[]} onChange={vi.fn()} availableAbbrs={["PR"]} />);
+
+    await user.click(screen.getByRole("button", { name: "Select states" }));
+
+    expect(screen.getByRole("option", { name: "PR Puerto Rico" })).toBeEnabled();
+    expect(screen.getByRole("option", { name: "AZ Arizona" })).toBeDisabled();
+  });
 });

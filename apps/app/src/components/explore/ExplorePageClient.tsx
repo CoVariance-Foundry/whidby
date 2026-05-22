@@ -367,10 +367,6 @@ export default function ExplorePageClient({
     return entry?.status === "ready" ? entry.city : openCity;
   }, [cityDetailCache, openCity]);
 
-  const states = useMemo(
-    () => [...new Set(data.cities.map((city) => city.state).filter(Boolean))].sort(),
-    [data.cities],
-  );
   const services = useMemo(
     () =>
       [
@@ -695,7 +691,6 @@ export default function ExplorePageClient({
         <ExploreFilters
           key={`${filterResetVersion}:${filters.populationMin}|${filters.populationMax}|${filters.incomeMin}|${filters.incomeMax}`}
           filters={filters}
-          states={states}
           services={services}
           growthAvailable={growthAvailable}
           onChange={applyFilters}
