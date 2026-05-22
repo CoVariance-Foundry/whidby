@@ -48,4 +48,3 @@ describe("strategy catalog accents", () => {
     });
   });
 });
-

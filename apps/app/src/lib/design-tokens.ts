@@ -102,4 +102,3 @@ export function strategyAccentForId(strategyId: string | null | undefined): Stra
   if (!normalized) return fallbackStrategyAccent;
   return strategyAccents[normalized as StrategyAccentId] ?? fallbackStrategyAccent;
 }
-

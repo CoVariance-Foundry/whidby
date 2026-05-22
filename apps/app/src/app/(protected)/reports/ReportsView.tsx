@@ -3,9 +3,16 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Icon, I } from "@/lib/icons";
+import { scoreToneForValue, type ScoreToneKey } from "@/lib/design-tokens";
 import type { ReportListRow } from "@/lib/niche-finder/reports-mapper";
 
-// Opportunity score thresholds → label + color token
+const SCORE_PILL_LABELS: Record<Exclude<ScoreToneKey, "muted">, string> = {
+  danger: "Danger",
+  warning: "Warning",
+  good: "Good",
+  high: "High",
+};
+
 function ScorePill({ score }: { score: number | null }) {
   if (score === null) {
     return (
@@ -25,13 +32,8 @@ function ScorePill({ score }: { score: number | null }) {
       </span>
     );
   }
-  const label = score >= 75 ? "High" : score >= 50 ? "Medium" : "Low";
-  const color =
-    score >= 75
-      ? { bg: "#e6f4ea", border: "#a8d5b5", text: "#1a6630" }
-      : score >= 50
-      ? { bg: "#fff8e1", border: "#ffe082", text: "#795500" }
-      : { bg: "#fce8e6", border: "#f5bcb6", text: "#a32b22" };
+  const tone = scoreToneForValue(score);
+  const label = tone.key === "muted" ? "Unknown" : SCORE_PILL_LABELS[tone.key];
   return (
     <span
       style={{
@@ -42,9 +44,9 @@ function ScorePill({ score }: { score: number | null }) {
         borderRadius: 4,
         fontSize: 11.5,
         fontFamily: "var(--mono)",
-        background: color.bg,
-        color: color.text,
-        border: `1px solid ${color.border}`,
+        background: tone.background,
+        color: tone.text,
+        border: `1px solid ${tone.border}`,
       }}
     >
       <span
