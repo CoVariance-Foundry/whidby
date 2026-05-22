@@ -202,7 +202,7 @@ describe("AgencyPage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("requires a primary keyword before reviewing Keyword Hijack custom-only targets", async () => {
+  it("lets Keyword Hijack custom-only targets proceed with row-level primary keywords", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
@@ -226,13 +226,16 @@ describe("AgencyPage", () => {
 
     expect(
       screen.getByText(
-        "Keyword Hijack needs a primary keyword for cached and custom targets.",
+        "Keyword Hijack needs a primary keyword on every custom target or in the global field.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
     expect(fetchMock).not.toHaveBeenCalled();
 
-    await user.type(screen.getByPlaceholderText("e.g. emergency plumber"), "water mitigation");
+    await user.type(
+      screen.getByLabelText("Custom target 1 primary keyword"),
+      "water mitigation",
+    );
     await user.click(screen.getByRole("button", { name: /Review targets/i }));
 
     expect(
@@ -247,7 +250,6 @@ describe("AgencyPage", () => {
     expect(runPayload).toMatchObject({
       mode: "fresh",
       strategy_id: "keyword_hijack",
-      primary_keyword: "water mitigation",
       targets: [
         {
           cbsa_code: "custom:tulsa:ok",
@@ -257,6 +259,29 @@ describe("AgencyPage", () => {
         },
       ],
     });
+    expect(runPayload.primary_keyword).toBeUndefined();
+  });
+
+  it("requires a global Keyword Hijack keyword for mixed cached and custom batches", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: /Keyword Hijack/i }));
+    await user.click(screen.getByRole("button", { name: /Roofing/i }));
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Boise");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "ID");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "Roof repair");
+    await user.type(screen.getByLabelText("Custom target 1 primary keyword"), "roof repair");
+
+    expect(
+      screen.getByText("Keyword Hijack needs a global primary keyword for cached discovery."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("reviews and queues cached and custom targets together with source labels", async () => {
@@ -440,6 +465,43 @@ describe("AgencyPage", () => {
       operator: "in",
       value: ["AZ"],
     });
+  });
+
+  it("ignores stale cached discovery responses after inputs change during preparation", async () => {
+    const user = userEvent.setup();
+    let resolveDiscover: (response: Response) => void = () => {};
+    const discoveryPromise = new Promise<Response>((resolve) => {
+      resolveDiscover = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValueOnce(discoveryPromise);
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: /Plumbing/i }));
+    await user.click(screen.getByRole("button", { name: /Review targets/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: /Roofing/i }));
+    resolveDiscover(
+      new Response(
+        JSON.stringify({
+          markets: [
+            {
+              city: { city_id: "12420", name: "Austin", state: "TX" },
+              service: { service_id: "plumbing", name: "Plumbing" },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Review targets/i })).toBeEnabled(),
+    );
+    expect(screen.queryByRole("heading", { name: "Confirm the batch" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Austin, TX")).not.toBeInTheDocument();
   });
 
   it("validates population filters before target discovery", async () => {

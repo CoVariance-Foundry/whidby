@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import StateMultiselect from "@/components/StateMultiselect";
 import { Icon, I } from "@/lib/icons";
 
@@ -169,6 +176,10 @@ function customRowReady(row: CustomTargetRow) {
     isTwoLetterState(row.state) &&
     normalizeNiche(row.service).length > 0
   );
+}
+
+function hasPrimaryKeyword(value: string) {
+  return value.trim().length >= 2;
 }
 
 function customRowToTarget(row: CustomTargetRow, fallbackPrimaryKeyword: string): QueuedTarget {
@@ -349,12 +360,10 @@ export default function AgencyPage() {
     () => SERVICE_OPTIONS.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds],
   );
+  const validCustomRows = useMemo(() => customRows.filter(customRowReady), [customRows]);
   const validCustomTargets = useMemo(
-    () =>
-      customRows
-        .filter(customRowReady)
-        .map((row) => customRowToTarget(row, primaryKeyword)),
-    [customRows, primaryKeyword],
+    () => validCustomRows.map((row) => customRowToTarget(row, primaryKeyword)),
+    [validCustomRows, primaryKeyword],
   );
   const incompleteCustomRows = customRows.filter(
     (row) => hasCustomInput(row) && !customRowReady(row),
@@ -368,11 +377,46 @@ export default function AgencyPage() {
     !populationInvalid && populationMinValue > populationMaxValue;
   const cachedFiltersInvalid = selectedServices.length > 0 && populationInvalid;
   const cachedRangeInvalid = selectedServices.length > 0 && rangeInvalid;
-  const keywordRequired =
+  const globalPrimaryKeywordReady = hasPrimaryKeyword(primaryKeyword);
+  const cachedKeywordRequired =
     strategyLens === "keyword_hijack" &&
-    (selectedServices.length > 0 || validCustomTargets.length > 0) &&
-    primaryKeyword.trim().length < 2;
+    selectedServices.length > 0 &&
+    !globalPrimaryKeywordReady;
+  const customKeywordRequired =
+    strategyLens === "keyword_hijack" &&
+    validCustomRows.some(
+      (row) => !globalPrimaryKeywordReady && !hasPrimaryKeyword(row.primary_keyword),
+    );
+  const keywordRequired = cachedKeywordRequired || customKeywordRequired;
   const targetCapExceeded = totalTargetPairs > TARGET_CAP;
+  const prepareSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        strategyLens,
+        selectedStates,
+        selectedServiceIds,
+        populationMin,
+        populationMax,
+        maxMarkets,
+        primaryKeyword,
+        customRows,
+      }),
+    [
+      strategyLens,
+      selectedStates,
+      selectedServiceIds,
+      populationMin,
+      populationMax,
+      maxMarkets,
+      primaryKeyword,
+      customRows,
+    ],
+  );
+  const latestPrepareSnapshotRef = useRef(prepareSnapshot);
+  const prepareRequestIdRef = useRef(0);
+  useEffect(() => {
+    latestPrepareSnapshotRef.current = prepareSnapshot;
+  }, [prepareSnapshot]);
   const readyToReview =
     (selectedServices.length > 0 || validCustomTargets.length > 0) &&
     !cachedFiltersInvalid &&
@@ -422,6 +466,12 @@ export default function AgencyPage() {
     ) {
       return;
     }
+    const requestId = prepareRequestIdRef.current + 1;
+    prepareRequestIdRef.current = requestId;
+    const requestSnapshot = latestPrepareSnapshotRef.current;
+    const isLatestRequest = () => prepareRequestIdRef.current === requestId;
+    const isCurrentSnapshot = () =>
+      isLatestRequest() && latestPrepareSnapshotRef.current === requestSnapshot;
     setError(null);
     setRunResult(null);
     setQueueNotice(null);
@@ -447,7 +497,9 @@ export default function AgencyPage() {
                   body: JSON.stringify({
                     lens_id: strategyLens,
                     primary_keyword:
-                      strategyLens === "keyword_hijack" ? primaryKeyword.trim() : undefined,
+                      strategyLens === "keyword_hijack" && globalPrimaryKeywordReady
+                        ? primaryKeyword.trim()
+                        : undefined,
                     city_filters: cityFilters,
                     service_filters: [
                       { field: "name", operator: "like", value: service.label },
@@ -487,6 +539,8 @@ export default function AgencyPage() {
             )
           : [];
 
+      if (!isCurrentSnapshot()) return;
+
       const cachedTargets = discovered.flat().filter(Boolean) as QueuedTarget[];
       const nextTargets = uniqueTargets([...cachedTargets, ...validCustomTargets]);
       if (nextTargets.length === 0) {
@@ -500,9 +554,13 @@ export default function AgencyPage() {
       setTargets(nextTargets);
       setStep("confirm");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Multi-market target discovery failed.");
+      if (isCurrentSnapshot()) {
+        setError(err instanceof Error ? err.message : "Multi-market target discovery failed.");
+      }
     } finally {
-      setIsPreparing(false);
+      if (isLatestRequest()) {
+        setIsPreparing(false);
+      }
     }
   }
 
@@ -520,7 +578,9 @@ export default function AgencyPage() {
           mode: "fresh",
           strategy_id: strategyLens,
           primary_keyword:
-            strategyLens === "keyword_hijack" ? primaryKeyword.trim() : undefined,
+            strategyLens === "keyword_hijack" && globalPrimaryKeywordReady
+              ? primaryKeyword.trim()
+              : undefined,
           targets: targets.map((target) => ({
             cbsa_code: target.cbsa_code,
             niche_normalized: target.niche_normalized,
@@ -569,8 +629,11 @@ export default function AgencyPage() {
     }
     if (cachedFiltersInvalid) return "Population filters need whole numbers only.";
     if (cachedRangeInvalid) return "Population minimum must be lower than the maximum.";
-    if (keywordRequired) {
-      return "Keyword Hijack needs a primary keyword for cached and custom targets.";
+    if (cachedKeywordRequired) {
+      return "Keyword Hijack needs a global primary keyword for cached discovery.";
+    }
+    if (customKeywordRequired) {
+      return "Keyword Hijack needs a primary keyword on every custom target or in the global field.";
     }
     if (targetCapExceeded) {
       return `This configuration can queue up to ${totalTargetPairs} targets. Keep it at ${TARGET_CAP} or fewer.`;
