@@ -386,7 +386,6 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
   }, [onClose]);
 
   const keywords = report.keyword_expansion?.expanded_keywords;
-  const meta = report.meta;
 
   return createPortal(
     <div
@@ -664,69 +663,6 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
             </section>
           )}
 
-          {/* Meta */}
-          {meta && Object.keys(meta).length > 0 && (
-            <details
-              style={{
-                border: "1px solid var(--rule)",
-                borderRadius: 10,
-                background: "var(--card)",
-              }}
-            >
-              <summary
-                style={{
-                  padding: "10px 14px",
-                  fontFamily: "var(--serif)",
-                  fontStyle: "italic",
-                  fontSize: 12,
-                  color: "var(--ink-3)",
-                  cursor: "pointer",
-                  listStyle: "none",
-                }}
-              >
-                Meta &amp; cost details
-              </summary>
-              <div
-                style={{
-                  padding: "0 14px 14px",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "10px 16px",
-                }}
-              >
-                {meta.processing_time_seconds != null && (
-                  <div>
-                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
-                      Processing time
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
-                      {Number(meta.processing_time_seconds).toFixed(1)}s
-                    </div>
-                  </div>
-                )}
-                {meta.total_api_calls != null && (
-                  <div>
-                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
-                      API calls
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
-                      {String(meta.total_api_calls)}
-                    </div>
-                  </div>
-                )}
-                {meta.total_cost_usd != null && (
-                  <div>
-                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
-                      Cost
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
-                      ${Number(meta.total_cost_usd).toFixed(4)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </details>
-          )}
         </div>
       </div>
     </div>,

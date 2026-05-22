@@ -109,6 +109,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       niche_keyword: "roofing",
       geo_target: "Phoenix, AZ",
       strategy_profile: "balanced",
+      meta: null,
     });
   });
 
@@ -136,6 +137,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       niche_keyword: "roofing",
       geo_target: "Phoenix, AZ",
       resolved_weights: { organic: 0.6, local: 0.4 },
+      meta: null,
       access_scope: "account",
       owner_account_id: entitlement.account_id,
     });
