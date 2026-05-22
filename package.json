@@ -15,6 +15,7 @@
     "dev:api": "docker compose up api --build",
     "dev:api:local": "arch -arm64 uvicorn src.research_agent.api:app --reload --port 8000",
     "env:sync:local": "node scripts/dev/sync_worktree_env.mjs",
+    "runtime:check": "node scripts/dev/check_runtime_env.mjs",
     "env:check": "node scripts/ci/env_manifest_check.mjs",
     "env:plan:vercel": "node scripts/ci/sync_vercel_env.mjs --dry-run",
     "env:plan:github": "node scripts/ci/sync_github_env.mjs",
