@@ -167,7 +167,7 @@ function LoginForm() {
               fontFamily: "var(--serif)",
               fontSize: 22,
               fontWeight: 600,
-              letterSpacing: "-0.3px",
+              letterSpacing: 0,
               color: "var(--ink)",
             }}
           >
