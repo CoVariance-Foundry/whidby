@@ -9,6 +9,7 @@ import { loadAccountSummary } from "@/lib/account/summary";
 
 const mocks = vi.hoisted(() => ({
   client: vi.fn(({ summary }) => <section>Settings for {summary.email}</section>),
+  headersGet: vi.fn(),
 }));
 
 vi.mock("./AccountSettingsClient", () => ({
@@ -39,10 +40,52 @@ vi.mock("@/lib/account/summary", () => ({
   loadAccountSummary: vi.fn(),
 }));
 
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get: mocks.headersGet,
+  })),
+}));
+
 beforeEach(() => {
+  delete process.env.WIDBY_APP_BASE_URL;
+  delete process.env.NEXT_PUBLIC_APP_URL;
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+  delete process.env.VERCEL_URL;
+  mocks.headersGet.mockImplementation((name: string) => {
+    const values: Record<string, string> = {
+      "x-forwarded-host": "preview.whidby.test",
+      "x-forwarded-proto": "https",
+      cookie: "sb-access-token=abc",
+    };
+    return values[name] ?? null;
+  });
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      status: "success",
+      reports: [
+        {
+          id: "report-1",
+          niche: "Plumbing",
+          city: "Austin, TX",
+          archetype_short: "Easy win",
+          opportunity_score: 82,
+          created_at: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+    }),
+  });
   vi.mocked(createClient).mockResolvedValue({} as never);
   vi.mocked(resolveEntitlementContext).mockResolvedValue({
-    user: { id: "user-1", email: "owner@example.com" },
+    user: {
+      id: "user-1",
+      email: "owner@example.com",
+      user_metadata: {
+        name: "Owner Example",
+        segment: "Agency",
+        coach_ref: "Coach A",
+      },
+    },
     entitlement: {
       account_id: "account-1",
       member_role: "owner",
@@ -83,6 +126,47 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("heading", { name: "Account & billing" })).toBeInTheDocument();
     expect(screen.getByText("Settings for owner@example.com")).toBeInTheDocument();
+    expect(mocks.client).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: {
+          email: "owner@example.com",
+          name: "Owner Example",
+          segment: "Agency",
+          referred_by: "Coach A",
+        },
+        savedReports: [
+          expect.objectContaining({
+            id: "report-1",
+            niche: "Plumbing",
+          }),
+        ],
+        savedReportsError: null,
+      }),
+      undefined,
+    );
+  });
+
+  it("does not forward cookies when the reports URL comes from request host headers", async () => {
+    render(await SettingsPage());
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://preview.whidby.test/api/agent/reports?limit=5",
+      { cache: "no-store" },
+    );
+  });
+
+  it("forwards cookies only when the reports URL comes from a configured base URL", async () => {
+    process.env.WIDBY_APP_BASE_URL = "https://app.whidby.test";
+
+    render(await SettingsPage());
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://app.whidby.test/api/agent/reports?limit=5",
+      {
+        cache: "no-store",
+        headers: { cookie: "sb-access-token=abc" },
+      },
+    );
   });
 
   it("renders an account unavailable state when entitlement resolution fails", async () => {
