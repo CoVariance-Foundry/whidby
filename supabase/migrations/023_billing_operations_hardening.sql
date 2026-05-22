@@ -79,6 +79,19 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_last_stripe_event
     ON subscriptions (last_stripe_event_created_at DESC)
     WHERE last_stripe_event_created_at IS NOT NULL;
 
+ALTER TABLE public.internal_user_entitlements
+    ADD COLUMN IF NOT EXISTS billing_operations_admin BOOLEAN NOT NULL DEFAULT false;
+
+UPDATE public.internal_user_entitlements
+SET billing_operations_admin = true,
+    updated_at = now()
+WHERE fresh_report_quota_exempt = true
+  AND billing_operations_admin = false;
+
+CREATE INDEX IF NOT EXISTS idx_internal_user_entitlements_billing_ops_admin
+    ON public.internal_user_entitlements (user_id, expires_at)
+    WHERE billing_operations_admin = true;
+
 ALTER TABLE billing_checkout_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE billing_operation_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE billing_webhook_events ENABLE ROW LEVEL SECURITY;
@@ -107,9 +120,10 @@ SET search_path = public
 AS $$
     SELECT EXISTS (
         SELECT 1
-        FROM account_memberships
+        FROM public.internal_user_entitlements
         WHERE user_id = (SELECT auth.uid())
-          AND role = 'admin'
+          AND billing_operations_admin = true
+          AND (expires_at IS NULL OR expires_at > now())
     );
 $$;
 
@@ -197,6 +211,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    v_rows_updated INT;
 BEGIN
     IF NOT public.is_internal_admin() THEN
         RAISE EXCEPTION 'billing_admin_required' USING ERRCODE = '42501';
@@ -209,6 +225,11 @@ BEGIN
         resolved_by = (SELECT auth.uid()),
         updated_at = now()
     WHERE id = p_event_id;
+
+    GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
+    IF v_rows_updated = 0 THEN
+        RAISE EXCEPTION 'billing_event_not_found' USING ERRCODE = 'P0002';
+    END IF;
 END;
 $$;
 

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   expireStaleOrCompetingCheckoutSessions: vi.fn(),
   reserveCheckoutSession: vi.fn(),
   completeCheckoutSessionReservation: vi.fn(),
+  markCheckoutSessionStatus: vi.fn(),
   recordBillingOperationEvent: vi.fn(),
   checkoutCreate: vi.fn(),
   customerCreate: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock("@/lib/billing/checkout-session", () => ({
   expireStaleOrCompetingCheckoutSessions: mocks.expireStaleOrCompetingCheckoutSessions,
   reserveCheckoutSession: mocks.reserveCheckoutSession,
   completeCheckoutSessionReservation: mocks.completeCheckoutSessionReservation,
+  markCheckoutSessionStatus: mocks.markCheckoutSessionStatus,
 }));
 
 vi.mock("@/lib/billing/ops-log", () => ({
@@ -92,6 +94,7 @@ describe("POST /api/billing/checkout", () => {
       idempotency_key: "billing-checkout:account-1:plus:reservation-1",
     });
     mocks.completeCheckoutSessionReservation.mockResolvedValue(undefined);
+    mocks.markCheckoutSessionStatus.mockResolvedValue(undefined);
     mocks.recordBillingOperationEvent.mockResolvedValue(undefined);
     mocks.customerCreate.mockResolvedValue({ id: "cus_123" });
     mocks.upsertBillingCustomer.mockResolvedValue(undefined);
@@ -195,6 +198,13 @@ describe("POST /api/billing/checkout", () => {
         source: "checkout",
         internal_message: "Neither STRIPE_SECRET_KEY nor STRIPE_RESTRICTED_KEY is configured",
       }),
+    );
+    expect(mocks.markCheckoutSessionStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        reservation_id: "reservation-1",
+        status: "expired",
+      },
     );
   });
 });

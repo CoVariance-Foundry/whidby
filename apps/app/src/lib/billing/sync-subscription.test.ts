@@ -124,4 +124,22 @@ describe("Stripe subscription sync", () => {
     });
     expect(supabase.rows).toHaveLength(0);
   });
+
+  it("skips equal-timestamp subscription events to avoid same-second rollback", async () => {
+    const supabase = new FakeSupabase();
+    supabase.existingSubscription = {
+      last_stripe_event_created_at: "2026-05-02T00:00:00.000Z",
+    };
+    const result = await syncStripeSubscription(supabase as never, subscription(), {
+      stripe_event_id: "evt_same_second",
+      stripe_event_created_at: "2026-05-02T00:00:00.000Z",
+    });
+
+    expect(result).toMatchObject({
+      applied: false,
+      reason: "stale_event",
+      last_stripe_event_created_at: "2026-05-02T00:00:00.000Z",
+    });
+    expect(supabase.rows).toHaveLength(0);
+  });
 });

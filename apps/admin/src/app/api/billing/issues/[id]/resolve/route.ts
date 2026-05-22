@@ -20,15 +20,24 @@ export async function POST(_req: NextRequest, { params }: RouteContext) {
   });
 
   if (error) {
-    const statusCode = error.code === "42501" ? 403 : 502;
+    const statusCode = error.code === "42501" ? 403 : error.code === "P0002" ? 404 : 502;
+    const code =
+      error.code === "42501"
+        ? "billing_admin_required"
+        : error.code === "P0002"
+          ? "billing_issue_not_found"
+          : "billing_issue_resolve_failed";
+    const message =
+      error.code === "42501"
+        ? "Admin access is required."
+        : error.code === "P0002"
+          ? "Billing issue was not found."
+          : "Billing issue could not be resolved.";
     return NextResponse.json(
       {
         status: "unavailable",
-        code: error.code === "42501" ? "billing_admin_required" : "billing_issue_resolve_failed",
-        message:
-          error.code === "42501"
-            ? "Admin access is required."
-            : "Billing issue could not be resolved.",
+        code,
+        message,
       },
       { status: statusCode },
     );

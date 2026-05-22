@@ -40,4 +40,19 @@ describe("POST /api/billing/issues/[id]/resolve", () => {
     expect(res.status).toBe(403);
     expect(body.code).toBe("billing_admin_required");
   });
+
+  it("returns not found when the RPC cannot resolve the event id", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "P0002", message: "billing_event_not_found" },
+    });
+
+    const res = await POST(new Request("http://localhost") as never, {
+      params: Promise.resolve({ id: "11111111-1111-1111-1111-111111111111" }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe("billing_issue_not_found");
+  });
 });

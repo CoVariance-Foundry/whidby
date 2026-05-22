@@ -59,4 +59,37 @@ describe("BillingIssuesPage", () => {
       });
     });
   });
+
+  it("prevents duplicate resolve requests while one is in flight", async () => {
+    let resolvePost!: (response: Response) => void;
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/resolve")) {
+        return new Promise<Response>((resolve) => {
+          resolvePost = resolve;
+        });
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ status: "success", issues: [issue] }), { status: 200 }),
+      );
+    }) as never;
+
+    render(<BillingIssuesPage />);
+
+    await screen.findByText("Billing checkout could not start.");
+    const button = screen.getByRole("button", { name: /mark resolved/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(screen.getByRole("button", { name: /resolving/i })).toBeDisabled();
+    const resolveCalls = vi.mocked(global.fetch).mock.calls.filter(([input]) =>
+      String(input).includes("/resolve"),
+    );
+    expect(resolveCalls).toHaveLength(1);
+
+    resolvePost(new Response(JSON.stringify({ status: "success" }), { status: 200 }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /mark resolved/i })).toBeEnabled();
+    });
+  });
 });

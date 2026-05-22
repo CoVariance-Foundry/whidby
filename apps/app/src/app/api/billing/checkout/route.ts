@@ -6,6 +6,7 @@ import {
   completeCheckoutSessionReservation,
   expireStaleOrCompetingCheckoutSessions,
   findReusableCheckoutSession,
+  markCheckoutSessionStatus,
   reserveCheckoutSession,
 } from "@/lib/billing/checkout-session";
 import { errorToInternalMessage, recordBillingOperationEvent } from "@/lib/billing/ops-log";
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
     plan_key?: string | null;
     stripe_customer_id?: string | null;
     stripe_checkout_session_id?: string | null;
+    checkout_reservation_id?: string | null;
   } = {};
 
   try {
@@ -148,6 +150,7 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       plan_key: body.plan_key,
     });
+    logContext.checkout_reservation_id = reservation.id;
 
     const session = await stripe.checkout.sessions.create(
       {
@@ -178,6 +181,9 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[billing/checkout] failed", error);
     if (admin) {
+      if (logContext.checkout_reservation_id) {
+        await markFailedCheckoutReservation(admin, logContext.checkout_reservation_id);
+      }
       await recordBillingOperationEvent(admin, {
         severity: "error",
         event_type: "checkout_failed",
@@ -199,5 +205,19 @@ export async function POST(req: NextRequest) {
       },
       { status: 500 },
     );
+  }
+}
+
+async function markFailedCheckoutReservation(
+  admin: ReturnType<typeof createAdminClient>,
+  reservationId: string,
+): Promise<void> {
+  try {
+    await markCheckoutSessionStatus(admin, {
+      reservation_id: reservationId,
+      status: "expired",
+    });
+  } catch (error) {
+    console.warn("[billing/checkout] failed to expire abandoned reservation", error);
   }
 }

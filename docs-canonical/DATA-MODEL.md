@@ -248,7 +248,7 @@ Fresh scoring requests must persist generated reports as `account`; existing own
 
 ### Billing Operations
 
-Billing operational state is service-role owned. Regular consumer users never read operational rows directly; admins access issue visibility through checked RPCs and `apps/admin` API routes.
+Billing operational state is service-role owned. Regular consumer users never read operational rows directly; internal operators access issue visibility through checked RPCs and `apps/admin` API routes. The billing operations gate is `internal_user_entitlements.billing_operations_admin`, not account-level membership role.
 
 `billing_checkout_sessions` reserves a Stripe Checkout attempt before the Stripe call. There can be only one active pending reservation per account. A still-unexpired pending reservation for the same account and plan should be reused instead of creating a duplicate Stripe Checkout Session; stale pending reservations should move to `expired`.
 
@@ -260,8 +260,8 @@ Admin RPCs:
 
 | RPC | Access | Responsibility |
 | --- | --- | --- |
-| `list_billing_operation_events(p_status text default 'open', p_severity text default null, p_limit int default 50)` | Authenticated account admin only | Returns recent billing events filtered by status/severity, capped at 100 rows. |
-| `resolve_billing_operation_event(p_event_id uuid)` | Authenticated account admin only | Marks an event resolved with `resolved_at` and `resolved_by`. |
+| `list_billing_operation_events(p_status text default 'open', p_severity text default null, p_limit int default 50)` | Authenticated billing operations admin only | Returns recent billing events filtered by status/severity, capped at 100 rows. |
+| `resolve_billing_operation_event(p_event_id uuid)` | Authenticated billing operations admin only | Marks an event resolved with `resolved_at` and `resolved_by`; raises `billing_event_not_found` when no event matches. |
 
 ### Internal User Entitlements
 
@@ -310,6 +310,7 @@ Free users can persist onboarding state and cached-route choices, but fresh scor
 | --- | --- | --- | --- | --- |
 | `user_id` | UUID | Yes | primary key, references `auth.users.id` | User receiving the internal override |
 | `fresh_report_quota_exempt` | boolean | Yes | default false | Bypasses fresh-report monthly quota when true and unexpired |
+| `billing_operations_admin` | boolean | Yes | default false | Allows internal billing issue list/resolve RPC access when true and unexpired |
 | `reason` | text | Yes | non-empty operational note | Why the override exists |
 | `granted_by` | UUID | No | references `auth.users.id` | Optional granting operator |
 | `expires_at` | timestamptz | No | null or future timestamp | Optional expiry for temporary testing |

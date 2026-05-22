@@ -180,7 +180,7 @@ Additional contract checks for scoring/autocomplete:
 
 | Scope | Required Coverage | Required Tests |
 | --- | --- | --- |
-| Billing hardening schema | `billing_checkout_sessions`, `billing_operation_events`, `billing_webhook_events`, subscription Stripe event ordering columns, RLS, service-role policies, admin RPCs, and supporting indexes | `tests/unit/test_supabase_schema.py` |
+| Billing hardening schema | `billing_checkout_sessions`, `billing_operation_events`, `billing_webhook_events`, subscription Stripe event ordering columns, `internal_user_entitlements.billing_operations_admin`, RLS, service-role policies, admin RPCs, and supporting indexes | `tests/unit/test_supabase_schema.py` |
 | Checkout route | Reuses unexpired pending sessions, creates customers/sessions with deterministic idempotency keys, logs failures, and returns stable public error codes/messages | `apps/app/src/app/api/billing/checkout/route.test.ts` |
 | Portal route | Logs missing customer/config/Stripe failures and never returns raw exception text to users | `apps/app/src/app/api/billing/portal/route.test.ts` |
 | Webhook route | Deduplicates processed Stripe events, retries failed events, fetches current subscription state when needed, skips stale subscription updates, marks checkout sessions complete/expired, and logs processing failures | `apps/app/src/app/api/billing/webhook/route.test.ts`, `apps/app/src/lib/billing/sync-subscription.test.ts` |

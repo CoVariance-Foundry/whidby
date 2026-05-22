@@ -130,7 +130,7 @@ async function isStaleStripeEvent(
     typeof data?.last_stripe_event_created_at === "string"
       ? data.last_stripe_event_created_at
       : null;
-  if (lastCreatedAt && Date.parse(lastCreatedAt) > Date.parse(eventContext.stripe_event_created_at)) {
+  if (lastCreatedAt && Date.parse(lastCreatedAt) >= Date.parse(eventContext.stripe_event_created_at)) {
     return {
       applied: false,
       reason: "stale_event",

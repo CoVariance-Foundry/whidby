@@ -43,11 +43,13 @@ def test_billing_operations_hardening_migration_contract() -> None:
     for column in (
         "last_stripe_event_id",
         "last_stripe_event_created_at",
+        "billing_operations_admin",
     ):
         assert f"ADD COLUMN IF NOT EXISTS {column}" in sql
 
     assert "idx_billing_checkout_sessions_one_pending_account" in sql
     assert "WHERE status = 'pending'" in sql
+    assert "idx_internal_user_entitlements_billing_ops_admin" in sql
     assert "idx_billing_operation_events_status_severity_created" in sql
     assert "idx_billing_webhook_events_status_created" in sql
     assert "Service role full access on billing checkout sessions" in sql
@@ -57,4 +59,9 @@ def test_billing_operations_hardening_migration_contract() -> None:
     assert "Authenticated admins can resolve billing operation events" in sql
     assert "CREATE OR REPLACE FUNCTION public.list_billing_operation_events" in sql
     assert "CREATE OR REPLACE FUNCTION public.resolve_billing_operation_event" in sql
+    assert "FROM public.internal_user_entitlements" in sql
+    assert "billing_operations_admin = true" in sql
+    assert "role = 'admin'" not in sql
+    assert "GET DIAGNOSTICS v_rows_updated = ROW_COUNT" in sql
+    assert "billing_event_not_found" in sql
     assert "billing_admin_required" in sql

@@ -2,7 +2,7 @@
 
 ## Billing Hardening And Admin Issue Visibility
 
-Status: implemented and verified locally on `codex/fix-billing-rollout-default`; ready for PR update.
+Status: implemented and verified locally on `codex/billing-hardening-admin-visibility`; PR review comments addressed.
 
 Goal: harden Stripe Checkout/Portal/Webhook behavior after the account billing rollout and give admins an in-app view of billing issues.
 
@@ -10,19 +10,19 @@ Completed in this slice:
 
 - Added migration `023_billing_operations_hardening.sql` with checkout session reservations, billing operation event logging, webhook event ledgering, subscription event-order columns, RLS/service-role policies, and admin RPCs for listing/resolving billing events.
 - Added fail-open billing issue logging, checkout session reservation/reuse helpers, webhook event ledger helpers, and stale-event-aware subscription sync.
-- Hardened consumer Checkout, Portal, and Webhook routes with stable public error codes/messages, Stripe idempotency keys, duplicate webhook handling, stale webhook skipping, and admin-visible issue records.
+- Hardened consumer Checkout, Portal, and Webhook routes with stable public error codes/messages, Stripe idempotency keys, abandoned reservation cleanup, duplicate webhook handling, stale/same-second webhook skipping, and admin-visible issue records.
 - Added admin billing issue list/resolve API routes, `/billing` dashboard, severity/status filters, expandable issue detail, resolve action, and Billing sidebar navigation.
 - Updated canonical architecture, data-model, test-spec, and project context docs for the billing operations contract.
 
 Verified:
 
-- `npm --workspace apps/app test -- billing flags AccountSettingsClient` passed 30 tests.
-- `npm --workspace apps/admin test -- billing Sidebar` passed 6 tests after using the local dependency bridge in this worktree.
+- `npm --workspace apps/app test -- billing flags AccountSettingsClient` passed 34 tests.
+- `npm --workspace apps/admin test -- billing Sidebar` passed 8 tests after using the local dependency bridge in this worktree.
 - Targeted `npm --workspace apps/app run lint -- ...billing files...` passed.
 - Targeted `npm --workspace apps/admin run lint -- ...billing files... Sidebar...` passed.
 - `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_supabase_schema.py -q` passed 2 tests with the existing `asyncio_mode` warning.
 - `git diff --check` passed.
-- `npx docguard-cli guard` ran with network escalation and exited warn-only with existing repository warnings around docs-sync, traceability, freshness, TODO tracking, Spec-Kit, and unrelated doc quality.
+- `npx docguard-cli guard` ran with network escalation and exited warn-only with existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.
 
 Noted but not fixed in this slice:
 

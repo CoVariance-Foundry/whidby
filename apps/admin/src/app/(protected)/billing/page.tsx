@@ -41,6 +41,7 @@ export default function BillingIssuesPage() {
   const [severity, setSeverity] = useState<SeverityFilter>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadIssues = useCallback(async () => {
@@ -83,15 +84,21 @@ export default function BillingIssuesPage() {
   );
 
   async function resolveIssue(issueId: string) {
-    const response = await fetch(`/api/billing/issues/${issueId}/resolve`, {
-      method: "POST",
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      setError(body.message ?? "Billing issue could not be resolved.");
-      return;
+    if (resolvingId) return;
+    setResolvingId(issueId);
+    try {
+      const response = await fetch(`/api/billing/issues/${issueId}/resolve`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        setError(body.message ?? "Billing issue could not be resolved.");
+        return;
+      }
+      await loadIssues();
+    } finally {
+      setResolvingId(null);
     }
-    await loadIssues();
   }
 
   return (
@@ -168,6 +175,7 @@ export default function BillingIssuesPage() {
                   expanded={expanded === issue.id}
                   onToggle={() => setExpanded(expanded === issue.id ? null : issue.id)}
                   onResolve={() => resolveIssue(issue.id)}
+                  resolving={resolvingId === issue.id}
                 />
               ))
             )}
@@ -230,11 +238,13 @@ function IssueRow({
   expanded,
   onToggle,
   onResolve,
+  resolving,
 }: {
   issue: BillingIssue;
   expanded: boolean;
   onToggle: () => void;
   onResolve: () => void;
+  resolving: boolean;
 }) {
   return (
     <>
@@ -260,9 +270,10 @@ function IssueRow({
             <button
               type="button"
               onClick={onResolve}
-              className="rounded-md border border-[var(--color-dark-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-dark-hover)]"
+              disabled={resolving}
+              className="rounded-md border border-[var(--color-dark-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-dark-hover)] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Mark resolved
+              {resolving ? "Resolving..." : "Mark resolved"}
             </button>
           ) : (
             <span className="text-xs text-[var(--color-positive)]">Resolved</span>

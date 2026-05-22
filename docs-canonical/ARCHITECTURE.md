@@ -108,7 +108,7 @@ Admin (`apps/admin`) hosts a **dual-surface niche finder**:
 - **Standard surface (`/`)**: city + service input returns an opportunity score for quick triage.
 - **Exploration surface (`/exploration`)**: same input and score pathway, plus evidence categories that explain score rationale and a follow-up chat assistant that pulls deeper signals via approved scoring/search tools while preserving active city/service context.
 
-Admin also hosts billing operations visibility at `/billing`. The page reads `billing_operation_events` through admin-checked RPCs and internal API routes, summarizes open/critical/warning counts, filters by severity/status, expands event metadata/internal detail, and lets admins resolve issues without direct database access or Vercel log lookup.
+Admin also hosts billing operations visibility at `/billing`. The page reads `billing_operation_events` through internal-operator RPCs and admin API routes, summarizes open/critical/warning counts, filters by severity/status, expands event metadata/internal detail, and lets billing operations admins resolve issues without direct database access or Vercel log lookup. The RPC gate uses `internal_user_entitlements.billing_operations_admin`, not account-level membership roles.
 
 Consumer (`apps/app`) hosts scoring and discovery surfaces:
 
