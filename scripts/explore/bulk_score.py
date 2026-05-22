@@ -4,7 +4,7 @@ Usage:
     # Preview what will be scored (no API calls):
     python -m scripts.explore.bulk_score --preview
 
-    # Score top 50 metros × 12 services via local FastAPI:
+    # Score 50 rank-and-rent metros × 12 services via local FastAPI:
     python -m scripts.explore.bulk_score --apply
 
     # Custom city/service counts:
@@ -31,8 +31,10 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +70,20 @@ SERVICES = [
 
 DEFAULT_CONCURRENCY = 10
 PAGE_SIZE = 1000
+MAX_METRO_FETCH = 1000
+RANK_AND_RENT_CLASS_ORDER = (
+    "large_300k_1m",
+    "medium_100_300k",
+    "metro_1m_5m",
+    "small_50_100k",
+    "mega_5m_plus",
+)
+STRIP_TRAILING_SERVICE_SUFFIXES = re.compile(
+    r"\s+\b(near me|services?|company|companies|contractors?|pros?|experts?)\b$",
+    re.IGNORECASE,
+)
+MULTI_SPACE = re.compile(r"\s+")
+CATALOG_SERVICE_KEYS = {MULTI_SPACE.sub(" ", service.strip().lower()) for service in SERVICES}
 
 
 def _load_env() -> None:
@@ -104,32 +120,172 @@ def _supabase_client() -> Any:
 
 
 def fetch_top_metros(supabase: Any, limit: int) -> list[dict[str, Any]]:
+    """Compatibility wrapper for the old top-population selection."""
+    return fetch_metros(
+        supabase,
+        limit=limit,
+        strategy="top-population",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=False,
+        mega_cap=None,
+    )
+
+
+def fetch_metros(
+    supabase: Any,
+    *,
+    limit: int,
+    strategy: str,
+    population_classes: list[str] | None,
+    min_population: int | None,
+    max_population: int | None,
+    require_dfs: bool,
+    mega_cap: int | None,
+) -> list[dict[str, Any]]:
     response = (
         supabase.table("metros")
-        .select("cbsa_code, cbsa_name, state, population")
+        .select(
+            "cbsa_code, cbsa_name, state, population, population_class, "
+            "dataforseo_location_codes"
+        )
         .not_.is_("population", "null")
         .order("population", desc=True)
-        .limit(limit)
+        .limit(MAX_METRO_FETCH)
         .execute()
     )
-    return response.data
+    candidates = list(response.data or [])
+    filtered = [
+        metro
+        for metro in candidates
+        if _metro_matches_filters(
+            metro,
+            population_classes=population_classes,
+            min_population=min_population,
+            max_population=max_population,
+            require_dfs=require_dfs,
+        )
+    ]
+    if strategy == "top-population":
+        ordered = sorted(
+            filtered,
+            key=lambda metro: (
+                -(int(metro.get("population") or 0)),
+                str(metro.get("cbsa_code") or ""),
+            ),
+        )
+        return ordered[:limit]
+
+    ordered = _rank_and_rent_order(filtered)
+    return _apply_mega_cap(ordered, limit=limit, mega_cap=mega_cap)
+
+
+def _metro_matches_filters(
+    metro: dict[str, Any],
+    *,
+    population_classes: list[str] | None,
+    min_population: int | None,
+    max_population: int | None,
+    require_dfs: bool,
+) -> bool:
+    population = metro.get("population")
+    if population is None:
+        return False
+    population_int = int(population)
+    if min_population is not None and population_int < min_population:
+        return False
+    if max_population is not None and population_int > max_population:
+        return False
+    if population_classes and metro.get("population_class") not in population_classes:
+        return False
+    if require_dfs and not _has_dfs_location(metro):
+        return False
+    return True
+
+
+def _has_dfs_location(metro: dict[str, Any]) -> bool:
+    codes = metro.get("dataforseo_location_codes")
+    return isinstance(codes, list) and any(code is not None for code in codes)
+
+
+def _rank_and_rent_order(metros: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    priority = {name: index for index, name in enumerate(RANK_AND_RENT_CLASS_ORDER)}
+    fallback_priority = len(priority)
+    return sorted(
+        metros,
+        key=lambda metro: (
+            priority.get(str(metro.get("population_class") or ""), fallback_priority),
+            -(int(metro.get("population") or 0)),
+            str(metro.get("state") or ""),
+            str(metro.get("cbsa_code") or ""),
+        ),
+    )
+
+
+def _apply_mega_cap(
+    metros: list[dict[str, Any]], *, limit: int, mega_cap: int | None
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    mega_count = 0
+    for metro in metros:
+        if metro.get("population_class") == "mega_5m_plus" and mega_cap is not None:
+            if mega_count >= mega_cap:
+                continue
+            mega_count += 1
+        selected.append(metro)
+        if len(selected) >= limit:
+            return selected
+    return selected
+
+
+def summarize_metro_selection(metros: list[dict[str, Any]]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for metro in metros:
+        population_class = str(metro.get("population_class") or "unknown")
+        summary[population_class] = summary.get(population_class, 0) + 1
+    return summary
+
+
+def normalize_service_key(raw: str) -> str:
+    text = MULTI_SPACE.sub(" ", raw.strip().lower()).strip()
+    if text in CATALOG_SERVICE_KEYS:
+        return text
+    return STRIP_TRAILING_SERVICE_SUFFIXES.sub("", text).strip()
 
 
 def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
+    try:
+        market_cells = _fetch_pages(
+            supabase,
+            "explore_market_cells",
+            "cbsa_code,niche_normalized,report_id",
+        )
+        pairs.update(
+            (str(row["cbsa_code"]), normalize_service_key(str(row["niche_normalized"])))
+            for row in market_cells
+            if row.get("cbsa_code") and row.get("niche_normalized") and row.get("report_id")
+        )
+    except Exception as exc:
+        logger.info(
+            "Could not read explore_market_cells for resume state; falling back to reports + metro_scores: %s",
+            exc,
+        )
+
     all_rows = _fetch_pages(supabase, "metro_scores", "cbsa_code, report_id")
     scored_cbsa = {row["cbsa_code"] for row in all_rows}
 
     if not scored_cbsa:
-        return set()
+        return pairs
 
     all_reports = _fetch_pages(supabase, "reports", "id, niche_keyword")
     report_niche = {row["id"]: row["niche_keyword"] for row in all_reports}
 
-    pairs = set()
     for row in all_rows:
         niche = report_niche.get(row["report_id"])
         if niche:
-            pairs.add((row["cbsa_code"], niche.strip().lower()))
+            pairs.add((row["cbsa_code"], normalize_service_key(niche)))
     return pairs
 
 
@@ -184,6 +340,198 @@ async def score_one(
     except Exception as exc:
         logger.error("Error scoring %s × %s: %s", city_name, service, exc)
         return None
+
+
+def verify_persistence(
+    supabase: Any,
+    *,
+    report_id: str | None,
+    cbsa_code: str,
+    require_v2: bool,
+) -> dict[str, Any]:
+    if not report_id:
+        return {
+            "ok": False,
+            "report_exists": False,
+            "metro_scores_count": 0,
+            "metro_score_v2_count": 0,
+            "seo_facts_count": 0,
+            "missing": ["report_id"],
+        }
+
+    report_rows = _select_rows(
+        supabase,
+        "reports",
+        "id",
+        filters={"id": report_id},
+        limit=1,
+    )
+    score_rows = _select_rows(
+        supabase,
+        "metro_scores",
+        "report_id, cbsa_code",
+        filters={"report_id": report_id, "cbsa_code": cbsa_code},
+    )
+    score_v2_rows: list[dict[str, Any]] = []
+    seo_fact_rows: list[dict[str, Any]] = []
+    if require_v2:
+        score_v2_rows = _select_rows(
+            supabase,
+            "metro_score_v2",
+            "report_id, cbsa_code",
+            filters={"report_id": report_id, "cbsa_code": cbsa_code},
+        )
+        seo_fact_rows = _select_rows(
+            supabase,
+            "seo_facts",
+            "report_id, cbsa_code",
+            filters={"report_id": report_id, "cbsa_code": cbsa_code},
+        )
+
+    missing = []
+    if not report_rows:
+        missing.append("reports")
+    if not score_rows:
+        missing.append("metro_scores")
+    if require_v2 and not score_v2_rows:
+        missing.append("metro_score_v2")
+    if require_v2 and not seo_fact_rows:
+        missing.append("seo_facts")
+
+    return {
+        "ok": not missing,
+        "report_exists": bool(report_rows),
+        "metro_scores_count": len(score_rows),
+        "metro_score_v2_count": len(score_v2_rows),
+        "seo_facts_count": len(seo_fact_rows),
+        "missing": missing,
+    }
+
+
+def persistence_verification_error(exc: Exception) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "report_exists": False,
+        "metro_scores_count": 0,
+        "metro_score_v2_count": 0,
+        "seo_facts_count": 0,
+        "missing": ["persistence_verification"],
+        "error": str(exc),
+    }
+
+
+def _select_rows(
+    supabase: Any,
+    table: str,
+    columns: str,
+    *,
+    filters: dict[str, Any],
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    query = supabase.table(table).select(columns)
+    for column, value in filters.items():
+        query = query.eq(column, value)
+    if limit is not None:
+        query = query.limit(limit)
+    response = query.execute()
+    return list(response.data or [])
+
+
+def build_audit_record(
+    *,
+    status: str,
+    metro: dict[str, Any],
+    city_name: str,
+    service: str,
+    api_url: str,
+    started_at: datetime,
+    elapsed_ms: int,
+    result: dict[str, Any] | None,
+    persistence: dict[str, Any],
+    error: str | None = None,
+) -> dict[str, Any]:
+    report_id = result.get("report_id") if result else None
+    persist_warning = result.get("persist_warning") if result else None
+    return {
+        "status": status,
+        "started_at": started_at.isoformat(),
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "elapsed_ms": elapsed_ms,
+        "api_url": api_url,
+        "request": {
+            "cbsa_code": metro.get("cbsa_code"),
+            "cbsa_name": metro.get("cbsa_name"),
+            "city": city_name,
+            "state": metro.get("state"),
+            "service": service,
+            "niche_normalized": normalize_service_key(service),
+            "population": metro.get("population"),
+            "population_class": metro.get("population_class"),
+        },
+        "report_id": report_id,
+        "score": {
+            "opportunity_score": result.get("opportunity_score") if result else None,
+            "classification_label": result.get("classification_label") if result else None,
+            "score_system": _score_system(result),
+            "v2_score_count": _v2_score_count(result),
+        },
+        "persist_warning": persist_warning,
+        "persistence": persistence,
+        "error": error,
+    }
+
+
+def _score_system(result: dict[str, Any] | None) -> str | None:
+    if result is None:
+        return None
+    return "v2" if _v2_score_count(result) > 0 else "legacy"
+
+
+def _v2_score_count(result: dict[str, Any] | None) -> int:
+    if result is None:
+        return 0
+    report = result.get("report")
+    if not isinstance(report, dict):
+        return 0
+    return sum(
+        1
+        for metro in report.get("metros", [])
+        if isinstance(metro, dict) and isinstance(metro.get("v2_scores"), dict)
+    )
+
+
+def _status_for_result(
+    result: dict[str, Any] | None,
+    persistence: dict[str, Any],
+) -> str:
+    if not result or not result.get("report_id"):
+        return "failed"
+    if result.get("persist_warning") or not persistence.get("ok"):
+        return "partial_failure"
+    return "success"
+
+
+def _error_for_status(
+    status: str,
+    result: dict[str, Any] | None,
+    persistence: dict[str, Any],
+) -> str | None:
+    if status == "failed":
+        if result is None:
+            return "Scoring API request failed before returning a response."
+        return "Scoring API returned a response without report_id."
+    if status != "partial_failure":
+        return None
+
+    errors = []
+    if result and result.get("persist_warning"):
+        errors.append(str(result["persist_warning"]))
+    if persistence.get("error"):
+        errors.append(f"persistence verification failed: {persistence['error']}")
+    missing = ", ".join(persistence.get("missing") or [])
+    if missing:
+        errors.append(f"missing {missing}")
+    return "; ".join(errors) if errors else None
 
 
 def refresh_matview(supabase: Any) -> None:
@@ -246,9 +594,26 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
     sb = _supabase_client()
     api_url = _api_url(args)
 
-    logger.info("Fetching top %d metros by population...", args.cities)
-    metros = fetch_top_metros(sb, args.cities)
-    logger.info("Found %d metros", len(metros))
+    logger.info(
+        "Fetching up to %d metros with %s strategy...",
+        args.cities,
+        args.strategy,
+    )
+    metros = fetch_metros(
+        sb,
+        limit=args.cities,
+        strategy=args.strategy,
+        population_classes=args.population_classes,
+        min_population=args.min_population,
+        max_population=args.max_population,
+        require_dfs=args.require_dfs,
+        mega_cap=args.mega_cap,
+    )
+    logger.info(
+        "Found %d metros by class: %s",
+        len(metros),
+        summarize_metro_selection(metros),
+    )
 
     services = SERVICES[: args.services]
     logger.info("Services to score (%d): %s", len(services), ", ".join(services))
@@ -265,7 +630,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
     for metro in metros:
         for service in services:
             cbsa = metro["cbsa_code"]
-            if args.resume and (cbsa, service.strip().lower()) in scored_pairs:
+            if args.resume and (cbsa, normalize_service_key(service)) in scored_pairs:
                 continue
             pairs.append((metro, service))
 
@@ -280,6 +645,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
                 m["state"],
                 f"{m['population']:,}",
             )
+        logger.info("Population class mix: %s", summarize_metro_selection(metros))
         logger.info("\nServices (%d): %s", len(services), ", ".join(services))
         logger.info("\nTotal pairs: %d", len(pairs))
         if scored_pairs:
@@ -318,6 +684,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
 
     succeeded = 0
     failed = 0
+    partial_failed = 0
     completed = 0
     results_path = PROJECT_ROOT / "scripts" / "explore" / "bulk_score_results.jsonl"
     started = time.monotonic()
@@ -327,7 +694,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
     async def _worker(
         idx: int, metro: dict[str, Any], service: str, client: httpx.AsyncClient
     ) -> bool:
-        nonlocal succeeded, failed, completed
+        nonlocal succeeded, failed, partial_failed, completed
         city_name = city_short_name(metro["cbsa_name"])
         state = metro["state"]
 
@@ -339,31 +706,47 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
                 idx, len(pairs), city_name, state, service, succeeded, failed, rate,
             )
 
+            attempt_started_at = datetime.now(timezone.utc)
+            attempt_start = time.monotonic()
             result = await score_one(client, api_url, city_name, state, service)
 
         completed += 1
-        if result and result.get("report_id"):
+        elapsed_ms = int((time.monotonic() - attempt_start) * 1000)
+        try:
+            persistence = await asyncio.to_thread(
+                verify_persistence,
+                sb,
+                report_id=result.get("report_id") if result else None,
+                cbsa_code=metro["cbsa_code"],
+                require_v2=args.require_v2_persistence,
+            )
+        except Exception as exc:
+            persistence = persistence_verification_error(exc)
+        status = _status_for_result(result, persistence)
+        if status == "success":
             succeeded += 1
-            async with write_lock:
-                with open(results_path, "a") as f:
-                    f.write(
-                        json.dumps(
-                            {
-                                "cbsa_code": metro["cbsa_code"],
-                                "city": city_name,
-                                "state": state,
-                                "service": service,
-                                "report_id": result["report_id"],
-                                "opportunity_score": result.get("opportunity_score"),
-                                "classification_label": result.get("classification_label"),
-                            }
-                        )
-                        + "\n"
-                    )
-            return True
+        elif status == "partial_failure":
+            partial_failed += 1
         else:
             failed += 1
-            return False
+
+        audit_record = build_audit_record(
+            status=status,
+            metro=metro,
+            city_name=city_name,
+            service=service,
+            api_url=api_url,
+            started_at=attempt_started_at,
+            elapsed_ms=elapsed_ms,
+            result=result,
+            persistence=persistence,
+            error=_error_for_status(status, result, persistence),
+        )
+        async with write_lock:
+            with open(results_path, "a") as f:
+                f.write(json.dumps(audit_record, sort_keys=True) + "\n")
+
+        return status == "success"
 
     async with httpx.AsyncClient() as client:
         tasks = [
@@ -376,13 +759,15 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
     logger.info(
         "\n=== BULK SCORE COMPLETE ===\n"
         "  Succeeded: %d\n"
+        "  Partial:   %d\n"
         "  Failed:    %d\n"
         "  Total:     %d\n"
         "  Time:      %.1f minutes\n"
         "  Results:   %s",
         succeeded,
+        partial_failed,
         failed,
-        succeeded + failed,
+        succeeded + partial_failed + failed,
         total_time / 60,
         results_path,
     )
@@ -414,13 +799,50 @@ def main() -> None:
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="Skip pairs that already have scores in metro_scores.",
+        help="Skip pairs already visible in explore_market_cells or legacy score tables.",
     )
     parser.add_argument(
         "--cities",
         type=int,
         default=50,
-        help="Number of top metros by population (default: 50).",
+        help="Number of metros to select (default: 50).",
+    )
+    parser.add_argument(
+        "--strategy",
+        choices=("rank-and-rent", "top-population"),
+        default="rank-and-rent",
+        help="Metro selection strategy (default: rank-and-rent).",
+    )
+    parser.add_argument(
+        "--population-class",
+        dest="population_classes",
+        action="append",
+        default=None,
+        help="Restrict to a population_class; repeat for multiple classes.",
+    )
+    parser.add_argument(
+        "--min-population",
+        type=int,
+        default=None,
+        help="Minimum metro population to include.",
+    )
+    parser.add_argument(
+        "--max-population",
+        type=int,
+        default=None,
+        help="Maximum metro population to include.",
+    )
+    parser.add_argument(
+        "--require-dfs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Require at least one DataForSEO location code (default: true).",
+    )
+    parser.add_argument(
+        "--mega-cap",
+        type=int,
+        default=5,
+        help="Maximum mega_5m_plus metros to include (default: 5).",
     )
     parser.add_argument(
         "--services",
@@ -440,6 +862,12 @@ def main() -> None:
         default=None,
         help="FastAPI base URL (default: NEXT_PUBLIC_API_URL or http://localhost:8000).",
     )
+    parser.add_argument(
+        "--require-v2-persistence",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Require metro_score_v2 and seo_facts rows before counting success (default: true).",
+    )
     args = parser.parse_args()
 
     if args.refresh_only:
@@ -450,6 +878,10 @@ def main() -> None:
         parser.error("Specify --preview or --apply")
 
     args.concurrency = max(1, min(20, args.concurrency))
+    if args.mega_cap is not None:
+        args.mega_cap = max(0, args.mega_cap)
+    if args.population_classes:
+        args.population_classes = list(dict.fromkeys(args.population_classes))
 
     asyncio.run(run_bulk_score(args))
 
