@@ -7,7 +7,7 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.6.1`     |
+| **Version**      | `1.6.2`     |
 | **Last Updated** | 2026-05-22  |
 | **Owner**        | @widby-team |
 
@@ -75,6 +75,8 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 ### Coverage-First Seed Data Contract
 
 Production seed acceptance is staged, not a single bulk-write event: verify schema parity and the expected Supabase project, run a canary, complete a 12x8 coverage pilot, recompute benchmarks, validate Explore cache reads, then run the 50x16 seed. Seeded rows must reuse canonical tables (`reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, `seo_benchmarks`, and Explore read models); do not create duplicate seed-specific tables.
+
+`scripts/explore/audit_scoring_strategy.py` is the read-only scoring-strategy audit over the same canonical tables. It builds the intended service x population-class matrix, measures V2 component input coverage, checks usable benchmark cells at `sample_size_metros >= 8`, identifies legacy-only and missing Explore rows, and emits generated JSON/Markdown artifacts under ignored `reports/scoring_audit/`.
 
 
 ### Sonar Slice-Lite Entities
@@ -600,3 +602,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.4.0   | 2026-05-16 | Strategy Discovery system design | Added strategy run/cache entities, local pack and metro vector facts, and StrategyResult DTO |
 | 1.6.0   | 2026-05-17 | Internal entitlements | Added internal quota-exempt user entitlement model and staging test personas |
 | 1.6.1   | 2026-05-22 | Coverage-first seed data contract | Documented nullable top-5 telemetry posture and production seed acceptance sequence |
+| 1.6.2   | 2026-05-22 | Scoring strategy audit contract | Documented read-only scoring audit matrix, benchmark usability threshold, and generated artifact location |

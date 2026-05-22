@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.6.2 -->
+<!-- docguard:version 1.6.3 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -115,6 +115,15 @@ tests/
 | Benchmark recompute | `seo_benchmarks` is rebuilt from accepted `seo_facts` after pilot coverage is reviewed |
 | Explore cache validation | `/explore` read models surface the seeded city/service rows with V2 preference and legacy fallback intact |
 | 50x16 seed | Full seed proceeds only after the prior gates pass |
+
+## Scoring Strategy Audit Tests
+
+| Coverage | Expected | Tests |
+|----------|----------|-------|
+| Component coverage | Demand, organic, local, monetization, AI resilience, and app-surface metrics summarize by service, population class, and benchmark cell | `tests/scripts/test_scoring_strategy_audit.py` |
+| Benchmark usability | Benchmark metrics classify cells below `sample_size_metros >= 8` as undersampled | `tests/scripts/test_scoring_strategy_audit.py` |
+| Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
+| Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
 
 ## E2E Scoring Tests (Playwright)
 
@@ -252,3 +261,4 @@ npm run lint
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
 | 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |
 | 1.6.2 | 2026-05-22 | Coverage-first production seed acceptance | Added schema parity, expected-project guard, canary, pilot, benchmark, Explore cache, and full-seed gates |
+| 1.6.3 | 2026-05-22 | Scoring strategy audit | Added component coverage, benchmark usability, pilot-result, and project-guard test obligations |
