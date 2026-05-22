@@ -86,4 +86,13 @@ describe("ScoreBar", () => {
     expect(bar).toHaveAttribute("aria-valuetext", "4 out of 5, high");
     expect(screen.getByTestId("score-bar-fill")).toHaveStyle({ width: "80%" });
   });
+
+  it("can keep the accessible label while hiding visible label and value chrome", () => {
+    render(<ScoreBar value={62} label="Opportunity" hideLabel hideValue />);
+
+    const bar = screen.getByRole("meter", { name: "Opportunity: 62 out of 100, good" });
+    expect(bar).toHaveAttribute("data-score-tone", "good");
+    expect(screen.queryByText("Opportunity")).not.toBeInTheDocument();
+    expect(screen.queryByText("62")).not.toBeInTheDocument();
+  });
 });

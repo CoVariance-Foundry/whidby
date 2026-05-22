@@ -1,5 +1,22 @@
 # Active Work
 
+## WHI-10 Design System Alignment
+
+Status: integration worker implemented shared primitive wiring on `codex/whi-10-design-system-alignment`; controller review/parent closeout still pending.
+
+Completed in this slice:
+
+- Reused shared score tone thresholds/components across report breakdowns, report detail modal scores, strategy discovery result scores, Explore score text, service score rows, and report table score text.
+- Removed local report `scoreColor` / `scoreBarBg` helpers from `BreakdownPanel` and `ReportDetailModal`.
+- Kept touched score numbers on mono typography and removed negative score display tracking from the report modal score cells/top opportunity score.
+- Reused `NextMoveCard` for the dashboard Explore/Multi-market destination cards where it matched the existing next-move pattern.
+- Updated canonical design-system architecture/test obligations for shared score visuals.
+
+Next:
+
+- Controller should review the WHI-10 worker diffs together, run broader app lint/typecheck when dependencies are available, and decide parent issue status.
+- Do not mark WHI-10 parent issues complete until the controller has integrated peer review and PR verification.
+
 ## Proto -> Production Convergence: Epic 7 Account & Settings
 
 Status: implemented on `codex/whi-8-account-settings-epic`; ready for PR/review closeout.

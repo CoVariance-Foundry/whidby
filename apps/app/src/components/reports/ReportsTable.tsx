@@ -1,6 +1,7 @@
 "use client";
 
 import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
+import { scoreToneForValue } from "@/lib/design-tokens";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 
 export interface TableRow {
@@ -92,89 +93,92 @@ export default function ReportsTable({ rows, onRowClick }: Props) {
         </span>
       </div>
 
-      {rows.map((r) => (
-        <div
-          key={r.id}
-          role="row"
-          className={onRowClick ? "report-row-clickable" : undefined}
-          tabIndex={onRowClick ? 0 : undefined}
-          onClick={onRowClick ? () => onRowClick(r.id) : undefined}
-          onKeyDown={
-            onRowClick
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onRowClick(r.id);
+      {rows.map((r) => {
+        const scoreTone = scoreToneForValue(r.opportunity_score);
+        return (
+          <div
+            key={r.id}
+            role="row"
+            className={onRowClick ? "report-row-clickable" : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
+            onClick={onRowClick ? () => onRowClick(r.id) : undefined}
+            onKeyDown={
+              onRowClick
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onRowClick(r.id);
+                    }
                   }
-                }
-              : undefined
-          }
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0,3fr) 1fr 1fr 1fr",
-            padding: "12px 16px",
-            borderBottom: "1px solid var(--rule)",
-            fontFamily: "var(--sans)",
-            fontSize: 13.5,
-            color: "var(--ink)",
-            alignItems: "flex-start",
-            gap: 12,
-            cursor: onRowClick ? "pointer" : undefined,
-            transition: "background 0.1s",
-          }}
-        >
-          <span
-            role="cell"
+                : undefined
+            }
             style={{
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              display: "grid",
+              gridTemplateColumns: "minmax(0,3fr) 1fr 1fr 1fr",
+              padding: "12px 16px",
+              borderBottom: "1px solid var(--rule)",
+              fontFamily: "var(--sans)",
+              fontSize: 13.5,
+              color: "var(--ink)",
+              alignItems: "flex-start",
+              gap: 12,
+              cursor: onRowClick ? "pointer" : undefined,
+              transition: "background 0.1s",
             }}
-            title={`${r.niche} · ${r.city}`}
           >
-            {r.niche} · {r.city}
-          </span>
-          <span role="cell">
             <span
-              className={archetypeGlyphClass(r.archetype_id)}
+              role="cell"
               style={{
-                display: "inline-block",
-                padding: "2px 10px",
-                borderRadius: 999,
-                fontSize: 11.5,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={`${r.niche} · ${r.city}`}
+            >
+              {r.niche} · {r.city}
+            </span>
+            <span role="cell">
+              <span
+                className={archetypeGlyphClass(r.archetype_id)}
+                style={{
+                  display: "inline-block",
+                  padding: "2px 10px",
+                  borderRadius: 999,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {r.archetype_short}
+              </span>
+            </span>
+            <span
+              role="cell"
+              style={{
+                textAlign: "right",
+                fontFamily: "var(--mono)",
+                color: scoreTone.text,
                 fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.02em",
               }}
             >
-              {r.archetype_short}
+              {r.opportunity_score ?? "—"}
             </span>
-          </span>
-          <span
-            role="cell"
-            style={{
-              textAlign: "right",
-              fontFamily: "var(--mono)",
-              color: "var(--accent-ink)",
-              fontWeight: 600,
-            }}
-          >
-            {r.opportunity_score ?? "—"}
-          </span>
-          <span
-            role="cell"
-            style={{
-              textAlign: "right",
-              fontFamily: "var(--mono)",
-              fontSize: 12,
-              color: "var(--ink-3)",
-            }}
-          >
-            {formatDate(r.created_at)}
-          </span>
-        </div>
-      ))}
+            <span
+              role="cell"
+              style={{
+                textAlign: "right",
+                fontFamily: "var(--mono)",
+                fontSize: 12,
+                color: "var(--ink-3)",
+              }}
+            >
+              {formatDate(r.created_at)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

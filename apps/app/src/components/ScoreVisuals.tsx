@@ -13,6 +13,8 @@ export interface ScoreBarProps {
   value: ScoreValue;
   max?: number;
   label?: string;
+  hideLabel?: boolean;
+  hideValue?: boolean;
 }
 
 function isValidScore(value: ScoreValue): value is number {
@@ -88,7 +90,7 @@ export function ScoreCircle({ value, size = 72, label, max = 100 }: ScoreCircleP
   );
 }
 
-export function ScoreBar({ value, max = 100, label }: ScoreBarProps) {
+export function ScoreBar({ value, max = 100, label, hideLabel = false, hideValue = false }: ScoreBarProps) {
   const safeMax = normalizeMax(max);
   const percent = clampPercent(value, max);
   const valid = isValidScore(value);
@@ -96,6 +98,7 @@ export function ScoreBar({ value, max = 100, label }: ScoreBarProps) {
   const valueNow = valid ? clampValue(value, safeMax) : undefined;
   const labelText = label ?? "Score";
   const accessibleText = scoreLabel(label, value, max, tone);
+  const showHeader = (label && !hideLabel) || !hideValue;
 
   return (
     <span
@@ -109,12 +112,16 @@ export function ScoreBar({ value, max = 100, label }: ScoreBarProps) {
       role={valid ? "meter" : "img"}
       style={{ display: "grid", gap: 7, minWidth: 0 }}
     >
-      <span style={{ alignItems: "center", display: "flex", gap: 10, justifyContent: "space-between" }}>
-        {label ? <span style={{ color: "var(--ink-2)", fontSize: 12.5 }}>{labelText}</span> : null}
-        <span style={{ color: tone.text, fontFamily: "var(--mono)", fontSize: 12.5, fontWeight: 800 }}>
-          {displayScore(value)}
+      {showHeader ? (
+        <span style={{ alignItems: "center", display: "flex", gap: 10, justifyContent: "space-between" }}>
+          {label && !hideLabel ? <span style={{ color: "var(--ink-2)", fontSize: 12.5 }}>{labelText}</span> : null}
+          {!hideValue ? (
+            <span style={{ color: tone.text, fontFamily: "var(--mono)", fontSize: 12.5, fontWeight: 800 }}>
+              {displayScore(value)}
+            </span>
+          ) : null}
         </span>
-      </span>
+      ) : null}
       <span
         aria-hidden="true"
         style={{

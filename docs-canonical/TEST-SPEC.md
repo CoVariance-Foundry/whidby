@@ -149,6 +149,7 @@ Additional contract checks for scoring/autocomplete:
 | Scope | Required Coverage | Required Tests |
 | --- | --- | --- |
 | Typography baseline | Root app layout exposes Inter, DM Serif Display, and JetBrains Mono font variables; shared CSS maps headings/italic metadata to the serif token and numeric displays to the mono token without negative display tracking | focused component/style tests when shared typography primitives are extracted; `apps/app` typecheck for font import regressions |
+| Score visuals | Shared score tone thresholds remain 80/60/40; `ScoreCircle` and `ScoreBar` preserve accessible labels, meter/img semantics, clamped fills, mono numeric display, and hidden-label variants used by compact report surfaces | `apps/app/src/components/ScoreVisuals.test.tsx`; affected surface tests such as `StrategyPageClient.test.tsx`, report table/modal tests, and Explore component tests when markup changes |
 
 ## Multi-Market Tests
 

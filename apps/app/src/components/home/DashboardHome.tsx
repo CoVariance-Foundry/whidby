@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Icon, I } from "@/lib/icons";
 import type { DashboardData } from "@/lib/home/load-dashboard";
 import type { StrategyCatalogEntry } from "@/lib/strategies/types";
+import NextMoveCard from "@/components/NextMoveCard";
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -442,41 +443,31 @@ function RecommendedHero({ dashboard }: { dashboard: DashboardData }) {
 function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
   return (
     <section aria-label="Dashboard destinations" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-      <Card ariaLabelledBy="explore-card-heading">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <h2 id="explore-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
-              Explore cached data
-            </h2>
-            <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
-              Browse for free. No scans consumed.
-            </p>
-          </div>
-          <div>
-            <ActionLink href="/explore" variant="ghost">
-              Open Explore <Icon d={I.arrow} />
-            </ActionLink>
-          </div>
-        </div>
-      </Card>
+      <NextMoveCard
+        href="/explore"
+        title="Explore cached data"
+        subtitle="Browse for free. No scans consumed."
+        ctaLabel="Open Explore"
+      />
 
-      <Card ariaLabelledBy="multi-market-card-heading">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
-              Multi-market scan
-            </h2>
-            <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
-              For agencies and scaled operators.
-            </p>
-          </div>
-          {dashboard.multi_market_available ? (
+      {dashboard.multi_market_available ? (
+        <NextMoveCard
+          href="/agency"
+          title="Multi-market scan"
+          subtitle="For agencies and scaled operators."
+          ctaLabel="Open agency tools"
+        />
+      ) : (
+        <Card ariaLabelledBy="multi-market-card-heading">
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <ActionLink href="/agency" variant="ghost">
-                Open agency tools <Icon d={I.arrow} />
-              </ActionLink>
+              <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
+                Multi-market scan
+              </h2>
+              <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
+                For agencies and scaled operators.
+              </p>
             </div>
-          ) : (
             <span
               aria-disabled="true"
               style={{
@@ -492,9 +483,9 @@ function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
             >
               Coming soon
             </span>
-          )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      )}
     </section>
   );
 }

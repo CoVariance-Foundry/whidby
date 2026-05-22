@@ -1,5 +1,11 @@
 # Project Context
 
+## Consumer Visual System
+
+The consumer app now has shared WHI-10 score primitives in `apps/app/src/lib/design-tokens.ts` and `apps/app/src/components/ScoreVisuals.tsx`. Use `scoreToneForValue` for 80/60/40 score tone decisions and `ScoreCircle` / `ScoreBar` for visible score displays before adding route-local threshold helpers. Numeric score displays should stay on `var(--mono)` with no negative letter spacing.
+
+Report breakdowns, the report detail modal, strategy discovery result cards, Explore score cells, service score rows, and Reports table scores now consume the shared score tone/visual path. Dashboard destination cards use `NextMoveCard` where the pattern is a simple next action rather than a bespoke content card.
+
 ## Consumer App Frame
 
 The protected consumer app frame now lives in `apps/app/src/app/(protected)/layout.tsx`. It renders a sticky `Navbar`, a minimal `Footer`, and the route content for authenticated app pages. The navbar resolves the Supabase user, attempts account entitlement and usage loading, and falls back to `Free` with `0/0 scans` if account summary data is unavailable.
