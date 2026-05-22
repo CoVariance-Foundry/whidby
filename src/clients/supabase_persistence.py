@@ -361,6 +361,8 @@ def build_seo_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     for metro in report.get("metros", []):
         if not isinstance(metro.get("v2_scores"), dict):
             continue
+        if snapshot_date is None:
+            raise ValueError("generated_at is required for seo_facts snapshot_date")
         signals = _flatten_signal_buckets(metro.get("signals") or {})
         niche_normalized = _niche_normalized(report, metro)
         for keyword in _expanded_keywords(report):
@@ -408,11 +410,10 @@ def build_seo_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "top5_organic_data_confidence": signals.get(
                     "top5_organic_data_confidence"
                 ),
+                "snapshot_date": snapshot_date,
                 "report_id": report_id,
                 "source": "orchestrator",
             }
-            if snapshot_date is not None:
-                row["snapshot_date"] = snapshot_date
             rows.append(row)
 
     return rows
@@ -793,13 +794,27 @@ class SupabasePersistence:
         persist_start = time.monotonic()
         logger.info("persist_report START report_id=%s", report_id)
 
+        report_row = build_report_row(report)
+        keyword_rows = build_keyword_rows(report)
+        signal_rows = build_metro_signal_rows(report)
+        score_rows = build_metro_score_rows(report)
+        score_v2_rows = build_metro_score_v2_rows(report)
+        fact_rows = build_seo_fact_rows(report)
+        facts_table = None
+        if fact_rows:
+            facts_table = self._client.table("seo_facts")
+            if not hasattr(facts_table, "upsert"):
+                raise RuntimeError(
+                    "Cannot persist seo_facts: Supabase table client lacks upsert; "
+                    "idempotent writes are required."
+                )
+
         t0 = time.monotonic()
-        self._client.table("reports").insert(build_report_row(report)).execute()
+        self._client.table("reports").insert(report_row).execute()
         reports_ms = int((time.monotonic() - t0) * 1000)
         logger.info("persist_report inserted reports row for %s duration_ms=%d",
                      report_id, reports_ms)
 
-        keyword_rows = build_keyword_rows(report)
         if keyword_rows:
             t0 = time.monotonic()
             self._client.table("report_keywords").insert(keyword_rows).execute()
@@ -807,7 +822,6 @@ class SupabasePersistence:
             logger.info("persist_report inserted %d report_keywords rows duration_ms=%d",
                         len(keyword_rows), kw_ms)
 
-        signal_rows = build_metro_signal_rows(report)
         if signal_rows:
             t0 = time.monotonic()
             self._client.table("metro_signals").insert(signal_rows).execute()
@@ -815,7 +829,6 @@ class SupabasePersistence:
             logger.info("persist_report inserted %d metro_signals rows duration_ms=%d",
                         len(signal_rows), sig_ms)
 
-        score_rows = build_metro_score_rows(report)
         if score_rows:
             t0 = time.monotonic()
             self._client.table("metro_scores").insert(score_rows).execute()
@@ -823,7 +836,6 @@ class SupabasePersistence:
             logger.info("persist_report inserted %d metro_scores rows duration_ms=%d",
                         len(score_rows), score_ms)
 
-        score_v2_rows = build_metro_score_v2_rows(report)
         if score_v2_rows:
             t0 = time.monotonic()
             self._client.table("metro_score_v2").upsert(
@@ -837,14 +849,12 @@ class SupabasePersistence:
                 score_v2_ms,
             )
 
-        fact_rows = build_seo_fact_rows(report)
         if fact_rows:
             t0 = time.monotonic()
-            facts_table = self._client.table("seo_facts")
-            if not hasattr(facts_table, "upsert"):
+            if facts_table is None:
                 raise RuntimeError(
-                    "Cannot persist seo_facts: Supabase table client lacks upsert; "
-                    "idempotent writes are required."
+                    "Cannot persist seo_facts: facts_table client was not initialized. "
+                    "This is a bug; please report it."
                 )
             facts_table.upsert(
                 fact_rows,

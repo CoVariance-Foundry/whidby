@@ -110,18 +110,18 @@ No API contract change needed. The API already returns `cached_scores[]` per cit
 
 ### Scope
 
-- **Cities**: All metros with population >= 500,000 (~130 cities)
+- **Cities**: rank-and-rent weighted metros by default, prioritizing `large_300k_1m`, `medium_100_300k`, and `metro_1m_5m` markets that have DataForSEO location codes. `mega_5m_plus` markets are capped by default so New York/LA/Chicago do not dominate the cache build.
 - **Services** (16): roofing, plumbing, hvac, tree service, pest control, water damage restoration, landscaping, electrician, concrete, fence installation, pressure washing, garage door repair, painting, carpet cleaning, junk removal, locksmith
-- **Total pairs**: ~2,080
-- **Estimated cost**: $20-40 (within $50 budget)
-- **Estimated runtime**: ~5.5 hours
+- **Total pairs**: controlled by `--cities` × `--services` after DFS readiness, population-class, and mega-cap filters.
+- **Estimated cost/runtime**: preview mode computes pair count, rough cost, and rough runtime from the selected city/service set.
 
 ### Execution
 
 The `scripts/explore/bulk_score.py` script calls `POST /api/niches/score` for each (city, service) pair:
-- Sequential execution with 2s delay between calls (rate limiting)
-- `--resume` flag skips pairs already scored in `metro_scores` (preserves existing 33 reports)
-- Results logged to `scripts/explore/bulk_score_results.jsonl`
+- Bounded concurrent execution through `--concurrency`
+- `--resume` flag skips pairs already visible in `explore_market_cells`, falling back to `metro_scores` + `reports`
+- Results logged to `scripts/explore/bulk_score_results.jsonl` as an append-only audit ledger with `success`, `partial_failure`, and `failed` rows
+- Success requires verified persistence in `reports`, `metro_scores`, `metro_score_v2`, and `seo_facts` unless `--no-require-v2-persistence` is explicitly used
 - Run against local FastAPI server on port 8001
 
 ### Matview Refresh
@@ -134,9 +134,10 @@ SELECT _refresh_explore_market_cells();
 ### Incremental Expansion
 
 The `--resume` flag enables incremental expansion:
-1. Run initial batch: `python -m scripts.explore.bulk_score --apply --cities 130 --services 16`
-2. If interrupted, resume: `python -m scripts.explore.bulk_score --apply --cities 130 --services 16 --resume`
-3. Add more services later by extending the `SERVICES` list and running with `--resume`
+1. Run initial preview: `python -m scripts.explore.bulk_score --preview --cities 50 --services 12`
+2. Run approved batch: `python -m scripts.explore.bulk_score --apply --cities 50 --services 12`
+3. If interrupted, resume: `python -m scripts.explore.bulk_score --apply --cities 50 --services 12 --resume`
+4. Add more services later by extending the `SERVICES` list and running with `--resume`
 
 ## Implementation Order
 
