@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type {
@@ -644,8 +645,24 @@ export default function ExplorePageClient({
               Cities & service data
             </h1>
             <p className="page-sub">
-              Browse the data layer for free. Narrow down by demographics, then spend scans on the markets that need fresh numbers.
+              Browse the data layer for free. Narrow down by demographics, then spend scans on the ones you want fresh numbers for.
             </p>
+            <div
+              style={{
+                marginTop: 10,
+                color: "var(--ink-2)",
+                fontSize: 13,
+              }}
+            >
+              Know what you want?{" "}
+              <Link
+                href="/strategies"
+                className="settings-link"
+                style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+              >
+                Jump to a strategy <Icon d={I.arrow} />
+              </Link>
+            </div>
           </div>
           <div
             style={{
