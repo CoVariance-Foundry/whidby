@@ -43,6 +43,7 @@ const user: NavbarUser = {
   scansUsed: 4,
   scansLimit: 10,
   adminUrl: "https://admin.example.com",
+  isAdmin: true,
 };
 
 afterEach(() => {
@@ -73,7 +74,7 @@ describe("Navbar", () => {
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("Plus");
   });
 
-  it("opens the profile menu and preserves settings, admin, password, and sign-out actions", async () => {
+  it("opens the profile menu and preserves settings, admin, password, and sign-out actions for admins", async () => {
     const signOut = vi.fn().mockResolvedValue({ error: null });
     vi.mocked(createClient).mockReturnValue({
       auth: { signOut },
@@ -95,11 +96,35 @@ describe("Navbar", () => {
       "href",
       "https://admin.example.com",
     );
+    expect(screen.getByRole("menuitem", { name: "Admin dashboard" })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+    expect(screen.getByRole("menuitem", { name: "Admin dashboard" })).toHaveAttribute(
+      "rel",
+      "noreferrer",
+    );
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
     expect(routerPush).toHaveBeenCalledWith("/login");
+  });
+
+  it("hides the admin dashboard action for non-admin users", () => {
+    render(<Navbar user={{ ...user, isAdmin: false }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open account menu/i }));
+
+    expect(screen.getByRole("menuitem", { name: "Account settings" })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+    expect(screen.getByRole("menuitem", { name: "Password" })).toHaveAttribute(
+      "href",
+      "/settings/password",
+    );
+    expect(screen.queryByRole("menuitem", { name: "Admin dashboard" })).not.toBeInTheDocument();
   });
 
   it("keeps sign-out available when Supabase sign-out fails", async () => {

@@ -1,5 +1,27 @@
 # Active Work
 
+## Proto -> Production Convergence: Epic 7 Account & Settings
+
+Status: implemented on `codex/whi-8-account-settings-epic`; ready for PR/review closeout.
+
+Linear: `WHI-8` with children `WHI-36`, `WHI-37`, and `WHI-38`.
+
+Goal: align `/settings` with the account proto while preserving existing Stripe Checkout/Portal billing actions, Supabase password reset/update flow, navbar profile dropdown behavior, admin dashboard link, and sign-out.
+
+Completed in this slice:
+
+- Reconciled the already-merged Account & Billing implementation with the newer Navbar app frame.
+- Added profile metadata, saved reports preview, password-management entry, and session/sign-out sections to `/settings` without changing billing semantics.
+- Server-loads the saved reports preview through the existing `/api/agent/reports?limit=5` route with cookie forwarding, then opens rows through `/reports?open=<report_id>`.
+- Added explicit navbar admin visibility from `entitlement.member_role === "admin"`; fallback/non-admin users no longer see the external Admin dashboard link.
+- Preserved Stripe Checkout/Portal actions, billing return banners, Supabase password reset/update, and Supabase sign-out behavior.
+
+Verified:
+
+- `npm --workspace apps/app test -- AccountSettingsClient settings/page Navbar` passed 21 tests.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+
 ## Proto -> Production Convergence: Epic 5 Multi-market
 
 Status: started on `codex/whi-6-multi-market-page`.
@@ -110,7 +132,7 @@ Current blockers:
 
 ## CI/CD AI Review and Visual QA
 
-- Account & Billing screen spec is active on `codex/accounts-and-billing`.
+- Account & Billing screen implementation exists on `main`; Epic 7 is now reconciling it with the proto and the Navbar app frame.
 - Spec: `specs/015-account-billing-screen/spec.md`
 - Account/settings is implemented; future app-frame work should use the navbar profile dropdown instead of the removed bottom-sidebar user menu.
 
