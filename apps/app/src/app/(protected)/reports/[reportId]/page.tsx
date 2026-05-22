@@ -56,6 +56,15 @@ function getAppRouteUrl(path: string, headerStore: HeaderReader): string | null 
   }
 }
 
+function isAbsoluteHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 async function loadReport(reportId: string): Promise<FullReportData | null> {
   const headerStore = await headers();
   const cookie = headerStore.get("cookie") ?? undefined;
@@ -63,7 +72,7 @@ async function loadReport(reportId: string): Promise<FullReportData | null> {
     `/api/agent/reports/${encodeURIComponent(reportId)}`,
     headerStore,
   );
-  if (!url) return null;
+  if (!url || !isAbsoluteHttpUrl(url)) return null;
 
   const response = await fetch(url, {
     cache: "no-store",

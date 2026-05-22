@@ -245,7 +245,9 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
                   </div>
                   {scoreBlock}
                 </div>
-                <Icon d={I.arrow} style={{ color: "var(--ink-3)" }} />
+                <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                  <Icon d={I.arrow} style={{ color: "var(--ink-3)" }} />
+                </span>
               </div>
             </article>
           </div>
