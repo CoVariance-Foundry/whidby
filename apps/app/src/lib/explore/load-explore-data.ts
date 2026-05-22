@@ -14,13 +14,15 @@ interface LoadExploreDataOptions {
   app_base_url?: string;
 }
 
+const DEFAULT_LOCAL_API_BASE_URL = "http://localhost:8000";
+
 const APP_BASE_ENV_KEYS = [
   "WIDBY_APP_BASE_URL",
   "NEXT_PUBLIC_APP_URL",
   "NEXT_PUBLIC_SITE_URL",
 ] as const;
 
-function normalizeAppBaseUrl(baseUrl: string) {
+function normalizeBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim().replace(/\/$/, "");
   if (!trimmed) return "";
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -29,31 +31,57 @@ function normalizeAppBaseUrl(baseUrl: string) {
   return `https://${trimmed}`;
 }
 
-async function getAppRouteUrl(path: string, injectedBaseUrl?: string) {
-  const injected = injectedBaseUrl ? normalizeAppBaseUrl(injectedBaseUrl) : "";
-  if (injected) return `${injected}${path}`;
+function requiresConfiguredApiBaseUrl() {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production" ||
+    process.env.VERCEL_ENV === "preview"
+  );
+}
+
+function getApiBaseUrl() {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configured) return normalizeBaseUrl(configured);
+  if (!requiresConfiguredApiBaseUrl()) return DEFAULT_LOCAL_API_BASE_URL;
+  throw new Error(
+    "loadExploreData explore cities: NEXT_PUBLIC_API_URL is required in deployed environments and must point to the API/Render service",
+  );
+}
+
+async function getAppOrigin(injectedBaseUrl?: string) {
+  const injected = injectedBaseUrl ? normalizeBaseUrl(injectedBaseUrl) : "";
+  if (injected) return new URL(injected).origin;
 
   for (const key of APP_BASE_ENV_KEYS) {
     const configured = process.env[key]?.trim();
-    if (configured) return `${normalizeAppBaseUrl(configured)}${path}`;
+    if (configured) return new URL(normalizeBaseUrl(configured)).origin;
   }
 
   const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (vercelUrl) return `${normalizeAppBaseUrl(vercelUrl)}${path}`;
+  if (vercelUrl) return new URL(normalizeBaseUrl(vercelUrl)).origin;
 
-  if (typeof window !== "undefined") return path;
+  if (typeof window !== "undefined") return undefined;
 
   const headerStore = await headers();
   const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
-  if (!host) return path;
+  if (!host) return undefined;
   const proto = headerStore.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}${path}`;
+  return new URL(`${proto}://${host}`).origin;
 }
 
-async function getIncomingCookieHeader(skipRequestHeaders = false) {
-  if (skipRequestHeaders || typeof window !== "undefined") return undefined;
-  const headerStore = await headers();
-  return headerStore.get("cookie") ?? undefined;
+async function getExploreCitiesUrl(path: string, injectedAppBaseUrl?: string) {
+  if (typeof window !== "undefined") return path;
+
+  const apiBaseUrl = getApiBaseUrl();
+  const apiOrigin = new URL(apiBaseUrl).origin;
+  const appOrigin = await getAppOrigin(injectedAppBaseUrl);
+  if (appOrigin && apiOrigin === appOrigin) {
+    throw new Error(
+      "loadExploreData explore cities: NEXT_PUBLIC_API_URL must point to the API/Render service, not the app origin",
+    );
+  }
+
+  return `${apiBaseUrl}${path}`;
 }
 
 export async function loadExploreData(
@@ -63,14 +91,12 @@ export async function loadExploreData(
   const query = toExploreSearchParams(params);
   const queryString = query.toString();
   const path = `/api/explore/cities${queryString ? `?${queryString}` : ""}`;
-  const url = await getAppRouteUrl(path, options.app_base_url);
-  const cookie = await getIncomingCookieHeader(Boolean(options.app_base_url));
+  const url = await getExploreCitiesUrl(path, options.app_base_url);
 
   let response: Response;
   try {
     response = await fetch(url, {
       cache: "no-store",
-      ...(cookie ? { headers: { cookie } } : {}),
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "request failed";

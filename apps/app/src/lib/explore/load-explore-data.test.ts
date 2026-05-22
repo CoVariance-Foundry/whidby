@@ -17,6 +17,9 @@ import {
 import { loadExploreData } from "./load-explore-data";
 
 const originalFetch = global.fetch;
+const originalNodeEnv = process.env.NODE_ENV;
+const originalVercelEnv = process.env.VERCEL_ENV;
+const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 afterEach(() => {
   global.fetch = originalFetch;
@@ -24,6 +27,21 @@ afterEach(() => {
   delete process.env.NEXT_PUBLIC_APP_URL;
   delete process.env.NEXT_PUBLIC_SITE_URL;
   delete process.env.VERCEL_URL;
+  if (originalApiUrl === undefined) {
+    delete process.env.NEXT_PUBLIC_API_URL;
+  } else {
+    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
+  }
+  if (originalNodeEnv === undefined) {
+    delete process.env.NODE_ENV;
+  } else {
+    process.env.NODE_ENV = originalNodeEnv;
+  }
+  if (originalVercelEnv === undefined) {
+    delete process.env.VERCEL_ENV;
+  } else {
+    process.env.VERCEL_ENV = originalVercelEnv;
+  }
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -74,7 +92,7 @@ describe("fromSearchParams", () => {
 });
 
 describe("loadExploreData", () => {
-  it("fetches the app explore cities BFF route with no-store caching", async () => {
+  it("fetches the FastAPI explore cities route directly on the server", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ cities: [] }), {
         status: 200,
@@ -82,6 +100,7 @@ describe("loadExploreData", () => {
       }),
     );
     global.fetch = fetchMock;
+    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test/";
 
     await loadExploreData(
       { service: "roofing", states: ["AZ", "CO"], limit: 25 },
@@ -89,7 +108,7 @@ describe("loadExploreData", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://app.example.test/api/explore/cities?service=roofing&state=AZ&state=CO&limit=25",
+      "https://api.example.test/api/explore/cities?service=roofing&state=AZ&state=CO&limit=25",
       { cache: "no-store" },
     );
   });
@@ -111,32 +130,42 @@ describe("loadExploreData", () => {
     });
   });
 
-  it("forwards server cookies to an app route derived from request headers", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ cities: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-    global.fetch = fetchMock;
-    mocks.headerGet.mockImplementation((name: string) => {
-      const values: Record<string, string> = {
-        "x-forwarded-host": "preview.whidby.test",
-        "x-forwarded-proto": "https",
-        cookie: "sb-access-token=abc; sb-refresh-token=def",
-      };
-      return values[name] ?? null;
-    });
+  it("throws loudly when production server rendering is missing NEXT_PUBLIC_API_URL", async () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.NEXT_PUBLIC_API_URL;
+    global.fetch = vi.fn();
 
-    await loadExploreData({ service: "roofing" });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://preview.whidby.test/api/explore/cities?service=roofing",
-      {
-        cache: "no-store",
-        headers: { cookie: "sb-access-token=abc; sb-refresh-token=def" },
-      },
+    await expect(
+      loadExploreData({}, { app_base_url: "https://app.example.test" }),
+    ).rejects.toThrow(
+      "NEXT_PUBLIC_API_URL is required in deployed environments and must point to the API/Render service",
     );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("throws loudly when Vercel preview server rendering is missing NEXT_PUBLIC_API_URL", async () => {
+    process.env.VERCEL_ENV = "preview";
+    delete process.env.NEXT_PUBLIC_API_URL;
+    global.fetch = vi.fn();
+
+    await expect(
+      loadExploreData({}, { app_base_url: "https://preview.example.test" }),
+    ).rejects.toThrow(
+      "NEXT_PUBLIC_API_URL is required in deployed environments and must point to the API/Render service",
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("throws when the server API base resolves to the app origin", async () => {
+    process.env.NEXT_PUBLIC_API_URL = "https://app.example.test";
+    global.fetch = vi.fn();
+
+    await expect(
+      loadExploreData({}, { app_base_url: "https://app.example.test/" }),
+    ).rejects.toThrow(
+      "NEXT_PUBLIC_API_URL must point to the API/Render service, not the app origin",
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("maps backend rows to compatibility aliases for existing components", async () => {
@@ -188,6 +217,7 @@ describe("loadExploreData", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
+    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
 
     const data = await loadExploreData(
       { service: "roofing" },
@@ -231,6 +261,7 @@ describe("loadExploreData", () => {
 
   it("throws an HTTP-specific error for non-ok proxy responses", async () => {
     global.fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 502 }));
+    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
 
     await expect(
       loadExploreData({}, { app_base_url: "https://app.example.test" }),
@@ -241,6 +272,7 @@ describe("loadExploreData", () => {
 
   it("throws when the upstream request fails before a response is received", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("connection refused"));
+    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
 
     await expect(
       loadExploreData({}, { app_base_url: "https://app.example.test" }),
