@@ -5,7 +5,7 @@ export const PRODUCT_FLAGS = {
   },
   billingCheckoutEnabled: {
     key: "billing_checkout_enabled",
-    defaultValue: false,
+    defaultValue: true,
   },
   reportQuotaEnforcementEnabled: {
     key: "report_quota_enforcement_enabled",

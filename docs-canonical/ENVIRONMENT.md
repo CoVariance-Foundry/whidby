@@ -44,6 +44,7 @@
 | `STRIPE_WEBHOOK_SECRET` | Yes (consumer billing) | — | Stripe webhook signing secret for `/api/billing/webhook` | Stripe Dashboard webhook endpoint |
 | `STRIPE_PLUS_PRICE_ID` | Yes (consumer billing) | — | Recurring monthly Stripe Price for Plus ($49/mo) | Stripe Dashboard product catalog |
 | `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | — | Recurring monthly Stripe Price for Pro ($100/mo) | Stripe Dashboard product catalog |
+| `BILLING_CHECKOUT_ENABLED` | No | `true` | Server-side rollout/kill switch for Stripe Checkout and Customer Portal actions. Set to `"false"` or `"0"` to hide account billing actions and make billing APIs return unavailable. | Vercel env override or PostHog flag fallback |
 | `NEXT_PUBLIC_POSTHOG_KEY` | No | — | PostHog project key for consumer feature flags. If absent, secure defaults are used. | PostHog project settings |
 | `NEXT_PUBLIC_POSTHOG_HOST` | No | `https://us.i.posthog.com` | PostHog ingestion/feature flag host | PostHog project settings |
 
@@ -116,6 +117,7 @@ The admin research-agent dashboard (`apps/admin/`, port 3001 locally) deploys to
 | `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (production) | App frontend origin for auth redirects, e.g. `https://app.thewidby.com` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Yes (consumer billing) | Required only on the consumer app project |
 | `STRIPE_PLUS_PRICE_ID` / `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | Plus and Pro monthly recurring price IDs |
+| `BILLING_CHECKOUT_ENABLED` | No | Defaults to enabled; set to `"false"` or `"0"` to temporarily disable Checkout/Portal |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` | No | Consumer feature flags; server handlers fall back to secure defaults when unset |
 
 ### E2E test accounts (Supabase `whidby` project)
