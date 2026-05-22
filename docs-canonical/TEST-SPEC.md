@@ -103,6 +103,9 @@ tests/
 | Top-5 organic facts | `avg_top5_da` and `avg_top5_lighthouse` use canonical top-5 organic competitors and exclude aggregators/missing URLs | `tests/unit/test_batch_executor.py`, `tests/unit/test_signal_extraction.py`, `tests/unit/test_signal_extractors.py`, `tests/scoring/test_v2_scoring.py` |
 | V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
 | Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
+| Competitor Intel persistence | Organic/local competitor facts are persisted as durable read-model rows without reading `api_response_cache`; run lineage records account/user/quota/status | `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py` |
+| Competitor Intel APIs | Free users receive upgrade state; Plus/Pro users can read/run; run creation consumes/refunds two `fresh_report` units atomically; service-role reads enforce account visibility | `apps/app/src/app/api/competitor-intel/route.test.ts`, `apps/app/src/app/api/competitor-intel/runs/route.test.ts`, `tests/unit/test_api_competitor_intel.py`, `tests/unit/test_competitor_intel_service.py` |
+| Competitor Intel UI | Locked, ready, running, aggregate-only, dossier, and error states render without leaking paid details or null-heavy cards | `apps/app/src/components/competitor-intel/CompetitorIntelClient.test.tsx` |
 
 ## E2E Scoring Tests (Playwright)
 
@@ -246,3 +249,4 @@ npm run lint
 | 1.4.0 | 2026-05-16 | Consumer onboarding flow | Added schema, routing, API, UI, first-report handoff, and auth-resume test obligations |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
 | 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |
+| 1.7.0 | 2026-05-22 | Competitor Intel | Added paid dossier, durable competitor facts, two-scan quota, and UI/API test obligations |
