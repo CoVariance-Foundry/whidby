@@ -124,6 +124,8 @@ Bulk Explore data builds use `scripts/explore/bulk_score.py` as an operational r
 
 Coverage-first production seeds must use a gated ramp: schema parity and expected-project guard, canary scoring, 12x8 coverage pilot, benchmark recompute, Explore cache validation, then the 50x16 seed. Top-5 DA and Lighthouse fields are optional telemetry during this seed audit; null values reduce evidence confidence but must not block scoring, guidance, or cache validation.
 
+`scripts/explore/audit_scoring_strategy.py` performs the broader read-only scoring-strategy audit before the paid pilot. It measures demand, organic, local, monetization, AI resilience, and app-surface coverage across the intended service x city-size matrix, verifies benchmark cells meet the canonical `sample_size_metros >= 8` usability floor, ingests `bulk_score.py` JSONL pilot output, and writes generated JSON/Markdown reports to ignored `reports/scoring_audit/`.
+
 ## Consumer Account, Billing, and Quota Flow
 
 ```
