@@ -29,6 +29,10 @@ function clampPercent(value: ScoreValue, max: number | undefined): number {
   return Math.max(0, Math.min(100, (value / safeMax) * 100));
 }
 
+function clampValue(value: number, max: number): number {
+  return Math.max(0, Math.min(max, value));
+}
+
 function displayScore(value: ScoreValue): string {
   return isValidScore(value) ? String(Math.round(value)) : "—";
 }
@@ -40,8 +44,8 @@ function scoreLabel(label: string | undefined, value: ScoreValue, max: number | 
 }
 
 export function ScoreCircle({ value, size = 72, label, max = 100 }: ScoreCircleProps) {
-  const tone = scoreToneForValue(value);
   const percent = clampPercent(value, max);
+  const tone = scoreToneForValue(isValidScore(value) ? percent : value);
   const safeSize = Math.max(44, size);
 
   return (
@@ -85,15 +89,24 @@ export function ScoreCircle({ value, size = 72, label, max = 100 }: ScoreCircleP
 }
 
 export function ScoreBar({ value, max = 100, label }: ScoreBarProps) {
-  const tone = scoreToneForValue(value);
+  const safeMax = normalizeMax(max);
   const percent = clampPercent(value, max);
+  const valid = isValidScore(value);
+  const tone = scoreToneForValue(valid ? percent : value);
+  const valueNow = valid ? clampValue(value, safeMax) : undefined;
   const labelText = label ?? "Score";
+  const accessibleText = scoreLabel(label, value, max, tone);
 
   return (
     <span
-      aria-label={scoreLabel(label, value, max, tone)}
+      aria-label={accessibleText}
+      aria-valuemax={valid ? safeMax : undefined}
+      aria-valuemin={valid ? 0 : undefined}
+      aria-valuenow={valueNow}
+      aria-valuetext={valid ? accessibleText.replace(`${labelText}: `, "") : undefined}
       data-score-tone={tone.key}
       data-score-value={displayScore(value)}
+      role={valid ? "meter" : "img"}
       style={{ display: "grid", gap: 7, minWidth: 0 }}
     >
       <span style={{ alignItems: "center", display: "flex", gap: 10, justifyContent: "space-between" }}>
