@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ARCHETYPES, type ArchetypeId } from "@/lib/archetypes";
+import { scoreToneForValue, type ScoreToneKey } from "@/lib/design-tokens";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import { Icon, I } from "@/lib/icons";
 
@@ -30,18 +31,19 @@ function archetypeGlyphClass(id: ArchetypeId): string {
   return ARCHETYPES.find((a) => a.id === id)?.glyph ?? "arch-mixed";
 }
 
-function scoreLabel(score: number | null): string {
-  if (score === null) return "Unknown";
-  if (score >= 75) return "High";
-  if (score >= 50) return "Medium";
-  return "Low";
-}
-
-function scoreColor(score: number | null): string {
-  if (score === null) return "var(--ink-3)";
-  if (score >= 75) return "#0f7a57";
-  if (score >= 50) return "#a05a00";
-  return "#a3292d";
+function scoreLabelForTone(tone: ScoreToneKey): string {
+  switch (tone) {
+    case "high":
+      return "High";
+    case "good":
+      return "Good";
+    case "warning":
+      return "Warning";
+    case "danger":
+      return "Danger";
+    case "muted":
+      return "Unknown";
+  }
 }
 
 interface Props {
@@ -85,9 +87,18 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
         const href = getRowHref?.(r.id);
         const openLabel = `Open report for ${r.niche} in ${r.city}`;
         const isInteractive = Boolean(href || onRowClick);
+        const scoreTone = scoreToneForValue(r.opportunity_score);
         const titleBlock = (
           <>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 5 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "center",
+                marginBottom: 5,
+              }}
+            >
               <h2
                 title={`${r.niche} · ${r.city}`}
                 style={{
@@ -131,9 +142,13 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
               }}
             >
               <span>{r.city}</span>
-              <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>·</span>
+              <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>
+                ·
+              </span>
               <span>{formatDate(r.created_at)}</span>
-              <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>·</span>
+              <span aria-hidden="true" style={{ color: "var(--ink-3)" }}>
+                ·
+              </span>
               <span>Spec v{r.spec_version}</span>
             </div>
           </>
@@ -146,7 +161,7 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
                 fontSize: 24,
                 fontWeight: 800,
                 lineHeight: 1,
-                color: scoreColor(r.opportunity_score),
+                color: scoreTone.text,
                 fontVariantNumeric: "tabular-nums",
               }}
             >
@@ -160,7 +175,7 @@ export default function ReportsTable({ rows, onRowClick, getRowHref }: Props) {
                 marginTop: 4,
               }}
             >
-              {scoreLabel(r.opportunity_score)}
+              {scoreLabelForTone(scoreTone.key)}
             </div>
           </>
         );

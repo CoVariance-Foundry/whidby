@@ -1,8 +1,58 @@
 # Active Work
 
+## WHI-10 Design System Alignment
+
+Status: PR open at `https://github.com/CoVariance-Foundry/whidby/pull/64` on `codex/whi-10-design-system-alignment`; local implementation, review gates, merge-conflict repair, and review-nit fixes passed. GitHub CI/review is still pending and WHI-10 should not be marked Done until the PR merges.
+
+Completed in this slice:
+
+- Adopted DM Serif Display as the consumer display serif while keeping numeric displays on mono and display tracking at `0`.
+- Added shared score tone thresholds/components across report breakdowns, report detail modal scores, strategy discovery result scores, Explore score text, service score rows, and report table score text.
+- Added shared `NextMoveCard`, `ScoreCircle`, and `ScoreBar` primitives with focused tests.
+- Removed local report `scoreColor` / `scoreBarBg` helpers from `BreakdownPanel` and `ReportDetailModal`.
+- Repaired the post-`main` merge Reports table conflict by preserving the new card-list layout and applying WHI-10 shared score tones/labels to it.
+- Removed synthetic serif weights in login/dashboard inline headings now that DM Serif Display is loaded at weight `400`.
+- Removed the redundant `strategyAccentForId` call in `withStrategyAccent`.
+- Reused `NextMoveCard` for the dashboard Explore/Multi-market destination cards where it matched the existing next-move pattern.
+- Updated canonical design-system architecture/test obligations for shared score visuals.
+
+Verified:
+
+- `npm --workspace apps/app test -- src/lib/design-tokens.test.ts src/lib/strategies/catalog.test.ts src/lib/explore/load-explore-data.test.ts src/components/NextMoveCard.test.tsx src/components/ScoreVisuals.test.tsx src/components/StateMultiselect.test.tsx src/components/reports/ScoreInfoHover.test.tsx src/components/reports/ReportsTable.test.tsx src/components/reports/ScoreBreakdownTabs.test.tsx src/components/explore/ExplorePageClient.test.tsx 'src/app/(protected)/strategies/[id]/StrategyPageClient.test.tsx'` passed 84 tests before the `main` merge; rerun the focused reports tests after any further conflict repair.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings.
+- `git diff --check origin/main...HEAD` passed before merging latest `main`.
+- `npm run runtime:check` passed service-role checks, but local Supabase publishable keys are invalid.
+- Playwright smoke rendered `/login`; protected routes redirected to `/login?next=...`.
+
+Next:
+
+- Push the merge-conflict repair, wait for GitHub checks/review, then merge PR #64.
+- Mark `WHI-10` Done only after the PR merges.
+- Authenticated visual QA of protected routes remains blocked locally until publishable Supabase keys are refreshed.
+
+## WHI-9 Competitor Intel
+
+Status: implemented locally on `codex/whi-9-competitor-intel`; focused verification complete, browser/auth QA pending.
+
+Linear: `WHI-9`.
+
+Completed in this slice:
+
+- Added protected `/competitor-intel` as a direct-link Plus/Pro dossier route with upgrade, ready, running, aggregate-only, dossier, and error states.
+- Added Next BFF routes and FastAPI routes for `GET /api/competitor-intel` and `POST /api/competitor-intel/runs`.
+- Added `organic_competitor_facts` and `competitor_intel_runs`, reused `local_pack_listing_facts`, and persisted competitor-level facts when report payloads carry them.
+- Added atomic multi-unit quota RPCs so Competitor Intel consumes/refunds two `fresh_report` units without two separate one-scan calls; refunds are service-role-only.
+- Updated canonical docs and focused tests for persistence, schema, API gates, and frontend states.
+
+Next:
+
+- Add the live DataForSEO collector/worker that turns a `ready_to_run` target into newly persisted competitor facts. This slice refuses and refunds runs when no durable aggregate/dossier can be materialized.
+- Run browser/visual QA once local auth/API wiring is available.
+- Add strategy/report entrypoint CTAs after the route is validated behind rollout controls.
 ## Proto -> Production Convergence: Epic 6 Reports Page
 
-Status: in progress on `codex/whi-7-reports-proto-layout`.
+Status: merged to `main` through PR #59. Follow-up visual QA with authenticated report data remains useful.
 
 Linear: `WHI-7` with first child `WHI-32` in progress. Remaining child issues are `WHI-33` strategy guidance refinement, `WHI-34` Next Moves refinement, and `WHI-35` report detail header/export/delete polish.
 

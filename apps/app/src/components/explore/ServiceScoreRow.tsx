@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { ExploreCachedScore } from "@/lib/explore/types";
+import { ScoreCircle } from "@/components/ScoreVisuals";
 import { formatDate, formatDecimal, formatPercent, humanize } from "./format";
 
 interface ServiceScoreRowProps {
@@ -112,21 +113,7 @@ export default function ServiceScoreRow({
           alignItems: "center",
         }}
       >
-        <div
-          aria-label={`${score.service} opportunity score`}
-          style={{
-            fontFamily: "var(--serif)",
-            fontSize: 26,
-            fontWeight: 600,
-            color: "var(--accent-ink)",
-            fontVariantNumeric: "tabular-nums",
-            lineHeight: 1,
-            minWidth: 38,
-            textAlign: "right",
-          }}
-        >
-          {score.opportunity_score}
-        </div>
+        <ScoreCircle value={score.opportunity_score} label={`${score.service} opportunity score`} size={46} />
         <label
           htmlFor={checkboxId}
           style={{

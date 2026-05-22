@@ -102,7 +102,7 @@ Two layers of protection on the login form:
 
 ## Design conventions
 
-- **Light academic theme** — Source Serif 4 for headings, Inter for body, JetBrains Mono for data/code. Respect the visual contrast with admin's dark theme; these are intentionally separate design systems.
+- **Light academic theme** — DM Serif Display for headings and italic metadata, Inter for body/UI, JetBrains Mono for data/code and numeric displays. Keep display letter spacing at `0` (no negative tracking). Respect the visual contrast with admin's dark theme; these are intentionally separate design systems.
 - **Navbar-first app frame** — protected app routes inherit sticky `Navbar` and minimal `Footer` from `(protected)/layout.tsx`. Do not reintroduce page-local `Sidebar`/`Topbar` shells; put route-level actions in page headers or client surfaces.
 - **Display-layer first** — pages should feel fast even before backend wiring lands. Use skeletons / sample data where appropriate, but label mock state clearly in component-internal comments.
 - **Shared Supabase auth** — same users auth against both apps. Sign-out on one app signs out the other via shared cookies.

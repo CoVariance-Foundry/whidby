@@ -67,7 +67,9 @@ describe("StrategyPageClient", () => {
     expect(await screen.findByText("Plumbing in Boise")).toBeInTheDocument();
     expect(screen.getByText("search_volume_monthly: 720")).toBeInTheDocument();
     expect(screen.getByText("local_pack_present: yes")).toBeInTheDocument();
-    expect(screen.getByLabelText("Strategy score")).toHaveTextContent("86");
+    const score = screen.getByRole("img", { name: "Strategy score: 86 out of 100, high" });
+    expect(score).toHaveAttribute("data-score-tone", "high");
+    expect(score).toHaveTextContent("86");
   });
 
   it("sends reference_city_id for Expand & Conquer", async () => {

@@ -175,6 +175,7 @@ def _apply_places_enrichment_status(
 
 from src.domain.services.discovery_service import DiscoveryService  # noqa: E402
 from src.domain.queries import MarketQuery, CityFilter, ServiceFilter  # noqa: E402
+from src.domain.competitor_intel import CompetitorIntelService  # noqa: E402
 
 
 class _NullMarketStore:
@@ -191,6 +192,7 @@ class _NullMarketStore:
 
 
 _DISCOVERY_SERVICE: DiscoveryService | None = None
+_COMPETITOR_INTEL_SERVICE: CompetitorIntelService | None = None
 
 
 def _get_discovery_service() -> DiscoveryService:
@@ -201,6 +203,227 @@ def _get_discovery_service() -> DiscoveryService:
             market_store=StrategyRepository(persistence.client)
         )
     return _DISCOVERY_SERVICE
+
+
+def _rows(result: Any) -> list[dict[str, Any]]:
+    error = getattr(result, "error", None)
+    if error:
+        message = getattr(error, "message", None) or str(error)
+        raise RuntimeError(f"Supabase request failed: {message}")
+    return list(getattr(result, "data", None) or [])
+
+
+class _SupabaseCompetitorIntelRepository:
+    """Supabase read adapter for persisted competitor-intel facts."""
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+
+    def find_metro(self, *, city: str | None, state: str | None) -> dict[str, Any] | None:
+        if not city:
+            return None
+        query = self._client.table("metros").select("cbsa_code, cbsa_name, state")
+        state_filter = state.upper() if state else None
+        if state:
+            query = query.eq("state", state_filter)
+        if hasattr(query, "ilike"):
+            query = query.ilike("cbsa_name", f"{city}%")
+        if hasattr(query, "order"):
+            query = query.order("cbsa_name").order("state")
+        rows = _rows(query.limit(1 if state_filter else 10).execute())
+        if not state_filter and len(rows) > 1:
+            return None
+        return rows[0] if rows else None
+
+    def fetch_score_context(
+        self,
+        *,
+        cbsa_code: str,
+        niche_normalized: str,
+        report_id: str | None,
+        account_id: str | None,
+    ) -> dict[str, Any] | None:
+        query = (
+            self._client.table("metro_score_v2")
+            .select("*, metros(*)")
+            .eq("cbsa_code", cbsa_code)
+            .eq("niche_normalized", niche_normalized)
+        )
+        if report_id:
+            query = query.eq("report_id", report_id)
+        rows = _rows(query.order("scored_at", desc=True).execute())
+        rows = self._filter_rows_by_report_visibility(rows, account_id=account_id)
+        return rows[0] if rows else None
+
+    def fetch_keyword_facts(
+        self,
+        *,
+        cbsa_code: str,
+        niche_normalized: str,
+        keyword: str | None,
+        account_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        query = (
+            self._client.table("seo_facts")
+            .select("*")
+            .eq("cbsa_code", cbsa_code)
+            .eq("niche_normalized", niche_normalized)
+        )
+        if keyword:
+            query = query.eq("keyword", keyword)
+        rows = _rows(query.order("snapshot_date", desc=True).execute())
+        return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
+
+    def fetch_organic_competitor_facts(
+        self,
+        *,
+        cbsa_code: str,
+        niche_normalized: str,
+        keyword: str | None,
+        account_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        query = (
+            self._client.table("organic_competitor_facts")
+            .select("*")
+            .eq("cbsa_code", cbsa_code)
+            .eq("niche_normalized", niche_normalized)
+        )
+        if keyword:
+            query = query.eq("keyword", keyword)
+        rows = _rows(
+            query.order("snapshot_date", desc=True)
+            .order("result_rank")
+            .execute()
+        )
+        return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
+
+    def fetch_local_pack_facts(
+        self,
+        *,
+        cbsa_code: str,
+        niche_normalized: str,
+        keyword: str | None,
+        account_id: str | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        query = (
+            self._client.table("local_pack_listing_facts")
+            .select("*")
+            .eq("cbsa_code", cbsa_code)
+            .eq("niche_normalized", niche_normalized)
+        )
+        if keyword:
+            query = query.eq("keyword", keyword)
+        rows = _rows(
+            query.order("snapshot_date", desc=True).order("listing_rank").execute()
+        )
+        return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
+
+    def fetch_report_context(
+        self,
+        *,
+        report_id: str,
+        account_id: str | None,
+    ) -> dict[str, Any] | None:
+        rows = _rows(
+            self._client.table("reports")
+            .select(
+                "id, created_at, niche_keyword, geo_scope, geo_target, "
+                "strategy_profile, access_scope, owner_account_id, metros"
+            )
+            .eq("id", report_id)
+            .limit(1)
+            .execute()
+        )
+        if not rows:
+            return None
+        return rows[0] if self._report_is_visible(rows[0], account_id=account_id) else None
+
+    def create_run_record(self, payload: dict[str, Any]) -> str:
+        now = datetime.now(timezone.utc).isoformat()
+        status = str(payload.get("status") or "queued")
+        result = (
+            self._client.table("competitor_intel_runs")
+            .insert(
+                {
+                    "account_id": payload.get("account_id"),
+                    "created_by_user_id": payload.get("created_by_user_id"),
+                    "report_id": payload.get("report_id"),
+                    "cbsa_code": payload.get("cbsa_code"),
+                    "niche_normalized": payload.get("niche_normalized"),
+                    "service": payload.get("service"),
+                    "keyword": payload.get("keyword"),
+                    "input_payload": payload.get("input_payload") or {},
+                    "quota_consumed": payload.get("quota_consumed") or 0,
+                    "status": status,
+                    "result_summary": payload.get("result_summary") or {},
+                    "errors": payload.get("errors") or [],
+                    "started_at": now,
+                    "completed_at": now if status != "queued" else None,
+                    "updated_at": now,
+                }
+            )
+            .execute()
+        )
+        rows = _rows(result)
+        if not rows or not rows[0].get("id"):
+            raise RuntimeError("Supabase competitor_intel_runs insert returned no run id")
+        return str(rows[0]["id"])
+
+    def _filter_rows_by_report_visibility(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        account_id: str | None,
+    ) -> list[dict[str, Any]]:
+        report_ids = sorted(
+            {
+                str(row["report_id"])
+                for row in rows
+                if row.get("report_id") not in (None, "")
+            }
+        )
+        if not report_ids:
+            return list(rows)
+
+        report_rows = _rows(
+            self._client.table("reports")
+            .select("id, access_scope, owner_account_id")
+            .in_("id", report_ids)
+            .execute()
+        )
+        visible_ids = {
+            str(row["id"])
+            for row in report_rows
+            if self._report_is_visible(row, account_id=account_id)
+        }
+        return [
+            row
+            for row in rows
+            if row.get("report_id") in (None, "") or str(row["report_id"]) in visible_ids
+        ]
+
+    @staticmethod
+    def _report_is_visible(
+        row: dict[str, Any],
+        *,
+        account_id: str | None,
+    ) -> bool:
+        if row.get("access_scope") == "cached":
+            return True
+        return bool(account_id and str(row.get("owner_account_id")) == account_id)
+
+
+def _get_competitor_intel_service() -> CompetitorIntelService:
+    global _COMPETITOR_INTEL_SERVICE
+    if _COMPETITOR_INTEL_SERVICE is None:
+        persistence = SupabasePersistence()
+        _COMPETITOR_INTEL_SERVICE = CompetitorIntelService(
+            _SupabaseCompetitorIntelRepository(persistence.client)
+        )
+    return _COMPETITOR_INTEL_SERVICE
 
 
 def _require_strategy_discovery_internal_access(request: Request) -> None:
@@ -546,6 +769,31 @@ class StrategyRunRequest(BaseModel):
             and not (self.city and self.service)
         ):
             raise ValueError("Fresh strategy runs require at least one target.")
+        return self
+
+
+class CompetitorIntelRunRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    city: str | None = Field(default=None, min_length=1)
+    state: str | None = Field(default=None, min_length=1, max_length=2)
+    service: str | None = Field(default=None, min_length=1)
+    cbsa_code: str | None = Field(default=None, min_length=1)
+    cbsa_name: str | None = Field(default=None, min_length=1)
+    niche_keyword: str | None = Field(default=None, min_length=1)
+    niche_normalized: str | None = Field(default=None, min_length=1)
+    primary_keyword: str | None = Field(default=None, min_length=1)
+    report_id: uuid.UUID | None = None
+    quota_consumed: int = Field(default=0, ge=0, le=2)
+    account_id: uuid.UUID | None = None
+    created_by_user_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _needs_target(self) -> "CompetitorIntelRunRequest":
+        if self.report_id:
+            return self
+        if not (self.city or self.cbsa_code) or not (self.service or self.niche_keyword):
+            raise ValueError("Competitor intel runs require a city/CBSA and service.")
         return self
 
 
@@ -1462,6 +1710,70 @@ class DiscoverRequest(BaseModel):
     ai_resilience_filter: bool = False
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
+
+
+@app.get("/api/competitor-intel")
+async def get_competitor_intel(
+    request: Request,
+    city: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    service: str | None = Query(default=None),
+    cbsa_code: str | None = Query(default=None),
+    cbsa_name: str | None = Query(default=None),
+    niche_keyword: str | None = Query(default=None),
+    niche_normalized: str | None = Query(default=None),
+    primary_keyword: str | None = Query(default=None),
+    report_id: uuid.UUID | None = Query(default=None),
+    account_id: uuid.UUID | None = Query(default=None),
+) -> Any:
+    """Return paid competitor-intel read-model state from durable facts."""
+    _require_strategy_discovery_internal_access(request)
+    try:
+        return _get_competitor_intel_service().get_read_model(
+            {
+                "city": city,
+                "state": state,
+                "service": service,
+                "cbsa_code": cbsa_code,
+                "cbsa_name": cbsa_name,
+                "niche_keyword": niche_keyword,
+                "niche_normalized": niche_normalized,
+                "primary_keyword": primary_keyword,
+                "report_id": str(report_id) if report_id else None,
+                "account_id": str(account_id) if account_id else None,
+            }
+        )
+    except Exception as exc:
+        logger.warning("Competitor intel read model unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "code": "competitor_intel_unavailable",
+                "message": "Competitor intel service is unavailable.",
+            },
+        )
+
+
+@app.post("/api/competitor-intel/runs")
+async def create_competitor_intel_run(
+    req: CompetitorIntelRunRequest,
+    request: Request,
+) -> Any:
+    """Create a deterministic competitor-intel run from persisted facts."""
+    _require_strategy_discovery_internal_access(request)
+    try:
+        return _get_competitor_intel_service().create_run(req.model_dump(mode="json"))
+    except Exception as exc:
+        logger.warning("Competitor intel run unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "code": "competitor_intel_unavailable",
+                "message": "Competitor intel run service is unavailable.",
+            },
+        )
 
 
 @app.get("/api/strategies")

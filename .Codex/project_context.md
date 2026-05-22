@@ -1,5 +1,11 @@
 # Project Context
 
+## Consumer Visual System
+
+The consumer app now has shared WHI-10 score primitives in `apps/app/src/lib/design-tokens.ts` and `apps/app/src/components/ScoreVisuals.tsx`. Use `scoreToneForValue` for 80/60/40 score tone decisions and `ScoreCircle` / `ScoreBar` for visible score displays before adding route-local threshold helpers. Numeric score displays should stay on `var(--mono)` with no negative letter spacing.
+
+Report breakdowns, the report detail modal, strategy discovery result cards, Explore score cells, service score rows, and Reports table scores now consume the shared score tone/visual path. Dashboard destination cards use `NextMoveCard` where the pattern is a simple next action rather than a bespoke content card.
+
 ## Consumer App Frame
 
 The protected consumer app frame now lives in `apps/app/src/app/(protected)/layout.tsx`. It renders a sticky `Navbar`, a minimal `Footer`, and the route content for authenticated app pages. The navbar resolves the Supabase user, attempts account entitlement and usage loading, and falls back to `Free` with `0/0 scans` if account summary data is unavailable.
@@ -58,6 +64,12 @@ Strategy Discovery is implemented as a consumer product surface on branch `codex
 Migration `016_strategy_discovery_system.sql` adds `strategy_runs`, `strategy_run_items`, `local_pack_listing_facts`, `metro_feature_vectors`, and `strategy_score_cache`. Domain projection logic lives in `src/domain/strategy_projection.py`, cached market access and run lineage live in `src/clients/strategy_repository.py`, and FastAPI now serves `/api/strategies`, strategy-aware `/api/discover`, and `/api/strategy-runs`. The consumer app adds protected `/strategies` gallery/detail screens, shared strategy types/API helpers, and proxy routes under `apps/app/src/app/api/strategies/*` with existing entitlement/quota checks for fresh runs.
 
 Fresh strategy run creation is validated and lineage-backed: free users remain cached-only via the app proxy, fresh runs are capped at 100 targets, backend write failures return non-success responses so quota can be refunded, and queued runs persist `quota_consumed = 1`. Full async report fanout and run-status/report detail endpoints are still follow-up work.
+
+## Competitor Intel
+
+WHI-9 adds a protected `/competitor-intel` route as a paid Plus/Pro dossier surface. Free users receive an upgrade state; paid users can view durable dossier data or create a two-scan run record when durable aggregate/dossier facts already exist. Until the live DataForSEO collector is wired, `ready_to_run` targets refuse and refund instead of charging for a dead queued job. The UI renders upgrade, ready, running, aggregate-only, dossier, and error states using the existing Widby warm paper design system.
+
+Migration `20260522184933_whi9_competitor_intel_schema_quota.sql` adds `organic_competitor_facts`, `competitor_intel_runs`, and generic multi-unit `consume_usage_quota` / `refund_usage_quota` RPCs while preserving one-unit consume wrappers and moving refund wrappers to service-role-only access. `SupabasePersistence` now writes durable organic and local-pack competitor facts when report payloads contain those rows; `api_response_cache` remains cache/cost infrastructure only. `CompetitorIntelService` reads `organic_competitor_facts`, `local_pack_listing_facts`, `seo_facts`, `metro_score_v2`, and `reports` to assemble ready, aggregate-only, or dossier states, and service-role reads drop competitor fact rows without visible report lineage.
 
 ## Consumer User Management and Billing
 
