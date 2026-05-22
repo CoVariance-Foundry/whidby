@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { Icon, I } from "@/lib/icons";
 import type {
   StrategyCatalogEntry,
@@ -207,6 +207,19 @@ function liveReportTargetLabel(target: LiveReportTarget) {
   return `${target.city} + ${target.service}`;
 }
 
+function liveReportTargetKey(target: LiveReportTarget) {
+  return JSON.stringify([
+    target.strategyId,
+    target.inputShape,
+    target.city,
+    target.referenceCityId,
+    target.service,
+    target.primaryKeyword,
+    target.aiResilienceFilter,
+    target.limit,
+  ]);
+}
+
 function buildFreshRunPayload(target: LiveReportTarget): StrategyRunRequest {
   const payload: StrategyRunRequest = {
     mode: "fresh",
@@ -218,6 +231,7 @@ function buildFreshRunPayload(target: LiveReportTarget): StrategyRunRequest {
 
   if (target.inputShape === "reference_city_service") {
     payload.reference_city_id = target.referenceCityId;
+    payload.city = target.referenceCityId;
   } else {
     payload.city = target.city;
   }
@@ -532,6 +546,8 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   const [results, setResults] = useState<StrategyResultCard[]>([]);
   const [zeroResultTarget, setZeroResultTarget] = useState<LiveReportTarget | null>(null);
   const [liveRunState, setLiveRunState] = useState<LiveRunState>({ status: "idle" });
+  const liveRunRequestIdRef = useRef(0);
+  const zeroResultTargetKeyRef = useRef<string | null>(null);
 
   const isPhase2Unavailable = strategy.status === "phase_2";
   const isUnavailable = isPhase2Unavailable;
@@ -575,6 +591,8 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
     setResults([]);
     setZeroResultTarget(null);
     setLiveRunState({ status: "idle" });
+    liveRunRequestIdRef.current += 1;
+    zeroResultTargetKeyRef.current = null;
 
     try {
       const res = await fetch("/api/strategies/discover", {
@@ -595,6 +613,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       const rawResults = Array.isArray(body.markets) ? body.markets : Array.isArray(body.results) ? body.results : [];
       setResults(rawResults.map(normalizeResult));
       if (rawResults.length === 0) {
+        zeroResultTargetKeyRef.current = liveReportTargetKey(requestedTarget);
         setZeroResultTarget(requestedTarget);
         setError(`No matching cached markets were returned for ${liveReportTargetLabel(requestedTarget)}.`);
       }
@@ -608,15 +627,25 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   async function runLiveReport() {
     if (!zeroResultTarget || liveRunState.status === "loading") return;
 
+    const requestTarget = zeroResultTarget;
+    const requestTargetKey = liveReportTargetKey(requestTarget);
+    const requestId = liveRunRequestIdRef.current + 1;
+    liveRunRequestIdRef.current = requestId;
+    zeroResultTargetKeyRef.current = requestTargetKey;
     setLiveRunState({ status: "loading" });
+
+    const isCurrentLiveRun = () =>
+      liveRunRequestIdRef.current === requestId &&
+      zeroResultTargetKeyRef.current === requestTargetKey;
 
     try {
       const response = await fetch("/api/strategies/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildFreshRunPayload(zeroResultTarget)),
+        body: JSON.stringify(buildFreshRunPayload(requestTarget)),
       });
       const body = (await response.json().catch(() => ({}))) as StrategyRunResponse;
+      if (!isCurrentLiveRun()) return;
 
       if (!response.ok) {
         if (isUpgradePath(body)) {
@@ -648,6 +677,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
 
       setLiveRunState({ status: "success", response: body });
     } catch (err) {
+      if (!isCurrentLiveRun()) return;
       setLiveRunState({
         status: "error",
         message: err instanceof Error ? err.message : "Live report could not be queued.",

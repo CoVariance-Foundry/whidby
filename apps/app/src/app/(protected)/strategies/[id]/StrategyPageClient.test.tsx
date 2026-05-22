@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StrategyCatalogEntry } from "@/lib/strategies/types";
 import StrategyPageClient from "./StrategyPageClient";
@@ -82,6 +82,101 @@ describe("StrategyPageClient", () => {
       ai_resilience_filter: true,
       limit: 10,
     });
+  });
+
+  it("sends a backend-valid fresh payload for an Expand & Conquer live report", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "expand_conquer",
+      name: "Expand & Conquer",
+      description: "Reference-market expansion.",
+      status: "launch",
+      input_shape: "reference_city_service",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ markets: [] }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ run_id: "strategy-run-1", status: "queued" }), {
+          status: 200,
+        }),
+      );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("Reference city id"), {
+      target: { value: "boise-id" },
+    });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await screen.findByText("Live report option");
+    fireEvent.click(screen.getByRole("button", { name: /run live report/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/strategies/runs");
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(body).toEqual({
+      mode: "fresh",
+      strategy_id: "expand_conquer",
+      city: "boise-id",
+      service: "plumbing",
+      reference_city_id: "boise-id",
+      ai_resilience_filter: false,
+      limit: 10,
+    });
+  });
+
+  it("ignores stale live run responses after a newer zero-result target is loaded", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    let resolveLiveRun: (response: Response) => void = () => undefined;
+    const liveRunResponse = new Promise<Response>((resolve) => {
+      resolveLiveRun = resolve;
+    });
+    const fetchMock = vi.fn((url: RequestInfo | URL) => {
+      if (String(url) === "/api/strategies/runs") {
+        return liveRunResponse;
+      }
+      return Promise.resolve(new Response(JSON.stringify({ markets: [] }), { status: 200 }));
+    });
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await screen.findByText("Live report option");
+    expect(screen.getAllByText("Boise + plumbing").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /run live report/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Reno" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getAllByText("Reno + plumbing").length).toBeGreaterThan(0));
+
+    await act(async () => {
+      resolveLiveRun(
+        new Response(JSON.stringify({ run_id: "stale-run-1", status: "queued" }), {
+          status: 200,
+        }),
+      );
+      await liveRunResponse;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("stale-run-1")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Live report queued/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Reno + plumbing").length).toBeGreaterThan(0);
   });
 
   it("renders upgrade-path copy and settings link when fresh runs are not included", async () => {
