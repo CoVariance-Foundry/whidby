@@ -17,6 +17,11 @@ type HeaderReader = {
   get(name: string): string | null;
 };
 
+type AppRouteTarget = {
+  url: string;
+  forwardCookie: boolean;
+};
+
 function normalizeAppBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim().replace(/\/$/, "");
   if (!trimmed) return "";
@@ -26,19 +31,19 @@ function normalizeAppBaseUrl(baseUrl: string) {
   return `https://${trimmed}`;
 }
 
-function getAppRouteUrl(path: string, headerStore: HeaderReader) {
+function getAppRouteTarget(path: string, headerStore: HeaderReader): AppRouteTarget {
   for (const key of APP_BASE_ENV_KEYS) {
     const configured = process.env[key]?.trim();
-    if (configured) return `${normalizeAppBaseUrl(configured)}${path}`;
+    if (configured) return { url: `${normalizeAppBaseUrl(configured)}${path}`, forwardCookie: true };
   }
 
   const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (vercelUrl) return `${normalizeAppBaseUrl(vercelUrl)}${path}`;
+  if (vercelUrl) return { url: `${normalizeAppBaseUrl(vercelUrl)}${path}`, forwardCookie: true };
 
   const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
-  if (!host) return path;
+  if (!host) return { url: path, forwardCookie: false };
   const proto = headerStore.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}${path}`;
+  return { url: `${proto}://${host}${path}`, forwardCookie: false };
 }
 
 function firstMetadataString(
@@ -77,9 +82,9 @@ async function loadSavedReportPreview(): Promise<{
 }> {
   try {
     const headerStore = await headers();
-    const cookie = headerStore.get("cookie") ?? undefined;
-    const url = getAppRouteUrl("/api/agent/reports?limit=5", headerStore);
-    const response = await fetch(url, {
+    const target = getAppRouteTarget("/api/agent/reports?limit=5", headerStore);
+    const cookie = target.forwardCookie ? (headerStore.get("cookie") ?? undefined) : undefined;
+    const response = await fetch(target.url, {
       cache: "no-store",
       ...(cookie ? { headers: { cookie } } : {}),
     });
@@ -114,9 +119,12 @@ export default async function SettingsPage() {
 
   try {
     const { user, entitlement } = await resolveEntitlementContext(supabase);
-    summary = await loadAccountSummary({ supabase, user, entitlement });
+    const [summaryResult, reportPreview] = await Promise.all([
+      loadAccountSummary({ supabase, user, entitlement }),
+      loadSavedReportPreview(),
+    ]);
+    summary = summaryResult;
     profile = profileFromUser(user);
-    const reportPreview = await loadSavedReportPreview();
     savedReports = reportPreview.reports;
     savedReportsError = reportPreview.error;
   } catch (error) {
