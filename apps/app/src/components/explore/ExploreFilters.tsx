@@ -50,7 +50,6 @@ function numericFilters(filters: ExploreFilterState): Pick<
 
 export default function ExploreFilters({
   filters,
-  states,
   services,
   growthAvailable,
   onChange,
@@ -185,7 +184,6 @@ export default function ExploreFilters({
       >
         <StateMultiselect
           label="States"
-          availableAbbrs={states}
           selected={filters.selectedStates}
           onChange={(selectedStates) =>
             onChange(updateFilter(filters, { selectedStates }))

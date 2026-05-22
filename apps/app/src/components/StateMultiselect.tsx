@@ -85,6 +85,10 @@ const REGIONS: StateRegion[] = [
       { abbr: "WY", name: "Wyoming" },
     ],
   },
+  {
+    name: "Territories",
+    states: [{ abbr: "PR", name: "Puerto Rico" }],
+  },
 ];
 
 const ALL_STATES = REGIONS.flatMap((region) => region.states);
@@ -117,10 +121,10 @@ export default function StateMultiselect({
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const availableSet = useMemo(
-    () => (availableAbbrs ? new Set(availableAbbrs) : null),
-    [availableAbbrs],
-  );
+  const availableSet = useMemo(() => {
+    const normalizedAbbrs = availableAbbrs?.filter(Boolean) ?? [];
+    return normalizedAbbrs.length > 0 ? new Set(normalizedAbbrs) : null;
+  }, [availableAbbrs]);
 
   useEffect(() => {
     if (!open) return;
