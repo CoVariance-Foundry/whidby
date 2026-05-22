@@ -155,10 +155,10 @@ export default function ReportsView({ rows }: ReportsViewProps) {
                 </div>
                 <div
                   style={{
-                    fontFamily: "var(--serif)",
+                    fontFamily: "var(--mono)",
                     fontSize: 26,
                     fontWeight: 600,
-                    letterSpacing: "-0.4px",
+                    letterSpacing: 0,
                     lineHeight: 1,
                     fontVariantNumeric: "tabular-nums",
                   }}

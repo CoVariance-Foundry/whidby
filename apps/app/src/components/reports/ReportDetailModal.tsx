@@ -470,7 +470,7 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
               fontFamily: "var(--serif)",
               fontSize: 24,
               fontWeight: 600,
-              letterSpacing: "-0.3px",
+              letterSpacing: 0,
               color: "var(--ink)",
               margin: 0,
               paddingRight: 40,

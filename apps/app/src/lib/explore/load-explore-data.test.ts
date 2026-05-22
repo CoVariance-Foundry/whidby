@@ -21,6 +21,20 @@ const originalNodeEnv = process.env.NODE_ENV;
 const originalVercelEnv = process.env.VERCEL_ENV;
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
+const setNodeEnv = (value: typeof process.env.NODE_ENV) => {
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, "NODE_ENV");
+    return;
+  }
+
+  Object.defineProperty(process.env, "NODE_ENV", {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
+};
+
 afterEach(() => {
   global.fetch = originalFetch;
   delete process.env.WIDBY_APP_BASE_URL;
@@ -32,11 +46,7 @@ afterEach(() => {
   } else {
     process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
   }
-  if (originalNodeEnv === undefined) {
-    delete process.env.NODE_ENV;
-  } else {
-    process.env.NODE_ENV = originalNodeEnv;
-  }
+  setNodeEnv(originalNodeEnv);
   if (originalVercelEnv === undefined) {
     delete process.env.VERCEL_ENV;
   } else {
@@ -131,7 +141,7 @@ describe("loadExploreData", () => {
   });
 
   it("throws loudly when production server rendering is missing NEXT_PUBLIC_API_URL", async () => {
-    process.env.NODE_ENV = "production";
+    setNodeEnv("production");
     delete process.env.NEXT_PUBLIC_API_URL;
     global.fetch = vi.fn();
 
