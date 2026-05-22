@@ -100,6 +100,37 @@ async def test_guidance_generator_rejects_missing_nested_numeric_field() -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("da_value", [None, "missing"])
+async def test_guidance_generator_allows_missing_avg_top5_da(da_value: object) -> None:
+    data = build_local_pack_vulnerable_input()
+    if da_value == "missing":
+        del data["signals"]["organic_competition"]["avg_top5_da"]
+    else:
+        data["signals"]["organic_competition"]["avg_top5_da"] = da_value
+
+    result = await classify_and_generate_guidance(data, FakeSuccessfulLLMClient())
+
+    assert result["guidance"]["guidance_status"] == "generated"
+
+
+@pytest.mark.asyncio
+async def test_guidance_generator_rejects_non_numeric_avg_top5_da_when_present() -> None:
+    data = build_local_pack_vulnerable_input()
+    data["signals"]["organic_competition"]["avg_top5_da"] = "unknown"
+    with pytest.raises(ValueError, match="avg_top5_da"):
+        await classify_and_generate_guidance(data, FakeSuccessfulLLMClient())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["aggregator_count", "local_biz_count"])
+async def test_guidance_generator_rejects_missing_required_organic_counts(field: str) -> None:
+    data = build_local_pack_vulnerable_input()
+    data["signals"]["organic_competition"][field] = None
+    with pytest.raises(ValueError, match=field):
+        await classify_and_generate_guidance(data, FakeSuccessfulLLMClient())
+
+
+@pytest.mark.asyncio
 async def test_guidance_generator_rejects_non_numeric_score_value() -> None:
     data = build_local_pack_vulnerable_input()
     data["scores"]["organic_competition"] = "not-a-number"

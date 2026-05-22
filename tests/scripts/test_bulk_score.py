@@ -108,6 +108,29 @@ def test_api_url_defaults_to_local_fastapi_port(monkeypatch):
     assert bulk_score._api_url(SimpleNamespace(api_url=None)) == "http://localhost:8000"
 
 
+def test_expected_project_ref_guard_accepts_matching_supabase_url(monkeypatch):
+    monkeypatch.setenv("NEXT_PUBLIC_SUPABASE_URL", "https://abc123.supabase.co")
+
+    bulk_score.validate_expected_project_ref("abc123")
+
+
+def test_expected_project_ref_guard_rejects_mismatched_supabase_url(monkeypatch):
+    monkeypatch.setenv("NEXT_PUBLIC_SUPABASE_URL", "https://abc123.supabase.co")
+
+    with pytest.raises(RuntimeError, match="expected def456, got abc123"):
+        bulk_score.validate_expected_project_ref("def456")
+
+
+def test_expected_project_ref_guard_rejects_suffixed_supabase_host(monkeypatch):
+    monkeypatch.setenv(
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "https://abc123.supabase.co.evil.test",
+    )
+
+    with pytest.raises(RuntimeError, match="expected abc123, got <unknown>"):
+        bulk_score.validate_expected_project_ref("abc123")
+
+
 def test_fetch_metros_prioritizes_rank_and_rent_classes_and_caps_mega():
     supabase = FakeSupabase(
         rows_by_table={

@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.6.1 -->
+<!-- docguard:version 1.6.2 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -103,6 +103,18 @@ tests/
 | Top-5 organic facts | `avg_top5_da` and `avg_top5_lighthouse` use canonical top-5 organic competitors and exclude aggregators/missing URLs | `tests/unit/test_batch_executor.py`, `tests/unit/test_signal_extraction.py`, `tests/unit/test_signal_extractors.py`, `tests/scoring/test_v2_scoring.py` |
 | V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
 | Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
+
+## Coverage-First Production Seed Acceptance
+
+| Gate | Expected |
+|------|----------|
+| Schema parity | Local migrations and target Supabase schema agree before seed writes |
+| Expected-project guard | Seed and recompute commands fail closed when pointed at the wrong project |
+| Canary | One city/service pair persists report, V2 score, SEO facts, and readable Explore cache output |
+| 12x8 coverage pilot | Pilot records success, partial, and failure audit rows without treating nullable top-5 DA/Lighthouse telemetry as blocking |
+| Benchmark recompute | `seo_benchmarks` is rebuilt from accepted `seo_facts` after pilot coverage is reviewed |
+| Explore cache validation | `/explore` read models surface the seeded city/service rows with V2 preference and legacy fallback intact |
+| 50x16 seed | Full seed proceeds only after the prior gates pass |
 
 ## E2E Scoring Tests (Playwright)
 
@@ -239,3 +251,4 @@ npm run lint
 | 1.4.0 | 2026-05-16 | Consumer onboarding flow | Added schema, routing, API, UI, first-report handoff, and auth-resume test obligations |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
 | 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |
+| 1.6.2 | 2026-05-22 | Coverage-first production seed acceptance | Added schema parity, expected-project guard, canary, pilot, benchmark, Explore cache, and full-seed gates |

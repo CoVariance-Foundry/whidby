@@ -65,6 +65,7 @@ def compute_v2_scores(
             or _number(signals.get("top3_review_velocity_coverage")) < 0.67
         )
     )
+    top5_organic_data_low_coverage = _top5_organic_data_low_coverage(signals)
 
     return {
         "niche_normalized": niche_normalized,
@@ -106,6 +107,7 @@ def compute_v2_scores(
             "benchmark_undersampled": benchmark is None or benchmark.is_undersampled,
             "cbp_data_missing": cbp_missing,
             "top3_review_data_low_coverage": top3_review_data_low_coverage,
+            "top5_organic_data_low_coverage": top5_organic_data_low_coverage,
         },
         "spec_version": "2.0",
     }
@@ -151,6 +153,15 @@ def _optional_number(value: Any) -> float | None:
 
 def _bool(value: Any) -> bool:
     return bool(value)
+
+
+def _top5_organic_data_low_coverage(signals: Mapping[str, Any]) -> bool:
+    confidence = str(signals.get("top5_organic_data_confidence") or "missing").strip().lower()
+    return (
+        _number(signals.get("top5_da_coverage")) < 0.6
+        or _number(signals.get("top5_lighthouse_coverage")) < 0.6
+        or confidence in {"low", "missing"}
+    )
 
 
 def _positive(value: float | None, default: float) -> float:

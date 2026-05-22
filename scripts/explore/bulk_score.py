@@ -46,6 +46,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -131,6 +132,34 @@ def _supabase_client() -> Any:
             "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required for matview refresh"
         )
     return create_client(url, key)
+
+
+def supabase_project_ref(supabase_url: str) -> str | None:
+    """Extract the Supabase project ref from a project URL."""
+    parsed = urlparse(supabase_url.strip())
+    if parsed.scheme != "https" or parsed.hostname is None:
+        return None
+    suffix = ".supabase.co"
+    if not parsed.hostname.endswith(suffix):
+        return None
+    project_ref = parsed.hostname[: -len(suffix)]
+    if not project_ref or "." in project_ref:
+        return None
+    return project_ref
+
+
+def validate_expected_project_ref(expected_project_ref: str | None) -> None:
+    """Fail fast when a caller pins an expected Supabase project ref."""
+    if not expected_project_ref:
+        return
+    supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    actual_project_ref = supabase_project_ref(supabase_url)
+    if actual_project_ref != expected_project_ref:
+        actual = actual_project_ref or "<unknown>"
+        raise RuntimeError(
+            "Supabase project ref mismatch: "
+            f"expected {expected_project_ref}, got {actual} from NEXT_PUBLIC_SUPABASE_URL"
+        )
 
 
 def fetch_top_metros(supabase: Any, limit: int) -> list[dict[str, Any]]:
@@ -664,9 +693,10 @@ def _is_missing_refresh_rpc(exc: Exception) -> bool:
     )
 
 
-def refresh_matview_sql() -> None:
+def refresh_matview_sql(expected_project_ref: str | None = None) -> None:
     """Refresh via direct SQL if the RPC doesn't exist."""
     _load_env()
+    validate_expected_project_ref(expected_project_ref)
     sb = _supabase_client()
     try:
         refresh_matview(sb)
@@ -702,6 +732,7 @@ def city_short_name(cbsa_name: str) -> str:
 
 async def run_bulk_score(args: argparse.Namespace) -> None:
     _load_env()
+    validate_expected_project_ref(getattr(args, "expected_project_ref", None))
     sb = _supabase_client()
     api_url = _api_url(args)
     retry_pairs: set[tuple[str, str]] | None = None
@@ -1037,6 +1068,14 @@ def main() -> None:
         default=True,
         help="Require metro_score_v2 and seo_facts rows before counting success (default: true).",
     )
+    parser.add_argument(
+        "--expected-project-ref",
+        default=None,
+        help=(
+            "Optional Supabase project ref guard. When set, NEXT_PUBLIC_SUPABASE_URL "
+            "must point at this project before scoring or refresh operations run."
+        ),
+    )
     args = parser.parse_args()
 
     if args.resume and args.resume_v2:
@@ -1045,7 +1084,7 @@ def main() -> None:
         parser.error("--retry-failed-from cannot be combined with --resume or --resume-v2")
 
     if args.refresh_only:
-        refresh_matview_sql()
+        refresh_matview_sql(args.expected_project_ref)
         return
 
     if not args.preview and not args.apply:

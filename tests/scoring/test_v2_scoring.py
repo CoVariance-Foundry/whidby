@@ -53,6 +53,10 @@ def signal_fixture(**overrides: object) -> dict[str, object]:
         "aggregator_count": 2.0,
         "local_biz_count": 5.0,
         "avg_top5_da": 30.0,
+        "avg_top5_lighthouse": 70.0,
+        "top5_da_coverage": 0.8,
+        "top5_lighthouse_coverage": 0.8,
+        "top5_organic_data_confidence": "high",
         "local_pack_present": True,
         "top3_review_count_min": 60,
         "review_velocity_avg": 4.5,
@@ -92,6 +96,7 @@ def test_compute_v2_scores_with_repository_uses_niche_and_population_key() -> No
     assert result["scores"]["local_difficulty"]["value"] == 50
     assert result["scores"]["monetization_signal"]["value"] == 120
     assert result["scores"]["ai_resilience"]["value"] == 69
+    assert result["flags"]["top5_organic_data_low_coverage"] is False
 
 
 def test_missing_benchmark_sets_undersampled_flag_and_still_scores() -> None:
@@ -182,6 +187,50 @@ def test_missing_top5_da_does_not_become_zero_organic_difficulty() -> None:
 
     assert with_da["scores"]["organic_difficulty"]["value"] == 22
     assert missing_da["scores"]["organic_difficulty"]["value"] == 26
+
+
+def test_top5_organic_low_coverage_flag_does_not_change_score_values() -> None:
+    baseline = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(),
+        benchmark=benchmark_cell(),
+    )
+    low_coverage = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(top5_da_coverage=0.4),
+        benchmark=benchmark_cell(),
+    )
+    low_confidence = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(top5_organic_data_confidence="low"),
+        benchmark=benchmark_cell(),
+    )
+
+    assert low_coverage["scores"] == baseline["scores"]
+    assert low_confidence["scores"] == baseline["scores"]
+    assert low_coverage["flags"]["top5_organic_data_low_coverage"] is True
+    assert low_confidence["flags"]["top5_organic_data_low_coverage"] is True
+
+
+def test_top5_organic_missing_evidence_sets_low_coverage_flag() -> None:
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(
+            avg_top5_da=None,
+            avg_top5_lighthouse=None,
+            top5_da_coverage=0.0,
+            top5_lighthouse_coverage=0.0,
+            top5_organic_data_confidence="missing",
+        ),
+        benchmark=benchmark_cell(),
+    )
+
+    assert result["scores"]["organic_difficulty"]["value"] == 26
+    assert result["flags"]["top5_organic_data_low_coverage"] is True
 
 
 def test_low_confidence_benchmark_sets_undersampled_flag() -> None:

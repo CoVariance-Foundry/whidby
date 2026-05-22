@@ -122,6 +122,8 @@ The write path above is triggered by the FastAPI `POST /api/niches/score` handle
 
 Bulk Explore data builds use `scripts/explore/bulk_score.py` as an operational runner over the same scoring and persistence path. The runner selects DataForSEO-ready metros with a rank-and-rent default ordering, caps `mega_5m_plus` markets only for the default strategy, accepts explicit repeated `--service-name` values for production seed runs, validates requested services against `niche_naics_mapping`, calls `POST /api/niches/score` for each city/service pair, verifies `reports`, `metro_scores`, `metro_score_v2`, and `seo_facts` persistence before marking an attempt successful, and appends a JSONL audit row for every success, partial persistence failure, or API failure. Legacy resume state merges report-backed `explore_market_cells` rows with legacy `metro_scores` + `reports` rows so interrupted runs skip all known cached reports rather than only one read model. V2-aware recovery uses `--resume-v2` to skip only pairs that already have normalized `metro_score_v2` and `seo_facts` rows, while `--retry-failed-from <jsonl>` reruns failed or partial audit rows from a specific run.
 
+Coverage-first production seeds must use a gated ramp: schema parity and expected-project guard, canary scoring, 12x8 coverage pilot, benchmark recompute, Explore cache validation, then the 50x16 seed. Top-5 DA and Lighthouse fields are optional telemetry during this seed audit; null values reduce evidence confidence but must not block scoring, guidance, or cache validation.
+
 ## Consumer Account, Billing, and Quota Flow
 
 ```

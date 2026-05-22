@@ -119,8 +119,12 @@ def _validate_signal_fields(signals: Mapping[str, Any]) -> None:
     """Validate required nested signal sections and numeric fields."""
     _require_section(signals, "organic_competition", "signals")
     organic = signals["organic_competition"]
-    for field in ("aggregator_count", "local_biz_count", "avg_top5_da"):
+    for field in ("aggregator_count", "local_biz_count"):
         _require_numeric(organic.get(field), f"signals.organic_competition.{field}")
+    _require_optional_numeric(
+        organic.get("avg_top5_da"),
+        "signals.organic_competition.avg_top5_da",
+    )
 
     _require_section(signals, "local_competition", "signals")
     local = signals["local_competition"]
@@ -142,6 +146,16 @@ def _require_numeric(value: Any, path: str) -> None:
     """Require a value to be present and coercible to float."""
     if value is None:
         raise ValueError(f"{path} is required but missing")
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{path} must be numeric, got {type(value).__name__}: {value!r}")
+
+
+def _require_optional_numeric(value: Any, path: str) -> None:
+    """Allow missing values but require present values to be numeric."""
+    if value is None:
+        return
     try:
         float(value)
     except (TypeError, ValueError):

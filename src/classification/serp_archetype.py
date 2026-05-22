@@ -22,7 +22,7 @@ def classify_serp_archetype(signals: Mapping[str, Any]) -> tuple[SerpArchetype, 
 
     aggregator_count = _to_float(organic.get("aggregator_count"))
     local_biz_count = _to_float(organic.get("local_biz_count"))
-    avg_top5_da = _to_float(organic.get("avg_top5_da"))
+    avg_top5_da = _optional_float(organic.get("avg_top5_da"))
 
     has_local_pack = bool(local.get("local_pack_present", False))
     review_avg = _to_float(local.get("local_pack_review_count_avg"))
@@ -39,9 +39,9 @@ def classify_serp_archetype(signals: Mapping[str, Any]) -> tuple[SerpArchetype, 
         return "LOCAL_PACK_ESTABLISHED", "pack_review_gt_30"
     if has_local_pack and review_avg <= 30:
         return "LOCAL_PACK_VULNERABLE", "pack_review_lte_30"
-    if local_ratio >= 0.4 and avg_top5_da < 25:
+    if avg_top5_da is not None and local_ratio >= 0.4 and avg_top5_da < 25:
         return "FRAGMENTED_WEAK", "local_ratio_ge_0_4_and_da_lt_25"
-    if local_ratio >= 0.4 and avg_top5_da >= 25:
+    if avg_top5_da is not None and local_ratio >= 0.4 and avg_top5_da >= 25:
         return "FRAGMENTED_COMPETITIVE", "local_ratio_ge_0_4_and_da_gte_25"
     if local_ratio < 0.3 and agg_ratio < 0.3:
         return "BARREN", "local_ratio_lt_0_3_and_agg_ratio_lt_0_3"
@@ -61,3 +61,13 @@ def _to_float(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _optional_float(value: Any) -> float | None:
+    """Return a float for present numeric values, preserving missing evidence."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.6.0`     |
-| **Last Updated** | 2026-05-17  |
+| **Version**      | `1.6.1`     |
+| **Last Updated** | 2026-05-22  |
 | **Owner**        | @widby-team |
 
 
@@ -70,6 +70,11 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 - `top3_review_velocity_avg` is the average monthly review velocity across ranked local top-3 listings with velocity data; missing velocity data persists as `null`.
 - `avg_top5_da` is the nullable average domain authority across usable top-5 organic competitors after existing aggregator/missing-URL exclusions.
 - `avg_top5_lighthouse` is the nullable average Lighthouse/site quality score across usable top-5 organic competitors. `top5_da_coverage`, `top5_lighthouse_coverage`, and `top5_organic_data_confidence` record sparse top-5 evidence so missing measurements do not become easy zero-DA or zero-Lighthouse facts.
+- During the coverage-first production seed audit, top-5 DA and Lighthouse are optional telemetry. `null` values lower confidence/evidence completeness only; they must not block V2 scoring, guidance classification, persistence, benchmark recompute, or Explore cache reads.
+
+### Coverage-First Seed Data Contract
+
+Production seed acceptance is staged, not a single bulk-write event: verify schema parity and the expected Supabase project, run a canary, complete a 12x8 coverage pilot, recompute benchmarks, validate Explore cache reads, then run the 50x16 seed. Seeded rows must reuse canonical tables (`reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, `seo_benchmarks`, and Explore read models); do not create duplicate seed-specific tables.
 
 
 ### Sonar Slice-Lite Entities
@@ -594,3 +599,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.3.0   | 2026-05-14 | Explore refresh control | Added refresh policy, target, run, run item, and report snapshot entities for cached Explore refreshes |
 | 1.4.0   | 2026-05-16 | Strategy Discovery system design | Added strategy run/cache entities, local pack and metro vector facts, and StrategyResult DTO |
 | 1.6.0   | 2026-05-17 | Internal entitlements | Added internal quota-exempt user entitlement model and staging test personas |
+| 1.6.1   | 2026-05-22 | Coverage-first seed data contract | Documented nullable top-5 telemetry posture and production seed acceptance sequence |
