@@ -14,6 +14,14 @@ Dashboard starter and shortcut strategies are launch-safe only: `easy_win`, `gbp
 
 The new dashboard component surface lives in `apps/app/src/components/home/DashboardHome.tsx` and includes the first-run banner, usage strip, recommended strategy hero, Explore/Multi-market cards, strategy shortcuts, and recent reports. Free/no-quota users are routed to cached Explore/settings CTAs; paid or quota-exempt users are routed to the launch-safe starter strategy. Recent report rows link to `/reports?open=<report_id>` so they reuse the existing report modal behavior. The old home widget components were removed; shared dashboard report item types now live in `apps/app/src/lib/home/types.ts`.
 
+## Consumer Multi-market
+
+The protected `/agency` route is now the Epic 5 Multi-market batch configuration flow instead of a placeholder. It uses the shared protected app frame, exposes a batch-cost indicator, and moves users through configure, confirm, and complete states. Configuration includes launch-safe strategy lenses, state/population filters, service selection, and a 100 target cap.
+
+Target review resolves cached city-service pairs through `apps/app /api/strategies/discover`; queueing sends explicit targets to `apps/app /api/strategies/runs` in fresh mode. The current quota model is one fresh-report scan per queued batch, using the existing strategy-run account/user injection, quota consume/refund behavior, and `strategy_runs` lineage. Target-level execution progress and report fanout remain the backend follow-up for WHI-30.
+
+`apps/app/src/components/StateMultiselect.tsx` is the shared state selector for Multi-market and Explore filters. Do not reintroduce route-local state dropdown copies unless a page needs behavior the shared selector cannot express.
+
 ## Account and Billing Settings
 
 Consumer `/settings` now implements the Account and Billing surface for authenticated users. The protected page resolves the Supabase user, account entitlement, fresh-report usage counter, Stripe customer presence, billing-management flag, and Stripe scheduled-cancellation state, then renders plan status, cycle reset dates, usage remaining, plan change actions, payment/invoice rows, and password reset controls.
