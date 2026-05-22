@@ -37,10 +37,23 @@ function getAppRouteUrl(path: string, headerStore: HeaderReader) {
   const vercelUrl = process.env.VERCEL_URL?.trim();
   if (vercelUrl) return `${normalizeAppBaseUrl(vercelUrl)}${path}`;
 
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  const host = headerStore.get("host")?.trim();
   if (!host) return path;
-  const proto = headerStore.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}${path}`;
+
+  try {
+    const parsed = new URL(`http://${host}`);
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+    const isLocalHost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1";
+    if (!isLocalHost) return path;
+
+    const proto = headerStore.get("x-forwarded-proto") === "https" ? "https" : "http";
+    return `${proto}://${parsed.host}${path}`;
+  } catch {
+    return path;
+  }
 }
 
 async function loadReport(reportId: string): Promise<FullReportData | null> {

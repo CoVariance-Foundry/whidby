@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import ScoreInfoHover from "./ScoreInfoHover";
 import { SCORE_EXPLAINERS, type ScoreKey } from "@/lib/reports/score-explainers";
 
@@ -23,6 +23,19 @@ describe("ScoreInfoHover", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByRole("tooltip")).toBeInTheDocument();
     expect(screen.getByText("Organic Competition")).toBeInTheDocument();
+  });
+
+  it("does not bubble clicks to an interactive row wrapper", () => {
+    const onRowClick = vi.fn();
+    render(
+      <div onClick={onRowClick}>
+        <ScoreInfoHover scoreKey="opportunity" />
+      </div>,
+    );
+
+    expect(fireEvent.click(screen.getByRole("button"))).toBe(false);
+    expect(onRowClick).not.toHaveBeenCalled();
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
   });
 
   it("shows correct content for each score key", () => {
