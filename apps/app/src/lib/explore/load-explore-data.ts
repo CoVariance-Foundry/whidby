@@ -22,7 +22,7 @@ const APP_BASE_ENV_KEYS = [
   "NEXT_PUBLIC_SITE_URL",
 ] as const;
 
-function normalizeAppBaseUrl(baseUrl: string) {
+function normalizeBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim().replace(/\/$/, "");
   if (!trimmed) return "";
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -31,42 +31,34 @@ function normalizeAppBaseUrl(baseUrl: string) {
   return `https://${trimmed}`;
 }
 
-function normalizeApiBaseUrl(baseUrl: string) {
-  const trimmed = baseUrl.trim().replace(/\/$/, "");
-  if (!trimmed) return "";
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
-  }
-  return `https://${trimmed}`;
-}
-
-function isProductionRuntime() {
+function requiresConfiguredApiBaseUrl() {
   return (
     process.env.NODE_ENV === "production" ||
-    process.env.VERCEL_ENV === "production"
+    process.env.VERCEL_ENV === "production" ||
+    process.env.VERCEL_ENV === "preview"
   );
 }
 
 function getApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (configured) return normalizeApiBaseUrl(configured);
-  if (!isProductionRuntime()) return DEFAULT_LOCAL_API_BASE_URL;
+  if (configured) return normalizeBaseUrl(configured);
+  if (!requiresConfiguredApiBaseUrl()) return DEFAULT_LOCAL_API_BASE_URL;
   throw new Error(
-    "loadExploreData explore cities: NEXT_PUBLIC_API_URL is required in production and must point to the API/Render service",
+    "loadExploreData explore cities: NEXT_PUBLIC_API_URL is required in deployed environments and must point to the API/Render service",
   );
 }
 
 async function getAppOrigin(injectedBaseUrl?: string) {
-  const injected = injectedBaseUrl ? normalizeAppBaseUrl(injectedBaseUrl) : "";
+  const injected = injectedBaseUrl ? normalizeBaseUrl(injectedBaseUrl) : "";
   if (injected) return new URL(injected).origin;
 
   for (const key of APP_BASE_ENV_KEYS) {
     const configured = process.env[key]?.trim();
-    if (configured) return new URL(normalizeAppBaseUrl(configured)).origin;
+    if (configured) return new URL(normalizeBaseUrl(configured)).origin;
   }
 
   const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (vercelUrl) return new URL(normalizeAppBaseUrl(vercelUrl)).origin;
+  if (vercelUrl) return new URL(normalizeBaseUrl(vercelUrl)).origin;
 
   if (typeof window !== "undefined") return undefined;
 

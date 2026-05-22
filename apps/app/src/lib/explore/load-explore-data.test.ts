@@ -138,7 +138,20 @@ describe("loadExploreData", () => {
     await expect(
       loadExploreData({}, { app_base_url: "https://app.example.test" }),
     ).rejects.toThrow(
-      "NEXT_PUBLIC_API_URL is required in production and must point to the API/Render service",
+      "NEXT_PUBLIC_API_URL is required in deployed environments and must point to the API/Render service",
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("throws loudly when Vercel preview server rendering is missing NEXT_PUBLIC_API_URL", async () => {
+    process.env.VERCEL_ENV = "preview";
+    delete process.env.NEXT_PUBLIC_API_URL;
+    global.fetch = vi.fn();
+
+    await expect(
+      loadExploreData({}, { app_base_url: "https://preview.example.test" }),
+    ).rejects.toThrow(
+      "NEXT_PUBLIC_API_URL is required in deployed environments and must point to the API/Render service",
     );
     expect(global.fetch).not.toHaveBeenCalled();
   });
