@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon, I } from "@/lib/icons";
 import { createClient } from "@/lib/supabase/client";
 import type { AccountSummary } from "@/lib/account/summary";
@@ -66,12 +66,37 @@ function planStatusCopy(summary: AccountSummary): string {
   return `${formatMoney(summary.monthly_price_cents)}/mo. Status: ${summary.subscription_status}.`;
 }
 
+export type ProfileSummary = {
+  email: string;
+  name?: string | null;
+  segment?: string | null;
+  referred_by?: string | null;
+};
+
+export type SavedReportPreview = {
+  id: string;
+  niche: string;
+  city: string;
+  archetype_short: string;
+  opportunity_score: number | null;
+  created_at: string;
+};
+
 interface Props {
   summary: AccountSummary;
+  profile?: ProfileSummary | null;
+  savedReports?: SavedReportPreview[];
+  savedReportsError?: string | null;
 }
 
-export default function AccountSettingsClient({ summary }: Props) {
+export default function AccountSettingsClient({
+  summary,
+  profile,
+  savedReports = [],
+  savedReportsError = null,
+}: Props) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(() => {
     const billing = searchParams.get("billing");
@@ -83,6 +108,7 @@ export default function AccountSettingsClient({ summary }: Props) {
   });
 
   const tone = usageTone(summary);
+  const displayEmail = profile?.email ?? summary.email;
   const usagePercent = summary.monthly_report_limit
     ? Math.min(100, Math.round((summary.fresh_reports_used / summary.monthly_report_limit) * 100))
     : 0;
@@ -143,6 +169,23 @@ export default function AccountSettingsClient({ summary }: Props) {
     }
   }
 
+  async function signOut() {
+    setBusyAction("sign-out");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setNotice(error.message);
+        return;
+      }
+      router.push("/login");
+    } catch {
+      setNotice("Sign out could not complete.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   async function sendPasswordReset() {
     setBusyAction("password");
     try {
@@ -180,6 +223,50 @@ export default function AccountSettingsClient({ summary }: Props) {
           {notice}
         </div>
       )}
+
+      <section className="settings-card" style={{ padding: 22 }}>
+        <div className="settings-section-head inline" style={{ padding: 0, marginBottom: 18 }}>
+          <div>
+            <div className="kicker">Profile</div>
+            <h2 className="settings-plan-title" style={{ fontSize: 28 }}>
+              Account
+            </h2>
+          </div>
+          <span>Signed in with Supabase Auth.</span>
+        </div>
+        <div className="settings-meta-grid">
+          {profile?.name ? (
+            <div>
+              <span>Name</span>
+              <strong>{profile.name}</strong>
+            </div>
+          ) : null}
+          <div>
+            <span>Email</span>
+            <strong>{displayEmail}</strong>
+          </div>
+          {profile?.segment ? (
+            <div>
+              <span>Segment</span>
+              <strong>{profile.segment}</strong>
+            </div>
+          ) : null}
+          {profile?.referred_by ? (
+            <div>
+              <span>Referred by</span>
+              <strong>{profile.referred_by}</strong>
+            </div>
+          ) : null}
+          <div>
+            <span>Plan</span>
+            <strong>{summary.plan_label}</strong>
+          </div>
+          <div>
+            <span>Account ID</span>
+            <strong title={summary.account_id}>{summary.account_id.slice(0, 8)}</strong>
+          </div>
+        </div>
+      </section>
 
       <section
         style={{
@@ -237,6 +324,64 @@ export default function AccountSettingsClient({ summary }: Props) {
                   ? `${summary.fresh_reports_remaining} fresh reports remain before reset.`
                   : `${summary.fresh_reports_remaining} fresh reports remain.`}
           </p>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-section-head inline">
+          <h3>Saved reports</h3>
+          <Link href="/reports" className="settings-link">
+            View all
+          </Link>
+        </div>
+        <div style={{ borderTop: "1px solid var(--rule)" }}>
+          {savedReportsError ? (
+            <div className="settings-row">
+              <div>
+                <strong>Reports could not load</strong>
+                <p>
+                  {savedReportsError} The reports archive is still available from the full Reports
+                  page.
+                </p>
+              </div>
+              <Link href="/reports" className="btn-ghost">
+                Open reports
+              </Link>
+            </div>
+          ) : savedReports.length === 0 ? (
+            <div className="settings-row">
+              <div>
+                <strong>No saved reports yet</strong>
+                <p>Run a strategy or explore query to build your first report.</p>
+              </div>
+              <Link href="/explore" className="btn-ghost">
+                Explore markets
+              </Link>
+            </div>
+          ) : (
+            savedReports.map((report) => (
+              <Link
+                key={report.id}
+                href={`/reports?open=${encodeURIComponent(report.id)}`}
+                className="settings-row"
+                style={{ textDecoration: "none" }}
+              >
+                <div>
+                  <strong>
+                    {report.niche} · {report.city}
+                  </strong>
+                  <p>
+                    {report.archetype_short} ·{" "}
+                    {report.opportunity_score == null
+                      ? "No score"
+                      : `${report.opportunity_score} opportunity`}{" "}
+                    · {formatDate(report.created_at)}
+                  </p>
+                </div>
+                <Icon d={I.arrow} size={14} />
+              </Link>
+            ))
+          )}
         </div>
       </section>
 
@@ -309,20 +454,49 @@ export default function AccountSettingsClient({ summary }: Props) {
           title="Password"
           body="Send a secure Supabase password reset email to this account."
           action={
-            <button
-              className="btn-ghost"
-              type="button"
-              disabled={busyAction === "password"}
-              onClick={sendPasswordReset}
+            <div
+              style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}
             >
-              Send reset email
-            </button>
+              <Link className="btn-ghost" href="/settings/password">
+                Manage password
+              </Link>
+              <button
+                className="btn-ghost"
+                type="button"
+                disabled={busyAction === "password"}
+                onClick={sendPasswordReset}
+              >
+                Send reset email
+              </button>
+            </div>
           }
         />
         <SettingRow
           title="Two-factor authentication"
           body="Additional sign-in factors are not enabled yet."
           action={<span className="settings-pill">Coming later</span>}
+        />
+      </section>
+
+      <section className="settings-card">
+        <div className="settings-section-head inline">
+          <h3>Session</h3>
+          <span>Leave this device signed out.</span>
+        </div>
+        <SettingRow
+          title="Sign out"
+          body="Ends the current Supabase session and returns to the login screen."
+          action={
+            <button
+              className="btn-ghost"
+              type="button"
+              disabled={busyAction === "sign-out"}
+              onClick={signOut}
+            >
+              <Icon d={I.x} size={12} />
+              {busyAction === "sign-out" ? "Signing out..." : "Sign out"}
+            </button>
+          }
         />
       </section>
 

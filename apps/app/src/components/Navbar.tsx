@@ -14,6 +14,7 @@ export interface NavbarUser {
   scansUsed: number;
   scansLimit: number;
   adminUrl: string;
+  isAdmin: boolean;
 }
 
 const NAV_ITEMS = [
@@ -207,12 +208,14 @@ function ProfileMenu({ user }: { user: NavbarUser }) {
           </div>
           <MenuLink href="/settings" label="Account settings" onClick={() => setOpen(false)} />
           <MenuLink href="/settings/password" label="Password" onClick={() => setOpen(false)} />
-          <MenuLink
-            href={user.adminUrl}
-            label="Admin dashboard"
-            external
-            onClick={() => setOpen(false)}
-          />
+          {user.isAdmin && (
+            <MenuLink
+              href={user.adminUrl}
+              label="Admin dashboard"
+              external
+              onClick={() => setOpen(false)}
+            />
+          )}
           <button
             type="button"
             role="menuitem"
