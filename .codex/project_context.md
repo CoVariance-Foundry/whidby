@@ -44,6 +44,10 @@ Migration `016_strategy_discovery_system.sql` adds `strategy_runs`, `strategy_ru
 
 Fresh strategy run creation is validated and lineage-backed: free users remain cached-only via the app proxy, fresh runs are capped at 100 targets, backend write failures return non-success responses so quota can be refunded, and queued runs persist `quota_consumed = 1`. Full async report fanout and run-status/report detail endpoints are still follow-up work.
 
+The `/strategies` surface is now aligned to Proto -> Production Convergence Epic 3. The gallery renders the proto header, AI-Proof filter toggle, onboarding-derived recommendation banner, launch-safe available strategy cards, and locked phase-2 cards. Onboarding recommendations are normalized to launch-safe strategy IDs before linking; deprecated or future IDs fall back to `easy_win`.
+
+Strategy detail pages keep the existing cached discovery API payloads but render the input form in a centered run shell with per-strategy accents, top-level AI-Proof control, and cached-discovery cost copy. Results now render a strategy result header, hero score, time-to-rank/AI/confidence badges, signal cards with trend indicators, a composite opportunity score, and context-aware Next Moves through shared `NextMoveCard`. Report detail modals reuse `NextMoveCard` and show a report-only Strategy Guidance block from existing `metro.guidance` fields; no new report API contract or migration was introduced.
+
 ## Consumer User Management and Billing
 
 Consumer user management now has a first implementation slice in code and schema. Supabase migration `014_user_management_billing.sql` defines profiles, accounts, memberships, subscriptions, billing customer mappings, usage counters, report ownership columns, cached/account report visibility, account-scoped report RLS, account bootstrap RPCs, and atomic report quota RPCs. Existing ownerless reports are treated as shared cached reports; fresh generated reports should persist with `owner_account_id`, `created_by_user_id`, and `access_scope = account`.

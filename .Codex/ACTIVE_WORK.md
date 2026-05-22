@@ -1,6 +1,36 @@
 # Active Work
 
-## Bulk Scoring Data Buildout
+## Proto -> Production Convergence: Epic 3 Strategy Section
+
+Status: implemented and verified locally on `codex/whi-4-strategy-section-phase-3`.
+
+Linear: `WHI-4` Strategy Section with implementation slices `WHI-21` through `WHI-24`.
+
+Completed:
+
+- Aligned the `/strategies` gallery with the proto header, AI-Proof filter toggle, onboarding-derived recommendation banner, launch-safe strategy cards, and locked phase-2 strategy section.
+- Wired gallery recommendations from onboarding profile/target data with launch-safe fallback to `easy_win`; onboarding lookup failures omit the banner without blocking the page.
+- Reworked strategy detail inputs into a centered run shell with per-strategy accents, top-level AI-Proof control, cached-discovery cost copy, and disabled phase-2 behavior.
+- Replaced plain strategy results with a result header, hero score section, time-to-rank/AI/confidence badges, signals grid with trend indicators, composite opportunity score, and context-aware Next Moves.
+- Added shared `NextMoveCard` and reused it in strategy results and report detail.
+- Added report-detail Strategy Guidance and Next Moves blocks using existing report/metro guidance data only; no new API, route, migration, or report contract was introduced.
+
+Review status:
+
+- Subagent spec-compliance and code-quality reviews approved `WHI-21`.
+- Subagent spec-compliance and code-quality reviews approved `WHI-22` through `WHI-24`.
+
+Verification:
+
+- Subagent spec-compliance and code-quality reviews approved the latest `WHI-21` gallery diff.
+- Subagent spec-compliance and code-quality reviews approved the latest `WHI-22` through `WHI-24` detail/results/Next Moves diff.
+- `npm --workspace apps/app test -- StrategiesGalleryClient StrategyPageClient ReportDetailModal NextMoveCard reports Navbar` passed 13 files / 64 tests.
+- `cd apps/app && npx --no-install tsc --noEmit` passed.
+- `npm --workspace apps/app run lint` exited 0 with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- `npx docguard-cli guard` required network escalation, then completed with warning-only existing repo hygiene findings and exit code 2; structure, docs sections, docs-sync, drift, changelog, environment, metadata-sync, and schema-sync checks passed.
+
+## Proto -> Production Convergence: Epic 2 Dashboard
 
 Status: implemented on `codex/bulk-scoring-followups`; draft PR open.
 
