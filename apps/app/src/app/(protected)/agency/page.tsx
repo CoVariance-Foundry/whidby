@@ -121,6 +121,10 @@ function normalizeState(value: string) {
   return value.trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
 }
 
+function isTwoLetterState(value: string) {
+  return /^[A-Za-z]{2}$/.test(value.trim());
+}
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -160,7 +164,11 @@ function hasCustomInput(row: CustomTargetRow) {
 }
 
 function customRowReady(row: CustomTargetRow) {
-  return row.city.trim().length >= 2 && row.service.trim().length >= 2;
+  return (
+    row.city.trim().length >= 2 &&
+    isTwoLetterState(row.state) &&
+    normalizeNiche(row.service).length > 0
+  );
 }
 
 function customRowToTarget(row: CustomTargetRow, fallbackPrimaryKeyword: string): QueuedTarget {
@@ -553,10 +561,12 @@ export default function AgencyPage() {
   }
 
   const statusMessage = (() => {
+    if (incompleteCustomRows.length > 0) {
+      return "Custom targets need a city, 2-letter state, and valid service.";
+    }
     if (selectedServices.length === 0 && validCustomTargets.length === 0) {
       return "Select cached services or add a custom city-service target.";
     }
-    if (incompleteCustomRows.length > 0) return "Custom targets need at least a city and service.";
     if (cachedFiltersInvalid) return "Population filters need whole numbers only.";
     if (cachedRangeInvalid) return "Population minimum must be lower than the maximum.";
     if (keywordRequired) return "Keyword Hijack needs a primary keyword.";
@@ -595,7 +605,7 @@ export default function AgencyPage() {
             Qualify territories in one batch.
           </h1>
           <p className="page-sub" style={{ marginBottom: 0 }}>
-            Configure a strategy lens, market filters, and service set, then queue up to 100 cached city-service targets for backend processing.
+            Configure a strategy lens, market filters, service set, or custom/live rows, then queue up to 100 city-service targets for backend processing.
           </p>
         </div>
         <div

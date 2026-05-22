@@ -165,6 +165,43 @@ describe("AgencyPage", () => {
     });
   });
 
+  it("requires a valid 2-letter state for custom targets before review", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Tulsa");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "Water damage");
+
+    expect(
+      screen.getByText("Custom targets need a city, 2-letter state, and valid service."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("requires a backend-valid normalized service key for custom targets before review", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    render(<AgencyPage />);
+
+    await user.click(screen.getByRole("button", { name: "Add custom target" }));
+    await user.type(screen.getByLabelText("Custom target 1 city"), "Tulsa");
+    await user.type(screen.getByLabelText("Custom target 1 state"), "OK");
+    await user.type(screen.getByLabelText("Custom target 1 service"), "!!");
+
+    expect(
+      screen.getByText("Custom targets need a city, 2-letter state, and valid service."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("reviews and queues cached and custom targets together with source labels", async () => {
     const user = userEvent.setup();
     const fetchMock = vi
