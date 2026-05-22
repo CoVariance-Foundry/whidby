@@ -14,6 +14,7 @@ export const I = {
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   check: "M5 13l4 4L19 7",
   x: "M6 6l12 12M18 6L6 18",
+  lock: "M7 11V8a5 5 0 0110 0v3M6 11h12v10H6z",
   bell: "M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9",
   plus: "M12 5v14M5 12h14",
   save: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8",

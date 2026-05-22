@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
+import NextMoveCard from "@/components/NextMoveCard";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
@@ -35,6 +36,10 @@ function scoreBarBg(score: number): string {
   if (score >= 75) return "#dfede6";
   if (score >= 50) return "#f6ebd4";
   return "#f3e1e1";
+}
+
+function encodedReportHref(path: string, city: string, service: string): string {
+  return `${path}?city=${encodeURIComponent(city)}&service=${encodeURIComponent(service)}`;
 }
 
 function archetypeLabel(id?: string): { label: string; glyph: string } {
@@ -239,31 +244,34 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
         <ScoreBreakdownTabs signals={metro.signals} scores={metro.scores} />
       )}
 
-      {/* Guidance */}
+      {/* Strategy guidance */}
       {metro.guidance && (metro.guidance.summary || metro.guidance.action_items) && (
         <div
           style={{
-            borderTop: "1px solid var(--rule)",
-            paddingTop: 14,
+            borderRadius: 12,
+            padding: 18,
+            background: "linear-gradient(135deg, #1f2937, #111827)",
+            color: "#fff",
           }}
         >
           <div
             style={{
-              fontFamily: "var(--serif)",
-              fontStyle: "italic",
+              fontFamily: "var(--sans)",
               fontSize: 11,
-              color: "var(--ink-3)",
+              color: "#6ee7b7",
               marginBottom: 6,
+              fontWeight: 800,
+              textTransform: "uppercase",
             }}
           >
-            Guidance
+            Strategy guidance
           </div>
           {metro.guidance.summary && (
             <p
               style={{
                 fontFamily: "var(--sans)",
                 fontSize: 13,
-                color: "var(--ink-2)",
+                color: "#f9fafb",
                 margin: "0 0 8px",
                 lineHeight: 1.5,
               }}
@@ -272,20 +280,43 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
             </p>
           )}
           {metro.guidance.action_items && metro.guidance.action_items.length > 0 && (
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: 18,
-                fontFamily: "var(--sans)",
-                fontSize: 12.5,
-                color: "var(--ink-2)",
-                lineHeight: 1.6,
-              }}
-            >
-              {metro.guidance.action_items.map((item, i) => (
-                <li key={i}>{item}</li>
-              ))}
-            </ul>
+            <div>
+              <div
+                style={{
+                  fontFamily: "var(--sans)",
+                  fontSize: 11,
+                  color: "#a7f3d0",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  margin: "10px 0 8px",
+                }}
+              >
+                Priority actions
+              </div>
+              <ol
+                style={{
+                  margin: 0,
+                  padding: 0,
+                  listStyle: "none",
+                  fontFamily: "var(--sans)",
+                  fontSize: 12.5,
+                  color: "#e5e7eb",
+                  lineHeight: 1.6,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                {metro.guidance.action_items.map((item, i) => (
+                  <li key={i} style={{ display: "grid", gridTemplateColumns: "28px minmax(0, 1fr)", gap: 8 }}>
+                    <span style={{ fontFamily: "var(--mono)", color: "#6ee7b7", fontWeight: 800 }}>
+                      {String(i).padStart(2, "0")}
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
         </div>
       )}
@@ -411,6 +442,9 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
 
   const keywords = report.keyword_expansion?.expanded_keywords;
   const meta = report.meta;
+  const topMetro = report.metros[0];
+  const nextMoveCity = topMetro?.cbsa_name ?? report.geo_target;
+  const nextMoveService = report.niche_keyword;
 
   return createPortal(
     <div
@@ -685,6 +719,47 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
                 {report.metros.map((m) => (
                   <MetroCard key={m.cbsa_code} metro={m} />
                 ))}
+              </div>
+            </section>
+          )}
+
+          {topMetro && (
+            <section style={{ marginBottom: 28 }}>
+              <h3
+                style={{
+                  fontFamily: "var(--sans)",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: "var(--ink)",
+                  margin: "0 0 12px",
+                  textTransform: "uppercase",
+                }}
+              >
+                Next Moves
+              </h3>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+                  gap: 12,
+                }}
+              >
+                <NextMoveCard
+                  href={encodedReportHref("/explore", nextMoveCity, nextMoveService)}
+                  title="Browse similar markets"
+                  subtitle={`Compare ${nextMoveService} opportunities around ${nextMoveCity}.`}
+                  primary
+                />
+                <NextMoveCard
+                  href="/strategies/cash_cow"
+                  title="Check the economics"
+                  subtitle="Evaluate monetization and lead quality."
+                />
+                <NextMoveCard
+                  href="/strategies/expand_conquer"
+                  title="Find lookalike cities"
+                  subtitle="Use the top market as an expansion pattern."
+                />
               </div>
             </section>
           )}
