@@ -12,6 +12,12 @@ The protected consumer app frame now lives in `apps/app/src/app/(protected)/layo
 
 Primary authenticated nav is Home, Strategies, Explore, Multi-market, and Reports. `/niche-finder` and `/recommendations` remain valid routes/deep links but are no longer primary nav items. Account settings, password, admin dashboard, and sign-out live in the navbar profile dropdown. Do not reintroduce page-local `Sidebar`/`Topbar` shells; protected pages should render route content and put actions in page headers or client surfaces.
 
+## Consumer Auth Entry
+
+`apps/app/src/app/login/page.tsx` is the canonical email/password login surface. It uses the white Widby card design, preserves the client-side progressive lockout/timeout behavior, honors safe `next` redirects, and defaults successful sign-in to `/reports`.
+
+`apps/web/src/app/login/page.tsx` no longer authenticates users directly. It redirects to the consumer app `/login`, preserving a safe `next` value, so users do not create a marketing-origin session and then bounce into the product app's auth gate.
+
 ## Consumer Dashboard
 
 The authenticated `/` home route is now the Phase 2 strategy-first dashboard. `apps/app/src/lib/home/load-dashboard.ts` aggregates the report dashboard BFF, account entitlement/usage summary, onboarding profile/target context, and the strategy catalog into one internal dashboard data shape. Report fetch and onboarding failures are soft dashboard notices; entitlement/auth failures render an actionable blocking account card.
