@@ -37,6 +37,14 @@ This project uses a hybrid documentation strategy:
 | `ruff check src tests` | Python lint |
 | `npm run lint` | JS/TS lint |
 
+## Production App Gotchas
+
+- The authenticated production app is `app.thewidby.com` on Vercel project `whidby-agent`; the marketing site is the separate `whidby` project on `www.thewidby.com`. When debugging app/dashboard/reports outages, verify the project before changing Vercel env.
+- If `/` shows "Reports are temporarily unavailable" or `/reports` fails with `reports list: HTTP 401`, check both:
+  - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` on the `whidby-agent` Production environment. Stale/mismatched publishable keys make Supabase Auth/PostgREST return `401 Invalid API key`.
+  - `WIDBY_APP_BASE_URL=https://app.thewidby.com` on `whidby-agent` Production. Server-side self-fetches must use the public app domain; falling back to `VERCEL_URL` can hit a protected deployment URL and return Vercel SSO `401` before `/api/agent/reports` runs.
+- After Vercel env changes, redeploy production and verify with an authenticated smoke test against `https://app.thewidby.com`; env changes alone do not update already-built serverless functions.
+
 ## DocGuard — Documentation Enforcement
 
 This project uses **DocGuard** for CDD compliance:
