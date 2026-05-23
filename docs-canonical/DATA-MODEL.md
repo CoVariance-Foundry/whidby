@@ -68,6 +68,8 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 
 ### V2 Scoring Runtime Tables
 
+- `metros.dataforseo_location_codes` is the geotargeting prerequisite for paid DataForSEO collection. A metro is DFS-ready only when this array contains a native DataForSEO location code verified against the DataForSEO locations catalog; borrowed state fallback codes must not be written to `metros`.
+- DFS readiness provenance is stored on `metros` with nullable `dataforseo_location_match_name`, `dataforseo_location_match_confidence`, `dataforseo_location_match_source`, `dataforseo_location_verified_at`, and `dataforseo_location_review_reason` fields. Production enrichment tools must fail closed if these provenance columns are missing.
 - `seo_facts` stores keyword-grain runtime observations by niche, CBSA, keyword, and observation date. V2 fact rows should include local-pack review facts, nullable top-organic competitor facts, and quality/confidence inputs used to recompute benchmarks.
 - `seo_benchmarks` stores population-class benchmark cells derived from `seo_facts`, `metros`, and `census_cbp_establishments`. V2 scoring reads these through `SeoBenchmarkRepository`; formulas do not query Supabase directly.
 - `metro_score_v2` stores persisted V2 score vectors, report lineage, benchmark confidence, and explanation facts for a city-service run. Explore and strategy read models prefer this table over legacy `metro_scores`.

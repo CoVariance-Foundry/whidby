@@ -64,6 +64,7 @@ research_runs/
 research_graph.json
 scripts/explore/bulk_score_results.jsonl
 reports/scoring_audit/
+reports/metro_readiness/
 
 # docker
 docker-compose.override.yml

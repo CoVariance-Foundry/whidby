@@ -126,6 +126,8 @@ Coverage-first production seeds must use a gated ramp: schema parity and expecte
 
 `scripts/explore/audit_scoring_strategy.py` performs the broader read-only scoring-strategy audit before the paid pilot. It measures demand, organic, local, monetization, AI resilience, and app-surface coverage across the intended service x city-size matrix, verifies benchmark cells meet the canonical `sample_size_metros >= 8` usability floor, ingests `bulk_score.py` JSONL pilot output, and writes generated JSON/Markdown reports to ignored `reports/scoring_audit/`.
 
+DFS-ready metro expansion is a separate geotargeting step before paid scoring. `scripts/explore/audit_metro_dfs_readiness.py` compares `public.metros` against the free DataForSEO locations catalog and classifies rows as already-ready, exact, strong, ambiguous, invalid, or no-match. `scripts/explore/enrich_metro_dfs_codes.py` applies only exact matches by default, requires approved CSV rows for strong matches, requires the expected Supabase project for writes, and fails closed unless DFS provenance columns exist on `public.metros`. State-level borrowed fallback codes may be used for ad hoc user scoring, but they must not be written back as canonical metro readiness.
+
 ## Consumer Account, Billing, and Quota Flow
 
 ```
