@@ -76,6 +76,13 @@ def test_parse_backlinks_and_lighthouse_values_from_dfs_shapes():
     assert parse_backlinks_domain_authority([{"rank": 42}]) == 42
     assert parse_backlinks_domain_authority([{"domain_from_rank": "33.5"}]) == 33.5
     assert (
+        parse_backlinks_domain_authority([
+            {"items": [{"rank": 1}]},
+            {"domain_rank": 44},
+        ])
+        == 44
+    )
+    assert (
         parse_lighthouse_performance_score([
             {"categories": {"performance": {"score": 0.87}}},
         ])

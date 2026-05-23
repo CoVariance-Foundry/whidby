@@ -493,11 +493,15 @@ def _numeric(value: Any) -> float | None:
 
 def parse_backlinks_domain_authority(data: Any) -> float | None:
     """Extract a DataForSEO rank-like authority value from backlinks summary data."""
-    for row in _walk_dicts(data):
-        for key in ("rank", "domain_rank", "domain_from_rank", "page_from_rank"):
+    for key in ("domain_rank", "domain_from_rank", "page_from_rank"):
+        for row in _walk_dicts(data):
             value = _numeric(row.get(key))
             if value is not None:
                 return value
+    for row in _walk_dicts(data):
+        value = _numeric(row.get("rank"))
+        if value is not None:
+            return value
     return None
 
 
