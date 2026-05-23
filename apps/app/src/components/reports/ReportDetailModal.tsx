@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
@@ -9,6 +9,7 @@ import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 import { ScoreBar, ScoreCircle } from "@/components/ScoreVisuals";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
+import ReportActions from "@/components/reports/ReportActions";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
 
 interface Props {
@@ -269,101 +270,8 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
   );
 }
 
-function KeywordTable({
-  keywords,
-}: {
-  keywords: { keyword: string; tier?: number; intent?: string; search_volume?: number; cpc?: number }[];
-}) {
-  return (
-    <div
-      style={{
-        border: "1px solid var(--rule)",
-        borderRadius: 10,
-        overflow: "hidden",
-        background: "var(--card)",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,2.5fr) 60px 100px 90px 70px",
-          padding: "8px 14px",
-          background: "var(--paper-alt)",
-          borderBottom: "1px solid var(--rule)",
-          fontFamily: "var(--serif)",
-          fontStyle: "italic",
-          fontSize: 11,
-          color: "var(--ink-3)",
-          gap: 10,
-        }}
-      >
-        <span>Keyword</span>
-        <span>Tier</span>
-        <span>Intent</span>
-        <span style={{ textAlign: "right" }}>Volume</span>
-        <span style={{ textAlign: "right" }}>CPC</span>
-      </div>
-      {keywords.map((kw, i) => (
-        <div
-          key={i}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0,2.5fr) 60px 100px 90px 70px",
-            padding: "8px 14px",
-            borderBottom: "1px solid var(--rule)",
-            fontFamily: "var(--sans)",
-            fontSize: 12.5,
-            color: "var(--ink)",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={kw.keyword}
-          >
-            {kw.keyword}
-          </span>
-          <span>
-            {kw.tier != null && (
-              <Pill style={{ fontSize: 10, padding: "1px 7px" }}>T{kw.tier}</Pill>
-            )}
-          </span>
-          <span style={{ fontSize: 11.5, color: "var(--ink-2)" }}>
-            {kw.intent ?? "—"}
-          </span>
-          <span
-            style={{
-              textAlign: "right",
-              fontFamily: "var(--mono)",
-              fontSize: 12,
-            }}
-          >
-            {kw.search_volume != null ? kw.search_volume.toLocaleString() : "—"}
-          </span>
-          <span
-            style={{
-              textAlign: "right",
-              fontFamily: "var(--mono)",
-              fontSize: 12,
-            }}
-          >
-            {kw.cpc != null ? `$${kw.cpc.toFixed(2)}` : "—"}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function ReportDetailModal({ report, onClose, onDelete }: Props) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     closeBtnRef.current?.focus();
@@ -385,7 +293,7 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const keywords = report.keyword_expansion?.expanded_keywords;
+  const meta = report.meta;
 
   return createPortal(
     <div
@@ -493,96 +401,9 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
             <Pill>{report.strategy_profile}</Pill>
             <Pill>{report.report_depth}</Pill>
 
-            {onDelete && (
-              <div style={{ marginLeft: "auto" }}>
-                {!confirmDelete ? (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={deleting}
-                    style={{
-                      fontFamily: "var(--sans)",
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: "var(--ink-3)",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: "4px 8px",
-                      borderRadius: 6,
-                      transition: "color 0.15s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--danger)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--ink-3)")}
-                  >
-                    Delete report
-                  </button>
-                ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      background: "var(--danger-soft)",
-                      border: "1px solid var(--danger)",
-                      borderRadius: 8,
-                      padding: "6px 12px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "var(--serif)",
-                        fontStyle: "italic",
-                        fontSize: 12,
-                        color: "var(--danger)",
-                      }}
-                    >
-                      This can&apos;t be undone
-                    </span>
-                    <button
-                      type="button"
-                      disabled={deleting}
-                      onClick={async () => {
-                        setDeleting(true);
-                        await onDelete(report.id);
-                      }}
-                      style={{
-                        fontFamily: "var(--sans)",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: "#fff",
-                        background: "var(--danger)",
-                        border: "none",
-                        borderRadius: 6,
-                        padding: "4px 12px",
-                        cursor: deleting ? "wait" : "pointer",
-                        opacity: deleting ? 0.6 : 1,
-                      }}
-                    >
-                      {deleting ? "Deleting…" : "Delete"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={deleting}
-                      onClick={() => setConfirmDelete(false)}
-                      style={{
-                        fontFamily: "var(--sans)",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        color: "var(--ink-2)",
-                        background: "none",
-                        border: "1px solid var(--rule)",
-                        borderRadius: 6,
-                        padding: "4px 10px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <div style={{ marginLeft: "auto" }}>
+              <ReportActions report={report} onDelete={onDelete} />
+            </div>
           </div>
         </div>
 
@@ -645,24 +466,69 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
             </section>
           )}
 
-          {/* Keywords */}
-          {keywords && keywords.length > 0 && (
-            <section style={{ marginBottom: 28 }}>
-              <h3
+          {/* Meta */}
+          {meta && Object.keys(meta).length > 0 && (
+            <details
+              style={{
+                border: "1px solid var(--rule)",
+                borderRadius: 10,
+                background: "var(--card)",
+              }}
+            >
+              <summary
                 style={{
+                  padding: "10px 14px",
                   fontFamily: "var(--serif)",
-                  fontSize: 16,
-                  fontWeight: 600,
-                  color: "var(--ink)",
-                  margin: "0 0 12px",
+                  fontStyle: "italic",
+                  fontSize: 12,
+                  color: "var(--ink-3)",
+                  cursor: "pointer",
+                  listStyle: "none",
                 }}
               >
-                Keyword expansion ({keywords.length})
-              </h3>
-              <KeywordTable keywords={keywords} />
-            </section>
+                Meta &amp; cost details
+              </summary>
+              <div
+                style={{
+                  padding: "0 14px 14px",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: "10px 16px",
+                }}
+              >
+                {meta.processing_time_seconds != null && (
+                  <div>
+                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
+                      Processing time
+                    </div>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
+                      {Number(meta.processing_time_seconds).toFixed(1)}s
+                    </div>
+                  </div>
+                )}
+                {meta.total_api_calls != null && (
+                  <div>
+                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
+                      API calls
+                    </div>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
+                      {String(meta.total_api_calls)}
+                    </div>
+                  </div>
+                )}
+                {meta.total_cost_usd != null && (
+                  <div>
+                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
+                      Cost
+                    </div>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
+                      ${Number(meta.total_cost_usd).toFixed(4)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
           )}
-
         </div>
       </div>
     </div>,

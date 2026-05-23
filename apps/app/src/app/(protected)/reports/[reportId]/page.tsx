@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Icon, I } from "@/lib/icons";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
+import ReportActions from "@/components/reports/ReportActions";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
 
@@ -259,78 +260,6 @@ function HeadlineScores({ metro }: { metro: ReportMetro }) {
   );
 }
 
-function KeywordTable({ report }: { report: FullReportData }) {
-  const keywords = report.keyword_expansion?.expanded_keywords ?? [];
-  if (keywords.length === 0) return null;
-
-  return (
-    <section>
-      <h2 className="page-h1" style={{ fontSize: 22, marginBottom: 12 }}>
-        Keyword expansion ({keywords.length})
-      </h2>
-      <div
-        style={{
-          border: "1px solid var(--rule)",
-          borderRadius: 8,
-          overflow: "hidden",
-          background: "var(--card)",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 2fr) 70px 120px 90px 80px",
-            gap: 10,
-            padding: "10px 14px",
-            background: "var(--paper-alt)",
-            borderBottom: "1px solid var(--rule)",
-            color: "var(--ink-3)",
-            fontFamily: "var(--sans)",
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-          }}
-        >
-          <span>Keyword</span>
-          <span>Tier</span>
-          <span>Intent</span>
-          <span style={{ textAlign: "right" }}>Volume</span>
-          <span style={{ textAlign: "right" }}>CPC</span>
-        </div>
-        {keywords.map((keyword, index) => (
-          <div
-            key={`${keyword.keyword}-${index}`}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 2fr) 70px 120px 90px 80px",
-              gap: 10,
-              padding: "10px 14px",
-              borderBottom: "1px solid var(--rule)",
-              color: "var(--ink)",
-              fontFamily: "var(--sans)",
-              fontSize: 13,
-              alignItems: "center",
-            }}
-          >
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {keyword.keyword}
-            </span>
-            <span>{keyword.tier ? `T${keyword.tier}` : "—"}</span>
-            <span style={{ color: "var(--ink-2)" }}>{keyword.intent ?? "—"}</span>
-            <span style={{ textAlign: "right", fontFamily: "var(--mono)" }}>
-              {keyword.search_volume?.toLocaleString("en-US") ?? "—"}
-            </span>
-            <span style={{ textAlign: "right", fontFamily: "var(--mono)" }}>
-              {keyword.cpc == null ? "—" : `$${keyword.cpc.toFixed(2)}`}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function StrategyGuidance({ metro }: { metro: ReportMetro }) {
   if (!metro.guidance?.summary && !metro.guidance?.action_items?.length) {
     return null;
@@ -382,21 +311,21 @@ function NextMoves({ report, metro }: { report: FullReportData; metro: ReportMet
   const city = encodeURIComponent(report.geo_target || metro.cbsa_name);
   const moves = [
     {
-      href: `/explore?service=${service}&q=${city}`,
-      title: "Browse similar markets",
-      subtitle: "Compare cached city and service opportunities.",
+      href: `/competitor-intel?city=${city}&service=${service}`,
+      title: "Run Competitor Intel",
+      subtitle: "Inspect the organic and local operators shaping this market.",
       primary: true,
+    },
+    {
+      href: "/strategies/cash_cow",
+      title: "Check economics",
+      subtitle: "Pressure-test monetization and lead value with the cash cow lens.",
+      primary: false,
     },
     {
       href: "/strategies/expand_conquer",
       title: "Find lookalike cities",
       subtitle: "Use the expansion lens on this market pattern.",
-      primary: false,
-    },
-    {
-      href: "/strategies",
-      title: "Try another lens",
-      subtitle: "Re-rank the same data with a different strategy.",
       primary: false,
     },
   ];
@@ -463,6 +392,63 @@ function NextMoves({ report, metro }: { report: FullReportData; metro: ReportMet
   );
 }
 
+function MetroBadges({ metro }: { metro: ReportMetro }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+      {metro.difficulty_tier ? <Pill>Difficulty: {humanizeEnum(metro.difficulty_tier)}</Pill> : null}
+      {metro.ai_exposure ? <Pill>AI exposure: {humanizeEnum(metro.ai_exposure)}</Pill> : null}
+      {metro.scores.confidence ? <Pill>Confidence: {metro.scores.confidence.score}</Pill> : null}
+    </div>
+  );
+}
+
+function PrimaryMetroSection({ metro }: { metro: ReportMetro }) {
+  return (
+    <section
+      aria-label="Primary report opportunity"
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--rule)",
+        borderRadius: 8,
+        padding: 24,
+      }}
+    >
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
+        <div>
+          <div
+            style={{
+              color: "var(--accent-ink)",
+              fontFamily: "var(--sans)",
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            Top market
+          </div>
+          <h2 style={{ margin: 0, fontFamily: "var(--serif)", fontSize: 28, color: "var(--ink)" }}>
+            {metro.cbsa_name}
+          </h2>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+          {metro.population ? <Pill>Pop. {metro.population.toLocaleString("en-US")}</Pill> : null}
+          {metro.serp_archetype ? <Pill>{humanizeEnum(metro.serp_archetype)}</Pill> : null}
+        </div>
+      </div>
+
+      <HeadlineScores metro={metro} />
+      <MetroBadges metro={metro} />
+      {metro.signals && Object.keys(metro.signals).length > 0 ? (
+        <div style={{ marginTop: 20 }}>
+          <ScoreBreakdownTabs signals={metro.signals} scores={metro.scores} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function MetroSection({ metro }: { metro: ReportMetro }) {
   return (
     <section
@@ -481,11 +467,7 @@ function MetroSection({ metro }: { metro: ReportMetro }) {
         {metro.serp_archetype ? <Pill>{humanizeEnum(metro.serp_archetype)}</Pill> : null}
       </div>
       <HeadlineScores metro={metro} />
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
-        {metro.difficulty_tier ? <Pill>Difficulty: {humanizeEnum(metro.difficulty_tier)}</Pill> : null}
-        {metro.ai_exposure ? <Pill>AI exposure: {humanizeEnum(metro.ai_exposure)}</Pill> : null}
-        {metro.scores.confidence ? <Pill>Confidence: {metro.scores.confidence.score}</Pill> : null}
-      </div>
+      <MetroBadges metro={metro} />
       {metro.signals && Object.keys(metro.signals).length > 0 ? (
         <div style={{ marginTop: 20 }}>
           <ScoreBreakdownTabs signals={metro.signals} scores={metro.scores} />
@@ -565,14 +547,17 @@ export default async function ReportDetailPage({
             <Pill>{report.report_depth}</Pill>
           </div>
         </div>
-        <Link href="/reports" className="btn-ghost" style={{ textDecoration: "none" }}>
-          Back to reports
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Link href="/reports" className="btn-ghost" style={{ textDecoration: "none" }}>
+            Back to reports
+          </Link>
+          <ReportActions report={report} enableArchiveDelete />
+        </div>
       </header>
 
       {topMetro ? (
         <>
-          <MetroSection metro={topMetro} />
+          <PrimaryMetroSection metro={topMetro} />
           <StrategyGuidance metro={topMetro} />
           <NextMoves report={report} metro={topMetro} />
           {report.metros.slice(1).map((metro) => (
@@ -592,8 +577,6 @@ export default async function ReportDetailPage({
           This report does not include metro score data yet.
         </section>
       )}
-
-      <KeywordTable report={report} />
     </main>
   );
 }

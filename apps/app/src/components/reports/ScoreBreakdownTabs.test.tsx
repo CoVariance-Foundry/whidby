@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect } from "vitest";
 import ScoreBreakdownTabs from "./ScoreBreakdownTabs";
 import type { MetroScores } from "@/lib/niche-finder/types";
@@ -66,63 +66,31 @@ const signals: Record<string, unknown> = {
 };
 
 describe("ScoreBreakdownTabs", () => {
-  it("renders four tab buttons", () => {
+  it("renders the score breakdown as native expanded sections", () => {
     render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    expect(screen.getByRole("tab", { name: /competition/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /demand/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /monetization/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /ai resilience/i })).toBeInTheDocument();
-  });
 
-  it("starts with no panel visible", () => {
-    render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
+    expect(screen.getByRole("region", { name: /score breakdown/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
   });
 
-  it("clicking Competition tab shows organic and local panels", () => {
+  it("shows competition, demand, monetization, and ai resilience on initial render", () => {
     render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    fireEvent.click(screen.getByRole("tab", { name: /competition/i }));
-    expect(screen.getByRole("tabpanel")).toBeInTheDocument();
+
     expect(screen.getByText("Organic Competition")).toBeInTheDocument();
     expect(screen.getByText("Local Competition")).toBeInTheDocument();
+    expect(screen.getByText("Demand")).toBeInTheDocument();
+    expect(screen.getByText("Monetization")).toBeInTheDocument();
+    expect(screen.getByText("AI Resilience")).toBeInTheDocument();
   });
 
-  it("clicking Demand tab shows demand signals", () => {
+  it("renders representative signals without user interaction", () => {
     render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    fireEvent.click(screen.getByRole("tab", { name: /demand/i }));
+
     expect(screen.getByText("Total search volume")).toBeInTheDocument();
-    expect(screen.getByText("Avg. CPC")).toBeInTheDocument();
-  });
-
-  it("clicking Monetization tab shows monetization signals", () => {
-    render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    fireEvent.click(screen.getByRole("tab", { name: /monetization/i }));
     expect(screen.getByText("Business density")).toBeInTheDocument();
-    expect(screen.getByText("Local Services Ads")).toBeInTheDocument();
-  });
-
-  it("clicking AI Resilience tab shows ai signals", () => {
-    render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    fireEvent.click(screen.getByRole("tab", { name: /ai resilience/i }));
     expect(screen.getByText("AI Overview trigger rate")).toBeInTheDocument();
-    expect(screen.getByText("PAA density")).toBeInTheDocument();
-  });
-
-  it("clicking the active tab again collapses the panel", () => {
-    render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    const tab = screen.getByRole("tab", { name: /demand/i });
-    fireEvent.click(tab);
-    expect(screen.getByRole("tabpanel")).toBeInTheDocument();
-    fireEvent.click(tab);
-    expect(screen.queryByRole("tabpanel")).not.toBeInTheDocument();
-  });
-
-  it("switching tabs changes panel content", () => {
-    render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
-    fireEvent.click(screen.getByRole("tab", { name: /demand/i }));
-    expect(screen.getByText("Total search volume")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: /monetization/i }));
-    expect(screen.queryByText("Total search volume")).not.toBeInTheDocument();
-    expect(screen.getByText("Business density")).toBeInTheDocument();
+    expect(screen.getByText("Avg. DA (top 5)")).toBeInTheDocument();
+    expect(screen.getByText("Review velocity")).toBeInTheDocument();
   });
 });
