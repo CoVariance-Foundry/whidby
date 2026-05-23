@@ -1,3 +1,5 @@
+import { scoreToneForValue } from "@/lib/design-tokens";
+
 export type ScoreKey =
   | "demand"
   | "organic_competition"
@@ -17,12 +19,20 @@ export interface ScoreExplainer {
   title: string;
   definition: string;
   howToRead: string;
-  bands: [ScoreBand, ScoreBand, ScoreBand];
+  bands: [ScoreBand, ScoreBand, ScoreBand, ScoreBand];
 }
 
-const GREEN = { color: "#0f7a57", bg: "#dfede6" };
-const AMBER = { color: "#a05a00", bg: "#f6ebd4" };
-const RED = { color: "#a3292d", bg: "#f3e1e1" };
+const HIGH = scoreToneForValue(80);
+const GOOD = scoreToneForValue(60);
+const WARNING = scoreToneForValue(40);
+const DANGER = scoreToneForValue(39);
+
+const SHARED_SCORE_GUIDANCE: [ScoreBand, ScoreBand, ScoreBand, ScoreBand] = [
+  { label: "Danger", range: "0-39", color: DANGER.text, bg: DANGER.background },
+  { label: "Warning", range: "40-59", color: WARNING.text, bg: WARNING.background },
+  { label: "Good", range: "60-79", color: GOOD.text, bg: GOOD.background },
+  { label: "High", range: "80-100", color: HIGH.text, bg: HIGH.background },
+];
 
 export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
   demand: {
@@ -30,11 +40,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
     definition:
       "How much search volume exists for this niche in this metro, weighted by keyword value and buyer intent.",
     howToRead: "Higher score = more people actively searching for this service.",
-    bands: [
-      { label: "Low", range: "0–49", ...RED },
-      { label: "Medium", range: "50–74", ...AMBER },
-      { label: "High", range: "75–100", ...GREEN },
-    ],
+    bands: SHARED_SCORE_GUIDANCE,
   },
 
   organic_competition: {
@@ -43,11 +49,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
       "How easy it is to rank in traditional Google search results, based on competitor domain authority, technical quality, and keyword targeting.",
     howToRead:
       "Higher score = weaker competition. A high score means incumbents are beatable with a well-built site.",
-    bands: [
-      { label: "Hard", range: "0–49", ...RED },
-      { label: "Moderate", range: "50–74", ...AMBER },
-      { label: "Easy", range: "75–100", ...GREEN },
-    ],
+    bands: SHARED_SCORE_GUIDANCE,
   },
 
   local_competition: {
@@ -56,11 +58,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
       "How easy it is to rank in the Google Local Pack and Maps, based on review counts, review velocity, and Google Business Profile quality of incumbents.",
     howToRead:
       "Higher score = weaker local competition. A high score means existing businesses have few reviews and under-optimized profiles.",
-    bands: [
-      { label: "Hard", range: "0–49", ...RED },
-      { label: "Moderate", range: "50–74", ...AMBER },
-      { label: "Easy", range: "75–100", ...GREEN },
-    ],
+    bands: SHARED_SCORE_GUIDANCE,
   },
 
   monetization: {
@@ -69,11 +67,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
       "How likely you are to earn revenue if you rank, based on cost-per-click, local business density, ad spending, and lead-buying activity in the area.",
     howToRead:
       "Higher score = stronger revenue potential. Businesses here are already spending money on leads.",
-    bands: [
-      { label: "Low", range: "0–49", ...RED },
-      { label: "Medium", range: "50–74", ...AMBER },
-      { label: "High", range: "75–100", ...GREEN },
-    ],
+    bands: SHARED_SCORE_GUIDANCE,
   },
 
   ai_resilience: {
@@ -82,11 +76,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
       "How protected this niche is from AI-driven traffic loss. Local, hands-on services are naturally shielded because AI can't replace a plumber or a roofer.",
     howToRead:
       "Higher score = more resilient. A high score means AI Overviews rarely appear and the service requires in-person fulfillment.",
-    bands: [
-      { label: "Exposed", range: "0–49", ...RED },
-      { label: "Moderate", range: "50–74", ...AMBER },
-      { label: "Shielded", range: "75–100", ...GREEN },
-    ],
+    bands: SHARED_SCORE_GUIDANCE,
   },
 
   opportunity: {
@@ -95,10 +85,6 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
       "The overall score combining demand, competition, monetization, and AI resilience into a single ranking signal. Weighted by your selected strategy profile.",
     howToRead:
       "Higher score = better overall opportunity. Scores below 40 indicate a critical weakness in at least one dimension.",
-    bands: [
-      { label: "Low", range: "0–49", ...RED },
-      { label: "Medium", range: "50–74", ...AMBER },
-      { label: "High", range: "75–100", ...GREEN },
-    ],
+    bands: SHARED_SCORE_GUIDANCE,
   },
 };

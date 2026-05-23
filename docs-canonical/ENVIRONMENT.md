@@ -1,6 +1,6 @@
 # Environment & Configuration
 
-<!-- docguard:version 1.4.0 -->
+<!-- docguard:version 1.4.1 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -44,6 +44,7 @@
 | `STRIPE_WEBHOOK_SECRET` | Yes (consumer billing) | — | Stripe webhook signing secret for `/api/billing/webhook` | Stripe Dashboard webhook endpoint |
 | `STRIPE_PLUS_PRICE_ID` | Yes (consumer billing) | — | Recurring monthly Stripe Price for Plus ($49/mo) | Stripe Dashboard product catalog |
 | `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | — | Recurring monthly Stripe Price for Pro ($100/mo) | Stripe Dashboard product catalog |
+| `BILLING_CHECKOUT_ENABLED` | No | `true` | Server-side rollout/kill switch for Stripe Checkout and Customer Portal actions. Set to `"false"` or `"0"` to hide account billing actions and make billing APIs return unavailable. | Vercel env override or PostHog flag fallback |
 | `NEXT_PUBLIC_POSTHOG_KEY` | No | — | PostHog project key for consumer feature flags. If absent, secure defaults are used. | PostHog project settings |
 | `NEXT_PUBLIC_POSTHOG_HOST` | No | `https://us.i.posthog.com` | PostHog ingestion/feature flag host | PostHog project settings |
 
@@ -81,6 +82,29 @@ See `docs/research_agent_design.md` §12 for production architecture, verified s
 | `apps/app/next.config.ts` | Consumer Next.js config | — |
 | `src/config/constants.py` | Scoring engine constants (AIO rates, weights, thresholds) | — |
 
+### Worktree Env Sync
+
+Git worktrees do not copy ignored local secret files such as `.env` or
+`apps/app/.env.local`. Before running app, API, Supabase, or E2E workflows from a
+fresh worktree, sync the canonical local env file from the main checkout:
+
+```bash
+npm run env:sync:local
+npm run runtime:check
+```
+
+`env:sync:local` copies
+`/Users/antwoineflowers/Desktop/development/covariance/whidby/.env` into the
+current worktree as `.env` and `apps/app/.env.local` with `0600` permissions.
+Use `WHIDBY_ENV_SOURCE=/path/to/.env npm run env:sync:local` or
+`npm run env:sync:local -- --source /path/to/.env` to override the source.
+
+`runtime:check` verifies the copied env files, service-role Supabase access, and
+the Python Supabase client runtime without printing secret values. Publishable
+key failures are reported as warnings because backend data-build scripts rely on
+service-role access, but browser login smoke still requires valid publishable
+keys.
+
 ### Vercel deployment checklist (`whidby-agent` — admin dashboard)
 
 The admin research-agent dashboard (`apps/admin/`, port 3001 locally) deploys to Vercel as project `whidby-agent` and serves `app.thewidby.com`. The consumer product (`apps/app/`, port 3002 locally) is a separate Vercel project — apply the same env-var checklist there with the consumer's own origin substituted into `NEXT_PUBLIC_APP_FRONTEND_URL`. The middleware requires these env vars at edge runtime — missing or invalid values cause `MIDDLEWARE_INVOCATION_FAILED`. Set them in the Vercel project settings for **both Production and Preview** environments:
@@ -93,6 +117,7 @@ The admin research-agent dashboard (`apps/admin/`, port 3001 locally) deploys to
 | `NEXT_PUBLIC_APP_FRONTEND_URL` | Yes (production) | App frontend origin for auth redirects, e.g. `https://app.thewidby.com` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Yes (consumer billing) | Required only on the consumer app project |
 | `STRIPE_PLUS_PRICE_ID` / `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | Plus and Pro monthly recurring price IDs |
+| `BILLING_CHECKOUT_ENABLED` | No | Defaults to enabled; set to `"false"` or `"0"` to temporarily disable Checkout/Portal |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` | No | Consumer feature flags; server handlers fall back to secure defaults when unset |
 
 ### Stripe billing setup (consumer app only)
@@ -193,6 +218,10 @@ The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which e
 |---------|---------|
 | `.venv/bin/python -m scripts.benchmarks.recompute_benchmarks 120` | Rebuild staging `seo_benchmarks` from recent `seo_facts` |
 
+### Coverage-first production seed gates
+
+Production seed runs must be coverage-first and guarded against accidental project writes. Before the 50x16 seed, operators must verify schema parity and the expected Supabase project, run a canary, complete the 12x8 coverage pilot, recompute benchmarks, and validate the Explore cache. Top-5 DA and Lighthouse are optional telemetry under audit for this seed; null telemetry must not block scoring or guidance.
+
 ### Supabase staging migrations
 
 Staging migrations deploy from `dev` to Supabase project `whidby-staging` (`wuybidpvqhhgkukpyyhq`) through `.github/workflows/supabase-staging.yml`. The workflow runs manually through `workflow_dispatch` and automatically on `dev` pushes that change `supabase/migrations/**` or the workflow file. Manual runs must choose branch `dev`; the deploy job is guarded to skip any other branch.
@@ -271,12 +300,13 @@ Greptile is the code-review AI for PR-level source review. It runs through the G
 ## Setup Steps
 
 1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in required variables
-3. Install Python dependencies: `pip install -e ".[dev]"`
-4. Install Node dependencies: `npm install`
-5. Run Python tests: `python -m pytest tests/unit/ -v`
-6. Run frontend lint: `npm run lint`
-7. Start all apps in dev: `npm run dev`
+2. Copy `.env.example` to `.env` and fill in required variables, or run `npm run env:sync:local` from a worktree
+3. Run `npm run runtime:check` when local secrets or runtime dependencies are needed
+4. Install Python dependencies: `pip install -e ".[dev]"`
+5. Install Node dependencies: `npm install`
+6. Run Python tests: `python -m pytest tests/unit/ -v`
+7. Run frontend lint: `npm run lint`
+8. Start all apps in dev: `npm run dev`
 
 ### Individual App Development
 
@@ -357,3 +387,4 @@ Run in order from `supabase/migrations/`:
 | 1.3.0 | 2026-04-25 | Staging environment | Added staging stack docs, `ENVIRONMENT`/`CORS_EXTRA_ORIGINS` vars, migration workflow, env scoping |
 | 1.4.0 | 2026-05-17 | Supabase staging workflows | Added staging migration and test-account seeding workflow docs, required `staging` secrets, local env handling, pinned Supabase CLI workflow setup, dev-branch guards, and missing migration rows through 018 |
 | 1.5.0 | 2026-05-21 | Stripe billing setup | Added Stripe Dashboard setup section (webhook, price IDs, feature flag, local testing, migration verification) |
+| 1.4.1 | 2026-05-22 | Coverage-first production seed gates | Documented expected-project guard, seed acceptance gates, and nullable top-5 telemetry posture |

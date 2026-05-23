@@ -8,9 +8,16 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from urllib import error as urlerror
 from urllib import request as urlreq
 
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
 
 SUPABASE_URL = os.environ.get(
     "BENCHMARK_SUPABASE_URL",
@@ -47,7 +54,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=positive_int,
         help="Positive day window for recent seo_facts. Defaults to 120.",
     )
+    parser.add_argument(
+        "--expected-project-ref",
+        default=None,
+        help=(
+            "Optional Supabase project ref guard. When set, BENCHMARK_SUPABASE_URL "
+            "must point at this project before recompute runs."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def validate_expected_project_ref(expected_project_ref: str | None) -> None:
+    """Fail fast when a caller pins an expected Supabase project ref."""
+    if not expected_project_ref:
+        return
+    actual_project_ref = supabase_project_ref(SUPABASE_URL)
+    if actual_project_ref != expected_project_ref:
+        actual = actual_project_ref or "<unknown>"
+        raise RuntimeError(
+            "Supabase project ref mismatch: "
+            f"expected {expected_project_ref}, got {actual} from BENCHMARK_SUPABASE_URL"
+        )
 
 
 def network_error_body(exc: urlerror.URLError | TimeoutError | OSError) -> str:
@@ -85,6 +113,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     window_days = args.window_days
     try:
+        validate_expected_project_ref(args.expected_project_ref)
         status, body = rpc("recompute_seo_benchmarks", {"p_window_days": window_days})
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)

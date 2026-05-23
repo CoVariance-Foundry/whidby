@@ -2,45 +2,57 @@ import {
   proxyStrategyJsonResponse,
   proxyStrategyResponse,
 } from "@/lib/strategies/api";
+import { strategyAccentForId } from "@/lib/design-tokens";
 import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strategies/types";
+
+function withStrategyAccent(strategy: StrategyCatalogEntry): StrategyCatalogEntry {
+  const accent_id = strategy.accent_id ?? strategy.strategy_id;
+  const accent = strategyAccentForId(accent_id);
+
+  return {
+    ...strategy,
+    accent_id: accent.accent_id,
+    accent,
+  };
+}
 
 export const FALLBACK_STRATEGY_CATALOG: StrategyCatalogResponse = {
   strategies: [
-    {
+    withStrategyAccent({
       strategy_id: "easy_win",
       name: "Easy Win",
       description: "Find city and service pairs with useful demand and weaker competition.",
       status: "launch",
       input_shape: "city_service",
-    },
-    {
+    }),
+    withStrategyAccent({
       strategy_id: "gbp_blitz",
       name: "GBP Blitz",
       description: "Prioritize markets where local pack competitors leave profile gaps.",
       status: "launch",
       input_shape: "city_service",
-    },
-    {
+    }),
+    withStrategyAccent({
       strategy_id: "keyword_hijack",
       name: "Keyword Hijack",
       description: "Rank markets through one primary keyword lens.",
       status: "launch",
       input_shape: "city_service_keyword",
-    },
-    {
+    }),
+    withStrategyAccent({
       strategy_id: "expand_conquer",
       name: "Expand & Conquer",
       description: "Use a reference city to find lookalike expansion markets.",
       status: "launch",
       input_shape: "reference_city_service",
-    },
-    {
+    }),
+    withStrategyAccent({
       strategy_id: "cash_cow",
       name: "Cash Cow",
       description: "Phase-2 scan for markets with stronger lead economics.",
       status: "phase_2",
       input_shape: "cached_scan",
-    },
+    }),
   ],
   global_modifiers: [
     {
@@ -70,6 +82,7 @@ export function filterStrategyCatalog(catalog: StrategyCatalogResponse): Strateg
       ...fallbackById.get(strategy.strategy_id),
       ...strategy,
     }))
+    .map(withStrategyAccent)
     .sort((a, b) => {
       const ai = FALLBACK_STRATEGY_CATALOG.strategies.findIndex(
         (strategy) => strategy.strategy_id === a.strategy_id,

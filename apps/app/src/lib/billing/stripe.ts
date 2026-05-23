@@ -12,6 +12,7 @@ export function getStripeClient(): Stripe {
 
   if (!stripe) {
     stripe = new Stripe(key, {
+      apiVersion: "2026-02-25.clover" as never,
       maxNetworkRetries: 2,
     });
   }

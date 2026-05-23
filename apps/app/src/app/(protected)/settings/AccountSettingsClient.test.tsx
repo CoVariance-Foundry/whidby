@@ -5,10 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AccountSettingsClient from "./AccountSettingsClient";
 import { createClient } from "@/lib/supabase/client";
 import type { AccountSummary } from "@/lib/account/summary";
+import type { ProfileSummary, SavedReportPreview } from "./AccountSettingsClient";
 
 const mocks = vi.hoisted(() => ({
   searchParams: "",
   resetPasswordForEmail: vi.fn(),
+  signOut: vi.fn(),
+  routerPush: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -29,6 +32,9 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(mocks.searchParams),
+  useRouter: () => ({
+    push: mocks.routerPush,
+  }),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -52,18 +58,38 @@ const baseSummary: AccountSummary = {
   billing_management_available: true,
 };
 
-function renderClient(overrides: Partial<AccountSummary> = {}) {
-  return render(<AccountSettingsClient summary={{ ...baseSummary, ...overrides }} />);
+function renderClient({
+  summary,
+  profile,
+  savedReports,
+  savedReportsError,
+}: {
+  summary?: Partial<AccountSummary>;
+  profile?: ProfileSummary | null;
+  savedReports?: SavedReportPreview[];
+  savedReportsError?: string | null;
+} = {}) {
+  return render(
+    <AccountSettingsClient
+      summary={{ ...baseSummary, ...summary }}
+      profile={profile}
+      savedReports={savedReports}
+      savedReportsError={savedReportsError}
+    />,
+  );
 }
 
 beforeEach(() => {
   mocks.searchParams = "";
   mocks.resetPasswordForEmail.mockResolvedValue({ error: null });
+  mocks.signOut.mockResolvedValue({ error: null });
   vi.mocked(createClient).mockReturnValue({
     auth: {
       resetPasswordForEmail: mocks.resetPasswordForEmail,
+      signOut: mocks.signOut,
     },
   } as never);
+  global.fetch = vi.fn();
   Object.defineProperty(window, "location", {
     value: {
       origin: "http://localhost:3002",
@@ -87,17 +113,36 @@ describe("AccountSettingsClient", () => {
     expect(screen.getByLabelText("Reports used 0 of 0")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /upgrade to plus/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /upgrade to pro/i })).toBeInTheDocument();
+    expect(screen.getAllByText("owner@example.com").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders Supabase profile metadata when available", () => {
+    renderClient({
+      profile: {
+        email: "owner@example.com",
+        name: "Antwoine Flowers",
+        segment: "Agency owner",
+        referred_by: "Coach Maya",
+      },
+    });
+
+    expect(screen.getByText("Antwoine Flowers")).toBeInTheDocument();
+    expect(screen.getByText("Agency owner")).toBeInTheDocument();
+    expect(screen.getByText("Coach Maya")).toBeInTheDocument();
+    expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   });
 
   it("renders Plus usage with remaining reports and reset date", () => {
     renderClient({
-      plan_key: "plus",
-      plan_label: "Plus",
-      monthly_price_cents: 4900,
-      monthly_report_limit: 10,
-      fresh_reports_used: 4,
-      fresh_reports_remaining: 6,
-      stripe_customer_exists: true,
+      summary: {
+        plan_key: "plus",
+        plan_label: "Plus",
+        monthly_price_cents: 4900,
+        monthly_report_limit: 10,
+        fresh_reports_used: 4,
+        fresh_reports_remaining: 6,
+        stripe_customer_exists: true,
+      },
     });
 
     expect(screen.getAllByRole("heading", { name: "Plus" }).length).toBeGreaterThan(0);
@@ -108,13 +153,15 @@ describe("AccountSettingsClient", () => {
 
   it("shows an exhausted quota warning", () => {
     renderClient({
-      plan_key: "plus",
-      plan_label: "Plus",
-      monthly_price_cents: 4900,
-      monthly_report_limit: 10,
-      fresh_reports_used: 10,
-      fresh_reports_remaining: 0,
-      stripe_customer_exists: true,
+      summary: {
+        plan_key: "plus",
+        plan_label: "Plus",
+        monthly_price_cents: 4900,
+        monthly_report_limit: 10,
+        fresh_reports_used: 10,
+        fresh_reports_remaining: 0,
+        stripe_customer_exists: true,
+      },
     });
 
     expect(screen.getByText(/fresh reports are exhausted/i)).toBeInTheDocument();
@@ -122,14 +169,16 @@ describe("AccountSettingsClient", () => {
 
   it("shows scheduled cancellation state for paid subscriptions", () => {
     renderClient({
-      plan_key: "plus",
-      plan_label: "Plus",
-      monthly_price_cents: 4900,
-      monthly_report_limit: 10,
-      fresh_reports_used: 4,
-      fresh_reports_remaining: 6,
-      stripe_customer_exists: true,
-      cancel_at_period_end: true,
+      summary: {
+        plan_key: "plus",
+        plan_label: "Plus",
+        monthly_price_cents: 4900,
+        monthly_report_limit: 10,
+        fresh_reports_used: 4,
+        fresh_reports_remaining: 6,
+        stripe_customer_exists: true,
+        cancel_at_period_end: true,
+      },
     });
 
     expect(screen.getByText(/cancels at period end/i)).toBeInTheDocument();
@@ -138,20 +187,68 @@ describe("AccountSettingsClient", () => {
   });
 
   it("does not call Stripe when billing is disabled", () => {
-    global.fetch = vi.fn();
-    renderClient({ billing_management_available: false });
+    renderClient({ summary: { billing_management_available: false } });
 
     const plusButton = screen.getByRole("button", { name: /upgrade to plus/i });
     expect(plusButton).toBeDisabled();
     fireEvent.click(plusButton);
 
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(vi.mocked(global.fetch)).not.toHaveBeenCalledWith(
+      "/api/billing/checkout",
+      expect.anything(),
+    );
+  });
+
+  it("renders a server-loaded saved reports preview", () => {
+    renderClient({
+      savedReports: [
+        {
+          id: "report-1",
+          niche: "Plumbing",
+          city: "Austin, TX",
+          archetype_short: "Easy win",
+          opportunity_score: 82,
+          created_at: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(screen.getByRole("heading", { name: "Saved reports" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /plumbing · austin/i })).toHaveAttribute(
+      "href",
+      "/reports?open=report-1",
+    );
+    expect(screen.getByText(/82 opportunity/i)).toBeInTheDocument();
+  });
+
+  it("shows the empty saved reports state", () => {
+    renderClient();
+
+    expect(screen.getByText("No saved reports yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Explore markets" })).toHaveAttribute(
+      "href",
+      "/explore",
+    );
+  });
+
+  it("shows the saved reports fallback when server loading fails", () => {
+    renderClient({ savedReportsError: "Reports request failed with HTTP 502." });
+
+    expect(screen.getByText("Reports could not load")).toBeInTheDocument();
+    expect(screen.getByText(/HTTP 502/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open reports" })).toHaveAttribute("href", "/reports");
   });
 
   it("renders a billing return banner from query params", () => {
     mocks.searchParams = "billing=success";
     renderClient();
     expect(screen.getByRole("status")).toHaveTextContent("Billing details refreshed.");
+  });
+
+  it("renders a cancelled billing return banner from query params", () => {
+    mocks.searchParams = "billing=cancelled";
+    renderClient();
+    expect(screen.getByRole("status")).toHaveTextContent("Billing change cancelled.");
   });
 
   it("renders a password return banner from query params", () => {
@@ -163,6 +260,10 @@ describe("AccountSettingsClient", () => {
   it("sends a password reset email with the settings password redirect", async () => {
     renderClient();
 
+    expect(screen.getByRole("link", { name: "Manage password" })).toHaveAttribute(
+      "href",
+      "/settings/password",
+    );
     fireEvent.click(screen.getByRole("button", { name: /send reset email/i }));
 
     await waitFor(() => {
@@ -171,5 +272,14 @@ describe("AccountSettingsClient", () => {
       });
     });
     expect(screen.getByRole("status")).toHaveTextContent("Password reset email sent.");
+  });
+
+  it("signs out through Supabase and returns to login", async () => {
+    renderClient();
+
+    fireEvent.click(screen.getByRole("button", { name: /^sign out$/i }));
+
+    await waitFor(() => expect(mocks.signOut).toHaveBeenCalledTimes(1));
+    expect(mocks.routerPush).toHaveBeenCalledWith("/login");
   });
 });

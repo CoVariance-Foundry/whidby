@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.6.0`     |
-| **Last Updated** | 2026-05-17  |
+| **Version**      | `1.7.3`     |
+| **Last Updated** | 2026-05-22  |
 | **Owner**        | @widby-team |
 
 
@@ -33,6 +33,8 @@
 | StrategyRun | Supabase `strategy_runs` table | id (UUID) | Cached/fresh strategy run envelope for account-scoped lineage |
 | StrategyRunItem | Supabase `strategy_run_items` table | id (UUID) | Ranked strategy result row for a city/service/keyword |
 | LocalPackListingFact | Supabase `local_pack_listing_facts` table | id (UUID) | Keyword + CBSA local pack listing evidence used by GBP Blitz and Keyword Hijack |
+| OrganicCompetitorFact | Supabase `organic_competitor_facts` table | cbsa + niche + keyword + rank + result type + date | Durable organic SERP competitor rows for Competitor Intel |
+| CompetitorIntelRun | Supabase `competitor_intel_runs` table | id (UUID) | Paid competitor-intel run lineage, quota usage, status, and summary |
 | MetroFeatureVector | Supabase `metro_feature_vectors` table | cbsa_code + feature_version | Derived metro similarity vector used by Expand & Conquer |
 | StrategyScoreCache | Supabase `strategy_score_cache` table | strategy_id + cbsa_code + niche + keyword | Optional read-optimized strategy projection cache |
 | FeedbackLog         | Supabase `feedback_log` table        | log_id (UUID)    | Input context + scores for future optimization (legacy)            |
@@ -55,6 +57,9 @@
 | Subscription        | Supabase `subscriptions` table        | subscription_id (UUID) | Active tier state synced from Stripe |
 | UsageCounter        | Supabase `usage_counters` table       | account + metric + period | Atomic monthly quota usage for fresh reports |
 | BillingCustomer     | Supabase `billing_customers` table    | account_id       | Stripe customer mapping |
+| BillingCheckoutSession | Supabase `billing_checkout_sessions` table | id (UUID) | Pending Stripe Checkout reservations and idempotency keys |
+| BillingOperationEvent | Supabase `billing_operation_events` table | id (UUID) | Admin-visible billing issue/event log |
+| BillingWebhookEvent | Supabase `billing_webhook_events` table | stripe_event_id | Stripe webhook delivery ledger and retry state |
 | InternalUserEntitlement | Supabase `internal_user_entitlements` table | user_id (UUID) | Internal operator/test override for quota exemption |
 | OnboardingProfile   | Supabase `onboarding_profiles` table  | id (UUID); unique user_id | Durable signup/onboarding answers, recommended strategy, and resume route |
 | OnboardingTarget    | Supabase `onboarding_targets` table   | id (UUID); unique profile + strategy | Selected strategy, service, and resolved geography for first-report handoff |
@@ -70,6 +75,16 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 - `top3_review_velocity_avg` is the average monthly review velocity across ranked local top-3 listings with velocity data; missing velocity data persists as `null`.
 - `avg_top5_da` is the nullable average domain authority across usable top-5 organic competitors after existing aggregator/missing-URL exclusions.
 - `avg_top5_lighthouse` is the nullable average Lighthouse/site quality score across usable top-5 organic competitors. `top5_da_coverage`, `top5_lighthouse_coverage`, and `top5_organic_data_confidence` record sparse top-5 evidence so missing measurements do not become easy zero-DA or zero-Lighthouse facts.
+- During the coverage-first production seed audit, top-5 DA and Lighthouse are optional telemetry. `null` values lower confidence/evidence completeness only; they must not block V2 scoring, guidance classification, persistence, benchmark recompute, or Explore cache reads.
+- `organic_competitor_facts` stores durable per-result organic evidence for Competitor Intel. Its grain is `(cbsa_code, niche_normalized, keyword, result_rank, result_type, snapshot_date)` and it preserves rank, result type, title, domain, URL, DA, backlinks/referring-domain counts, Lighthouse score, schema/title-match signals, aggregator/local-business flags, source, and optional report lineage. Competitor Intel service-role reads should enforce visible report lineage when `report_id` is present and may include `report_id IS NULL` rows as shared report-agnostic facts.
+- `competitor_intel_runs` stores paid run lineage for account/user/report context, service/niche/keyword input, quota consumed, status, durable result summary, and error payloads. It is a lineage table, not the primary fact table; dossier reconstruction reads durable fact tables.
+- Multi-unit quota is handled by `consume_usage_quota(account, metric_key, units)` and `refund_usage_quota(account, metric_key, units)`. Existing report quota RPCs remain one-unit wrappers over the same `fresh_report` usage counter; consume is callable by authenticated account members, while refunds are service-role only so browser-authenticated clients cannot reset their own counters.
+
+### Coverage-First Seed Data Contract
+
+Production seed acceptance is staged, not a single bulk-write event: verify schema parity and the expected Supabase project, run a canary, complete a 12x8 coverage pilot, recompute benchmarks, validate Explore cache reads, then run the 50x16 seed. Seeded rows must reuse canonical tables (`reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, `seo_benchmarks`, and Explore read models); do not create duplicate seed-specific tables.
+
+`scripts/explore/audit_scoring_strategy.py` is the read-only scoring-strategy audit over the same canonical tables. It builds the intended service x population-class matrix, measures V2 component input coverage, checks usable benchmark cells at `sample_size_metros >= 8`, identifies legacy-only and missing Explore rows, and emits generated JSON/Markdown artifacts under ignored `reports/scoring_audit/`.
 
 
 ### Sonar Slice-Lite Entities
@@ -243,6 +258,23 @@ Reports have two visibility modes:
 
 Fresh scoring requests must persist generated reports as `account`; existing ownerless reports are treated as `cached`. Report child tables (`report_keywords`, `metro_signals`, `metro_scores`) inherit read access through their parent report. Authenticated users do not receive direct `UPDATE` access to report payloads; account-owned soft archive is exposed only through `archive_account_report(report_id)`.
 
+### Billing Operations
+
+Billing operational state is service-role owned. Regular consumer users never read operational rows directly; internal operators access issue visibility through checked RPCs and `apps/admin` API routes. The billing operations gate is `internal_user_entitlements.billing_operations_admin`, not account-level membership role.
+
+`billing_checkout_sessions` reserves a Stripe Checkout attempt before the Stripe call. There can be only one active pending reservation per account. A still-unexpired pending reservation for the same account and plan should be reused instead of creating a duplicate Stripe Checkout Session; if a reservation insert collides with a concurrent same-plan request, the checkout path should refetch and reuse that pending row rather than logging a billing failure. Stale pending reservations should move to `expired`.
+
+`billing_webhook_events` is a ledger keyed by Stripe `event.id`. Processed or ignored events are acknowledged without reprocessing. Failed events can be retried by Stripe and increment `attempt_count`. Subscription sync receives the Stripe event id and event creation timestamp, persists them on `subscriptions.last_stripe_event_id` and `subscriptions.last_stripe_event_created_at`, and skips older subscription events when a newer event has already been applied.
+
+`billing_operation_events` records issues and notable operational decisions for admins. User-facing API responses expose stable public error codes/messages only; raw exception text belongs in `internal_message` and structured context belongs in `metadata`.
+
+Admin RPCs:
+
+| RPC | Access | Responsibility |
+| --- | --- | --- |
+| `list_billing_operation_events(p_status text default 'open', p_severity text default null, p_limit int default 50)` | Authenticated billing operations admin only | Returns recent billing events filtered by status/severity, capped at 100 rows. |
+| `resolve_billing_operation_event(p_event_id uuid)` | Authenticated billing operations admin only | Marks an event resolved with `resolved_at` and `resolved_by`; raises `billing_event_not_found` when no event matches. |
+
 ### Internal User Entitlements
 
 Internal report-generation overrides are user-scoped, not paid-plan state. `internal_user_entitlements.fresh_report_quota_exempt = true` lets trusted admin/test users generate fresh reports without consuming monthly quota while their account can remain on `free`. The entitlement is folded into `get_account_entitlement()` as `fresh_report_quota_exempt` and is enforced by app-layer fresh-report gates before quota checks. The same entitlement RPC also exposes `subscriptions.cancel_at_period_end` so UI can distinguish active paid plans from paid plans scheduled to end at the current period boundary without locally mutating Stripe state.
@@ -290,11 +322,64 @@ Free users can persist onboarding state and cached-route choices, but fresh scor
 | --- | --- | --- | --- | --- |
 | `user_id` | UUID | Yes | primary key, references `auth.users.id` | User receiving the internal override |
 | `fresh_report_quota_exempt` | boolean | Yes | default false | Bypasses fresh-report monthly quota when true and unexpired |
+| `billing_operations_admin` | boolean | Yes | default false | Allows internal billing issue list/resolve RPC access when true and unexpired |
 | `reason` | text | Yes | non-empty operational note | Why the override exists |
 | `granted_by` | UUID | No | references `auth.users.id` | Optional granting operator |
 | `expires_at` | timestamptz | No | null or future timestamp | Optional expiry for temporary testing |
 | `created_at` | timestamptz | Yes | default now() | Creation timestamp |
 | `updated_at` | timestamptz | Yes | default now() | Last update timestamp |
+
+### BillingCheckoutSession (`billing_checkout_sessions`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Local reservation id |
+| `account_id` | UUID | Yes | references `accounts.id` | Account starting checkout |
+| `user_id` | UUID | No | references `auth.users.id` | User who initiated checkout |
+| `plan_key` | text | Yes | `plus` or `pro` | Target paid plan |
+| `status` | text | Yes | `pending`, `completed`, `cancelled`, or `expired` | Local checkout state |
+| `stripe_checkout_session_id` | text | No | unique | Stripe Checkout Session id once created |
+| `stripe_checkout_url` | text | No | - | Hosted checkout URL to reuse while pending |
+| `expires_at` | timestamptz | Yes | - | Expiry used to stop reusing old sessions |
+| `idempotency_key` | text | Yes | unique | Stripe idempotency key for Checkout Session creation |
+| `created_at` | timestamptz | Yes | default now() | Creation timestamp |
+| `updated_at` | timestamptz | Yes | default now() | Last update timestamp |
+
+### BillingOperationEvent (`billing_operation_events`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Stable event id |
+| `severity` | text | Yes | `critical`, `error`, `warning`, or `info` | Admin triage severity |
+| `status` | text | Yes | `open` or `resolved` | Admin resolution state |
+| `event_type` | text | Yes | non-empty | Event classifier such as `checkout_failed` |
+| `source` | text | Yes | non-empty | Route or worker that recorded the event |
+| `account_id` | UUID | No | references `accounts.id` | Related account when known |
+| `user_id` | UUID | No | references `auth.users.id` | Related user when known |
+| `stripe_customer_id` | text | No | - | Related Stripe customer |
+| `stripe_subscription_id` | text | No | - | Related Stripe subscription |
+| `stripe_checkout_session_id` | text | No | - | Related Stripe Checkout Session |
+| `stripe_event_id` | text | No | indexed when present | Related Stripe webhook event |
+| `public_message` | text | Yes | safe for UI | Sanitized user/admin summary |
+| `internal_message` | text | No | operational only | Raw exception/error detail |
+| `metadata` | jsonb | Yes | default `{}` | Structured diagnostic context |
+| `created_at` / `updated_at` | timestamptz | Yes | default now() | Event timestamps |
+| `resolved_at` | timestamptz | No | - | Resolution timestamp |
+| `resolved_by` | UUID | No | references `auth.users.id` | Admin who resolved the issue |
+
+### BillingWebhookEvent (`billing_webhook_events`)
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `stripe_event_id` | text | Yes | primary key | Stripe webhook event id |
+| `event_type` | text | Yes | non-empty | Stripe event type |
+| `stripe_created_at` | timestamptz | Yes | - | Stripe event creation time |
+| `processing_status` | text | Yes | `processing`, `processed`, `failed`, or `ignored` | Webhook processing state |
+| `attempt_count` | integer | Yes | `>= 0` | Number of processing attempts |
+| `last_error` | text | No | - | Most recent processing error |
+| `received_at` | timestamptz | Yes | default now() | First ledger timestamp |
+| `processed_at` | timestamptz | No | - | Completion timestamp for processed/ignored events |
+| `updated_at` | timestamptz | Yes | default now() | Last ledger update |
 
 ### OnboardingProfile (`onboarding_profiles`)
 
@@ -594,3 +679,8 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.3.0   | 2026-05-14 | Explore refresh control | Added refresh policy, target, run, run item, and report snapshot entities for cached Explore refreshes |
 | 1.4.0   | 2026-05-16 | Strategy Discovery system design | Added strategy run/cache entities, local pack and metro vector facts, and StrategyResult DTO |
 | 1.6.0   | 2026-05-17 | Internal entitlements | Added internal quota-exempt user entitlement model and staging test personas |
+| 1.6.1   | 2026-05-22 | Coverage-first seed data contract | Documented nullable top-5 telemetry posture and production seed acceptance sequence |
+| 1.6.2   | 2026-05-22 | Scoring strategy audit contract | Documented read-only scoring audit matrix, benchmark usability threshold, and generated artifact location |
+| 1.7.0   | 2026-05-22 | Competitor Intel | Added organic competitor facts, competitor-intel run lineage, and multi-unit quota model |
+| 1.7.1   | 2026-05-22 | Merge sync | Preserved coverage-first seed contract alongside Competitor Intel schema lineage |
+| 1.7.2   | 2026-05-22 | Merge sync | Preserved scoring strategy audit contract alongside Competitor Intel and coverage-first seed docs |

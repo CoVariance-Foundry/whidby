@@ -153,6 +153,20 @@ function pressTab(shiftKey = false) {
 }
 
 describe("ExplorePageClient", () => {
+  it("renders the Explore subheader and strategy jump link", () => {
+    render(<ExplorePageClient data={fixtureData} />);
+
+    expect(
+      screen.getByText(
+        "Browse the data layer for free. Narrow down by demographics, then spend scans on the ones you want fresh numbers for.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryAllByText(/Know what you want\?/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /jump to a strategy/i }).getAttribute("href")).toBe(
+      "/strategies",
+    );
+  });
+
   it("writes service filters and sort changes to the URL", () => {
     render(<ExplorePageClient data={fixtureData} />);
 

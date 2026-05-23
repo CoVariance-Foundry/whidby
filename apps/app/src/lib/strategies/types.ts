@@ -1,3 +1,5 @@
+import type { StrategyAccent, StrategyAccentId } from "@/lib/design-tokens";
+
 export type StrategyStatus = "launch" | "phase_2";
 
 export type StrategyInputShape =
@@ -12,6 +14,8 @@ export interface StrategyCatalogEntry {
   description: string;
   status: StrategyStatus;
   input_shape: StrategyInputShape;
+  accent_id?: StrategyAccentId;
+  accent?: StrategyAccent;
 }
 
 export interface StrategyGlobalModifier {

@@ -10,8 +10,17 @@ Usage:
     # Custom city/service counts:
     python -m scripts.explore.bulk_score --apply --cities 20 --services 6
 
+    # Explicit service list:
+    python -m scripts.explore.bulk_score --apply --service-name roofing --service-name plumbing
+
     # Resume after interruption (skips already-scored pairs):
     python -m scripts.explore.bulk_score --apply --resume
+
+    # V2-aware resume (skips only pairs with metro_score_v2 + seo_facts):
+    python -m scripts.explore.bulk_score --apply --resume-v2
+
+    # Retry failed/partial pairs from an audit file:
+    python -m scripts.explore.bulk_score --apply --retry-failed-from scripts/explore/bulk_score_results.jsonl
 
     # Refresh the materialized view only (no scoring):
     python -m scripts.explore.bulk_score --refresh-only
@@ -48,13 +57,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
 
 SERVICES = [
     "roofing",
     "plumbing",
     "hvac",
     "tree service",
-    "pest control",
+    "auto repair",
     "water damage restoration",
     "landscaping",
     "electrician",
@@ -71,6 +84,11 @@ SERVICES = [
 DEFAULT_CONCURRENCY = 10
 PAGE_SIZE = 1000
 MAX_METRO_FETCH = 1000
+RETRYABLE_STATUSES = {"failed", "partial_failure"}
+METRO_SELECT_COLUMNS = (
+    "cbsa_code, cbsa_name, state, population, population_class, "
+    "dataforseo_location_codes"
+)
 RANK_AND_RENT_CLASS_ORDER = (
     "large_300k_1m",
     "medium_100_300k",
@@ -84,6 +102,10 @@ STRIP_TRAILING_SERVICE_SUFFIXES = re.compile(
 )
 MULTI_SPACE = re.compile(r"\s+")
 CATALOG_SERVICE_KEYS = {MULTI_SPACE.sub(" ", service.strip().lower()) for service in SERVICES}
+
+
+def default_results_path() -> Path:
+    return PROJECT_ROOT / "scripts" / "explore" / "bulk_score_results.jsonl"
 
 
 def _load_env() -> None:
@@ -119,6 +141,20 @@ def _supabase_client() -> Any:
     return create_client(url, key)
 
 
+def validate_expected_project_ref(expected_project_ref: str | None) -> None:
+    """Fail fast when a caller pins an expected Supabase project ref."""
+    if not expected_project_ref:
+        return
+    supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    actual_project_ref = supabase_project_ref(supabase_url)
+    if actual_project_ref != expected_project_ref:
+        actual = actual_project_ref or "<unknown>"
+        raise RuntimeError(
+            "Supabase project ref mismatch: "
+            f"expected {expected_project_ref}, got {actual} from NEXT_PUBLIC_SUPABASE_URL"
+        )
+
+
 def fetch_top_metros(supabase: Any, limit: int) -> list[dict[str, Any]]:
     """Compatibility wrapper for the old top-population selection."""
     return fetch_metros(
@@ -146,10 +182,7 @@ def fetch_metros(
 ) -> list[dict[str, Any]]:
     response = (
         supabase.table("metros")
-        .select(
-            "cbsa_code, cbsa_name, state, population, population_class, "
-            "dataforseo_location_codes"
-        )
+        .select(METRO_SELECT_COLUMNS)
         .not_.is_("population", "null")
         .order("population", desc=True)
         .limit(MAX_METRO_FETCH)
@@ -179,6 +212,21 @@ def fetch_metros(
 
     ordered = _rank_and_rent_order(filtered)
     return _apply_mega_cap(ordered, limit=limit, mega_cap=mega_cap)
+
+
+def fetch_metros_by_cbsa(
+    supabase: Any, cbsa_codes: set[str]
+) -> dict[str, dict[str, Any]]:
+    """Fetch exact metros for retry audit pairs."""
+    if not cbsa_codes:
+        return {}
+    rows = _fetch_pages_with_in_filters(
+        supabase,
+        "metros",
+        METRO_SELECT_COLUMNS,
+        {"cbsa_code": sorted(cbsa_codes)},
+    )
+    return {str(row["cbsa_code"]): row for row in rows if row.get("cbsa_code")}
 
 
 def _metro_matches_filters(
@@ -247,11 +295,87 @@ def summarize_metro_selection(metros: list[dict[str, Any]]) -> dict[str, int]:
     return summary
 
 
-def normalize_service_key(raw: str) -> str:
-    text = MULTI_SPACE.sub(" ", raw.strip().lower()).strip()
-    if text in CATALOG_SERVICE_KEYS:
+def normalize_service_key(raw: str, catalog_keys: set[str] | None = None) -> str:
+    text = service_key_text(raw)
+    known_keys = catalog_keys or CATALOG_SERVICE_KEYS
+    if text in known_keys:
         return text
     return STRIP_TRAILING_SERVICE_SUFFIXES.sub("", text).strip()
+
+
+def service_key_text(raw: str) -> str:
+    return MULTI_SPACE.sub(" ", raw.strip().lower()).strip()
+
+
+def select_services(args: argparse.Namespace) -> list[str]:
+    """Resolve requested service labels into unique normalized scoring labels."""
+    service_names = getattr(args, "service_names", None)
+    raw_services = service_names if service_names else SERVICES[: args.services]
+    normalize = service_key_text if service_names else normalize_service_key
+    services: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_services:
+        service = normalize(raw)
+        if not service:
+            raise ValueError("Service names must be non-empty")
+        if service in seen:
+            continue
+        services.append(service)
+        seen.add(service)
+    return services
+
+
+def fetch_service_catalog_keys(supabase: Any) -> set[str]:
+    rows = _fetch_pages(supabase, "niche_naics_mapping", "niche_normalized")
+    return {
+        service_key_text(str(row.get("niche_normalized") or ""))
+        for row in rows
+        if row.get("niche_normalized")
+    }
+
+
+def validate_services_for_catalog(supabase: Any, services: list[str]) -> list[str]:
+    """Validate services against the Explore catalog and return catalog-normalized keys."""
+    catalog_keys = fetch_service_catalog_keys(supabase)
+    return _validated_services_for_catalog(services, catalog_keys)
+
+
+def _validated_services_for_catalog(
+    services: list[str],
+    catalog_keys: set[str],
+) -> list[str]:
+    normalized_services = [normalize_service_key(service, catalog_keys) for service in services]
+    missing = [
+        service
+        for service, normalized in zip(services, normalized_services, strict=True)
+        if normalized not in catalog_keys
+    ]
+    if missing:
+        raise RuntimeError(
+            "Requested service(s) are missing from niche_naics_mapping: "
+            + ", ".join(missing)
+        )
+    return list(dict.fromkeys(normalized_services))
+
+
+def _validated_retry_pairs_for_catalog(
+    retry_pairs: set[tuple[str, str]],
+    catalog_keys: set[str],
+) -> set[tuple[str, str]]:
+    normalized_pairs: set[tuple[str, str]] = set()
+    missing_services: list[str] = []
+    for cbsa_code, service in sorted(retry_pairs):
+        normalized_service = normalize_service_key(service, catalog_keys)
+        if normalized_service not in catalog_keys:
+            missing_services.append(service)
+            continue
+        normalized_pairs.add((cbsa_code, normalized_service))
+    if missing_services:
+        raise RuntimeError(
+            "Requested service(s) are missing from niche_naics_mapping: "
+            + ", ".join(dict.fromkeys(missing_services))
+        )
+    return normalized_pairs
 
 
 def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
@@ -289,21 +413,156 @@ def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
     return pairs
 
 
+def fetch_v2_persisted_pairs(
+    supabase: Any,
+    candidate_pairs: set[tuple[str, str]] | None = None,
+) -> set[tuple[str, str]]:
+    """Return pairs that have both normalized V2 scores and benchmark fact rows."""
+    candidate_keys: set[tuple[str, str]] | None = None
+    catalog_keys: set[str] | None = None
+    if candidate_pairs is not None:
+        candidate_keys = {
+            (str(cbsa_code), service_key_text(service))
+            for cbsa_code, service in candidate_pairs
+        }
+        catalog_keys = {service for _cbsa_code, service in candidate_keys}
+
+    v2_rows = _fetch_pair_candidate_pages(
+        supabase,
+        "metro_score_v2",
+        "cbsa_code,niche_normalized,report_id",
+        candidate_keys,
+    )
+    fact_rows = _fetch_pair_candidate_pages(
+        supabase,
+        "seo_facts",
+        "cbsa_code,niche_normalized,report_id",
+        candidate_keys,
+    )
+    v2_pairs = {
+        (
+            str(row["cbsa_code"]),
+            normalize_service_key(str(row["niche_normalized"]), catalog_keys),
+        )
+        for row in v2_rows
+        if row.get("cbsa_code") and row.get("niche_normalized") and row.get("report_id")
+    }
+    fact_pairs = {
+        (
+            str(row["cbsa_code"]),
+            normalize_service_key(str(row["niche_normalized"]), catalog_keys),
+        )
+        for row in fact_rows
+        if row.get("cbsa_code") and row.get("niche_normalized") and row.get("report_id")
+    }
+    persisted_pairs = v2_pairs.intersection(fact_pairs)
+    if candidate_keys is not None:
+        return persisted_pairs.intersection(candidate_keys)
+    return persisted_pairs
+
+
+def load_retry_pairs(path: Path) -> set[tuple[str, str]]:
+    """Load failed or partial city-service pairs from a bulk-score JSONL audit."""
+    pairs: set[tuple[str, str]] = set()
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                record = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Could not parse retry audit row {line_number} in {path}"
+                ) from exc
+            if record.get("status") not in RETRYABLE_STATUSES:
+                continue
+            request = record.get("request")
+            if not isinstance(request, dict):
+                continue
+            cbsa_code = str(request.get("cbsa_code") or "").strip()
+            service = str(
+                request.get("service") or request.get("niche_normalized") or ""
+            ).strip()
+            if cbsa_code and service:
+                pairs.add((cbsa_code, service_key_text(service)))
+    return pairs
+
+
 def _fetch_pages(supabase: Any, table: str, columns: str) -> list[dict[str, Any]]:
+    return _fetch_pages_with_in_filters(supabase, table, columns, {})
+
+
+def _fetch_pages_with_in_filters(
+    supabase: Any,
+    table: str,
+    columns: str,
+    in_filters: dict[str, list[str]],
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     offset = 0
     while True:
-        response = (
-            supabase.table(table)
-            .select(columns)
-            .range(offset, offset + PAGE_SIZE - 1)
-            .execute()
-        )
+        query = supabase.table(table).select(columns)
+        for column, values in in_filters.items():
+            query = query.in_(column, values)
+        response = query.range(offset, offset + PAGE_SIZE - 1).execute()
         page = list(response.data or [])
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             return rows
         offset += PAGE_SIZE
+
+
+def _fetch_pair_candidate_pages(
+    supabase: Any,
+    table: str,
+    columns: str,
+    candidate_pairs: set[tuple[str, str]] | None,
+) -> list[dict[str, Any]]:
+    if candidate_pairs is None:
+        return _fetch_pages(supabase, table, columns)
+    if not candidate_pairs:
+        return []
+    return _fetch_pages_with_in_filters(
+        supabase,
+        table,
+        columns,
+        {
+            "cbsa_code": sorted({cbsa_code for cbsa_code, _service in candidate_pairs}),
+            "niche_normalized": sorted(
+                {service for _cbsa_code, service in candidate_pairs}
+            ),
+        },
+    )
+
+
+def _pair_key(metro: dict[str, Any], service: str) -> tuple[str, str]:
+    return str(metro["cbsa_code"]), service_key_text(service)
+
+
+def _build_retry_score_pairs(
+    supabase: Any,
+    retry_pairs: set[tuple[str, str]],
+) -> list[tuple[dict[str, Any], str]]:
+    catalog_keys = fetch_service_catalog_keys(supabase)
+    normalized_retry_pairs = _validated_retry_pairs_for_catalog(retry_pairs, catalog_keys)
+    metros_by_cbsa = fetch_metros_by_cbsa(
+        supabase, {cbsa_code for cbsa_code, _service in normalized_retry_pairs}
+    )
+    missing_cbsa_codes = sorted(
+        cbsa_code
+        for cbsa_code, _service in normalized_retry_pairs
+        if cbsa_code not in metros_by_cbsa
+    )
+    if missing_cbsa_codes:
+        raise RuntimeError(
+            "Retry audit referenced CBSA code(s) missing from metros: "
+            + ", ".join(missing_cbsa_codes)
+        )
+    return [
+        (metros_by_cbsa[cbsa_code], service)
+        for cbsa_code, service in sorted(normalized_retry_pairs)
+    ]
 
 
 async def score_one(
@@ -464,7 +723,7 @@ def build_audit_record(
             "city": city_name,
             "state": metro.get("state"),
             "service": service,
-            "niche_normalized": normalize_service_key(service),
+            "niche_normalized": service_key_text(service),
             "population": metro.get("population"),
             "population_class": metro.get("population_class"),
         },
@@ -553,9 +812,10 @@ def _is_missing_refresh_rpc(exc: Exception) -> bool:
     )
 
 
-def refresh_matview_sql() -> None:
+def refresh_matview_sql(expected_project_ref: str | None = None) -> None:
     """Refresh via direct SQL if the RPC doesn't exist."""
     _load_env()
+    validate_expected_project_ref(expected_project_ref)
     sb = _supabase_client()
     try:
         refresh_matview(sb)
@@ -591,48 +851,76 @@ def city_short_name(cbsa_name: str) -> str:
 
 async def run_bulk_score(args: argparse.Namespace) -> None:
     _load_env()
+    validate_expected_project_ref(getattr(args, "expected_project_ref", None))
     sb = _supabase_client()
     api_url = _api_url(args)
+    retry_pairs: set[tuple[str, str]] | None = None
+    retry_failed_from = getattr(args, "retry_failed_from", None)
+    if retry_failed_from:
+        retry_pairs = load_retry_pairs(retry_failed_from)
+        logger.info(
+            "Loaded %d retryable pair(s) from %s",
+            len(retry_pairs),
+            retry_failed_from,
+        )
+        if not retry_pairs:
+            logger.info("No failed or partial pairs found in retry audit; nothing to do.")
+            return
 
-    logger.info(
-        "Fetching up to %d metros with %s strategy...",
-        args.cities,
-        args.strategy,
-    )
-    metros = fetch_metros(
-        sb,
-        limit=args.cities,
-        strategy=args.strategy,
-        population_classes=args.population_classes,
-        min_population=args.min_population,
-        max_population=args.max_population,
-        require_dfs=args.require_dfs,
-        mega_cap=args.mega_cap,
-    )
-    logger.info(
-        "Found %d metros by class: %s",
-        len(metros),
-        summarize_metro_selection(metros),
-    )
+    if retry_pairs is not None:
+        pairs = _build_retry_score_pairs(sb, retry_pairs)
+        metros = list({metro["cbsa_code"]: metro for metro, _service in pairs}.values())
+        services = list(dict.fromkeys(service for _metro, service in pairs))
+        logger.info(
+            "Retry audit selected %d pair(s) across %d metro(s) and %d service(s).",
+            len(pairs),
+            len(metros),
+            len(services),
+        )
+    else:
+        logger.info(
+            "Fetching up to %d metros with %s strategy...",
+            args.cities,
+            args.strategy,
+        )
+        metros = fetch_metros(
+            sb,
+            limit=args.cities,
+            strategy=args.strategy,
+            population_classes=args.population_classes,
+            min_population=args.min_population,
+            max_population=args.max_population,
+            require_dfs=args.require_dfs,
+            mega_cap=args.mega_cap,
+        )
+        logger.info(
+            "Found %d metros by class: %s",
+            len(metros),
+            summarize_metro_selection(metros),
+        )
 
-    services = SERVICES[: args.services]
-    logger.info("Services to score (%d): %s", len(services), ", ".join(services))
+        services = validate_services_for_catalog(sb, select_services(args))
+        logger.info("Services to score (%d): %s", len(services), ", ".join(services))
+        pairs = [(metro, service) for metro in metros for service in services]
 
-    total_pairs = len(metros) * len(services)
+    total_pairs = len(pairs)
+    candidate_pair_keys = {_pair_key(metro, service) for metro, service in pairs}
 
     scored_pairs: set[tuple[str, str]] = set()
-    if args.resume:
+    resume_v2 = getattr(args, "resume_v2", False)
+    if args.resume or resume_v2:
         logger.info("Checking for already-scored pairs...")
-        scored_pairs = fetch_scored_pairs(sb)
-        logger.info("Found %d already-scored pairs", len(scored_pairs))
-
-    pairs = []
-    for metro in metros:
-        for service in services:
-            cbsa = metro["cbsa_code"]
-            if args.resume and (cbsa, normalize_service_key(service)) in scored_pairs:
-                continue
-            pairs.append((metro, service))
+        scored_pairs = (
+            fetch_v2_persisted_pairs(sb, candidate_pair_keys)
+            if resume_v2
+            else fetch_scored_pairs(sb)
+        )
+        logger.info("Found %d already-scored candidate pair(s)", len(scored_pairs))
+        pairs = [
+            (metro, service)
+            for metro, service in pairs
+            if _pair_key(metro, service) not in scored_pairs
+        ]
 
     if args.preview:
         logger.info("\n=== PREVIEW: %d pairs to score ===", len(pairs))
@@ -686,7 +974,10 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
     failed = 0
     partial_failed = 0
     completed = 0
-    results_path = PROJECT_ROOT / "scripts" / "explore" / "bulk_score_results.jsonl"
+    results_path = getattr(args, "results_path", None) or default_results_path()
+    if not results_path.is_absolute():
+        results_path = PROJECT_ROOT / results_path
+    results_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     write_lock = asyncio.Lock()
     sem = asyncio.Semaphore(args.concurrency)
@@ -802,6 +1093,20 @@ def main() -> None:
         help="Skip pairs already visible in explore_market_cells or legacy score tables.",
     )
     parser.add_argument(
+        "--resume-v2",
+        action="store_true",
+        help=(
+            "Skip only pairs that already have both metro_score_v2 and seo_facts rows. "
+            "Use this for V2-aware recovery without skipping legacy-only pairs."
+        ),
+    )
+    parser.add_argument(
+        "--retry-failed-from",
+        type=Path,
+        default=None,
+        help="Retry only failed or partial_failure pairs from a bulk-score JSONL audit.",
+    )
+    parser.add_argument(
         "--cities",
         type=int,
         default=50,
@@ -851,6 +1156,13 @@ def main() -> None:
         help="Number of services from the catalog (default: 12).",
     )
     parser.add_argument(
+        "--service-name",
+        dest="service_names",
+        action="append",
+        default=None,
+        help="Explicit service to score. Repeat to build a custom service list.",
+    )
+    parser.add_argument(
         "--concurrency",
         type=int,
         default=DEFAULT_CONCURRENCY,
@@ -863,15 +1175,36 @@ def main() -> None:
         help="FastAPI base URL (default: NEXT_PUBLIC_API_URL or http://localhost:8000).",
     )
     parser.add_argument(
+        "--results-path",
+        type=Path,
+        default=None,
+        help=(
+            "JSONL audit output path. Defaults to scripts/explore/bulk_score_results.jsonl."
+        ),
+    )
+    parser.add_argument(
         "--require-v2-persistence",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Require metro_score_v2 and seo_facts rows before counting success (default: true).",
     )
+    parser.add_argument(
+        "--expected-project-ref",
+        default=None,
+        help=(
+            "Optional Supabase project ref guard. When set, NEXT_PUBLIC_SUPABASE_URL "
+            "must point at this project before scoring or refresh operations run."
+        ),
+    )
     args = parser.parse_args()
 
+    if args.resume and args.resume_v2:
+        parser.error("Use either --resume or --resume-v2, not both")
+    if args.retry_failed_from and (args.resume or args.resume_v2):
+        parser.error("--retry-failed-from cannot be combined with --resume or --resume-v2")
+
     if args.refresh_only:
-        refresh_matview_sql()
+        refresh_matview_sql(args.expected_project_ref)
         return
 
     if not args.preview and not args.apply:

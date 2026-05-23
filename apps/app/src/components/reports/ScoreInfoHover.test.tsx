@@ -58,12 +58,48 @@ describe("ScoreInfoHover", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
-  it("renders three color bands in tooltip", () => {
+  it("renders the shared WHI-10 score bands in tooltip", () => {
     render(<ScoreInfoHover scoreKey="local_competition" />);
     fireEvent.click(screen.getByRole("button"));
-    expect(screen.getByText("Hard")).toBeInTheDocument();
-    expect(screen.getByText("Moderate")).toBeInTheDocument();
-    expect(screen.getByText("Easy")).toBeInTheDocument();
+    expect(screen.getByText("Danger")).toBeInTheDocument();
+    expect(screen.getByText("0-39")).toBeInTheDocument();
+    expect(screen.getByText("Warning")).toBeInTheDocument();
+    expect(screen.getByText("40-59")).toBeInTheDocument();
+    expect(screen.getByText("Good")).toBeInTheDocument();
+    expect(screen.getByText("60-79")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("80-100")).toBeInTheDocument();
+  });
+
+  it("keeps score explainer bands aligned to shared score tone CSS variables", () => {
+    for (const explainer of Object.values(SCORE_EXPLAINERS)) {
+      expect(explainer.bands).toEqual([
+        {
+          label: "Danger",
+          range: "0-39",
+          color: "var(--score-danger)",
+          bg: "var(--score-danger-soft)",
+        },
+        {
+          label: "Warning",
+          range: "40-59",
+          color: "var(--score-warning)",
+          bg: "var(--score-warning-soft)",
+        },
+        {
+          label: "Good",
+          range: "60-79",
+          color: "var(--score-good)",
+          bg: "var(--score-good-soft)",
+        },
+        {
+          label: "High",
+          range: "80-100",
+          color: "var(--score-high)",
+          bg: "var(--score-high-soft)",
+        },
+      ]);
+    }
   });
 
   it("competition scores show inverse-direction language", () => {

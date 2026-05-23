@@ -63,6 +63,7 @@ venv/
 research_runs/
 research_graph.json
 scripts/explore/bulk_score_results.jsonl
+reports/scoring_audit/
 
 # docker
 docker-compose.override.yml

@@ -1,5 +1,154 @@
 # Active Work
 
+## Billing Hardening And Admin Issue Visibility
+
+Status: merge conflicts with `origin/main` resolved on `codex/billing-hardening-admin-visibility`; implementation and final checkout reservation race fix are already pushed.
+
+Goal: harden Stripe Checkout/Portal/Webhook behavior after the account billing rollout and give admins an in-app view of billing issues.
+
+Completed in this slice:
+
+- Added migration `023_billing_operations_hardening.sql` with checkout session reservations, billing operation event logging, webhook event ledgering, subscription event-order columns, RLS/service-role policies, and admin RPCs for listing/resolving billing events.
+- Added fail-open billing issue logging, checkout session reservation/reuse helpers, webhook event ledger helpers, and stale-event-aware subscription sync.
+- Hardened consumer Checkout, Portal, and Webhook routes with stable public error codes/messages, Stripe idempotency keys, same-plan checkout reservation race recovery, abandoned reservation cleanup, duplicate webhook handling, stale/same-second webhook skipping, and admin-visible issue records.
+- Added admin billing issue list/resolve API routes, `/billing` dashboard, severity/status filters, expandable issue detail, resolve action, and Billing sidebar navigation.
+- Updated canonical architecture, data-model, test-spec, and project context docs for the billing operations contract.
+
+Verified:
+
+- `npm --workspace apps/app test -- billing flags AccountSettingsClient` passed 36 tests.
+- `npm --workspace apps/admin test -- billing Sidebar` passed 8 tests after using the local dependency bridge in this worktree.
+- Targeted `npm --workspace apps/app run lint -- ...billing files...` passed.
+- Targeted `npm --workspace apps/admin run lint -- ...billing files... Sidebar...` passed.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_supabase_schema.py -q` passed 2 tests with the existing `asyncio_mode` warning.
+- `git diff --check` passed.
+- `npx docguard-cli guard` ran with network escalation and exited warn-only with existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.
+
+Noted but not fixed in this slice:
+
+- `npx --no-install tsc --noEmit` in `apps/app` now fails only on existing `src/lib/explore/load-explore-data.test.ts` `NODE_ENV` assignment errors.
+- `npx --no-install tsc --noEmit` in `apps/admin` still fails on existing `src/__tests__/proxy.test.ts` string pathname assertions.
+
+## WHI-10 Design System Alignment
+
+Status: PR open at `https://github.com/CoVariance-Foundry/whidby/pull/64` on `codex/whi-10-design-system-alignment`; local implementation, review gates, merge-conflict repair, and review-nit fixes passed. GitHub CI/review is still pending and WHI-10 should not be marked Done until the PR merges.
+
+Completed in this slice:
+
+- Adopted DM Serif Display as the consumer display serif while keeping numeric displays on mono and display tracking at `0`.
+- Added shared score tone thresholds/components across report breakdowns, report detail modal scores, strategy discovery result scores, Explore score text, service score rows, and report table score text.
+- Added shared `NextMoveCard`, `ScoreCircle`, and `ScoreBar` primitives with focused tests.
+- Removed local report `scoreColor` / `scoreBarBg` helpers from `BreakdownPanel` and `ReportDetailModal`.
+- Repaired the post-`main` merge Reports table conflict by preserving the new card-list layout and applying WHI-10 shared score tones/labels to it.
+- Removed synthetic serif weights in login/dashboard inline headings now that DM Serif Display is loaded at weight `400`.
+- Removed the redundant `strategyAccentForId` call in `withStrategyAccent`.
+- Reused `NextMoveCard` for the dashboard Explore/Multi-market destination cards where it matched the existing next-move pattern.
+- Updated canonical design-system architecture/test obligations for shared score visuals.
+
+Verified:
+
+- `npm --workspace apps/app test -- src/lib/design-tokens.test.ts src/lib/strategies/catalog.test.ts src/lib/explore/load-explore-data.test.ts src/components/NextMoveCard.test.tsx src/components/ScoreVisuals.test.tsx src/components/StateMultiselect.test.tsx src/components/reports/ScoreInfoHover.test.tsx src/components/reports/ReportsTable.test.tsx src/components/reports/ScoreBreakdownTabs.test.tsx src/components/explore/ExplorePageClient.test.tsx 'src/app/(protected)/strategies/[id]/StrategyPageClient.test.tsx'` passed 84 tests before the `main` merge; rerun the focused reports tests after any further conflict repair.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings.
+- `git diff --check origin/main...HEAD` passed before merging latest `main`.
+- `npm run runtime:check` passed service-role checks, but local Supabase publishable keys are invalid.
+- Playwright smoke rendered `/login`; protected routes redirected to `/login?next=...`.
+
+Next:
+
+- Push the merge-conflict repair, wait for GitHub checks/review, then merge PR #64.
+- Mark `WHI-10` Done only after the PR merges.
+- Authenticated visual QA of protected routes remains blocked locally until publishable Supabase keys are refreshed.
+
+## WHI-9 Competitor Intel
+
+Status: implemented locally on `codex/whi-9-competitor-intel`; focused verification complete, browser/auth QA pending.
+
+Linear: `WHI-9`.
+
+Completed in this slice:
+
+- Added protected `/competitor-intel` as a direct-link Plus/Pro dossier route with upgrade, ready, running, aggregate-only, dossier, and error states.
+- Added Next BFF routes and FastAPI routes for `GET /api/competitor-intel` and `POST /api/competitor-intel/runs`.
+- Added `organic_competitor_facts` and `competitor_intel_runs`, reused `local_pack_listing_facts`, and persisted competitor-level facts when report payloads carry them.
+- Added atomic multi-unit quota RPCs so Competitor Intel consumes/refunds two `fresh_report` units without two separate one-scan calls; refunds are service-role-only.
+- Updated canonical docs and focused tests for persistence, schema, API gates, and frontend states.
+
+Next:
+
+- Add the live DataForSEO collector/worker that turns a `ready_to_run` target into newly persisted competitor facts. This slice refuses and refunds runs when no durable aggregate/dossier can be materialized.
+- Run browser/visual QA once local auth/API wiring is available.
+- Add strategy/report entrypoint CTAs after the route is validated behind rollout controls.
+## Proto -> Production Convergence: Epic 6 Reports Page
+
+Status: merged to `main` through PR #59. Follow-up visual QA with authenticated report data remains useful.
+
+Linear: `WHI-7` with first child `WHI-32` in progress. Remaining child issues are `WHI-33` strategy guidance refinement, `WHI-34` Next Moves refinement, and `WHI-35` report detail header/export/delete polish.
+
+Completed in the first slice:
+
+- Opened Epic 6 and `WHI-32` in Linear.
+- Updated `/reports` header copy to match the prototype history framing.
+- Reworked the reports list into prototype-style summary stats, search, sort, empty state, and card-list rows.
+- Kept existing `/reports?open=<report_id>` modal behavior for dashboard/explore deep links.
+- Added `/reports/[reportId]` as the page-based report detail entry point used by list rows, including headline score band, score tabs, strategy guidance when present, safe Next Moves, and keyword expansion.
+
+Verified:
+
+- `npm ci` completed for this worktree.
+- `npm --workspace apps/app test -- ReportsTable` passed.
+- `cd apps/app && npx --no-install tsc --noEmit` passed.
+- `cd apps/app && npx --no-install eslint 'src/app/(protected)/reports/ReportsPageClient.tsx' 'src/components/reports/ReportsTable.tsx' 'src/app/(protected)/reports/[reportId]/page.tsx'` passed.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+- `git diff --check` passed.
+- `npx docguard-cli guard` ran after network escalation; it exited warn-only with existing repository warnings around traceability, freshness, TODO tracking, and unrelated config/doc drift.
+- Local app server is running at `http://localhost:3002`; Playwright navigation to `/reports` redirected to `/login` as expected for the protected route. The browser console only showed the existing missing `/favicon.ico`; server logs also reported missing Supabase env vars, so authenticated report-page visual QA is still blocked in this worktree.
+
+Next:
+
+- Use an authenticated local session or preview to visually verify `/reports` and `/reports/[reportId]` with real report data.
+- Continue `WHI-33`/`WHI-34`/`WHI-35` polish on the new detail page rather than the legacy modal.
+## Proto -> Production Convergence: Epic 7 Account & Settings
+
+Status: implemented on `codex/whi-8-account-settings-epic`; ready for PR/review closeout.
+
+Linear: `WHI-8` with children `WHI-36`, `WHI-37`, and `WHI-38`.
+
+Goal: align `/settings` with the account proto while preserving existing Stripe Checkout/Portal billing actions, Supabase password reset/update flow, navbar profile dropdown behavior, admin dashboard link, and sign-out.
+
+Completed in this slice:
+
+- Reconciled the already-merged Account & Billing implementation with the newer Navbar app frame.
+- Added profile metadata, saved reports preview, password-management entry, and session/sign-out sections to `/settings` without changing billing semantics.
+- Server-loads the saved reports preview through the existing `/api/agent/reports?limit=5` route with cookie forwarding, then opens rows through `/reports?open=<report_id>`.
+- Added explicit navbar admin visibility from `entitlement.member_role === "admin"`; fallback/non-admin users no longer see the external Admin dashboard link.
+- Preserved Stripe Checkout/Portal actions, billing return banners, Supabase password reset/update, and Supabase sign-out behavior.
+
+Verified:
+
+- `npm --workspace apps/app test -- AccountSettingsClient settings/page Navbar` passed 21 tests.
+- `npx --no-install tsc --noEmit` passed from `apps/app`.
+- `npm --workspace apps/app run lint` passed with two pre-existing warnings in `apps/app/e2e/autocomplete-scoring-flow.spec.ts` and `apps/app/src/app/(protected)/niche-finder/page.test.tsx`.
+
+## Proto -> Production Convergence: Epic 5 Multi-market
+
+Status: started on `codex/whi-6-multi-market-page`.
+
+Linear: `WHI-6` with child issues `WHI-27` through `WHI-31`. `WHI-6`, `WHI-27`, `WHI-28`, `WHI-29`, and `WHI-31` are in progress; `WHI-30` remains the deeper backend follow-up.
+
+Completed in this slice:
+
+- Replaced the protected `/agency` placeholder with a configure → confirm → complete Multi-market batch flow.
+- Added launch-safe strategy lens selection, population/state criteria, service selection, target caps, target preview, and completion state.
+- Ported a shared `StateMultiselect` component and wired Explore filters to use it.
+- Connected target review to `apps/app /api/strategies/discover` and queued batches to `apps/app /api/strategies/runs` fresh mode with explicit targets.
+- Documented the current quota assumption: one fresh-report scan per queued batch through the existing strategy-run quota boundary.
+
+Next:
+
+- Implement WHI-30 backend depth beyond queue creation: target-level processing progress, run item/report linkage, and surfaced run status once FastAPI has durable fanout semantics.
+- Decide whether batch cost should remain one fresh-report scan per batch or become target-scaled before changing schema/RPCs.
+
 ## Bulk Scoring Data Buildout
 
 Status: implemented on `codex/bulk-scoring-followups`; draft PR open.
@@ -91,7 +240,7 @@ Current blockers:
 
 ## CI/CD AI Review and Visual QA
 
-- Account & Billing screen spec is active on `codex/accounts-and-billing`.
+- Account & Billing screen implementation exists on `main`; Epic 7 is now reconciling it with the proto and the Navbar app frame.
 - Spec: `specs/015-account-billing-screen/spec.md`
 - Account/settings is implemented; future app-frame work should use the navbar profile dropdown instead of the removed bottom-sidebar user menu.
 
