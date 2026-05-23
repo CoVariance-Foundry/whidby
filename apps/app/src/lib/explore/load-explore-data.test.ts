@@ -17,31 +17,28 @@ import {
 import { loadExploreData } from "./load-explore-data";
 
 const originalFetch = global.fetch;
+const mutableEnv = process.env as Record<string, string | undefined>;
 const originalNodeEnv = process.env.NODE_ENV;
 const originalVercelEnv = process.env.VERCEL_ENV;
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
+function setEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete mutableEnv[name];
+  } else {
+    mutableEnv[name] = value;
+  }
+}
+
 afterEach(() => {
   global.fetch = originalFetch;
-  delete process.env.WIDBY_APP_BASE_URL;
-  delete process.env.NEXT_PUBLIC_APP_URL;
-  delete process.env.NEXT_PUBLIC_SITE_URL;
-  delete process.env.VERCEL_URL;
-  if (originalApiUrl === undefined) {
-    delete process.env.NEXT_PUBLIC_API_URL;
-  } else {
-    process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
-  }
-  if (originalNodeEnv === undefined) {
-    delete process.env.NODE_ENV;
-  } else {
-    process.env.NODE_ENV = originalNodeEnv;
-  }
-  if (originalVercelEnv === undefined) {
-    delete process.env.VERCEL_ENV;
-  } else {
-    process.env.VERCEL_ENV = originalVercelEnv;
-  }
+  setEnv("WIDBY_APP_BASE_URL", undefined);
+  setEnv("NEXT_PUBLIC_APP_URL", undefined);
+  setEnv("NEXT_PUBLIC_SITE_URL", undefined);
+  setEnv("VERCEL_URL", undefined);
+  setEnv("NEXT_PUBLIC_API_URL", originalApiUrl);
+  setEnv("NODE_ENV", originalNodeEnv);
+  setEnv("VERCEL_ENV", originalVercelEnv);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -100,7 +97,7 @@ describe("loadExploreData", () => {
       }),
     );
     global.fetch = fetchMock;
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test/";
+    setEnv("NEXT_PUBLIC_API_URL", "https://api.example.test/");
 
     await loadExploreData(
       { service: "roofing", states: ["AZ", "CO"], limit: 25 },
@@ -131,8 +128,8 @@ describe("loadExploreData", () => {
   });
 
   it("throws loudly when production server rendering is missing NEXT_PUBLIC_API_URL", async () => {
-    process.env.NODE_ENV = "production";
-    delete process.env.NEXT_PUBLIC_API_URL;
+    setEnv("NODE_ENV", "production");
+    setEnv("NEXT_PUBLIC_API_URL", undefined);
     global.fetch = vi.fn();
 
     await expect(
@@ -144,8 +141,8 @@ describe("loadExploreData", () => {
   });
 
   it("throws loudly when Vercel preview server rendering is missing NEXT_PUBLIC_API_URL", async () => {
-    process.env.VERCEL_ENV = "preview";
-    delete process.env.NEXT_PUBLIC_API_URL;
+    setEnv("VERCEL_ENV", "preview");
+    setEnv("NEXT_PUBLIC_API_URL", undefined);
     global.fetch = vi.fn();
 
     await expect(
@@ -157,7 +154,7 @@ describe("loadExploreData", () => {
   });
 
   it("throws when the server API base resolves to the app origin", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://app.example.test";
+    setEnv("NEXT_PUBLIC_API_URL", "https://app.example.test");
     global.fetch = vi.fn();
 
     await expect(
@@ -217,7 +214,7 @@ describe("loadExploreData", () => {
         { status: 200, headers: { "content-type": "application/json" } },
       ),
     );
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
+    setEnv("NEXT_PUBLIC_API_URL", "https://api.example.test");
 
     const data = await loadExploreData(
       { service: "roofing" },
@@ -261,7 +258,7 @@ describe("loadExploreData", () => {
 
   it("throws an HTTP-specific error for non-ok proxy responses", async () => {
     global.fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 502 }));
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
+    setEnv("NEXT_PUBLIC_API_URL", "https://api.example.test");
 
     await expect(
       loadExploreData({}, { app_base_url: "https://app.example.test" }),
@@ -272,7 +269,7 @@ describe("loadExploreData", () => {
 
   it("throws when the upstream request fails before a response is received", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("connection refused"));
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.test";
+    setEnv("NEXT_PUBLIC_API_URL", "https://api.example.test");
 
     await expect(
       loadExploreData({}, { app_base_url: "https://app.example.test" }),

@@ -82,6 +82,7 @@ cd apps/app && npx vitest run  # Once tests are added
 Currently uses:
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — auth
+- `WIDBY_APP_BASE_URL` — production self-fetch base URL for SSR routes; set to `https://app.thewidby.com`
 - `NEXT_PUBLIC_APP_FRONTEND_URL` — auth redirect origin
 - `NEXT_PUBLIC_API_URL` — FastAPI bridge base (required for scoring + places autocomplete)
 - `NEXT_PUBLIC_NICHE_DRY_RUN` — dev/E2E override
@@ -89,6 +90,8 @@ Currently uses:
 Note: `MAPBOX_ACCESS_TOKEN` is set on the FastAPI side (Render env), not the frontend. The frontend proxies through `/api/agent/places/suggest`.
 
 Operational note (2026-04-22): Render API env has been updated with `MAPBOX_ACCESS_TOKEN`; consumer `/niche-finder` autocomplete now returns small-city suggestions such as Tuskegee, AL and Macon, GA.
+
+Operational note (2026-05-22): Production `/reports` and the dashboard reports summary failed with `HTTP 401` after Supabase key rotation/env drift. The fix was on Vercel project `whidby-agent` Production, not the marketing `whidby` project: refresh `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, add `WIDBY_APP_BASE_URL=https://app.thewidby.com`, then redeploy. Without `WIDBY_APP_BASE_URL`, SSR self-fetches can prefer `VERCEL_URL`, hit a protected deployment URL, and receive Vercel SSO `401` before `/api/agent/reports` runs.
 
 ## Auth rate limits
 
@@ -102,7 +105,7 @@ Two layers of protection on the login form:
 
 ## Design conventions
 
-- **Light academic theme** — Source Serif 4 for headings, Inter for body, JetBrains Mono for data/code. Respect the visual contrast with admin's dark theme; these are intentionally separate design systems.
+- **Light academic theme** — DM Serif Display for headings and italic metadata, Inter for body/UI, JetBrains Mono for data/code and numeric displays. Keep display letter spacing at `0` (no negative tracking). Respect the visual contrast with admin's dark theme; these are intentionally separate design systems.
 - **Navbar-first app frame** — protected app routes inherit sticky `Navbar` and minimal `Footer` from `(protected)/layout.tsx`. Do not reintroduce page-local `Sidebar`/`Topbar` shells; put route-level actions in page headers or client surfaces.
 - **Display-layer first** — pages should feel fast even before backend wiring lands. Use skeletons / sample data where appropriate, but label mock state clearly in component-internal comments.
 - **Shared Supabase auth** — same users auth against both apps. Sign-out on one app signs out the other via shared cookies.

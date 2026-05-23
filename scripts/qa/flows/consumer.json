@@ -34,6 +34,13 @@
       "requiresAuth": true,
       "expectedPath": "/niche-finder",
       "capture": "page"
+    },
+    {
+      "name": "competitor-intel",
+      "path": "/competitor-intel?city=Boise&state=ID&service=roofing",
+      "requiresAuth": true,
+      "expectedPath": "/competitor-intel",
+      "capture": "page"
     }
   ]
 }

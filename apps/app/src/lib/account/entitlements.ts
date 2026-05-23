@@ -82,15 +82,56 @@ export async function consumeReportQuota(
   return data === true;
 }
 
+export async function consumeReportQuotaUnits(
+  supabase: SupabaseClient,
+  accountId: string,
+  units: number,
+): Promise<boolean> {
+  const normalizedUnits = normalizeQuotaUnits(units);
+  const { data, error } = await supabase.rpc("consume_usage_quota", {
+    p_account_id: accountId,
+    p_metric_key: "fresh_report",
+    p_units: normalizedUnits,
+  });
+  if (error) {
+    throw new EntitlementError(
+      "Unable to consume report quota.",
+      500,
+      "quota_unavailable",
+    );
+  }
+  return data === true;
+}
+
 export async function refundReportQuota(
   supabase: SupabaseClient,
   accountId: string,
 ): Promise<void> {
-  const { error } = await supabase.rpc("refund_report_quota", {
+  const { data, error } = await supabase.rpc("refund_report_quota", {
     p_account_id: accountId,
   });
   if (error) {
     console.warn("[entitlements] quota refund failed", error.message);
+  } else if (data !== true) {
+    console.warn("[entitlements] quota refund skipped");
+  }
+}
+
+export async function refundReportQuotaUnits(
+  supabase: SupabaseClient,
+  accountId: string,
+  units: number,
+): Promise<void> {
+  const normalizedUnits = normalizeQuotaUnits(units);
+  const { data, error } = await supabase.rpc("refund_usage_quota", {
+    p_account_id: accountId,
+    p_metric_key: "fresh_report",
+    p_units: normalizedUnits,
+  });
+  if (error) {
+    console.warn("[entitlements] quota refund failed", error.message);
+  } else if (data !== true) {
+    console.warn("[entitlements] quota refund skipped");
   }
 }
 
@@ -106,4 +147,9 @@ export class EntitlementError extends Error {
 
 function normalizePlanKey(value: unknown): PlanKey {
   return value === "plus" || value === "pro" ? value : "free";
+}
+
+function normalizeQuotaUnits(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.trunc(value));
 }

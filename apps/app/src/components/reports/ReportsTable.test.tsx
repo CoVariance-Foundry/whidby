@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, describe, it, expect } from "vitest";
 import ReportsTable, { type TableRow } from "./ReportsTable";
 
@@ -39,5 +39,15 @@ describe("ReportsTable", () => {
   it("shows empty state when rows is empty", () => {
     render(<ReportsTable rows={[]} />);
     expect(screen.getByText(/no reports match/i)).toBeInTheDocument();
+  });
+
+  it("keeps score info controls outside report links", () => {
+    render(<ReportsTable rows={[rows[0]]} getRowHref={(id) => `/reports/${id}`} />);
+
+    const infoButton = screen.getByRole("button", { name: /what is opportunity/i });
+    expect(infoButton.closest("a")).toBeNull();
+    fireEvent.click(infoButton);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /open report for roofing/i })).toHaveLength(1);
   });
 });

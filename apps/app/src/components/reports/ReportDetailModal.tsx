@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
+import { scoreToneForValue } from "@/lib/design-tokens";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
+import { ScoreBar, ScoreCircle } from "@/components/ScoreVisuals";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
@@ -23,18 +25,6 @@ function formatDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function scoreColor(score: number): string {
-  if (score >= 75) return "#0f7a57";
-  if (score >= 50) return "#a05a00";
-  return "#a3292d";
-}
-
-function scoreBarBg(score: number): string {
-  if (score >= 75) return "#dfede6";
-  if (score >= 50) return "#f6ebd4";
-  return "#f3e1e1";
 }
 
 function archetypeLabel(id?: string): { label: string; glyph: string } {
@@ -97,6 +87,8 @@ function Pill({ children, style }: { children: React.ReactNode; style?: React.CS
 
 function ScoreCell({ label, value, scoreKey }: { label: string; value: number | undefined; scoreKey?: ScoreKey }) {
   const v = value ?? 0;
+  const tone = scoreToneForValue(value);
+
   return (
     <div style={{ minWidth: 0 }}>
       <div
@@ -115,34 +107,18 @@ function ScoreCell({ label, value, scoreKey }: { label: string; value: number | 
       </div>
       <div
         style={{
-          fontFamily: "var(--serif)",
+          fontFamily: "var(--mono)",
           fontVariantNumeric: "tabular-nums",
-          fontWeight: 600,
+          fontWeight: 800,
           fontSize: 22,
-          letterSpacing: "-0.4px",
-          color: scoreColor(v),
+          color: tone.text,
           lineHeight: 1,
         }}
       >
         {value != null ? Math.round(v) : "—"}
       </div>
-      <div
-        style={{
-          marginTop: 6,
-          height: 3,
-          background: scoreBarBg(v),
-          borderRadius: 2,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${Math.min(v, 100)}%`,
-            background: scoreColor(v),
-            borderRadius: 2,
-          }}
-        />
+      <div style={{ marginTop: 6 }}>
+        <ScoreBar value={value} label={label} hideLabel hideValue />
       </div>
     </div>
   );
@@ -410,7 +386,6 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
   }, [onClose]);
 
   const keywords = report.keyword_expansion?.expanded_keywords;
-  const meta = report.meta;
 
   return createPortal(
     <div
@@ -494,7 +469,7 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
               fontFamily: "var(--serif)",
               fontSize: 24,
               fontWeight: 600,
-              letterSpacing: "-0.3px",
+              letterSpacing: 0,
               color: "var(--ink)",
               margin: 0,
               paddingRight: 40,
@@ -631,37 +606,18 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
                 <ScoreInfoHover scoreKey="opportunity" />
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
-                <span
-                  style={{
-                    fontFamily: "var(--serif)",
-                    fontVariantNumeric: "tabular-nums",
-                    fontWeight: 600,
-                    fontSize: 48,
-                    lineHeight: 1,
-                    letterSpacing: "-1px",
-                    color: scoreColor(report.metros[0].scores.opportunity),
-                  }}
-                >
-                  {Math.round(report.metros[0].scores.opportunity)}
-                </span>
-                <div style={{ width: 120, paddingBottom: 8 }}>
-                  <div
-                    style={{
-                      height: 4,
-                      background: scoreBarBg(report.metros[0].scores.opportunity),
-                      borderRadius: 2,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${Math.min(report.metros[0].scores.opportunity, 100)}%`,
-                        background: scoreColor(report.metros[0].scores.opportunity),
-                        borderRadius: 2,
-                      }}
-                    />
-                  </div>
+                <ScoreCircle
+                  value={report.metros[0].scores.opportunity}
+                  label="Top opportunity score"
+                  size={78}
+                />
+                <div style={{ width: 132, paddingBottom: 10 }}>
+                  <ScoreBar
+                    value={report.metros[0].scores.opportunity}
+                    label="Top opportunity score"
+                    hideLabel
+                    hideValue
+                  />
                 </div>
               </div>
             </div>
@@ -707,69 +663,6 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
             </section>
           )}
 
-          {/* Meta */}
-          {meta && Object.keys(meta).length > 0 && (
-            <details
-              style={{
-                border: "1px solid var(--rule)",
-                borderRadius: 10,
-                background: "var(--card)",
-              }}
-            >
-              <summary
-                style={{
-                  padding: "10px 14px",
-                  fontFamily: "var(--serif)",
-                  fontStyle: "italic",
-                  fontSize: 12,
-                  color: "var(--ink-3)",
-                  cursor: "pointer",
-                  listStyle: "none",
-                }}
-              >
-                Meta &amp; cost details
-              </summary>
-              <div
-                style={{
-                  padding: "0 14px 14px",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "10px 16px",
-                }}
-              >
-                {meta.processing_time_seconds != null && (
-                  <div>
-                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
-                      Processing time
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
-                      {Number(meta.processing_time_seconds).toFixed(1)}s
-                    </div>
-                  </div>
-                )}
-                {meta.total_api_calls != null && (
-                  <div>
-                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
-                      API calls
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
-                      {String(meta.total_api_calls)}
-                    </div>
-                  </div>
-                )}
-                {meta.total_cost_usd != null && (
-                  <div>
-                    <div style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 11, color: "var(--ink-3)" }}>
-                      Cost
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--ink)" }}>
-                      ${Number(meta.total_cost_usd).toFixed(4)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </details>
-          )}
         </div>
       </div>
     </div>,
