@@ -11,6 +11,18 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: vi.fn(() => ({
     rpc: vi.fn(),
@@ -97,5 +109,34 @@ describe("ReportDetailModal", () => {
     expect(screen.getByRole("button", { name: /delete report/i })).toBeInTheDocument();
     expect(screen.queryByText(/keyword expansion/i)).not.toBeInTheDocument();
     expect(screen.queryByText("emergency plumber near me")).not.toBeInTheDocument();
+  });
+
+  it("links the top market to Competitor Intel with report context", () => {
+    render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
+
+    const link = screen.getByRole("link", { name: /run competitor intel/i });
+    const href = link.getAttribute("href");
+    expect(href).toBeTruthy();
+
+    const url = new URL(href ?? "", "http://localhost");
+    expect(url.pathname).toBe("/competitor-intel");
+    expect(url.searchParams.get("report_id")).toBe("rpt_123");
+    expect(url.searchParams.get("city")).toBe("Phoenix-Mesa-Chandler, AZ");
+    expect(url.searchParams.get("service")).toBe("plumber");
+    expect(url.searchParams.get("cbsa_code")).toBe("38060");
+  });
+
+  it("links secondary next moves only to launch-ready strategies", () => {
+    render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByRole("link", { name: /validate rank ease/i })).toHaveAttribute(
+      "href",
+      "/strategies/easy_win",
+    );
+    expect(screen.getByRole("link", { name: /find lookalike cities/i })).toHaveAttribute(
+      "href",
+      "/strategies/expand_conquer",
+    );
+    expect(screen.queryByRole("link", { name: /check economics/i })).not.toBeInTheDocument();
   });
 });
