@@ -151,6 +151,12 @@ Linear: `WHI-99`. This is the required source-of-truth experiment contract befor
 | AI resilience | AIO presence, PAA density, intent mix, and persisted V2 AI resilience coverage |
 | App visibility | V2 score existence, benchmark confidence metadata, Explore visible row, and Explore V2 preference |
 
+### Benchmark Data Acquisition
+
+The post-pilot acquisition slice is explicit opt-in only. `scripts.benchmarks.run_pilot --collect-organic-telemetry` enriches the top non-aggregator organic SERP targets with DataForSEO Backlinks Summary using `rank_scale=one_hundred` plus Lighthouse data, writing nullable `avg_top5_da`, `avg_top5_lighthouse`, coverage, and confidence fields to `seo_facts`. `--collect-review-velocity` enriches the top local-pack listings through DataForSEO Google Reviews using `cid` or `place_id` when available, writing nullable `top3_review_velocity_avg`.
+
+Preflight mode must skip both acquisition add-ons even when their flags are present. These flags are for bounded backfill/acquisition runs after read-only audits identify missing DA/Lighthouse, review velocity, or undersampled benchmark cells; they do not authorize broader paid expansion or benchmark recompute until audit gates pass.
+
 ### CLI Commands
 
 Run from the repo root after `npm run env:sync:local` and `npm run runtime:check`. All apply commands use `--require-dfs`, `--require-v2-persistence`, `--expected-project-ref eoajvifhbmqmoluiokcj`, and production API `https://whidby-1.onrender.com`.
@@ -193,6 +199,12 @@ BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m script
 python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajvifhbmqmoluiokcj
 ```
 
+Run bounded benchmark acquisition only after the read-only audits identify the smallest missing cells:
+
+```bash
+python -m scripts.benchmarks.run_pilot --sample-mode pilot --limit-metros 8 --niche "roofing" --collect-organic-telemetry --collect-review-velocity --organic-telemetry-limit 5 --review-depth 10
+```
+
 ### Cost And Stop Rules
 
 | Rule | Stop Condition |
@@ -203,6 +215,7 @@ python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajv
 | Concurrency | Canary concurrency is `1`; pilot concurrency is `2`; raising above `3` requires explicit operator approval |
 | API health | Stop the current bucket when API success for attempted rows drops below `80%` after at least four attempts |
 | Persistence | Stop immediately on schema failure, missing required table/column, V2 persistence failure, or Explore refresh failure |
+| Acquisition flags | `--collect-organic-telemetry` and `--collect-review-velocity` are bounded backfill tools only; preflight skips them, and any broad paid run still requires an approved sample frame |
 | Paid spend | Do not continue to the next population class if the prior class produced more than `25%` `failed` or `partial_failure` rows |
 | Residual DFS rows | Ambiguous, invalid, and no-match DFS residuals are excluded until `WHI-112`, `WHI-113`, or `WHI-114` explicitly approves a bounded batch |
 
@@ -237,6 +250,15 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
 | Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
 | Production target identity | Bulk scoring requests preserve Supabase metro identity through `/api/niches/score` so `metro_scores`, `metro_score_v2`, `seo_facts`, and Explore rows share the same CBSA | `tests/scripts/test_bulk_score.py`, `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py` |
+
+## Benchmark Acquisition Tests
+
+| Coverage | Expected | Tests |
+|----------|----------|-------|
+| Organic target extraction | SERP parsing excludes known aggregators and missing URLs before selecting organic telemetry targets | `tests/scripts/test_benchmark_serp_parsing.py` |
+| DA/Lighthouse parsing | Backlinks Summary and Lighthouse response shapes produce nullable top-5 telemetry and coverage fields | `tests/scripts/test_benchmark_serp_parsing.py` |
+| Review velocity acquisition | Google Reviews can target local-pack `cid` or `place_id` identifiers and request newest reviews for top-3 velocity | `tests/scripts/test_benchmark_serp_parsing.py`, `tests/unit/test_dataforseo_client.py` |
+| Sampling guardrails | Benchmark pilot sampling still rejects invalid modes, population classes, and metro limits before paid calls | `tests/scripts/test_benchmark_sampling.py` |
 
 ## Metro DFS Readiness Tests
 
@@ -408,3 +430,4 @@ npm run lint
 | 1.7.3 | 2026-05-23 | WHI-99 scoring coverage experiment | Added source-of-truth sample frame, CLI commands, stop rules, and classification thresholds |
 | 1.7.4 | 2026-05-23 | WHI-101 DFS residual review path | Added residual classification, approval, and seed-exclusion policy |
 | 1.7.5 | 2026-05-23 | WHI-102 canary persistence gate | Added production target identity preservation as a canary/pilot test obligation |
+| 1.7.6 | 2026-05-23 | WHI-102 acquisition backfill gate | Added explicit opt-in benchmark acquisition flags and tests for top-5 organic telemetry plus top-3 review velocity |

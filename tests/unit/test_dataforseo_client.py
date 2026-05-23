@@ -138,6 +138,33 @@ class TestStandardQueue:
 
         assert result.status == "ok"
 
+    @pytest.mark.asyncio
+    async def test_google_reviews_can_target_place_id_and_sort_newest(self, mocker):
+        client = _make_client()
+        post = mocker.patch.object(
+            client,
+            "_post",
+            side_effect=[SERP_TASK_POST_RESPONSE, SERP_TASK_GET_RESPONSE],
+        )
+        mocker.patch("asyncio.sleep", return_value=None)
+
+        result = await client.google_reviews(
+            location_code=1012873,
+            place_id="place-123",
+            depth=10,
+            sort_by="newest",
+        )
+
+        assert result.status == "ok"
+        assert post.call_args_list[0].args[1] == [
+            {
+                "location_code": 1012873,
+                "depth": 10,
+                "place_id": "place-123",
+                "sort_by": "newest",
+            }
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Live endpoints
@@ -155,6 +182,18 @@ class TestLiveEndpoints:
         assert result.status == "ok"
         assert result.data is not None
         assert result.cost > 0
+
+    @pytest.mark.asyncio
+    async def test_backlinks_summary_can_request_one_hundred_rank_scale(self, mocker):
+        client = _make_client()
+        post = mocker.patch.object(client, "_post", return_value=BUSINESS_LISTINGS_RESPONSE)
+
+        result = await client.backlinks_summary("example.com", rank_scale="one_hundred")
+
+        assert result.status == "ok"
+        assert post.call_args_list[0].args[1] == [
+            {"target": "example.com", "rank_scale": "one_hundred"}
+        ]
 
 
 # ---------------------------------------------------------------------------

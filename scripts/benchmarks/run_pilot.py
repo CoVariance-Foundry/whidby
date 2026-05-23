@@ -11,8 +11,9 @@ Per (niche, metro):
   2. DataForSEO keyword_volume (batched, one task per metro)
   3. DataForSEO SERP per top 2 keywords (extract AIO, local pack, aggregator,
      local biz, featured snippet, PAA, ads, LSA flags)
-  4. (Pilot skips GBP + reviews — added in full run)
-  5. Insert seo_facts rows via Supabase PostgREST
+  4. Optional top-5 organic telemetry via backlinks summary + Lighthouse
+  5. Optional top-3 local review velocity via Google Reviews
+  6. Insert seo_facts rows via Supabase PostgREST
 
 Usage:
   cd whidby
@@ -43,6 +44,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.clients.dataforseo import DataForSEOClient  # noqa: E402
 from src.clients.llm.client import LLMClient  # noqa: E402
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
+from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("benchmark_runner")
@@ -132,6 +134,12 @@ class VolumeCollectionResult:
     failures: list[VolumeAttemptFailure]
 
 
+@dataclass(frozen=True)
+class OrganicTelemetryResult:
+    fields: dict[str, Any]
+    failures: list[str]
+
+
 BENCHMARK_PAID_POPULATION_CLASSES = {
     "mega_5m_plus",
     "metro_1m_5m",
@@ -191,6 +199,34 @@ def parse_args() -> argparse.Namespace:
         "--preflight-only",
         action="store_true",
         help="Validate keyword-volume coverage without SERP pulls or Supabase writes.",
+    )
+    parser.add_argument(
+        "--collect-organic-telemetry",
+        action="store_true",
+        help=(
+            "Opt in to paid top-5 organic DA/Lighthouse collection for benchmark "
+            "facts. Uses SERP organic URLs, backlinks summary, and Lighthouse."
+        ),
+    )
+    parser.add_argument(
+        "--collect-review-velocity",
+        action="store_true",
+        help=(
+            "Opt in to paid Google Reviews calls for top-3 local pack review "
+            "velocity."
+        ),
+    )
+    parser.add_argument(
+        "--organic-telemetry-limit",
+        type=positive_int,
+        default=5,
+        help="Maximum non-aggregator organic result URLs to enrich per pair (default: 5).",
+    )
+    parser.add_argument(
+        "--review-depth",
+        type=positive_int,
+        default=10,
+        help="Google Reviews depth per top-3 local pack item (default: 10).",
     )
     return parser.parse_args()
 
@@ -360,8 +396,10 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
         "ads_present": False,
         "lsa_present": False,
         "top_local_pack_items": [],
+        "organic_targets": [],
         "top3_review_count_min": None,
         "top3_review_count_avg": None,
+        "top3_review_velocity_avg": None,
         "top3_rating_avg": None,
     }
     if not serp_data:
@@ -400,12 +438,22 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
             flags["lsa_present"] = True
         elif t == "organic":
             org_position += 1
+            url = item.get("url") or ""
+            domain = extract_domain(url)
             if org_position <= 10:
-                domain = extract_domain(item.get("url", ""))
+                if not domain:
+                    continue
                 if domain in KNOWN_AGGREGATORS:
                     flags["aggregator_count_top10"] += 1
                 else:
                     flags["local_biz_count_top10"] += 1
+                    if url and domain and len(flags["organic_targets"]) < 10:
+                        flags["organic_targets"].append({
+                            "url": url,
+                            "domain": domain,
+                            "title": item.get("title"),
+                            "rank_absolute": item.get("rank_absolute"),
+                        })
     review_counts = [
         item["rating_count"]
         for item in flags["top_local_pack_items"][:3]
@@ -422,6 +470,179 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
     if ratings:
         flags["top3_rating_avg"] = round(sum(ratings) / len(ratings), 2)
     return flags
+
+
+def _walk_dicts(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for nested in value.values():
+            yield from _walk_dicts(nested)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_dicts(item)
+
+
+def _numeric(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_backlinks_domain_authority(data: Any) -> float | None:
+    """Extract a DataForSEO rank-like authority value from backlinks summary data."""
+    for key in ("domain_rank", "domain_from_rank", "page_from_rank"):
+        for row in _walk_dicts(data):
+            value = _numeric(row.get(key))
+            if value is not None:
+                return value
+    for row in _walk_dicts(data):
+        value = _numeric(row.get("rank"))
+        if value is not None:
+            return value
+    return None
+
+
+def parse_lighthouse_performance_score(data: Any) -> float | None:
+    """Extract a 0-100 Lighthouse performance score from DataForSEO data."""
+    for row in _walk_dicts(data):
+        categories = row.get("categories")
+        if isinstance(categories, dict):
+            performance = categories.get("performance")
+            if isinstance(performance, dict):
+                score = _numeric(performance.get("score"))
+                if score is not None:
+                    return round(score * 100 if score <= 1 else score, 4)
+
+        for key in ("performance_score", "performance"):
+            score = _numeric(row.get(key))
+            if score is not None:
+                return round(score * 100 if score <= 1 else score, 4)
+    return None
+
+
+def top5_organic_confidence(da_coverage: float, lighthouse_coverage: float) -> str:
+    if da_coverage >= 0.8 and lighthouse_coverage >= 0.8:
+        return "high"
+    if da_coverage >= 0.6 or lighthouse_coverage >= 0.6:
+        return "medium"
+    if da_coverage > 0 or lighthouse_coverage > 0:
+        return "low"
+    return "missing"
+
+
+def propagate_head_feature(
+    serp_features_by_kw: dict[str, dict[str, Any]],
+    head_features: dict[str, Any],
+    key: str,
+    value: Any,
+) -> None:
+    """Apply a metro-level head SERP feature to every keyword fact row."""
+    head_features[key] = value
+    for features in serp_features_by_kw.values():
+        features[key] = value
+
+
+async def collect_organic_telemetry(
+    dfs: DataForSEOClient,
+    organic_targets: list[dict[str, Any]],
+    *,
+    limit: int = 5,
+) -> OrganicTelemetryResult:
+    """Collect paid top-5 DA/Lighthouse telemetry for one market pair."""
+    selected = organic_targets[: min(limit, 5)]
+    da_values: list[float] = []
+    lighthouse_values: list[float] = []
+    failures: list[str] = []
+
+    for target in selected:
+        domain = target.get("domain")
+        url = target.get("url")
+        if domain:
+            response = await dfs.backlinks_summary(str(domain), rank_scale="one_hundred")
+            if response.status == "ok":
+                da = parse_backlinks_domain_authority(response.data)
+                if da is not None:
+                    da_values.append(da)
+                else:
+                    failures.append(f"{domain}:backlinks_missing_rank")
+            else:
+                failures.append(f"{domain}:backlinks_failed:{response.error or 'error'}")
+        if url:
+            response = await dfs.lighthouse(str(url))
+            if response.status == "ok":
+                score = parse_lighthouse_performance_score(response.data)
+                if score is not None:
+                    lighthouse_values.append(score)
+                else:
+                    failures.append(f"{url}:lighthouse_missing_performance")
+            else:
+                failures.append(f"{url}:lighthouse_failed:{response.error or 'error'}")
+
+    da_coverage = len(da_values) / 5.0
+    lighthouse_coverage = len(lighthouse_values) / 5.0
+    fields = {
+        "avg_top5_da": round(sum(da_values) / len(da_values), 2) if da_values else None,
+        "avg_top5_lighthouse": (
+            round(sum(lighthouse_values) / len(lighthouse_values), 2)
+            if lighthouse_values
+            else None
+        ),
+        "top5_da_coverage": round(da_coverage, 4),
+        "top5_lighthouse_coverage": round(lighthouse_coverage, 4),
+        "top5_organic_data_confidence": top5_organic_confidence(
+            da_coverage,
+            lighthouse_coverage,
+        ),
+    }
+    return OrganicTelemetryResult(fields=fields, failures=failures)
+
+
+def extract_review_timestamps(data: Any) -> list[str]:
+    """Extract review timestamps from DataForSEO Google Reviews task results."""
+    timestamps: list[str] = []
+    for row in _walk_dicts(data):
+        timestamp = row.get("timestamp")
+        if timestamp and any(
+            row.get(key) is not None
+            for key in ("review_text", "review_id", "rating", "profile_name", "text")
+        ):
+            timestamps.append(str(timestamp))
+    return timestamps
+
+
+async def collect_top3_review_velocity(
+    dfs: DataForSEOClient,
+    local_pack_items: list[dict[str, Any]],
+    *,
+    location_code: int,
+    depth: int = 10,
+) -> float | None:
+    """Collect review timestamps for local top-3 listings and return avg velocity."""
+    velocities: list[float] = []
+    for item in local_pack_items[:3]:
+        title = item.get("title")
+        keyword = str(title) if title else None
+        cid = item.get("cid")
+        place_id = item.get("place_id")
+        if not any((keyword, cid, place_id)):
+            continue
+        response = await dfs.google_reviews(
+            keyword=keyword,
+            location_code=location_code,
+            depth=depth,
+            cid=cid,
+            place_id=place_id,
+            sort_by="newest",
+        )
+        if response.status != "ok":
+            continue
+        timestamps = extract_review_timestamps(response.data)
+        if timestamps:
+            velocities.append(compute_reviews_per_month(timestamps))
+    return round(sum(velocities) / len(velocities), 4) if velocities else None
 
 
 def classify_keyword_volume_failure(response: Any) -> str:
@@ -574,6 +795,10 @@ async def score_one(
     stats: RunStats,
     *,
     preflight_only: bool = False,
+    collect_organic: bool = False,
+    collect_review_velocity_flag: bool = False,
+    organic_telemetry_limit: int = 5,
+    review_depth: int = 10,
 ) -> int:
     """Score one (niche, metro) pair → returns count of facts inserted."""
     cbsa = metro["cbsa_code"]
@@ -653,7 +878,32 @@ async def score_one(
         # Use head SERP features as the "metro-level" SERP signal for all keywords
         # (actual SERP per long-tail keyword would 50x cost; head signal is the
         # competitive landscape proxy for benchmarking)
-        head_features = next(iter(serp_features_by_kw.values()), {}) if serp_features_by_kw else {}
+        head_features = dict(next(iter(serp_features_by_kw.values()), {})) if serp_features_by_kw else {}
+        if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
+            velocity = await collect_top3_review_velocity(
+                dfs,
+                list(head_features.get("top_local_pack_items") or []),
+                location_code=loc_code_for_serp,
+                depth=review_depth,
+            )
+            if velocity is not None:
+                propagate_head_feature(
+                    serp_features_by_kw,
+                    head_features,
+                    "top3_review_velocity_avg",
+                    velocity,
+                )
+
+        organic_telemetry: dict[str, Any] = {}
+        if collect_organic:
+            telemetry = await collect_organic_telemetry(
+                dfs,
+                list(head_features.get("organic_targets") or []),
+                limit=organic_telemetry_limit,
+            )
+            organic_telemetry = telemetry.fields
+            for failure in telemetry.failures:
+                stats.record_failure(niche, cbsa, "organic_telemetry_partial", failure)
 
         # 3) Build seo_facts rows
         rows = []
@@ -666,7 +916,7 @@ async def score_one(
                 # No volume data — skip (DFS returned nothing for this kw)
                 continue
             row_features = serp_features_by_kw.get(kw["keyword"], head_features)
-            rows.append({
+            row = {
                 "niche_keyword": niche,
                 "niche_normalized": niche.lower(),
                 "cbsa_code": cbsa,
@@ -680,6 +930,7 @@ async def score_one(
                 "local_pack_position": row_features.get("local_pack_position"),
                 "top3_review_count_min": row_features.get("top3_review_count_min"),
                 "top3_review_count_avg": row_features.get("top3_review_count_avg"),
+                "top3_review_velocity_avg": row_features.get("top3_review_velocity_avg"),
                 "top3_rating_avg": row_features.get("top3_rating_avg"),
                 "aggregator_count_top10": row_features.get("aggregator_count_top10"),
                 "local_biz_count_top10": row_features.get("local_biz_count_top10"),
@@ -689,7 +940,10 @@ async def score_one(
                 "lsa_present": row_features.get("lsa_present"),
                 "snapshot_date": snapshot,
                 "source": "orchestrator",
-            })
+            }
+            if organic_telemetry:
+                row.update(organic_telemetry)
+            rows.append(row)
 
         # 4) Persist
         if rows:
@@ -754,14 +1008,18 @@ async def main():
     if not ((SUPABASE_KEY or args.preflight_only) and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
         log.error("missing env vars — check .env")
         sys.exit(1)
+    if args.preflight_only and (args.collect_organic_telemetry or args.collect_review_velocity):
+        log.info("preflight-only skips organic telemetry and review velocity collection")
 
     log.info(
-        "%s sample: %s niches × %s paid-eligible metros = %s reports%s",
+        "%s sample: %s niches × %s paid-eligible metros = %s reports%s%s%s",
         args.sample_mode,
         len(niches),
         len(selected_metros),
         len(pairs),
         " (preflight only)" if args.preflight_only else "",
+        " + organic telemetry" if args.collect_organic_telemetry and not args.preflight_only else "",
+        " + review velocity" if args.collect_review_velocity and not args.preflight_only else "",
     )
 
     # Disable persistent cache: it reads NEXT_PUBLIC_SUPABASE_URL (prod) but the
@@ -784,6 +1042,12 @@ async def main():
                 dfs,
                 stats,
                 preflight_only=args.preflight_only,
+                collect_organic=args.collect_organic_telemetry and not args.preflight_only,
+                collect_review_velocity_flag=(
+                    args.collect_review_velocity and not args.preflight_only
+                ),
+                organic_telemetry_limit=args.organic_telemetry_limit,
+                review_depth=args.review_depth,
             )
 
     await asyncio.gather(*(runner(p) for p in pairs), return_exceptions=False)
