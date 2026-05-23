@@ -301,12 +301,16 @@ def _explicit_target(
         return None
     if not isinstance(dataforseo_location_code, int) or dataforseo_location_code <= 0:
         raise ValueError("cbsa_code requires a positive dataforseo_location_code")
+    if population is None or population <= 0:
+        raise ValueError(
+            "cbsa_code requires a positive population for benchmark class resolution"
+        )
 
     state_code = state.strip().upper() if isinstance(state, str) and state.strip() else ""
     metro_name = str(cbsa_name or "").strip() or (
         f"{city}, {state_code}" if state_code else city
     )
-    population_value = int(population or 0)
+    population_value = int(population)
     city_record = City(
         city_id=cleaned_cbsa,
         name=city,

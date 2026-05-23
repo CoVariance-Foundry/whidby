@@ -727,6 +727,10 @@ class NicheScoreRequest(BaseModel):
     def _explicit_cbsa_requires_dfs_code(self) -> "NicheScoreRequest":
         if self.cbsa_code and self.dataforseo_location_code is None:
             raise ValueError("cbsa_code requires a positive dataforseo_location_code")
+        if self.cbsa_code and (self.population is None or self.population <= 0):
+            raise ValueError(
+                "cbsa_code requires a positive population for benchmark class resolution"
+            )
         return self
 
 

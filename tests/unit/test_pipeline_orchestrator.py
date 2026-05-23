@@ -327,6 +327,27 @@ def test_score_niche_preserves_explicit_production_cbsa_target() -> None:
     assert metro["v2_scores"]["cbsa_code"] == "47380"
 
 
+def test_score_niche_requires_positive_population_for_explicit_cbsa_target() -> None:
+    import pytest
+
+    for invalid_population in (None, 0):
+        with pytest.raises(ValueError, match="positive population"):
+            asyncio.run(
+                score_niche_for_metro(
+                    niche="roofing",
+                    city="Waco",
+                    state="TX",
+                    dataforseo_location_code=1026822,
+                    cbsa_code="47380",
+                    cbsa_name="Waco, TX",
+                    population=invalid_population,
+                    llm_client=object(),
+                    dataforseo_client=_make_fake_dfs_client(),
+                    benchmark_repository=_FakeBenchmarkRepository(),
+                )
+            )
+
+
 def test_v2_population_class_derives_from_population_when_signal_missing() -> None:
     from src.pipeline.orchestrator import _population_class_for_benchmarks
 

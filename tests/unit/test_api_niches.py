@@ -123,12 +123,31 @@ def test_niche_score_request_requires_dfs_code_for_explicit_cbsa() -> None:
         NicheScoreRequest(niche="roofing", city="Waco", cbsa_code="47380")
 
 
+def test_niche_score_request_requires_population_for_explicit_cbsa() -> None:
+    with pytest.raises(ValidationError, match="positive population"):
+        NicheScoreRequest(
+            niche="roofing",
+            city="Waco",
+            cbsa_code="47380",
+            dataforseo_location_code=1026822,
+        )
+    with pytest.raises(ValidationError, match="positive population"):
+        NicheScoreRequest(
+            niche="roofing",
+            city="Waco",
+            cbsa_code="47380",
+            dataforseo_location_code=1026822,
+            population=0,
+        )
+
+
 def test_niche_score_request_accepts_explicit_cbsa_metadata_source() -> None:
     req = NicheScoreRequest(
         niche="roofing",
         city="Waco",
         cbsa_code="47380",
         dataforseo_location_code=1026822,
+        population=299217,
         metadata_source="explicit_cbsa",
     )
 
