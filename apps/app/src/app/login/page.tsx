@@ -123,108 +123,73 @@ function LoginForm() {
         : "Sign in";
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        background: "var(--paper)",
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 380,
-          background: "var(--card)",
-          border: "1px solid var(--rule)",
-          borderRadius: 12,
-          padding: 28,
-          boxShadow: "0 1px 0 rgba(47,38,20,0.03)",
-        }}
-      >
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div
-            style={{
-              display: "inline-grid",
-              placeItems: "center",
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: "var(--ink)",
-              color: "var(--paper)",
-              fontFamily: "var(--serif)",
-              fontStyle: "italic",
-              fontWeight: 700,
-              fontSize: 18,
-              marginBottom: 12,
-            }}
-          >
-            W
+    <div className="grid min-h-screen place-items-center bg-white px-6 py-10">
+      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="mb-6 space-y-2 text-center">
+          <div className="mb-2 inline-flex items-center gap-2">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#141414]">
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+              >
+                <circle cx="8" cy="8" r="6" stroke="#10B981" strokeWidth="2" />
+                <circle cx="8" cy="8" r="2.5" fill="#10B981" />
+              </svg>
+            </div>
+            <h1 className="text-lg font-bold tracking-normal text-[#141414]">
+              Widby
+            </h1>
           </div>
-          <h1
-            style={{
-              fontFamily: "var(--serif)",
-              fontSize: 22,
-              fontWeight: 600,
-              letterSpacing: "-0.3px",
-              color: "var(--ink)",
-            }}
-          >
-            Widby
-          </h1>
-          <p
-            style={{
-              marginTop: 4,
-              fontFamily: "var(--serif)",
-              fontStyle: "italic",
-              fontSize: 13,
-              color: "var(--ink-3)",
-            }}
-          >
-            Sign in to continue
-          </p>
+          <h2 className="text-xl font-semibold tracking-normal text-gray-900">
+            Welcome back
+          </h2>
+          <p className="text-sm text-gray-500">Sign in to your account</p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: 14 }}
-        >
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <div className="field-label">Email</div>
-            <div className="input-wrap">
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </div>
+            <label
+              htmlFor="email"
+              className="mb-1.5 block text-xs font-medium text-gray-600"
+            >
+              Email address
+            </label>
+            <input
+              id="email"
+              autoComplete="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#10B981] focus:outline-none focus:ring-1 focus:ring-[#10B981]"
+            />
           </div>
 
           <div>
-            <div className="field-label">Password</div>
-            <div className="input-wrap">
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
+            <label
+              htmlFor="password"
+              className="mb-1.5 block text-xs font-medium text-gray-600"
+            >
+              Password
+            </label>
+            <input
+              id="password"
+              autoComplete="current-password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#10B981] focus:outline-none focus:ring-1 focus:ring-[#10B981]"
+            />
           </div>
 
           {status === "error" && (
-            <p
-              style={{
-                fontSize: 12,
-                color: "var(--danger)",
-                fontFamily: "var(--serif)",
-                fontStyle: "italic",
-              }}
-            >
+            <p className="text-xs text-red-600" role="alert">
               {errorMsg}
             </p>
           )}
@@ -232,13 +197,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={isBusy}
-            className="btn-primary"
-            style={{
-              justifyContent: "center",
-              marginTop: 4,
-              opacity: isBusy ? 0.6 : 1,
-              cursor: isBusy ? "not-allowed" : "pointer",
-            }}
+            className="w-full rounded-lg bg-[#141414] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {buttonLabel}
           </button>
@@ -247,14 +206,7 @@ function LoginForm() {
             <p
               role="status"
               aria-live="polite"
-              style={{
-                marginTop: 0,
-                fontSize: 12,
-                fontFamily: "var(--serif)",
-                fontStyle: "italic",
-                color: "var(--ink-3)",
-                textAlign: "center",
-              }}
+              className="text-center text-xs text-gray-500"
             >
               Try again in {remainingSec}s
             </p>

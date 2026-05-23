@@ -39,3 +39,29 @@ def test_classify_serp_archetype_returns_mixed_fallback_for_ambiguous_signals() 
     archetype, rule_id = classify_serp_archetype(data["signals"])
     assert archetype == "MIXED"
     assert rule_id == "fallback_mixed"
+
+
+def test_classify_serp_archetype_preserves_fragmented_weak_when_da_present() -> None:
+    data = build_local_pack_vulnerable_input()
+    data["signals"]["organic_competition"]["local_biz_count"] = 4
+    data["signals"]["organic_competition"]["avg_top5_da"] = 24
+    data["signals"]["local_competition"]["local_pack_present"] = False
+    data["signals"]["local_competition"]["local_pack_review_count_avg"] = 0
+
+    archetype, rule_id = classify_serp_archetype(data["signals"])
+
+    assert archetype == "FRAGMENTED_WEAK"
+    assert rule_id == "local_ratio_ge_0_4_and_da_lt_25"
+
+
+def test_classify_serp_archetype_missing_da_does_not_imply_weak_competitors() -> None:
+    data = build_local_pack_vulnerable_input()
+    data["signals"]["organic_competition"]["local_biz_count"] = 4
+    data["signals"]["organic_competition"]["avg_top5_da"] = None
+    data["signals"]["local_competition"]["local_pack_present"] = False
+    data["signals"]["local_competition"]["local_pack_review_count_avg"] = 0
+
+    archetype, rule_id = classify_serp_archetype(data["signals"])
+
+    assert archetype == "MIXED"
+    assert rule_id == "fallback_mixed"

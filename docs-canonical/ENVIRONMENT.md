@@ -1,6 +1,6 @@
 # Environment & Configuration
 
-<!-- docguard:version 1.4.0 -->
+<!-- docguard:version 1.4.1 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -177,6 +177,10 @@ The staging Render service (`whidby-staging`) has `ENVIRONMENT=staging`, which e
 |---------|---------|
 | `.venv/bin/python -m scripts.benchmarks.recompute_benchmarks 120` | Rebuild staging `seo_benchmarks` from recent `seo_facts` |
 
+### Coverage-first production seed gates
+
+Production seed runs must be coverage-first and guarded against accidental project writes. Before the 50x16 seed, operators must verify schema parity and the expected Supabase project, run a canary, complete the 12x8 coverage pilot, recompute benchmarks, and validate the Explore cache. Top-5 DA and Lighthouse are optional telemetry under audit for this seed; null telemetry must not block scoring or guidance.
+
 ### Supabase staging migrations
 
 Staging migrations deploy from `dev` to Supabase project `whidby-staging` (`wuybidpvqhhgkukpyyhq`) through `.github/workflows/supabase-staging.yml`. The workflow runs manually through `workflow_dispatch` and automatically on `dev` pushes that change `supabase/migrations/**` or the workflow file. Manual runs must choose branch `dev`; the deploy job is guarded to skip any other branch.
@@ -341,3 +345,4 @@ Run in order from `supabase/migrations/`:
 | 1.2.0 | 2026-04-22 | Mapbox autocomplete | Added `MAPBOX_ACCESS_TOKEN` to both root and Render env tables |
 | 1.3.0 | 2026-04-25 | Staging environment | Added staging stack docs, `ENVIRONMENT`/`CORS_EXTRA_ORIGINS` vars, migration workflow, env scoping |
 | 1.4.0 | 2026-05-17 | Supabase staging workflows | Added staging migration and test-account seeding workflow docs, required `staging` secrets, local env handling, pinned Supabase CLI workflow setup, dev-branch guards, and missing migration rows through 018 |
+| 1.4.1 | 2026-05-22 | Coverage-first production seed gates | Documented expected-project guard, seed acceptance gates, and nullable top-5 telemetry posture |

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Icon, I } from "@/lib/icons";
 import type { DashboardData } from "@/lib/home/load-dashboard";
 import type { StrategyCatalogEntry } from "@/lib/strategies/types";
+import NextMoveCard from "@/components/NextMoveCard";
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -210,7 +211,7 @@ function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
               color: "var(--ink)",
               fontFamily: "var(--serif)",
               fontSize: 24,
-              fontWeight: 600,
+              fontWeight: 400,
               lineHeight: 1.15,
             }}
           >
@@ -329,7 +330,7 @@ function UsageStrip({ dashboard }: { dashboard: DashboardData }) {
               color: "var(--ink)",
               fontFamily: "var(--serif)",
               fontSize: 24,
-              fontWeight: 600,
+              fontWeight: 400,
               lineHeight: 1.1,
               overflowWrap: "anywhere",
             }}
@@ -391,7 +392,7 @@ function RecommendedHero({ dashboard }: { dashboard: DashboardData }) {
               color: "var(--paper)",
               fontFamily: "var(--serif)",
               fontSize: 32,
-              fontWeight: 600,
+              fontWeight: 400,
               lineHeight: 1.1,
             }}
           >
@@ -442,41 +443,31 @@ function RecommendedHero({ dashboard }: { dashboard: DashboardData }) {
 function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
   return (
     <section aria-label="Dashboard destinations" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-      <Card ariaLabelledBy="explore-card-heading">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <h2 id="explore-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
-              Explore cached data
-            </h2>
-            <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
-              Browse for free. No scans consumed.
-            </p>
-          </div>
-          <div>
-            <ActionLink href="/explore" variant="ghost">
-              Open Explore <Icon d={I.arrow} />
-            </ActionLink>
-          </div>
-        </div>
-      </Card>
+      <NextMoveCard
+        href="/explore"
+        title="Explore cached data"
+        subtitle="Browse for free. No scans consumed."
+        ctaLabel="Open Explore"
+      />
 
-      <Card ariaLabelledBy="multi-market-card-heading">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
-              Multi-market scan
-            </h2>
-            <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
-              For agencies and scaled operators.
-            </p>
-          </div>
-          {dashboard.multi_market_available ? (
+      {dashboard.multi_market_available ? (
+        <NextMoveCard
+          href="/agency"
+          title="Multi-market scan"
+          subtitle="For agencies and scaled operators."
+          ctaLabel="Open agency tools"
+        />
+      ) : (
+        <Card ariaLabelledBy="multi-market-card-heading">
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <ActionLink href="/agency" variant="ghost">
-                Open agency tools <Icon d={I.arrow} />
-              </ActionLink>
+              <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
+                Multi-market scan
+              </h2>
+              <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
+                For agencies and scaled operators.
+              </p>
             </div>
-          ) : (
             <span
               aria-disabled="true"
               style={{
@@ -492,9 +483,9 @@ function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
             >
               Coming soon
             </span>
-          )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      )}
     </section>
   );
 }
@@ -503,7 +494,7 @@ function StrategyShortcuts({ dashboard }: { dashboard: DashboardData }) {
   return (
     <Card ariaLabelledBy="strategy-shortcuts-heading">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-        <h2 id="strategy-shortcuts-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
+        <h2 id="strategy-shortcuts-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
           Your strategy shortcuts
         </h2>
         <Link href="/strategies" className="settings-link">
@@ -546,7 +537,7 @@ function RecentReports({ dashboard }: { dashboard: DashboardData }) {
   return (
     <Card ariaLabelledBy="recent-reports-heading">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-        <h2 id="recent-reports-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 600 }}>
+        <h2 id="recent-reports-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
           Recent reports
         </h2>
         <Link href="/reports" className="settings-link">

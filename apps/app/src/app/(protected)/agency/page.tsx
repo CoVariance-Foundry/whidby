@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import StateMultiselect from "@/components/StateMultiselect";
 import { Icon, I } from "@/lib/icons";
 
 type Step = "configure" | "confirm" | "complete";
 type StrategyId = "easy_win" | "gbp_blitz" | "keyword_hijack" | "expand_conquer";
+type TargetSource = "cached" | "custom";
 
 interface ServiceOption {
   id: string;
@@ -46,6 +54,15 @@ interface QueuedTarget {
   primary_keyword?: string;
   opportunity_score: number | null;
   rank: number | null;
+  source: TargetSource;
+}
+
+interface CustomTargetRow {
+  id: string;
+  city: string;
+  state: string;
+  service: string;
+  primary_keyword: string;
 }
 
 interface RunResponse {
@@ -103,6 +120,18 @@ function normalizeNiche(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
+function normalizeCustomIdPart(value: string) {
+  return normalizeNiche(value).replace(/_+/g, "-") || "target";
+}
+
+function normalizeState(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+}
+
+function isTwoLetterState(value: string) {
+  return /^[A-Za-z]{2}$/.test(value.trim());
+}
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -133,6 +162,55 @@ function uniqueTargets(targets: QueuedTarget[]) {
     byKey.set(`${target.cbsa_code}:${target.niche_normalized}`, target);
   }
   return [...byKey.values()];
+}
+
+function hasCustomInput(row: CustomTargetRow) {
+  return [row.city, row.state, row.service, row.primary_keyword].some(
+    (value) => value.trim().length > 0,
+  );
+}
+
+function customRowReady(row: CustomTargetRow) {
+  return (
+    row.city.trim().length >= 2 &&
+    isTwoLetterState(row.state) &&
+    normalizeNiche(row.service).length > 0
+  );
+}
+
+function hasPrimaryKeyword(value: string) {
+  return value.trim().length >= 2;
+}
+
+function customRowToTarget(row: CustomTargetRow, fallbackPrimaryKeyword: string): QueuedTarget {
+  const state = normalizeState(row.state);
+  const service = row.service.trim();
+  const rowPrimaryKeyword = row.primary_keyword.trim();
+  const primaryKeyword = rowPrimaryKeyword || fallbackPrimaryKeyword.trim();
+  return {
+    cbsa_code: `custom:${normalizeCustomIdPart(row.city)}:${state.toLowerCase() || "na"}`,
+    city_name: row.city.trim(),
+    state: state || null,
+    population: null,
+    niche_normalized: normalizeNiche(service),
+    niche_keyword: service,
+    primary_keyword: primaryKeyword || undefined,
+    opportunity_score: null,
+    rank: null,
+    source: "custom",
+  };
+}
+
+function isTierLimitResponse(body: RunResponse) {
+  return body.code === "fresh_strategy_runs_not_included" || body.status === "tier_limit";
+}
+
+function isQuotaResponse(body: RunResponse) {
+  return (
+    body.code === "monthly_report_quota_exceeded" ||
+    body.code === "quota_exceeded" ||
+    body.status === "quota_exceeded"
+  );
 }
 
 function Card({
@@ -265,32 +343,92 @@ export default function AgencyPage() {
   const [populationMax, setPopulationMax] = useState("750000");
   const [maxMarkets, setMaxMarkets] = useState(25);
   const [primaryKeyword, setPrimaryKeyword] = useState("");
+  const [customRows, setCustomRows] = useState<CustomTargetRow[]>([]);
   const [targets, setTargets] = useState<QueuedTarget[]>([]);
   const [runResult, setRunResult] = useState<RunResponse | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [discoveryEmpty, setDiscoveryEmpty] = useState(false);
+  const [queueNotice, setQueueNotice] = useState<{
+    kind: "upgrade" | "quota";
+    title: string;
+    message: string;
+  } | null>(null);
 
   const selectedServices = useMemo(
     () => SERVICE_OPTIONS.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds],
   );
+  const validCustomRows = useMemo(() => customRows.filter(customRowReady), [customRows]);
+  const validCustomTargets = useMemo(
+    () => validCustomRows.map((row) => customRowToTarget(row, primaryKeyword)),
+    [validCustomRows, primaryKeyword],
+  );
+  const incompleteCustomRows = useMemo(
+    () => customRows.filter((row) => hasCustomInput(row) && !customRowReady(row)),
+    [customRows],
+  );
   const maxTargetPairs = selectedServices.length * maxMarkets;
+  const totalTargetPairs = maxTargetPairs + validCustomTargets.length;
   const populationMinValue = parsePopulationInput(populationMin);
   const populationMaxValue = parsePopulationInput(populationMax);
   const populationInvalid = populationMinValue === null || populationMaxValue === null;
   const rangeInvalid =
     !populationInvalid && populationMinValue > populationMaxValue;
-  const keywordRequired = strategyLens === "keyword_hijack" && primaryKeyword.trim().length < 2;
-  const targetCapExceeded = maxTargetPairs > TARGET_CAP;
-  const readyToReview =
+  const cachedFiltersInvalid = selectedServices.length > 0 && populationInvalid;
+  const cachedRangeInvalid = selectedServices.length > 0 && rangeInvalid;
+  const globalPrimaryKeywordReady = hasPrimaryKeyword(primaryKeyword);
+  const cachedKeywordRequired =
+    strategyLens === "keyword_hijack" &&
     selectedServices.length > 0 &&
-    !populationInvalid &&
-    !rangeInvalid &&
+    !globalPrimaryKeywordReady;
+  const customKeywordRequired =
+    strategyLens === "keyword_hijack" &&
+    validCustomRows.some(
+      (row) => !globalPrimaryKeywordReady && !hasPrimaryKeyword(row.primary_keyword),
+    );
+  const keywordRequired = cachedKeywordRequired || customKeywordRequired;
+  const targetCapExceeded = totalTargetPairs > TARGET_CAP;
+  const prepareSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        strategyLens,
+        selectedStates,
+        selectedServiceIds,
+        populationMin,
+        populationMax,
+        maxMarkets,
+        primaryKeyword,
+        customRows,
+      }),
+    [
+      strategyLens,
+      selectedStates,
+      selectedServiceIds,
+      populationMin,
+      populationMax,
+      maxMarkets,
+      primaryKeyword,
+      customRows,
+    ],
+  );
+  const latestPrepareSnapshotRef = useRef(prepareSnapshot);
+  const prepareRequestIdRef = useRef(0);
+  const customRowIdCounterRef = useRef(0);
+  useEffect(() => {
+    latestPrepareSnapshotRef.current = prepareSnapshot;
+  }, [prepareSnapshot]);
+  const readyToReview =
+    (selectedServices.length > 0 || validCustomTargets.length > 0) &&
+    !cachedFiltersInvalid &&
+    !cachedRangeInvalid &&
     !keywordRequired &&
-    !targetCapExceeded;
+    !targetCapExceeded &&
+    incompleteCustomRows.length === 0;
 
   function toggleService(id: string) {
+    setDiscoveryEmpty(false);
     setSelectedServiceIds((current) =>
       current.includes(id)
         ? current.filter((serviceId) => serviceId !== id)
@@ -298,84 +436,142 @@ export default function AgencyPage() {
     );
   }
 
+  function addCustomRow() {
+    setDiscoveryEmpty(false);
+    customRowIdCounterRef.current += 1;
+    const nextCustomRowId = customRowIdCounterRef.current;
+    setCustomRows((current) => [
+      ...current,
+      {
+        id: `custom-${nextCustomRowId}`,
+        city: "",
+        state: "",
+        service: "",
+        primary_keyword: "",
+      },
+    ]);
+  }
+
+  function updateCustomRow(id: string, field: keyof Omit<CustomTargetRow, "id">, value: string) {
+    setDiscoveryEmpty(false);
+    setCustomRows((current) =>
+      current.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
+    );
+  }
+
+  function removeCustomRow(id: string) {
+    setCustomRows((current) => current.filter((row) => row.id !== id));
+  }
+
   async function prepareTargets() {
-    if (!readyToReview || populationMinValue === null || populationMaxValue === null) return;
+    if (
+      !readyToReview ||
+      (selectedServices.length > 0 && (populationMinValue === null || populationMaxValue === null))
+    ) {
+      return;
+    }
+    const requestId = prepareRequestIdRef.current + 1;
+    prepareRequestIdRef.current = requestId;
+    const requestSnapshot = latestPrepareSnapshotRef.current;
+    const isLatestRequest = () => prepareRequestIdRef.current === requestId;
+    const isCurrentSnapshot = () =>
+      isLatestRequest() && latestPrepareSnapshotRef.current === requestSnapshot;
     setError(null);
     setRunResult(null);
+    setQueueNotice(null);
+    setDiscoveryEmpty(false);
     setIsPreparing(true);
 
     try {
-      const cityFilters: Record<string, unknown>[] = [
-        { field: "population", operator: ">=", value: populationMinValue },
-        { field: "population", operator: "<=", value: populationMaxValue },
-      ];
-      if (selectedStates.length > 0) {
-        cityFilters.push({ field: "state", operator: "in", value: selectedStates });
-      }
+      const discovered =
+        selectedServices.length > 0
+          ? await Promise.all(
+              selectedServices.map(async (service) => {
+                const cityFilters: Record<string, unknown>[] = [
+                  { field: "population", operator: ">=", value: populationMinValue ?? 0 },
+                  { field: "population", operator: "<=", value: populationMaxValue ?? 0 },
+                ];
+                if (selectedStates.length > 0) {
+                  cityFilters.push({ field: "state", operator: "in", value: selectedStates });
+                }
 
-      const discovered = await Promise.all(
-        selectedServices.map(async (service) => {
-          const response = await fetch("/api/strategies/discover", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              lens_id: strategyLens,
-              primary_keyword:
-                strategyLens === "keyword_hijack" ? primaryKeyword.trim() : undefined,
-              city_filters: cityFilters,
-              service_filters: [
-                { field: "name", operator: "like", value: service.label },
-              ],
-              limit: maxMarkets,
-            }),
-          });
-          const body = await readJson<DiscoveryResponse>(response);
-          if (!response.ok) {
-            throw new Error(
-              requestMessage(body, `Could not discover targets for ${service.label}.`),
-            );
-          }
-          return (body.markets ?? []).map((market): QueuedTarget | null => {
-            const cbsaCode = market.city?.city_id?.trim();
-            const serviceName = market.service?.name || service.label;
-            if (!cbsaCode) return null;
-            return {
-              cbsa_code: cbsaCode,
-              city_name: market.city?.name || cbsaCode,
-              state: market.city?.state ?? null,
-              population: market.city?.population ?? null,
-              niche_normalized:
-                market.service?.service_id || service.id || normalizeNiche(serviceName),
-              niche_keyword: serviceName,
-              primary_keyword:
-                strategyLens === "keyword_hijack" ? primaryKeyword.trim() : undefined,
-              opportunity_score:
-                typeof market.opportunity_score === "number"
-                  ? market.opportunity_score
-                  : null,
-              rank: typeof market.rank === "number" ? market.rank : null,
-            };
-          });
-        }),
-      );
+                const response = await fetch("/api/strategies/discover", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    lens_id: strategyLens,
+                    primary_keyword:
+                      strategyLens === "keyword_hijack" && globalPrimaryKeywordReady
+                        ? primaryKeyword.trim()
+                        : undefined,
+                    city_filters: cityFilters,
+                    service_filters: [
+                      { field: "name", operator: "like", value: service.label },
+                    ],
+                    limit: maxMarkets,
+                  }),
+                });
+                const body = await readJson<DiscoveryResponse>(response);
+                if (!response.ok) {
+                  throw new Error(
+                    requestMessage(body, `Could not discover targets for ${service.label}.`),
+                  );
+                }
+                return (body.markets ?? []).map((market): QueuedTarget | null => {
+                  const cbsaCode = market.city?.city_id?.trim();
+                  const serviceName = market.service?.name || service.label;
+                  if (!cbsaCode) return null;
+                  return {
+                    cbsa_code: cbsaCode,
+                    city_name: market.city?.name || cbsaCode,
+                    state: market.city?.state ?? null,
+                    population: market.city?.population ?? null,
+                    niche_normalized:
+                      market.service?.service_id || service.id || normalizeNiche(serviceName),
+                    niche_keyword: serviceName,
+                    primary_keyword:
+                      strategyLens === "keyword_hijack" ? primaryKeyword.trim() : undefined,
+                    opportunity_score:
+                      typeof market.opportunity_score === "number"
+                        ? market.opportunity_score
+                        : null,
+                    rank: typeof market.rank === "number" ? market.rank : null,
+                    source: "cached",
+                  };
+                });
+              }),
+            )
+          : [];
 
-      const nextTargets = uniqueTargets(discovered.flat().filter(Boolean) as QueuedTarget[]);
+      if (!isCurrentSnapshot()) return;
+
+      const cachedTargets = discovered.flat().filter(Boolean) as QueuedTarget[];
+      const nextTargets = uniqueTargets([...cachedTargets, ...validCustomTargets]);
       if (nextTargets.length === 0) {
-        setError("No cached markets matched this configuration. Widen the filters or try another service.");
+        setDiscoveryEmpty(true);
         return;
       }
-      setTargets(nextTargets.slice(0, TARGET_CAP));
+      if (nextTargets.length > TARGET_CAP) {
+        setError(`This batch has ${nextTargets.length} targets. Keep it at ${TARGET_CAP} or fewer.`);
+        return;
+      }
+      setTargets(nextTargets);
       setStep("confirm");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Multi-market target discovery failed.");
+      if (isCurrentSnapshot()) {
+        setError(err instanceof Error ? err.message : "Multi-market target discovery failed.");
+      }
     } finally {
-      setIsPreparing(false);
+      if (isLatestRequest()) {
+        setIsPreparing(false);
+      }
     }
   }
 
   async function queueRun() {
     if (targets.length === 0 || isSubmitting) return;
     setError(null);
+    setQueueNotice(null);
     setIsSubmitting(true);
 
     try {
@@ -386,7 +582,9 @@ export default function AgencyPage() {
           mode: "fresh",
           strategy_id: strategyLens,
           primary_keyword:
-            strategyLens === "keyword_hijack" ? primaryKeyword.trim() : undefined,
+            strategyLens === "keyword_hijack" && globalPrimaryKeywordReady
+              ? primaryKeyword.trim()
+              : undefined,
           targets: targets.map((target) => ({
             cbsa_code: target.cbsa_code,
             niche_normalized: target.niche_normalized,
@@ -397,6 +595,24 @@ export default function AgencyPage() {
       });
       const body = await readJson<RunResponse>(response);
       if (!response.ok) {
+        if (isTierLimitResponse(body)) {
+          setQueueNotice({
+            kind: "upgrade",
+            title: "Fresh multi-market scans are an upgrade path.",
+            message:
+              "Your current plan can browse cached research, but live batch runs require Plus or Pro.",
+          });
+          return;
+        }
+        if (isQuotaResponse(body)) {
+          setQueueNotice({
+            kind: "quota",
+            title: "Monthly report quota reached.",
+            message:
+              "This batch needs one report credit. Review your plan or quota before queueing more live work.",
+          });
+          return;
+        }
         throw new Error(requestMessage(body, "Multi-market run could not be queued."));
       }
       setRunResult(body);
@@ -409,14 +625,24 @@ export default function AgencyPage() {
   }
 
   const statusMessage = (() => {
-    if (selectedServices.length === 0) return "Select at least one service.";
-    if (populationInvalid) return "Population filters need whole numbers only.";
-    if (rangeInvalid) return "Population minimum must be lower than the maximum.";
-    if (keywordRequired) return "Keyword Hijack needs a primary keyword.";
-    if (targetCapExceeded) {
-      return `This configuration can queue up to ${maxTargetPairs} targets. Keep it at ${TARGET_CAP} or fewer.`;
+    if (incompleteCustomRows.length > 0) {
+      return "Custom targets need a city, 2-letter state, and valid service.";
     }
-    return `${formatNumber(Math.min(maxTargetPairs, TARGET_CAP))} target pairs can be queued with the current cap.`;
+    if (selectedServices.length === 0 && validCustomTargets.length === 0) {
+      return "Select cached services or add a custom city-service target.";
+    }
+    if (cachedFiltersInvalid) return "Population filters need whole numbers only.";
+    if (cachedRangeInvalid) return "Population minimum must be lower than the maximum.";
+    if (cachedKeywordRequired) {
+      return "Keyword Hijack needs a global primary keyword for cached discovery.";
+    }
+    if (customKeywordRequired) {
+      return "Keyword Hijack needs a primary keyword on every custom target or in the global field.";
+    }
+    if (targetCapExceeded) {
+      return `This configuration can queue up to ${totalTargetPairs} targets. Keep it at ${TARGET_CAP} or fewer.`;
+    }
+    return `${formatNumber(totalTargetPairs)} target pairs can be queued with the current cap.`;
   })();
 
   return (
@@ -448,7 +674,7 @@ export default function AgencyPage() {
             Qualify territories in one batch.
           </h1>
           <p className="page-sub" style={{ marginBottom: 0 }}>
-            Configure a strategy lens, market filters, and service set, then queue up to 100 cached city-service targets for backend processing.
+            Configure a strategy lens, market filters, service set, or custom/live rows, then queue up to 100 city-service targets for backend processing.
           </p>
         </div>
         <div
@@ -518,6 +744,35 @@ export default function AgencyPage() {
           }}
         >
           {error}
+        </div>
+      ) : null}
+
+      {queueNotice ? (
+        <div
+          role="alert"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            border: "1px solid var(--warn)",
+            borderRadius: 8,
+            background: "var(--warn-soft)",
+            color: "var(--warn)",
+            padding: "12px 14px",
+            fontSize: 13,
+          }}
+        >
+          <span>
+            <strong style={{ display: "block", color: "var(--ink)", marginBottom: 3 }}>
+              {queueNotice.title}
+            </strong>
+            {queueNotice.message}
+          </span>
+          <Link href="/settings" className="btn-primary" style={{ textDecoration: "none" }}>
+            Open settings <Icon d={I.arrow} />
+          </Link>
         </div>
       ) : null}
 
@@ -693,11 +948,119 @@ export default function AgencyPage() {
             </div>
           </Card>
 
+          <Card title="Custom city-service targets">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <p style={{ margin: 0, color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5 }}>
+                Add city-service pairs when cached discovery is empty or the market you want is missing.
+              </p>
+              <button type="button" className="btn-ghost" onClick={addCustomRow}>
+                <Icon d={I.plus} />
+                Add custom target
+              </button>
+            </div>
+
+            {customRows.length > 0 ? (
+              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                {customRows.map((row, index) => (
+                  <div
+                    key={row.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                      gap: 8,
+                      alignItems: "end",
+                    }}
+                  >
+                    <label>
+                      <span className="field-label">City</span>
+                      <div className="input-wrap">
+                        <Icon d={I.mapPin} />
+                        <input
+                          aria-label={`Custom target ${index + 1} city`}
+                          value={row.city}
+                          onChange={(event) =>
+                            updateCustomRow(row.id, "city", event.target.value)
+                          }
+                          placeholder="e.g. Boise"
+                        />
+                      </div>
+                    </label>
+                    <label>
+                      <span className="field-label">State</span>
+                      <div className="input-wrap">
+                        <Icon d={I.mapPin} />
+                        <input
+                          aria-label={`Custom target ${index + 1} state`}
+                          value={row.state}
+                          onChange={(event) =>
+                            updateCustomRow(row.id, "state", event.target.value)
+                          }
+                          placeholder="ID"
+                          maxLength={2}
+                        />
+                      </div>
+                    </label>
+                    <label>
+                      <span className="field-label">Service</span>
+                      <div className="input-wrap">
+                        <Icon d={I.search} />
+                        <input
+                          aria-label={`Custom target ${index + 1} service`}
+                          value={row.service}
+                          onChange={(event) =>
+                            updateCustomRow(row.id, "service", event.target.value)
+                          }
+                          placeholder="e.g. Roofing"
+                        />
+                      </div>
+                    </label>
+                    <label>
+                      <span className="field-label">Primary keyword</span>
+                      <div className="input-wrap">
+                        <Icon d={I.target} />
+                        <input
+                          aria-label={`Custom target ${index + 1} primary keyword`}
+                          value={row.primary_keyword}
+                          onChange={(event) =>
+                            updateCustomRow(row.id, "primary_keyword", event.target.value)
+                          }
+                          placeholder="optional"
+                        />
+                      </div>
+                    </label>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      aria-label={`Remove custom target ${index + 1}`}
+                      onClick={() => removeCustomRow(row.id)}
+                      style={{ minHeight: 42 }}
+                    >
+                      <Icon d={I.x} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin: "14px 0 0", color: "var(--ink-3)", fontSize: 13 }}>
+                No custom targets yet.
+              </p>
+            )}
+          </Card>
+
           <Card title="Run summary">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
               <Metric label="Services" value={selectedServices.length} />
+              <Metric label="Custom" value={validCustomTargets.length} />
               <Metric label="Market cap" value={maxMarkets} />
-              <Metric label="Max targets" value={formatNumber(maxTargetPairs)} />
+              <Metric label="Max targets" value={formatNumber(totalTargetPairs)} />
               <Metric label="Batch cost" value={SCAN_COST} emphasis />
             </div>
             <div
@@ -731,6 +1094,49 @@ export default function AgencyPage() {
               </button>
             </div>
           </Card>
+
+          {discoveryEmpty ? (
+            <section
+              role="status"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 14,
+                flexWrap: "wrap",
+                border: "1px solid var(--rule)",
+                borderRadius: 8,
+                background: "var(--paper)",
+                padding: 16,
+              }}
+            >
+              <div style={{ maxWidth: 680 }}>
+                <strong style={{ display: "block", color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20 }}>
+                  No cached markets matched this configuration.
+                </strong>
+                <p style={{ margin: "6px 0 0", color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5 }}>
+                  Add custom city-service targets to queue live research, or widen filters and try cached discovery again.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button type="button" className="btn-primary" onClick={addCustomRow}>
+                  Add city-service targets <Icon d={I.plus} />
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => {
+                    setSelectedStates([]);
+                    setPopulationMin("0");
+                    setPopulationMax("1000000");
+                    setDiscoveryEmpty(false);
+                  }}
+                >
+                  Widen filters
+                </button>
+              </div>
+            </section>
+          ) : null}
         </>
       ) : null}
 
@@ -739,7 +1145,8 @@ export default function AgencyPage() {
           <Card title="Confirm the batch">
             <Row label="Strategy lens" value={STRATEGY_LENSES.find((strategy) => strategy.id === strategyLens)?.label ?? strategyLens} />
             <Row label="States" value={selectedStates.length > 0 ? selectedStates.join(", ") : "All states"} />
-            <Row label="Services" value={selectedServices.map((service) => service.label).join(", ")} />
+            <Row label="Cached services" value={selectedServices.length > 0 ? selectedServices.map((service) => service.label).join(", ") : "None selected"} />
+            <Row label="Custom targets" value={formatNumber(targets.filter((target) => target.source === "custom").length)} />
             <Row label="Queued targets" value={formatNumber(targets.length)} />
             <Row label="Cost" value={`${SCAN_COST} scan`} emphasis />
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
@@ -780,9 +1187,26 @@ export default function AgencyPage() {
                     </strong>
                     <span style={{ color: "var(--ink-2)" }}>{target.niche_keyword}</span>
                   </div>
-                  <span style={{ color: "var(--accent-ink)", fontFamily: "var(--mono)", fontWeight: 700 }}>
-                    {target.opportunity_score == null ? "--" : Math.round(target.opportunity_score)}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      aria-label={`Source ${target.source === "cached" ? "cached" : "custom/live"}`}
+                      style={{
+                        border: "1px solid var(--rule)",
+                        borderRadius: 999,
+                        color: target.source === "cached" ? "var(--ink-2)" : "var(--accent-ink)",
+                        background: target.source === "cached" ? "var(--card)" : "var(--accent-soft)",
+                        padding: "3px 7px",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {target.source === "cached" ? "cached" : "custom/live"}
+                    </span>
+                    <span style={{ color: "var(--accent-ink)", fontFamily: "var(--mono)", fontWeight: 700 }}>
+                      {target.opportunity_score == null ? "new" : Math.round(target.opportunity_score)}
+                    </span>
+                  </div>
                 </div>
               ))}
               {targets.length > 8 ? (
