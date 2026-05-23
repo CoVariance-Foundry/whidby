@@ -34,6 +34,24 @@ def test_v2_top5_fact_fields_migration_extends_seo_facts() -> None:
     assert "top5_organic_data_confidence IN ('high', 'medium', 'low', 'missing')" in sql
 
 
+def test_repair_migration_keeps_v2_top5_schema_idempotent() -> None:
+    matches = sorted(MIGRATIONS_DIR.glob("*_repair_v2_top5_schema.sql"))
+    assert matches, "V2 top-5 repair migration is missing"
+    sql = matches[-1].read_text()
+
+    for expected in (
+        "ADD COLUMN IF NOT EXISTS avg_top5_da",
+        "ADD COLUMN IF NOT EXISTS avg_top5_lighthouse",
+        "ADD COLUMN IF NOT EXISTS top5_da_coverage",
+        "ADD COLUMN IF NOT EXISTS top5_lighthouse_coverage",
+        "ADD COLUMN IF NOT EXISTS top5_organic_data_confidence",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_score_v2_report_cbsa_unique",
+        "seo_facts_top5_organic_confidence_check",
+        "top5_organic_data_confidence IN ('high', 'medium', 'low', 'missing')",
+    ):
+        assert expected in sql
+
+
 def test_whi9_competitor_intel_migration_adds_fact_and_run_tables() -> None:
     sql = _latest_whi9_migration_sql()
 
