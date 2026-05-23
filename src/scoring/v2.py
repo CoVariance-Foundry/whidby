@@ -156,12 +156,25 @@ def _bool(value: Any) -> bool:
 
 
 def _top5_organic_data_low_coverage(signals: Mapping[str, Any]) -> bool:
-    confidence = str(signals.get("top5_organic_data_confidence") or "missing").strip().lower()
-    return (
-        _number(signals.get("top5_da_coverage")) < 0.6
-        or _number(signals.get("top5_lighthouse_coverage")) < 0.6
-        or confidence in {"low", "missing"}
+    return _top5_metric_coverage(signals, "top5_da_coverage", "avg_top5_da") < 0.6 or (
+        _top5_metric_coverage(
+            signals,
+            "top5_lighthouse_coverage",
+            "avg_top5_lighthouse",
+        )
+        < 0.6
     )
+
+
+def _top5_metric_coverage(
+    signals: Mapping[str, Any],
+    coverage_key: str,
+    value_key: str,
+) -> float:
+    coverage = _optional_number(signals.get(coverage_key))
+    if coverage is not None:
+        return clamp(coverage, 0.0, 1.0)
+    return 1.0 if _optional_number(signals.get(value_key)) is not None else 0.0
 
 
 def _positive(value: float | None, default: float) -> float:
