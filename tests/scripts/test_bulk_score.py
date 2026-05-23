@@ -430,13 +430,13 @@ def test_fetch_v2_persisted_pairs_requires_scores_and_facts():
     assert bulk_score.fetch_v2_persisted_pairs(supabase) == {("11111", "roofing")}
 
 
-def test_fetch_v2_persisted_pairs_scopes_queries_to_candidate_pairs():
+def test_fetch_v2_persisted_pairs_scopes_queries_to_candidates():
     supabase = FakeSupabase(
         rows_by_table={
             "metro_score_v2": [
                 {
                     "cbsa_code": "11111",
-                    "niche_normalized": "roofing",
+                    "niche_normalized": "roofing contractor",
                     "report_id": "report-1",
                 },
                 {
@@ -448,7 +448,7 @@ def test_fetch_v2_persisted_pairs_scopes_queries_to_candidate_pairs():
             "seo_facts": [
                 {
                     "cbsa_code": "11111",
-                    "niche_normalized": "roofing",
+                    "niche_normalized": "roofing contractor",
                     "report_id": "report-1",
                 },
                 {
@@ -460,14 +460,18 @@ def test_fetch_v2_persisted_pairs_scopes_queries_to_candidate_pairs():
         }
     )
 
-    pairs = bulk_score.fetch_v2_persisted_pairs(
+    assert bulk_score.fetch_v2_persisted_pairs(
         supabase,
-        {("11111", "roofing")},
-    )
-
-    assert pairs == {("11111", "roofing")}
-    assert ("in", "cbsa_code", ["11111"]) in supabase.queries["metro_score_v2"][0].filters
-    assert ("in", "niche_normalized", ["roofing"]) in supabase.queries["seo_facts"][0].filters
+        {("11111", "roofing contractor")},
+    ) == {("11111", "roofing contractor")}
+    assert supabase.queries["metro_score_v2"][0].filters == [
+        ("in", "cbsa_code", ["11111"]),
+        ("in", "niche_normalized", ["roofing contractor"]),
+    ]
+    assert supabase.queries["seo_facts"][0].filters == [
+        ("in", "cbsa_code", ["11111"]),
+        ("in", "niche_normalized", ["roofing contractor"]),
+    ]
 
 
 def test_load_retry_pairs_reads_failed_and_partial_rows(tmp_path):
@@ -502,75 +506,103 @@ def test_load_retry_pairs_reads_failed_and_partial_rows(tmp_path):
     )
 
     assert bulk_score.load_retry_pairs(audit) == {
-        ("22222", "plumbing"),
+        ("22222", "plumbing services"),
         ("33333", "tree service"),
     }
 
 
-def test_run_bulk_score_retry_mode_uses_audit_pairs_not_current_slice(
-    monkeypatch,
-    tmp_path,
+def test_run_bulk_score_retries_audit_pairs_outside_current_selection(
+    monkeypatch, tmp_path
 ):
-    retry_path = tmp_path / "bulk_score_results.jsonl"
-    retry_path.write_text(
+    result_dir = tmp_path / "scripts" / "explore"
+    result_dir.mkdir(parents=True)
+    audit = tmp_path / "bulk_score_results.jsonl"
+    audit.write_text(
         json.dumps(
             {
                 "status": "failed",
                 "request": {
-                    "cbsa_code": "99999",
-                    "service": "plumbing",
+                    "cbsa_code": "22222",
+                    "service": "Roofing Contractor",
+                    "niche_normalized": "roofing",
                 },
             }
-        )
-        + "\n",
+        ),
         encoding="utf-8",
     )
     supabase = FakeSupabase(
         rows_by_table={
             "metros": [
                 {
-                    "cbsa_code": "99999",
-                    "cbsa_name": "Retry Only, TX",
+                    "cbsa_code": "22222",
+                    "cbsa_name": "Dallas-Fort Worth-Arlington, TX",
                     "state": "TX",
-                    "population": 125_000,
-                    "population_class": "medium_100_300k",
-                    "dataforseo_location_codes": [123],
+                    "population": 7_600_000,
+                    "population_class": "mega_5m_plus",
+                    "dataforseo_location_codes": [1],
                 }
             ],
-            "niche_naics_mapping": [{"niche_normalized": "plumbing"}],
+            "niche_naics_mapping": [
+                {"niche_normalized": "roofing contractor"},
+            ],
         }
     )
+    scored: list[tuple[str, str, str]] = []
 
+    monkeypatch.setattr(bulk_score, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
     monkeypatch.setattr(bulk_score, "_supabase_client", lambda: supabase)
+    monkeypatch.setattr(
+        bulk_score,
+        "fetch_metros",
+        lambda *_args, **_kwargs: pytest.fail("retry mode should not fetch selection"),
+    )
+    monkeypatch.setattr(bulk_score.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(bulk_score, "refresh_matview_sql", lambda: None)
+    monkeypatch.setattr(
+        bulk_score,
+        "verify_persistence",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "report_exists": True,
+            "metro_scores_count": 1,
+            "metro_score_v2_count": 1,
+            "seo_facts_count": 1,
+            "missing": [],
+        },
+    )
 
-    def fail_if_slice_fetch_runs(*_args, **_kwargs):
-        raise AssertionError("retry mode should fetch metros by audit CBSA")
+    async def score_success(_client, _api_url, city_name, state, service):
+        scored.append((city_name, state, service))
+        return {"report_id": "report-1", "opportunity_score": 72}
 
-    monkeypatch.setattr(bulk_score, "fetch_metros", fail_if_slice_fetch_runs)
+    monkeypatch.setattr(bulk_score, "score_one", score_success)
     args = SimpleNamespace(
         api_url=None,
         cities=1,
         services=1,
-        service_names=None,
+        service_names=["plumbing"],
         resume=False,
-        resume_v2=False,
-        retry_failed_from=retry_path,
-        preview=True,
+        preview=False,
         concurrency=1,
         strategy="rank-and-rent",
-        population_classes=["large_300k_1m"],
+        population_classes=None,
         min_population=None,
         max_population=None,
         require_dfs=True,
         mega_cap=5,
         require_v2_persistence=True,
-        expected_project_ref=None,
+        retry_failed_from=audit,
     )
 
     asyncio.run(bulk_score.run_bulk_score(args))
 
-    assert ("in", "cbsa_code", ["99999"]) in supabase.queries["metros"][0].filters
+    records = [
+        json.loads(line)
+        for line in (result_dir / "bulk_score_results.jsonl").read_text().splitlines()
+    ]
+    assert scored == [("Dallas", "TX", "roofing contractor")]
+    assert records[0]["request"]["niche_normalized"] == "roofing contractor"
 
 
 def test_verify_persistence_requires_v2_rows_when_enabled():
@@ -679,7 +711,7 @@ def test_audit_record_omits_full_report_body_and_keeps_recovery_fields():
     )
 
     assert "report" not in record
-    assert record["request"]["niche_normalized"] == "roofing"
+    assert record["request"]["niche_normalized"] == "roofing services"
     assert record["score"]["score_system"] == "v2"
     assert record["persistence"]["seo_facts_count"] == 3
 

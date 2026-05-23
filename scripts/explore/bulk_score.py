@@ -85,6 +85,10 @@ DEFAULT_CONCURRENCY = 10
 PAGE_SIZE = 1000
 MAX_METRO_FETCH = 1000
 RETRYABLE_STATUSES = {"failed", "partial_failure"}
+METRO_SELECT_COLUMNS = (
+    "cbsa_code, cbsa_name, state, population, population_class, "
+    "dataforseo_location_codes"
+)
 RANK_AND_RENT_CLASS_ORDER = (
     "large_300k_1m",
     "medium_100_300k",
@@ -178,10 +182,7 @@ def fetch_metros(
 ) -> list[dict[str, Any]]:
     response = (
         supabase.table("metros")
-        .select(
-            "cbsa_code, cbsa_name, state, population, population_class, "
-            "dataforseo_location_codes"
-        )
+        .select(METRO_SELECT_COLUMNS)
         .not_.is_("population", "null")
         .order("population", desc=True)
         .limit(MAX_METRO_FETCH)
@@ -213,32 +214,19 @@ def fetch_metros(
     return _apply_mega_cap(ordered, limit=limit, mega_cap=mega_cap)
 
 
-def fetch_metros_by_cbsa_codes(
-    supabase: Any,
-    cbsa_codes: set[str],
-) -> list[dict[str, Any]]:
-    """Fetch exact metros referenced by a retry audit."""
+def fetch_metros_by_cbsa(
+    supabase: Any, cbsa_codes: set[str]
+) -> dict[str, dict[str, Any]]:
+    """Fetch exact metros for retry audit pairs."""
     if not cbsa_codes:
-        return []
-    rows: list[dict[str, Any]] = []
-    offset = 0
-    while True:
-        response = (
-            supabase.table("metros")
-            .select(
-                "cbsa_code, cbsa_name, state, population, population_class, "
-                "dataforseo_location_codes"
-            )
-            .in_("cbsa_code", sorted(cbsa_codes))
-            .range(offset, offset + PAGE_SIZE - 1)
-            .execute()
-        )
-        page = list(response.data or [])
-        rows.extend(page)
-        if len(page) < PAGE_SIZE:
-            break
-        offset += PAGE_SIZE
-    return sorted(rows, key=lambda metro: str(metro.get("cbsa_code") or ""))
+        return {}
+    rows = _fetch_pages_with_in_filters(
+        supabase,
+        "metros",
+        METRO_SELECT_COLUMNS,
+        {"cbsa_code": sorted(cbsa_codes)},
+    )
+    return {str(row["cbsa_code"]): row for row in rows if row.get("cbsa_code")}
 
 
 def _metro_matches_filters(
@@ -349,6 +337,13 @@ def fetch_service_catalog_keys(supabase: Any) -> set[str]:
 def validate_services_for_catalog(supabase: Any, services: list[str]) -> list[str]:
     """Validate services against the Explore catalog and return catalog-normalized keys."""
     catalog_keys = fetch_service_catalog_keys(supabase)
+    return _validated_services_for_catalog(services, catalog_keys)
+
+
+def _validated_services_for_catalog(
+    services: list[str],
+    catalog_keys: set[str],
+) -> list[str]:
     normalized_services = [normalize_service_key(service, catalog_keys) for service in services]
     missing = [
         service
@@ -361,6 +356,26 @@ def validate_services_for_catalog(supabase: Any, services: list[str]) -> list[st
             + ", ".join(missing)
         )
     return list(dict.fromkeys(normalized_services))
+
+
+def _validated_retry_pairs_for_catalog(
+    retry_pairs: set[tuple[str, str]],
+    catalog_keys: set[str],
+) -> set[tuple[str, str]]:
+    normalized_pairs: set[tuple[str, str]] = set()
+    missing_services: list[str] = []
+    for cbsa_code, service in sorted(retry_pairs):
+        normalized_service = normalize_service_key(service, catalog_keys)
+        if normalized_service not in catalog_keys:
+            missing_services.append(service)
+            continue
+        normalized_pairs.add((cbsa_code, normalized_service))
+    if missing_services:
+        raise RuntimeError(
+            "Requested service(s) are missing from niche_naics_mapping: "
+            + ", ".join(dict.fromkeys(missing_services))
+        )
+    return normalized_pairs
 
 
 def fetch_scored_pairs(supabase: Any) -> set[tuple[str, str]]:
@@ -403,32 +418,47 @@ def fetch_v2_persisted_pairs(
     candidate_pairs: set[tuple[str, str]] | None = None,
 ) -> set[tuple[str, str]]:
     """Return pairs that have both normalized V2 scores and benchmark fact rows."""
-    v2_rows = _fetch_pages(
+    candidate_keys: set[tuple[str, str]] | None = None
+    catalog_keys: set[str] | None = None
+    if candidate_pairs is not None:
+        candidate_keys = {
+            (str(cbsa_code), service_key_text(service))
+            for cbsa_code, service in candidate_pairs
+        }
+        catalog_keys = {service for _cbsa_code, service in candidate_keys}
+
+    v2_rows = _fetch_pair_candidate_pages(
         supabase,
         "metro_score_v2",
         "cbsa_code,niche_normalized,report_id",
-        candidate_pairs=candidate_pairs,
+        candidate_keys,
     )
-    fact_rows = _fetch_pages(
+    fact_rows = _fetch_pair_candidate_pages(
         supabase,
         "seo_facts",
         "cbsa_code,niche_normalized,report_id",
-        candidate_pairs=candidate_pairs,
+        candidate_keys,
     )
     v2_pairs = {
-        (str(row["cbsa_code"]), normalize_service_key(str(row["niche_normalized"])))
+        (
+            str(row["cbsa_code"]),
+            normalize_service_key(str(row["niche_normalized"]), catalog_keys),
+        )
         for row in v2_rows
         if row.get("cbsa_code") and row.get("niche_normalized") and row.get("report_id")
     }
     fact_pairs = {
-        (str(row["cbsa_code"]), normalize_service_key(str(row["niche_normalized"])))
+        (
+            str(row["cbsa_code"]),
+            normalize_service_key(str(row["niche_normalized"]), catalog_keys),
+        )
         for row in fact_rows
         if row.get("cbsa_code") and row.get("niche_normalized") and row.get("report_id")
     }
-    persisted = v2_pairs.intersection(fact_pairs)
-    if candidate_pairs is not None:
-        return persisted.intersection(candidate_pairs)
-    return persisted
+    persisted_pairs = v2_pairs.intersection(fact_pairs)
+    if candidate_keys is not None:
+        return persisted_pairs.intersection(candidate_keys)
+    return persisted_pairs
 
 
 def load_retry_pairs(path: Path) -> set[tuple[str, str]]:
@@ -452,34 +482,87 @@ def load_retry_pairs(path: Path) -> set[tuple[str, str]]:
                 continue
             cbsa_code = str(request.get("cbsa_code") or "").strip()
             service = str(
-                request.get("niche_normalized") or request.get("service") or ""
+                request.get("service") or request.get("niche_normalized") or ""
             ).strip()
             if cbsa_code and service:
-                pairs.add((cbsa_code, normalize_service_key(service)))
+                pairs.add((cbsa_code, service_key_text(service)))
     return pairs
 
 
-def _fetch_pages(
+def _fetch_pages(supabase: Any, table: str, columns: str) -> list[dict[str, Any]]:
+    return _fetch_pages_with_in_filters(supabase, table, columns, {})
+
+
+def _fetch_pages_with_in_filters(
     supabase: Any,
     table: str,
     columns: str,
-    *,
-    candidate_pairs: set[tuple[str, str]] | None = None,
+    in_filters: dict[str, list[str]],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     offset = 0
-    cbsa_codes = sorted({cbsa for cbsa, _service in candidate_pairs or set()})
-    services = sorted({service for _cbsa, service in candidate_pairs or set()})
     while True:
         query = supabase.table(table).select(columns)
-        if candidate_pairs:
-            query = query.in_("cbsa_code", cbsa_codes).in_("niche_normalized", services)
+        for column, values in in_filters.items():
+            query = query.in_(column, values)
         response = query.range(offset, offset + PAGE_SIZE - 1).execute()
         page = list(response.data or [])
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             return rows
         offset += PAGE_SIZE
+
+
+def _fetch_pair_candidate_pages(
+    supabase: Any,
+    table: str,
+    columns: str,
+    candidate_pairs: set[tuple[str, str]] | None,
+) -> list[dict[str, Any]]:
+    if candidate_pairs is None:
+        return _fetch_pages(supabase, table, columns)
+    if not candidate_pairs:
+        return []
+    return _fetch_pages_with_in_filters(
+        supabase,
+        table,
+        columns,
+        {
+            "cbsa_code": sorted({cbsa_code for cbsa_code, _service in candidate_pairs}),
+            "niche_normalized": sorted(
+                {service for _cbsa_code, service in candidate_pairs}
+            ),
+        },
+    )
+
+
+def _pair_key(metro: dict[str, Any], service: str) -> tuple[str, str]:
+    return str(metro["cbsa_code"]), service_key_text(service)
+
+
+def _build_retry_score_pairs(
+    supabase: Any,
+    retry_pairs: set[tuple[str, str]],
+) -> list[tuple[dict[str, Any], str]]:
+    catalog_keys = fetch_service_catalog_keys(supabase)
+    normalized_retry_pairs = _validated_retry_pairs_for_catalog(retry_pairs, catalog_keys)
+    metros_by_cbsa = fetch_metros_by_cbsa(
+        supabase, {cbsa_code for cbsa_code, _service in normalized_retry_pairs}
+    )
+    missing_cbsa_codes = sorted(
+        cbsa_code
+        for cbsa_code, _service in normalized_retry_pairs
+        if cbsa_code not in metros_by_cbsa
+    )
+    if missing_cbsa_codes:
+        raise RuntimeError(
+            "Retry audit referenced CBSA code(s) missing from metros: "
+            + ", ".join(missing_cbsa_codes)
+        )
+    return [
+        (metros_by_cbsa[cbsa_code], service)
+        for cbsa_code, service in sorted(normalized_retry_pairs)
+    ]
 
 
 async def score_one(
@@ -640,7 +723,7 @@ def build_audit_record(
             "city": city_name,
             "state": metro.get("state"),
             "service": service,
-            "niche_normalized": normalize_service_key(service),
+            "niche_normalized": service_key_text(service),
             "population": metro.get("population"),
             "population_class": metro.get("population_class"),
         },
@@ -785,19 +868,15 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             return
 
     if retry_pairs is not None:
-        retry_cbsa_codes = {cbsa_code for cbsa_code, _service in retry_pairs}
+        pairs = _build_retry_score_pairs(sb, retry_pairs)
+        metros = list({metro["cbsa_code"]: metro for metro, _service in pairs}.values())
+        services = list(dict.fromkeys(service for _metro, service in pairs))
         logger.info(
-            "Fetching %d retry metro(s) referenced by audit...",
-            len(retry_cbsa_codes),
+            "Retry audit selected %d pair(s) across %d metro(s) and %d service(s).",
+            len(pairs),
+            len(metros),
+            len(services),
         )
-        metros = fetch_metros_by_cbsa_codes(sb, retry_cbsa_codes)
-        found_cbsa_codes = {str(metro.get("cbsa_code") or "") for metro in metros}
-        missing_cbsa_codes = sorted(retry_cbsa_codes - found_cbsa_codes)
-        if missing_cbsa_codes:
-            raise RuntimeError(
-                "Retry audit references metro(s) missing from metros: "
-                + ", ".join(missing_cbsa_codes)
-            )
     else:
         logger.info(
             "Fetching up to %d metros with %s strategy...",
@@ -814,61 +893,34 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             require_dfs=args.require_dfs,
             mega_cap=args.mega_cap,
         )
-    logger.info(
-        "Found %d metros by class: %s",
-        len(metros),
-        summarize_metro_selection(metros),
-    )
+        logger.info(
+            "Found %d metros by class: %s",
+            len(metros),
+            summarize_metro_selection(metros),
+        )
 
-    requested_services = (
-        sorted({service for _cbsa_code, service in retry_pairs})
-        if retry_pairs is not None
-        else select_services(args)
-    )
-    services = validate_services_for_catalog(sb, requested_services)
-    logger.info("Services to score (%d): %s", len(services), ", ".join(services))
+        services = validate_services_for_catalog(sb, select_services(args))
+        logger.info("Services to score (%d): %s", len(services), ", ".join(services))
+        pairs = [(metro, service) for metro in metros for service in services]
 
-    candidate_pairs: list[tuple[dict[str, Any], str, tuple[str, str]]] = []
-    selected_pair_keys: set[tuple[str, str]] = set()
-    for metro in metros:
-        for service in services:
-            cbsa = metro["cbsa_code"]
-            pair_key = (cbsa, normalize_service_key(service))
-            if retry_pairs is not None and pair_key not in retry_pairs:
-                continue
-            selected_pair_keys.add(pair_key)
-            candidate_pairs.append((metro, service, pair_key))
-
-    if retry_pairs is not None:
-        unmatched_retry_pairs = retry_pairs - selected_pair_keys
-        if unmatched_retry_pairs:
-            formatted_pairs = ", ".join(
-                f"{cbsa_code}/{service}"
-                for cbsa_code, service in sorted(unmatched_retry_pairs)
-            )
-            raise RuntimeError(
-                "Retry audit pair(s) could not be matched to fetched metros/catalog services: "
-                + formatted_pairs
-            )
-
-    total_pairs = len(candidate_pairs)
+    total_pairs = len(pairs)
+    candidate_pair_keys = {_pair_key(metro, service) for metro, service in pairs}
 
     scored_pairs: set[tuple[str, str]] = set()
     resume_v2 = getattr(args, "resume_v2", False)
     if args.resume or resume_v2:
         logger.info("Checking for already-scored pairs...")
         scored_pairs = (
-            fetch_v2_persisted_pairs(sb, selected_pair_keys)
+            fetch_v2_persisted_pairs(sb, candidate_pair_keys)
             if resume_v2
-            else fetch_scored_pairs(sb).intersection(selected_pair_keys)
+            else fetch_scored_pairs(sb)
         )
-        logger.info("Found %d already-scored pairs", len(scored_pairs))
-
-    pairs = [
-        (metro, service)
-        for metro, service, pair_key in candidate_pairs
-        if not ((args.resume or resume_v2) and pair_key in scored_pairs)
-    ]
+        logger.info("Found %d already-scored candidate pair(s)", len(scored_pairs))
+        pairs = [
+            (metro, service)
+            for metro, service in pairs
+            if _pair_key(metro, service) not in scored_pairs
+        ]
 
     if args.preview:
         logger.info("\n=== PREVIEW: %d pairs to score ===", len(pairs))
