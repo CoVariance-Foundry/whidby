@@ -91,6 +91,26 @@ def test_repair_migration_keeps_v2_top5_schema_idempotent() -> None:
         assert expected in sql
 
 
+def test_metro_dfs_readiness_migration_adds_provenance_fields() -> None:
+    """DFS enrichment must leave reviewable provenance on canonical metro rows."""
+    sql = (MIGRATIONS_DIR / "024_metro_dfs_readiness_provenance.sql").read_text()
+
+    for column in (
+        "dataforseo_location_match_name",
+        "dataforseo_location_match_confidence",
+        "dataforseo_location_match_source",
+        "dataforseo_location_verified_at",
+        "dataforseo_location_review_reason",
+    ):
+        assert f"ADD COLUMN IF NOT EXISTS {column}" in sql
+
+    assert "ALTER TABLE public.metros" in sql
+    assert "metros_dfs_location_match_confidence_check" in sql
+    assert "'exact'" in sql
+    assert "'strong'" in sql
+    assert "idx_metros_dfs_verified_at" in sql
+
+
 def test_whi9_competitor_intel_migration_adds_fact_and_run_tables() -> None:
     sql = _latest_whi9_migration_sql()
 

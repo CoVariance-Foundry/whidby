@@ -132,6 +132,14 @@ tests/
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
 | Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
 
+## Metro DFS Readiness Tests
+
+| Coverage | Expected | Tests |
+|----------|----------|-------|
+| DFS match safety | Exact principal-city matches can be auto-selected, split-token CBSA matches are review-gated, ambiguous cities fail closed, and existing codes are compatible with the metro before being trusted | `tests/scripts/test_metro_dfs_readiness.py` |
+| DFS enrichment apply guard | Production applies require the expected Supabase project, approved strong rows must match CBSA and location code, unsafe statuses never write, provenance schema misses abort, and updates must affect exactly one metro row | `tests/scripts/test_enrich_metro_dfs_codes.py` |
+| Schema provenance | `metros` has DFS match provenance columns and confidence constraints before enrichment writes run | `tests/unit/test_supabase_schema.py` |
+
 ## E2E Scoring Tests (Playwright)
 
 | Spec File | Scope | Requires Backend? |
