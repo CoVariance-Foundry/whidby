@@ -24,8 +24,11 @@ type BillingRecorder = {
 };
 
 const repoRoot = path.resolve(__dirname, "../../..");
-loadDotEnv(path.join(repoRoot, ".env"));
-loadDotEnv(path.resolve(__dirname, "../.env.local"));
+const testEnv = {
+  ...readDotEnv(path.join(repoRoot, ".env")),
+  ...readDotEnv(path.resolve(__dirname, "../.env.local")),
+  ...process.env,
+};
 
 const scenarios: TierScenario[] = [
   {
@@ -141,14 +144,15 @@ function accountFromEnv({
 
 function envFirst(keys: string[]): string | undefined {
   for (const key of keys) {
-    const value = process.env[key];
+    const value = testEnv[key];
     if (value) return value;
   }
   return undefined;
 }
 
-function loadDotEnv(filePath: string): void {
-  if (!fs.existsSync(filePath)) return;
+function readDotEnv(filePath: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  if (!fs.existsSync(filePath)) return values;
 
   for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -165,10 +169,12 @@ function loadDotEnv(filePath: string): void {
       value = value.slice(1, -1);
     }
 
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
+    if (key) {
+      values[key] = value;
     }
   }
+
+  return values;
 }
 
 async function stubBillingRoutes(page: Page): Promise<BillingRecorder> {
