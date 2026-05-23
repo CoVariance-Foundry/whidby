@@ -95,6 +95,47 @@ The admin research-agent dashboard (`apps/admin/`, port 3001 locally) deploys to
 | `STRIPE_PLUS_PRICE_ID` / `STRIPE_PRO_PRICE_ID` | Yes (consumer billing) | Plus and Pro monthly recurring price IDs |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` | No | Consumer feature flags; server handlers fall back to secure defaults when unset |
 
+### Stripe billing setup (consumer app only)
+
+Billing routes live in `apps/app/src/app/api/billing/` (checkout, portal, webhook). All server-side — no Stripe.js on the client.
+
+**1. Stripe Dashboard — webhook endpoint**
+
+Create an endpoint at Stripe Dashboard → Developers → Webhooks:
+- URL: `https://<consumer-vercel-domain>/api/billing/webhook` (Vercel, **not** Render)
+- Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+- Copy the signing secret → set as `STRIPE_WEBHOOK_SECRET` in Vercel env vars
+
+**2. Price IDs**
+
+Products (Plus $49/mo, Pro $100/mo) must exist in Stripe Dashboard → Products. Copy each plan's recurring price ID:
+- Plus price ID → `STRIPE_PLUS_PRICE_ID`
+- Pro price ID → `STRIPE_PRO_PRICE_ID`
+
+For local dev, create the same products in test mode and use test price IDs in `apps/app/.env.local`.
+
+**3. Feature flag activation**
+
+Billing is gated by `billing_checkout_enabled` (defaults `false`). To enable:
+- Set `BILLING_CHECKOUT_ENABLED=true` in Vercel env (bypasses PostHog), or
+- Enable `billing_checkout_enabled` flag in PostHog for gradual rollout
+
+**4. Local testing with Stripe CLI**
+
+```bash
+stripe listen --forward-to localhost:3002/api/billing/webhook
+# Copy the whsec_... output → STRIPE_WEBHOOK_SECRET in apps/app/.env.local
+npm run dev:app
+# Sign in → Settings → Upgrade → test card 4242 4242 4242 4242
+```
+
+**5. Required Supabase migrations**
+
+Migrations 014 (`user_management_billing`) through 018 (`internal_user_entitlements`) must be applied. Verify:
+```sql
+SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'billing_customers');
+```
+
 ### E2E test accounts (Supabase `whidby` project)
 
 Login uses email + password (`signInWithPassword`). These accounts are seeded directly in `auth.users`.
@@ -315,3 +356,4 @@ Run in order from `supabase/migrations/`:
 | 1.2.0 | 2026-04-22 | Mapbox autocomplete | Added `MAPBOX_ACCESS_TOKEN` to both root and Render env tables |
 | 1.3.0 | 2026-04-25 | Staging environment | Added staging stack docs, `ENVIRONMENT`/`CORS_EXTRA_ORIGINS` vars, migration workflow, env scoping |
 | 1.4.0 | 2026-05-17 | Supabase staging workflows | Added staging migration and test-account seeding workflow docs, required `staging` secrets, local env handling, pinned Supabase CLI workflow setup, dev-branch guards, and missing migration rows through 018 |
+| 1.5.0 | 2026-05-21 | Stripe billing setup | Added Stripe Dashboard setup section (webhook, price IDs, feature flag, local testing, migration verification) |
