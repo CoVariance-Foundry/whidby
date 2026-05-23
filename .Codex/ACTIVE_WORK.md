@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: `WHI-99`, `WHI-100`, and `WHI-101` done in Linear; `WHI-102` is in progress. PR #78 merged, the post-merge canary and bounded 12x8 pilot passed persistence gates, final read-only audits keep the benchmark/data-acquisition gate closed, and the current branch is adding opt-in benchmark acquisition support.
+Status: `WHI-99`, `WHI-100`, `WHI-101`, and `WHI-102` are done in Linear. PR #81 merged the opt-in acquisition support, and the current branch is `WHI-103`, generating the durable scoring coverage analysis from the completed experiment artifacts.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-102`.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-103`.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -26,6 +26,7 @@ Current contract:
 - `audit_signal_coverage --coverage-threshold 0.6 --min-benchmark-cells 48 --min-benchmark-sample-size 8` exited fail. Overall DA/Lighthouse value and measurement coverage are 0.0; usable benchmark cells at sample size 8 are 0/48; 32 fact-backed niche/population cells lack benchmark cells; 55 benchmark cells are undersampled; and 89 fact pairs are missing Explore cache rows.
 - Current acquisition slice adds explicit, paid opt-in flags to `scripts/benchmarks/run_pilot.py`: `--collect-organic-telemetry` enriches top non-aggregator organic targets with DataForSEO Backlinks Summary and Lighthouse into nullable top-5 telemetry fields, while `--collect-review-velocity` enriches top local-pack listings through Google Reviews using `cid`/`place_id` when available. Preflight still skips both add-ons, and no broader paid acquisition has run in this slice.
 - PR #81 reviewer follow-up fixed acquisition edge cases: review velocity now propagates to every keyword fact row, malformed local-pack rows without title/CID/place ID are skipped, Backlinks Summary requests the `one_hundred` rank scale before persisting DA telemetry, and DA parsing prefers explicit domain-rank keys before any generic nested `rank`.
+- WHI-103 records the durable analysis in `docs/scoring-coverage-analysis.md`, using the ignored `reports/scoring_audit/coverage_*.jsonl` and `scoring_audit_20260523T154926Z.*` artifacts. The conclusion is that the 96/96 pilot validates the guarded scoring and persistence path, but benchmark usability remains 0/48 at `sample_size_metros >= 8`, DA/Lighthouse telemetry is absent, local difficulty inputs are missing, and only 10/96 pilot rows are visible through V2-backed Explore rows.
 
 Verified:
 
@@ -47,7 +48,7 @@ Verified:
 
 Next:
 
-- Review and merge the opt-in acquisition support PR, then run the smallest approved backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
+- Open and merge the WHI-103 coverage-analysis PR, then move to `WHI-104` for benchmark-cell sufficiency. Keep paid work bounded to the smallest reviewed acquisition/backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
 
 ## Billing Hardening And Admin Issue Visibility
 
