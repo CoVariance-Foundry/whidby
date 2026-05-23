@@ -149,6 +149,82 @@ The benchmark gate remains closed.
 
 The current benchmark shape is enough to explain why scores are low-confidence, but not enough to recompute benchmark-backed V2 scoring or expand production seeding. The next acquisition run should target the smallest missing service x population cells needed to lift benchmark sample sizes to at least 8 metros per cell.
 
+## Benchmark-Cell Sufficiency Appendix
+
+Linear: `WHI-104`
+
+Schema source checked before querying:
+
+- `.Codex/databricks-context/` is not present in this repo checkout.
+- Supabase schema source is `supabase/migrations/010_v2_benchmarks.sql` and `supabase/migrations/012_recompute_seo_benchmarks.sql`.
+- The live read-only query selected the documented `seo_benchmarks` columns: `niche_normalized`, `naics_code`, `population_class`, benchmark percentile fields, `sample_size_metros`, `sample_size_observations`, `confidence_label`, `last_recomputed_at`, `fact_window_start`, and `fact_window_end`.
+
+Live query snapshot:
+
+| Measure | Result |
+| --- | ---: |
+| Query time | 2026-05-23 |
+| Production project | `eoajvifhbmqmoluiokcj` |
+| `seo_benchmarks` rows | 55 |
+| Distinct benchmark niches | 10 |
+| Core-service cells present | 28/48 |
+| Core-service cells usable at `sample_size_metros >= 8` | 0/48 |
+| Core-service cells missing | 20/48 |
+| Present core-service cells below sample threshold | 28/28 |
+| Present core-service low-confidence cells | 6 |
+| Present core-service insufficient cells | 22 |
+| Latest benchmark recompute timestamp | 2026-05-17T19:44:17.682542+00:00 |
+
+All present cells are below the production usability floor. Sample sizes across all 55 benchmark rows are: 21 cells at `n=1`, 22 cells at `n=2`, 11 cells at `n=3`, and 1 cell at `n=4`. There are no `medium` or `high` confidence cells.
+
+### Core-Service Cell Matrix
+
+Cell format: `sample_size_metros / confidence`. `missing` means no benchmark row exists for the core service alias and population class.
+
+| Service | `micro_under_50k` | `small_50_100k` | `medium_100_300k` | `large_300k_1m` | `metro_1m_5m` | `mega_5m_plus` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `roofing` | 1 / insufficient | 2 / insufficient | 2 / insufficient | 1 / insufficient | 2 / insufficient | 1 / insufficient |
+| `plumbing` | 1 / insufficient | 1 / insufficient | 1 / insufficient | 1 / insufficient | 3 / low | 2 / insufficient |
+| `hvac` | missing | missing | missing | missing | missing | missing |
+| `tree service` | missing | missing | missing | missing | missing | missing |
+| `auto repair` | 1 / insufficient | 2 / insufficient | 4 / low | 3 / low | 3 / low | 2 / insufficient |
+| `water damage restoration` | 1 / insufficient | 2 / insufficient | 3 / low | missing | 1 / insufficient | 1 / insufficient |
+| `electrician` | missing | missing | missing | missing | missing | missing |
+| `locksmith` | missing | 2 / insufficient | 2 / insufficient | 3 / low | 2 / insufficient | 1 / insufficient |
+
+### Metric-Level Usability
+
+| Metric group | Current state | Production policy |
+| --- | --- | --- |
+| Demand volume/CPC | Values exist in many present cells, but every cell is below `sample_size_metros >= 8`. | Warning-only until each target cell or approved pooled cell reaches the sample floor. |
+| Organic aggregator/local-business counts | Values exist in present cells, but every cell is below the sample floor. | Warning-only; do not treat as benchmark-reliable. |
+| Local review count and review velocity | `median_top3_review_count_min` and `median_top3_review_velocity` are null in all 28 present core-service cells. | Requires acquisition/backfill before local difficulty benchmarking. |
+| Monetization density/ads/LSA | Values exist in present cells, but every cell is below the sample floor. | Warning-only until sample sizes pass; do not recompute scale-out scores from these cells. |
+| AI resilience AIO rate | Values exist in present cells, but every cell is below the sample floor. | Warning-only; defer formula decisions to post-acquisition audit. |
+
+### Pooling And Seed Recommendations
+
+Per-class scoring is not production-usable for any core service. If the product accepts pooled city-size classes as a temporary fallback, only one limited grouping clears the sample floor today: `auto repair` across small + medium + large (`n=9`). Everything else remains below threshold and should stay warning-only or receive more benchmark metros.
+
+| Service | Small+medium+large n | Recommendation | Metro+mega n | Recommendation |
+| --- | ---: | --- | ---: | --- |
+| `roofing` | 5 | Add 3 class-pooled metros or keep warning-only | 3 | Add 5 metro/mega metros or keep warning-only |
+| `plumbing` | 3 | Add 5 class-pooled metros or keep warning-only | 5 | Add 3 metro/mega metros or keep warning-only |
+| `hvac` | 0 | Add 8 class-pooled metros or keep warning-only | 0 | Add 8 metro/mega metros or keep warning-only |
+| `tree service` | 0 | Add 8 class-pooled metros or keep warning-only | 0 | Add 8 metro/mega metros or keep warning-only |
+| `auto repair` | 9 | Pooled small/medium/large cell is usable if pooling is approved | 5 | Add 3 metro/mega metros or keep warning-only |
+| `water damage restoration` | 5 | Add 3 class-pooled metros or keep warning-only | 2 | Add 6 metro/mega metros or keep warning-only |
+| `electrician` | 0 | Add 8 class-pooled metros or keep warning-only | 0 | Add 8 metro/mega metros or keep warning-only |
+| `locksmith` | 7 | Add 1 class-pooled metro or keep warning-only | 3 | Add 5 metro/mega metros or keep warning-only |
+
+Concrete routing:
+
+1. Add more metros for missing core services first: `hvac`, `tree service`, and `electrician` have 0/6 benchmark cells.
+2. Backfill missing cells for `water damage restoration` large and `locksmith` micro before treating those services as class-complete.
+3. Keep metro and mega buckets warning-only unless a follow-up explicitly approves pooling and adds at least 3 to 8 more metro/mega benchmark metros per service.
+4. Keep local difficulty benchmark-gated until review count and review velocity medians are populated; sample size alone will not fix local difficulty because the current median fields are null.
+5. Do not mark any benchmark cell usable in app or scoring logic until `sample_size_metros >= 8`; current `low` cells remain non-production.
+
 ## App Surface Visibility
 
 | Measure | Result |
