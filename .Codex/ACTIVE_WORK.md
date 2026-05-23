@@ -2,7 +2,7 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: `WHI-99`, `WHI-100`, and `WHI-101` done in Linear; `WHI-102` is in progress and stopped at the canary persistence gate. Draft PR: https://github.com/CoVariance-Foundry/whidby/pull/78.
+Status: `WHI-99`, `WHI-100`, and `WHI-101` done in Linear; `WHI-102` is in progress. PR #78 merged, the post-merge canary and bounded 12x8 pilot passed persistence gates, and final read-only audits keep the benchmark/data-acquisition gate closed.
 
 Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-102`.
 
@@ -14,14 +14,16 @@ Current contract:
 - Pilot scope is 12 metros x 8 services: 1 micro, 3 small, 3 medium, 3 large, 1 metro, and 1 mega, using DFS-ready metros only.
 - Core services are roofing, plumbing, hvac, tree service, auto repair, water damage restoration, electrician, and locksmith.
 - Apply commands require `--require-dfs`, `--require-v2-persistence`, and `--expected-project-ref eoajvifhbmqmoluiokcj`.
-- No paid pilot should run until preview and one-pair canary gates pass.
+- No broader paid expansion or benchmark recompute should run until the read-only audit gates pass.
 - `scripts/explore/bulk_score.py` now emits WHI-100 stable JSONL fields plus aggregate preview/apply JSON under ignored `reports/scoring_audit/` by default.
 - `scripts/explore/audit_metro_dfs_readiness.py` review CSVs now include WHI-101 residual review classification, production seed policy, approval-artifact requirement, and population context.
 - `bulk_score.py --require-dfs` excludes rows whose DFS match confidence is marked `ambiguous`, `invalid_existing_code`, or `no_match`.
 - WHI-102 previews passed for all six buckets using `uv run python -m scripts.explore.bulk_score --preview` and wrote ignored summary files under `reports/scoring_audit/preview_*.json`.
-- WHI-102 one-pair production canary ran Waco, TX x roofing against `https://whidby-1.onrender.com` with `--require-dfs`, `--require-v2-persistence`, and project guard `eoajvifhbmqmoluiokcj`. It returned API HTTP 200 and created report `69d8dccf-b1c9-453d-9ff7-7dffaf0c9850`, but stopped as `partial_failure` because `metro_scores`, `metro_score_v2`, and `seo_facts` were missing. `explore_market_cells` had one row but it was not report-backed/V2-visible.
-- The read-only canary audit exited fail with `persistence_partial_failure`; top app-surface gaps were missing Explore V2 preference and missing report-backed Explore visibility.
-- Follow-up inspection showed the API persisted legacy child rows for report `69d8dccf-b1c9-453d-9ff7-7dffaf0c9850`, but under synthetic `cbsa_code=fallback:waco`; V2 upsert then failed because the synthetic CBSA does not exist in production `metros`. The local fix on PR #78 preserves explicit production `cbsa_code`, `cbsa_name`, `population`, and DFS location code through `bulk_score.py` -> `/api/niches/score` -> `score_niche_for_metro`.
+- WHI-102 original one-pair production canary ran Waco, TX x roofing against `https://whidby-1.onrender.com` with `--require-dfs`, `--require-v2-persistence`, and project guard `eoajvifhbmqmoluiokcj`. It returned API HTTP 200 and created report `69d8dccf-b1c9-453d-9ff7-7dffaf0c9850`, but stopped as `partial_failure` because `metro_scores`, `metro_score_v2`, and `seo_facts` were missing. Follow-up inspection showed target identity drift: the API persisted legacy child rows under synthetic `cbsa_code=fallback:waco`, so V2 upserts could not satisfy production metro lineage.
+- PR #78 fixed explicit production metro identity propagation through `bulk_score.py` -> `/api/niches/score` -> `score_niche_for_metro`. After merge, `npm run runtime:check` passed and the post-merge canary reran Waco, TX x roofing against `https://whidby-1.onrender.com`; it returned API HTTP 200, created report `d440f723-4f6f-43a3-a4c4-65fc786cee9e`, and passed required persistence checks for `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and report-backed `explore_market_cells` under CBSA `47380`.
+- The bounded 12x8 WHI-102 pilot passed: 96 successes, 0 partials, 0 failures. Bucket outputs are ignored artifacts under `reports/scoring_audit/coverage_*.jsonl`: micro Winona, MN (8); small Rome, GA / Dubuque, IA / Adrian, MI (24); medium Waco, TX / Sioux Falls, SD / Longview, TX (24); large Omaha, NE / Greenville, SC / Knoxville, TN (24); metro Phoenix, AZ (8); mega New York, NY (8). Each apply run used `--require-dfs`, `--require-v2-persistence`, project guard `eoajvifhbmqmoluiokcj`, and refreshed `explore_market_cells`.
+- `audit_scoring_strategy` wrote `reports/scoring_audit/scoring_audit_20260523T154926Z.json` and exited fail despite the 96/96 pilot success. Critical gaps remain: demand benchmark undersampled; organic top-5 DA/Lighthouse values and measurements missing; local difficulty inputs missing; local and monetization benchmarks undersampled; and app-surface benchmark confidence undersampled. Inventory snapshot: 7,480 intended market pairs, 114 `metro_score_v2` rows, 8,315 `seo_facts` rows, 55 `seo_benchmark` cells, and 131,835 `explore_market_cells` rows.
+- `audit_signal_coverage --coverage-threshold 0.6 --min-benchmark-cells 48 --min-benchmark-sample-size 8` exited fail. Overall DA/Lighthouse value and measurement coverage are 0.0; usable benchmark cells at sample size 8 are 0/48; 32 fact-backed niche/population cells lack benchmark cells; 55 benchmark cells are undersampled; and 89 fact pairs are missing Explore cache rows.
 
 Verified:
 
@@ -38,7 +40,7 @@ Verified:
 
 Next:
 
-- Get PR #78 reviewed/merged and deployed to the production Render API before rerunning the one-pair canary. Do not run the full 12x8 paid pilot until the canary persists `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and a report-backed Explore row under production `cbsa_code=47380`.
+- Keep WHI-102 open for the data-acquisition gate. Next work is to decide the smallest follow-up acquisition/backfill slice that can populate DA/Lighthouse telemetry, local difficulty inputs, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
 
 ## Billing Hardening And Admin Issue Visibility
 
