@@ -177,7 +177,6 @@ def apply_candidates(
             _update_metro(supabase, match.cbsa_code, payload)
         except Exception as exc:
             if _is_missing_provenance_column_error(exc):
-                provenance_columns_missing = True
                 raise RuntimeError(
                     "Provenance columns are missing or schema cache is stale; "
                     "aborting apply without codes-only fallback."

@@ -295,7 +295,7 @@ def test_non_missing_update_failure_mentioning_provenance_column_propagates():
 
 def test_project_ref_guard_rejects_apply_without_expected_ref(monkeypatch):
     monkeypatch.setattr(enrich, "load_env", lambda: None)
-    monkeypatch.setattr(enrich, "supabase_client", lambda: FakeSupabase())
+    monkeypatch.setattr(enrich, "supabase_client", FakeSupabase)
 
     result = enrich.main(["--apply", "--stdout-only"])
 
