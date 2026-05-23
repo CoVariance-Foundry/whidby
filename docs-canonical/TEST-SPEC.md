@@ -30,6 +30,10 @@
 | `src/research_agent/**/*.py` | `tests/unit/test_*.py` | Unit |
 | `src/domain/explore/**/*.py` | `tests/unit/test_explore_*.py` | Unit |
 | `src/domain/services/explore_city_service.py` | `tests/unit/test_explore_city_service.py` | Unit |
+| `apps/app/src/app/api/billing/**/*.ts` | colocated `*.test.ts` | Unit/contract |
+| `apps/app/src/lib/billing/**/*.ts` | colocated `*.test.ts` | Unit/contract |
+| `apps/admin/src/app/api/billing/**/*.ts` | colocated `*.test.ts` | Unit/contract |
+| `apps/admin/src/app/(protected)/billing/**/*.tsx` | colocated `*.test.tsx` | Component |
 | `apps/app/src/app/api/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
 | `apps/app/src/lib/onboarding/**/*.ts` | colocated `*.test.ts` | Unit/contract |
 | `apps/app/src/app/onboarding/**/*.tsx` | colocated `*.test.tsx` | Component |
@@ -203,6 +207,17 @@ Additional contract checks for scoring/autocomplete:
 | Staging seed script | Creates/updates Auth users without returning passwords, preserves existing metadata, assigns member role/plan/quota exemption, and supports admin-test, user-test, Henock, Antwoine, and Luke personas | `tests/scripts/test_seed_test_accounts.py` |
 | Migration parity audit | Fails closed on missing/empty local migration directories and reports local migrations absent from staging history | `tests/scripts/test_audit_migration_parity.py` |
 
+## Billing Operations Tests
+
+| Scope | Required Coverage | Required Tests |
+| --- | --- | --- |
+| Billing hardening schema | `billing_checkout_sessions`, `billing_operation_events`, `billing_webhook_events`, subscription Stripe event ordering columns, `internal_user_entitlements.billing_operations_admin`, RLS, service-role policies, admin RPCs, and supporting indexes | `tests/unit/test_supabase_schema.py` |
+| Checkout route/helpers | Reuses unexpired pending sessions, recovers same-plan reservation insert races, creates customers/sessions with deterministic idempotency keys, logs failures, and returns stable public error codes/messages | `apps/app/src/app/api/billing/checkout/route.test.ts`, `apps/app/src/lib/billing/checkout-session.test.ts` |
+| Portal route | Logs missing customer/config/Stripe failures and never returns raw exception text to users | `apps/app/src/app/api/billing/portal/route.test.ts` |
+| Webhook route | Deduplicates processed Stripe events, retries failed events, fetches current subscription state when needed, skips stale subscription updates, marks checkout sessions complete/expired, and logs processing failures | `apps/app/src/app/api/billing/webhook/route.test.ts`, `apps/app/src/lib/billing/sync-subscription.test.ts` |
+| Admin billing APIs | Requires authenticated admin access through Supabase RPCs, lists filtered billing events, and resolves events | `apps/admin/src/app/api/billing/issues/route.test.ts`, `apps/admin/src/app/api/billing/issues/[id]/resolve/route.test.ts` |
+| Admin billing UI | Shows open issue counts, severity/status filters, detail rows, resolve actions, and a sidebar Billing link | `apps/admin/src/app/(protected)/billing/page.test.tsx`, `apps/admin/src/components/Sidebar.test.tsx` |
+
 ## Unit Test Obligations (Algo Spec §12.1)
 
 | Test | Input | Expected |
@@ -269,6 +284,7 @@ npm run lint
 | 1.3.0 | 2026-05-14 | Explore refresh control | Added refresh policy, target selection, run status, snapshot lineage, trend delta, and cron auth test obligations |
 | 1.4.0 | 2026-05-16 | Consumer onboarding flow | Added schema, routing, API, UI, first-report handoff, and auth-resume test obligations |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
+| 1.6.2 | 2026-05-22 | Billing operations hardening | Added checkout/session idempotency, webhook ledger, issue logging, admin API/UI, and schema test obligations |
 | 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |
 | 1.6.2 | 2026-05-22 | Coverage-first production seed acceptance | Added schema parity, expected-project guard, canary, pilot, benchmark, Explore cache, and full-seed gates |
 | 1.6.3 | 2026-05-22 | Scoring strategy audit | Added component coverage, benchmark usability, pilot-result, and project-guard test obligations |

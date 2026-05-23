@@ -1,5 +1,34 @@
 # Active Work
 
+## Billing Hardening And Admin Issue Visibility
+
+Status: merge conflicts with `origin/main` resolved on `codex/billing-hardening-admin-visibility`; implementation and final checkout reservation race fix are already pushed.
+
+Goal: harden Stripe Checkout/Portal/Webhook behavior after the account billing rollout and give admins an in-app view of billing issues.
+
+Completed in this slice:
+
+- Added migration `023_billing_operations_hardening.sql` with checkout session reservations, billing operation event logging, webhook event ledgering, subscription event-order columns, RLS/service-role policies, and admin RPCs for listing/resolving billing events.
+- Added fail-open billing issue logging, checkout session reservation/reuse helpers, webhook event ledger helpers, and stale-event-aware subscription sync.
+- Hardened consumer Checkout, Portal, and Webhook routes with stable public error codes/messages, Stripe idempotency keys, same-plan checkout reservation race recovery, abandoned reservation cleanup, duplicate webhook handling, stale/same-second webhook skipping, and admin-visible issue records.
+- Added admin billing issue list/resolve API routes, `/billing` dashboard, severity/status filters, expandable issue detail, resolve action, and Billing sidebar navigation.
+- Updated canonical architecture, data-model, test-spec, and project context docs for the billing operations contract.
+
+Verified:
+
+- `npm --workspace apps/app test -- billing flags AccountSettingsClient` passed 36 tests.
+- `npm --workspace apps/admin test -- billing Sidebar` passed 8 tests after using the local dependency bridge in this worktree.
+- Targeted `npm --workspace apps/app run lint -- ...billing files...` passed.
+- Targeted `npm --workspace apps/admin run lint -- ...billing files... Sidebar...` passed.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/unit/test_supabase_schema.py -q` passed 2 tests with the existing `asyncio_mode` warning.
+- `git diff --check` passed.
+- `npx docguard-cli guard` ran with network escalation and exited warn-only with existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.
+
+Noted but not fixed in this slice:
+
+- `npx --no-install tsc --noEmit` in `apps/app` now fails only on existing `src/lib/explore/load-explore-data.test.ts` `NODE_ENV` assignment errors.
+- `npx --no-install tsc --noEmit` in `apps/admin` still fails on existing `src/__tests__/proxy.test.ts` string pathname assertions.
+
 ## WHI-10 Design System Alignment
 
 Status: PR open at `https://github.com/CoVariance-Foundry/whidby/pull/64` on `codex/whi-10-design-system-alignment`; local implementation, review gates, merge-conflict repair, and review-nit fixes passed. GitHub CI/review is still pending and WHI-10 should not be marked Done until the PR merges.
