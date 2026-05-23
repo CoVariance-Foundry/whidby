@@ -528,7 +528,7 @@ raw_data = collect_data(
 }
 ```
 
-Benchmark acquisition uses this M5 contract in a bounded runner path: SERP parsing selects non-aggregator organic URLs before optional Backlinks Summary/Lighthouse calls, and local-pack rows use `place_id` or `cid` before title fallback for optional Google Reviews velocity. The resulting nullable telemetry remains at `seo_facts` grain and feeds benchmark recompute only after audit approval.
+Benchmark acquisition uses this M5 contract in a bounded runner path: SERP parsing selects non-aggregator organic URLs before optional Backlinks Summary calls on the `one_hundred` rank scale plus Lighthouse calls, and local-pack rows use `place_id` or `cid` before title fallback for optional Google Reviews velocity. The resulting nullable telemetry remains at `seo_facts` grain and feeds benchmark recompute only after audit approval.
 
 **Files to create:**
 ```

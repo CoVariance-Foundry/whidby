@@ -25,6 +25,7 @@ Current contract:
 - `audit_scoring_strategy` wrote `reports/scoring_audit/scoring_audit_20260523T154926Z.json` and exited fail despite the 96/96 pilot success. Critical gaps remain: demand benchmark undersampled; organic top-5 DA/Lighthouse values and measurements missing; local difficulty inputs missing; local and monetization benchmarks undersampled; and app-surface benchmark confidence undersampled. Inventory snapshot: 7,480 intended market pairs, 114 `metro_score_v2` rows, 8,315 `seo_facts` rows, 55 `seo_benchmark` cells, and 131,835 `explore_market_cells` rows.
 - `audit_signal_coverage --coverage-threshold 0.6 --min-benchmark-cells 48 --min-benchmark-sample-size 8` exited fail. Overall DA/Lighthouse value and measurement coverage are 0.0; usable benchmark cells at sample size 8 are 0/48; 32 fact-backed niche/population cells lack benchmark cells; 55 benchmark cells are undersampled; and 89 fact pairs are missing Explore cache rows.
 - Current acquisition slice adds explicit, paid opt-in flags to `scripts/benchmarks/run_pilot.py`: `--collect-organic-telemetry` enriches top non-aggregator organic targets with DataForSEO Backlinks Summary and Lighthouse into nullable top-5 telemetry fields, while `--collect-review-velocity` enriches top local-pack listings through Google Reviews using `cid`/`place_id` when available. Preflight still skips both add-ons, and no broader paid acquisition has run in this slice.
+- PR #81 reviewer follow-up fixed three acquisition edge cases: review velocity now propagates to every keyword fact row, malformed local-pack rows without title/CID/place ID are skipped, and Backlinks Summary requests the `one_hundred` rank scale before persisting DA telemetry.
 
 Verified:
 
@@ -38,8 +39,8 @@ Verified:
 - `uv run python -m scripts.explore.audit_scoring_strategy --read-only --expected-project-ref eoajvifhbmqmoluiokcj --service-name roofing --population-class medium_100_300k --pilot-results reports/scoring_audit/coverage_canary.jsonl --stdout-only` exited fail because the canary was a persistence partial failure.
 - `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p asyncio tests/unit/test_pipeline_orchestrator.py tests/unit/test_api_niches.py tests/scripts/test_bulk_score.py -q` passed 50 tests after the explicit-target fix.
 - `ruff check src/pipeline/orchestrator.py src/domain/services/market_service.py src/research_agent/api.py scripts/explore/bulk_score.py tests/unit/test_pipeline_orchestrator.py tests/unit/test_api_niches.py tests/scripts/test_bulk_score.py` passed.
-- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p asyncio tests/scripts/test_benchmark_serp_parsing.py tests/scripts/test_benchmark_sampling.py tests/scripts/test_signal_coverage_audit.py tests/scripts/test_scoring_strategy_audit.py -q` passed 45 tests for the acquisition/backfill support.
-- `pytest tests/unit/test_dataforseo_client.py -q` passed 17 tests.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p asyncio tests/scripts/test_benchmark_serp_parsing.py tests/scripts/test_benchmark_sampling.py tests/scripts/test_signal_coverage_audit.py tests/scripts/test_scoring_strategy_audit.py -q` passed 47 tests for the acquisition/backfill support.
+- `pytest tests/unit/test_dataforseo_client.py -q` passed 18 tests.
 - `ruff check scripts/benchmarks/run_pilot.py src/clients/dataforseo/client.py tests/scripts/test_benchmark_serp_parsing.py tests/unit/test_dataforseo_client.py` passed.
 - `git diff --check` passed.
 - `npx docguard-cli guard` ran with network escalation and exited warn-only with the existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.

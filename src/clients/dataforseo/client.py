@@ -236,9 +236,16 @@ class DataForSEOClient:
         payload = [{"keyword": keyword, "location_code": location_code}]
         return await self._live_request(ep.GOOGLE_MY_BUSINESS_INFO, payload)
 
-    async def backlinks_summary(self, target: str) -> APIResponse:
-        payload = [{"target": target}]
-        return await self._live_request(ep.BACKLINKS_SUMMARY, payload)
+    async def backlinks_summary(
+        self,
+        target: str,
+        *,
+        rank_scale: str | None = None,
+    ) -> APIResponse:
+        payload_item: dict[str, Any] = {"target": target}
+        if rank_scale:
+            payload_item["rank_scale"] = rank_scale
+        return await self._live_request(ep.BACKLINKS_SUMMARY, [payload_item])
 
     async def lighthouse(self, url: str) -> APIResponse:
         payload = [{"url": url}]

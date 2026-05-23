@@ -153,7 +153,7 @@ Linear: `WHI-99`. This is the required source-of-truth experiment contract befor
 
 ### Benchmark Data Acquisition
 
-The post-pilot acquisition slice is explicit opt-in only. `scripts.benchmarks.run_pilot --collect-organic-telemetry` enriches the top non-aggregator organic SERP targets with DataForSEO Backlinks Summary and Lighthouse data, writing nullable `avg_top5_da`, `avg_top5_lighthouse`, coverage, and confidence fields to `seo_facts`. `--collect-review-velocity` enriches the top local-pack listings through DataForSEO Google Reviews using `cid` or `place_id` when available, writing nullable `top3_review_velocity_avg`.
+The post-pilot acquisition slice is explicit opt-in only. `scripts.benchmarks.run_pilot --collect-organic-telemetry` enriches the top non-aggregator organic SERP targets with DataForSEO Backlinks Summary using `rank_scale=one_hundred` plus Lighthouse data, writing nullable `avg_top5_da`, `avg_top5_lighthouse`, coverage, and confidence fields to `seo_facts`. `--collect-review-velocity` enriches the top local-pack listings through DataForSEO Google Reviews using `cid` or `place_id` when available, writing nullable `top3_review_velocity_avg`.
 
 Preflight mode must skip both acquisition add-ons even when their flags are present. These flags are for bounded backfill/acquisition runs after read-only audits identify missing DA/Lighthouse, review velocity, or undersampled benchmark cells; they do not authorize broader paid expansion or benchmark recompute until audit gates pass.
 

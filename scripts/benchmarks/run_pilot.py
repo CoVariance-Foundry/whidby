@@ -529,6 +529,18 @@ def top5_organic_confidence(da_coverage: float, lighthouse_coverage: float) -> s
     return "missing"
 
 
+def propagate_head_feature(
+    serp_features_by_kw: dict[str, dict[str, Any]],
+    head_features: dict[str, Any],
+    key: str,
+    value: Any,
+) -> None:
+    """Apply a metro-level head SERP feature to every keyword fact row."""
+    head_features[key] = value
+    for features in serp_features_by_kw.values():
+        features[key] = value
+
+
 async def collect_organic_telemetry(
     dfs: DataForSEOClient,
     organic_targets: list[dict[str, Any]],
@@ -545,7 +557,7 @@ async def collect_organic_telemetry(
         domain = target.get("domain")
         url = target.get("url")
         if domain:
-            response = await dfs.backlinks_summary(str(domain))
+            response = await dfs.backlinks_summary(str(domain), rank_scale="one_hundred")
             if response.status == "ok":
                 da = parse_backlinks_domain_authority(response.data)
                 if da is not None:
@@ -608,12 +620,17 @@ async def collect_top3_review_velocity(
     velocities: list[float] = []
     for item in local_pack_items[:3]:
         title = item.get("title")
+        keyword = str(title) if title else None
+        cid = item.get("cid")
+        place_id = item.get("place_id")
+        if not any((keyword, cid, place_id)):
+            continue
         response = await dfs.google_reviews(
-            keyword=str(title) if title else None,
+            keyword=keyword,
             location_code=location_code,
             depth=depth,
-            cid=item.get("cid"),
-            place_id=item.get("place_id"),
+            cid=cid,
+            place_id=place_id,
             sort_by="newest",
         )
         if response.status != "ok":
@@ -866,7 +883,12 @@ async def score_one(
                 depth=review_depth,
             )
             if velocity is not None:
-                head_features["top3_review_velocity_avg"] = velocity
+                propagate_head_feature(
+                    serp_features_by_kw,
+                    head_features,
+                    "top3_review_velocity_avg",
+                    velocity,
+                )
 
         organic_telemetry: dict[str, Any] = {}
         if collect_organic:

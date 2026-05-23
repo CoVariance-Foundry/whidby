@@ -183,6 +183,18 @@ class TestLiveEndpoints:
         assert result.data is not None
         assert result.cost > 0
 
+    @pytest.mark.asyncio
+    async def test_backlinks_summary_can_request_one_hundred_rank_scale(self, mocker):
+        client = _make_client()
+        post = mocker.patch.object(client, "_post", return_value=BUSINESS_LISTINGS_RESPONSE)
+
+        result = await client.backlinks_summary("example.com", rank_scale="one_hundred")
+
+        assert result.status == "ok"
+        assert post.call_args_list[0].args[1] == [
+            {"target": "example.com", "rank_scale": "one_hundred"}
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Caching

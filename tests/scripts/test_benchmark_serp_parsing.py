@@ -6,6 +6,7 @@ from scripts.benchmarks.run_pilot import (
     parse_backlinks_domain_authority,
     parse_lighthouse_performance_score,
     parse_serp_items,
+    propagate_head_feature,
 )
 from src.clients.dataforseo.types import APIResponse
 
@@ -83,11 +84,32 @@ def test_parse_backlinks_and_lighthouse_values_from_dfs_shapes():
     assert parse_lighthouse_performance_score([{"performance_score": 91}]) == 91
 
 
+def test_propagate_head_feature_updates_all_keyword_rows():
+    features_by_kw = {
+        "roofing": {"top3_review_velocity_avg": None},
+        "roof repair": {},
+    }
+    head_features = {}
+
+    propagate_head_feature(
+        features_by_kw,
+        head_features,
+        "top3_review_velocity_avg",
+        1.25,
+    )
+
+    assert head_features["top3_review_velocity_avg"] == 1.25
+    assert features_by_kw["roofing"]["top3_review_velocity_avg"] == 1.25
+    assert features_by_kw["roof repair"]["top3_review_velocity_avg"] == 1.25
+
+
 class _FakeDFS:
     def __init__(self) -> None:
+        self.backlink_calls = []
         self.review_calls = []
 
-    async def backlinks_summary(self, target):
+    async def backlinks_summary(self, target, *, rank_scale=None):
+        self.backlink_calls.append({"target": target, "rank_scale": rank_scale})
         return APIResponse(status="ok", data=[{"rank": 40 if target == "a.example" else 50}])
 
     async def lighthouse(self, url):
@@ -147,6 +169,10 @@ async def test_collect_organic_telemetry_aggregates_top5_fields():
         "top5_organic_data_confidence": "low",
     }
     assert result.failures == []
+    assert dfs.backlink_calls == [
+        {"target": "a.example", "rank_scale": "one_hundred"},
+        {"target": "b.example", "rank_scale": "one_hundred"},
+    ]
 
 
 @pytest.mark.asyncio
@@ -181,4 +207,32 @@ async def test_collect_top3_review_velocity_uses_place_identifiers():
             "place_id": "place-b",
             "sort_by": "newest",
         },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_collect_top3_review_velocity_skips_missing_review_identifiers():
+    dfs = _FakeDFS()
+
+    velocity = await collect_top3_review_velocity(
+        dfs,
+        [
+            {},
+            {"title": ""},
+            {"cid": "cid-a"},
+        ],
+        location_code=1012873,
+        depth=10,
+    )
+
+    assert velocity == 1.0
+    assert dfs.review_calls == [
+        {
+            "keyword": None,
+            "location_code": 1012873,
+            "depth": 10,
+            "cid": "cid-a",
+            "place_id": None,
+            "sort_by": "newest",
+        }
     ]
