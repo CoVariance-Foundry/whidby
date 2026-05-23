@@ -151,6 +151,13 @@ export async function POST(req: NextRequest) {
       plan_key: body.plan_key,
     });
     logContext.checkout_reservation_id = reservation.id;
+    if (reservation.stripe_checkout_url) {
+      return NextResponse.json({
+        status: "success",
+        url: reservation.stripe_checkout_url,
+        reused: true,
+      });
+    }
 
     const session = await stripe.checkout.sessions.create(
       {

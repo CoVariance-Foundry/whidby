@@ -250,7 +250,7 @@ Fresh scoring requests must persist generated reports as `account`; existing own
 
 Billing operational state is service-role owned. Regular consumer users never read operational rows directly; internal operators access issue visibility through checked RPCs and `apps/admin` API routes. The billing operations gate is `internal_user_entitlements.billing_operations_admin`, not account-level membership role.
 
-`billing_checkout_sessions` reserves a Stripe Checkout attempt before the Stripe call. There can be only one active pending reservation per account. A still-unexpired pending reservation for the same account and plan should be reused instead of creating a duplicate Stripe Checkout Session; stale pending reservations should move to `expired`.
+`billing_checkout_sessions` reserves a Stripe Checkout attempt before the Stripe call. There can be only one active pending reservation per account. A still-unexpired pending reservation for the same account and plan should be reused instead of creating a duplicate Stripe Checkout Session; if a reservation insert collides with a concurrent same-plan request, the checkout path should refetch and reuse that pending row rather than logging a billing failure. Stale pending reservations should move to `expired`.
 
 `billing_webhook_events` is a ledger keyed by Stripe `event.id`. Processed or ignored events are acknowledged without reprocessing. Failed events can be retried by Stripe and increment `attempt_count`. Subscription sync receives the Stripe event id and event creation timestamp, persists them on `subscriptions.last_stripe_event_id` and `subscriptions.last_stripe_event_created_at`, and skips older subscription events when a newer event has already been applied.
 

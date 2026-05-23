@@ -173,6 +173,37 @@ describe("POST /api/billing/checkout", () => {
     expect(mocks.checkoutCreate).not.toHaveBeenCalled();
   });
 
+  it("reuses a checkout reservation recovered from a concurrent request", async () => {
+    mocks.reserveCheckoutSession.mockResolvedValue({
+      id: "reservation-race",
+      account_id: "account-1",
+      user_id: "user-1",
+      plan_key: "plus",
+      status: "pending",
+      stripe_checkout_session_id: "cs_race",
+      stripe_checkout_url: "https://stripe.test/race",
+      expires_at: "2026-05-01T00:30:00.000Z",
+      idempotency_key: "billing-checkout:account-1:plus:reservation-race",
+    });
+    const req = new Request("http://localhost:3002/api/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ plan_key: "plus" }),
+    });
+
+    const res = await POST(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "success",
+      url: "https://stripe.test/race",
+      reused: true,
+    });
+    expect(mocks.checkoutCreate).not.toHaveBeenCalled();
+    expect(mocks.completeCheckoutSessionReservation).not.toHaveBeenCalled();
+    expect(mocks.recordBillingOperationEvent).not.toHaveBeenCalled();
+  });
+
   it("logs checkout failures and returns a sanitized error", async () => {
     mocks.checkoutCreate.mockRejectedValue(new Error("Neither STRIPE_SECRET_KEY nor STRIPE_RESTRICTED_KEY is configured"));
     const req = new Request("http://localhost:3002/api/billing/checkout", {

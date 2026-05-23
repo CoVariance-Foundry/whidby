@@ -16,6 +16,9 @@ export type BillingCheckoutSession = {
 
 const CHECKOUT_SESSION_TTL_MS = 30 * 60 * 1000;
 const ABANDONED_PENDING_GRACE_MS = 2 * 60 * 1000;
+const CHECKOUT_SESSION_SELECT =
+  "id, account_id, user_id, plan_key, status, stripe_checkout_session_id, stripe_checkout_url, expires_at, idempotency_key";
+const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 export async function findReusableCheckoutSession(
   supabase: SupabaseClient,
@@ -25,9 +28,7 @@ export async function findReusableCheckoutSession(
 ): Promise<BillingCheckoutSession | null> {
   const { data, error } = await supabase
     .from("billing_checkout_sessions")
-    .select(
-      "id, account_id, user_id, plan_key, status, stripe_checkout_session_id, stripe_checkout_url, expires_at, idempotency_key",
-    )
+    .select(CHECKOUT_SESSION_SELECT)
     .eq("account_id", accountId)
     .eq("plan_key", planKey)
     .eq("status", "pending")
@@ -111,13 +112,49 @@ export async function reserveCheckoutSession(
       idempotency_key: idempotencyKey,
       updated_at: now.toISOString(),
     })
-    .select(
-      "id, account_id, user_id, plan_key, status, stripe_checkout_session_id, stripe_checkout_url, expires_at, idempotency_key",
-    )
+    .select(CHECKOUT_SESSION_SELECT)
     .single();
 
-  if (error) throw new Error(`checkout session reservation failed: ${error.message}`);
+  if (error) {
+    if (isUniqueConstraintError(error)) {
+      const existing = await findPendingCheckoutReservation(
+        supabase,
+        params.account_id,
+        params.plan_key,
+        now,
+      );
+      if (existing) return existing;
+    }
+    throw new Error(`checkout session reservation failed: ${error.message}`);
+  }
   return data as BillingCheckoutSession;
+}
+
+async function findPendingCheckoutReservation(
+  supabase: SupabaseClient,
+  accountId: string,
+  planKey: PaidPlanKey,
+  now: Date,
+): Promise<BillingCheckoutSession | null> {
+  const { data, error } = await supabase
+    .from("billing_checkout_sessions")
+    .select(CHECKOUT_SESSION_SELECT)
+    .eq("account_id", accountId)
+    .eq("plan_key", planKey)
+    .eq("status", "pending")
+    .gt("expires_at", now.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`checkout session conflict recovery failed: ${error.message}`);
+  }
+  return (data as BillingCheckoutSession | null) ?? null;
+}
+
+function isUniqueConstraintError(error: { code?: string | null }): boolean {
+  return error.code === POSTGRES_UNIQUE_VIOLATION;
 }
 
 export async function completeCheckoutSessionReservation(

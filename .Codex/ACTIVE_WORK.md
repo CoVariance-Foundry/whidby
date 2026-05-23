@@ -2,7 +2,7 @@
 
 ## Billing Hardening And Admin Issue Visibility
 
-Status: implemented and verified locally on `codex/billing-hardening-admin-visibility`; PR review comments addressed.
+Status: implemented and verified locally on `codex/billing-hardening-admin-visibility`; final checkout reservation race review issue addressed.
 
 Goal: harden Stripe Checkout/Portal/Webhook behavior after the account billing rollout and give admins an in-app view of billing issues.
 
@@ -10,13 +10,13 @@ Completed in this slice:
 
 - Added migration `023_billing_operations_hardening.sql` with checkout session reservations, billing operation event logging, webhook event ledgering, subscription event-order columns, RLS/service-role policies, and admin RPCs for listing/resolving billing events.
 - Added fail-open billing issue logging, checkout session reservation/reuse helpers, webhook event ledger helpers, and stale-event-aware subscription sync.
-- Hardened consumer Checkout, Portal, and Webhook routes with stable public error codes/messages, Stripe idempotency keys, abandoned reservation cleanup, duplicate webhook handling, stale/same-second webhook skipping, and admin-visible issue records.
+- Hardened consumer Checkout, Portal, and Webhook routes with stable public error codes/messages, Stripe idempotency keys, same-plan checkout reservation race recovery, abandoned reservation cleanup, duplicate webhook handling, stale/same-second webhook skipping, and admin-visible issue records.
 - Added admin billing issue list/resolve API routes, `/billing` dashboard, severity/status filters, expandable issue detail, resolve action, and Billing sidebar navigation.
 - Updated canonical architecture, data-model, test-spec, and project context docs for the billing operations contract.
 
 Verified:
 
-- `npm --workspace apps/app test -- billing flags AccountSettingsClient` passed 34 tests.
+- `npm --workspace apps/app test -- billing flags AccountSettingsClient` passed 36 tests.
 - `npm --workspace apps/admin test -- billing Sidebar` passed 8 tests after using the local dependency bridge in this worktree.
 - Targeted `npm --workspace apps/app run lint -- ...billing files...` passed.
 - Targeted `npm --workspace apps/admin run lint -- ...billing files... Sidebar...` passed.
