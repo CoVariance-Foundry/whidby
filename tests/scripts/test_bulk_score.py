@@ -1041,6 +1041,34 @@ async def test_score_one_omits_explicit_identity_for_unresolved_dfs_residual():
     }
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("population", [None, 0])
+async def test_score_one_omits_explicit_identity_without_positive_population(population):
+    client = FakePostClient()
+    metro = {
+        "cbsa_code": "47380",
+        "cbsa_name": "Waco, TX",
+        "state": "TX",
+        "population": population,
+        "dataforseo_location_codes": [1026822],
+        "dataforseo_location_match_confidence": "exact",
+    }
+
+    result = await bulk_score.score_one(
+        client,
+        "https://whidby-1.onrender.com",
+        metro,
+        "roofing",
+    )
+
+    assert result == {"report_id": "report-1", "opportunity_score": 72}
+    assert client.posts[0]["json"] == {
+        "niche": "roofing",
+        "city": "Waco",
+        "state": "TX",
+    }
+
+
 def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
     monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
     monkeypatch.setattr(bulk_score, "_supabase_client", lambda: object())

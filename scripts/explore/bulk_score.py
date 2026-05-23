@@ -594,12 +594,18 @@ async def score_one(
         "city": city_name,
         "state": metro.get("state"),
     }
-    if dataforseo_location_code is not None and _has_dfs_location(metro):
+    population = metro.get("population")
+    if (
+        dataforseo_location_code is not None
+        and _has_dfs_location(metro)
+        and isinstance(population, int)
+        and population > 0
+    ):
         payload.update(
             {
                 "cbsa_code": str(metro.get("cbsa_code") or ""),
                 "cbsa_name": str(metro.get("cbsa_name") or ""),
-                "population": metro.get("population"),
+                "population": population,
                 "metadata_source": "explicit_cbsa",
                 "dataforseo_location_code": dataforseo_location_code,
             }
