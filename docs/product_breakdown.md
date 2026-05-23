@@ -137,6 +137,8 @@ M10 → M11 → M12 → M13 → M14 → M15
 ```python
 # Input: API endpoint + parameters
 client.serp_organic(keyword="plumber", location_code=1012873, depth=10)
+client.google_reviews(location_code=1012873, cid="1234567890", sort_by="newest")
+client.google_reviews(location_code=1012873, place_id="ChIJ...", depth=10)
 
 # Output: Standardized response object
 {
@@ -151,6 +153,7 @@ client.serp_organic(keyword="plumber", location_code=1012873, depth=10)
 **Key implementation details:**
 - Standard queue endpoints: POST task, poll for results (max 5 min)
 - Live endpoints: single POST, immediate response
+- Google Reviews collection accepts `keyword`, `cid`, or `place_id`; benchmark acquisition prefers local-pack `place_id`/`cid` identifiers and `sort_by="newest"` for review velocity.
 - Rate limit: 2000 calls/minute (enforce client-side)
 - Response caching: cache SERP and keyword data for 24 hours (configurable TTL)
 - Cost tracking: log every API call cost to `api_usage_log` table
@@ -502,7 +505,7 @@ raw_data = collect_data(
       "serp_maps": [{...}],             # per metro
       "keyword_volume": [{...}, ...],   # per keyword
       "business_listings": [{...}, ...],
-      "google_reviews": [{...}, ...],   # per top-3 local pack business
+      "google_reviews": [{...}, ...],   # per top-3 local pack business, newest-first for velocity backfills
       "gbp_info": [{...}, ...],         # per top-5 GBP listing
       "backlinks": [{...}, ...],        # per top-5 domain
       "lighthouse": [{...}, ...],       # per top-5 URL
@@ -524,6 +527,8 @@ raw_data = collect_data(
   }
 }
 ```
+
+Benchmark acquisition uses this M5 contract in a bounded runner path: SERP parsing selects non-aggregator organic URLs before optional Backlinks Summary/Lighthouse calls, and local-pack rows use `place_id` or `cid` before title fallback for optional Google Reviews velocity. The resulting nullable telemetry remains at `seo_facts` grain and feeds benchmark recompute only after audit approval.
 
 **Files to create:**
 ```
