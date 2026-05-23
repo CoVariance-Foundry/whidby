@@ -623,7 +623,9 @@ def test_run_bulk_score_retries_audit_pairs_outside_current_selection(
         },
     )
 
-    async def score_success(_client, _api_url, city_name, state, service):
+    async def score_success(_client, _api_url, metro, service):
+        city_name = bulk_score.city_short_name(metro["cbsa_name"])
+        state = metro["state"]
         scored.append((city_name, state, service))
         return {"report_id": "report-1", "opportunity_score": 72}
 
@@ -930,6 +932,60 @@ class FakeAsyncClient:
 
     async def get(self, *_args, **_kwargs):
         return FakeHealthResponse()
+
+
+class FakePostResponse:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"report_id": "report-1", "opportunity_score": 72}
+
+
+class FakePostClient:
+    def __init__(self):
+        self.posts = []
+
+    async def post(self, url, *, json, timeout):
+        self.posts.append({"url": url, "json": json, "timeout": timeout})
+        return FakePostResponse()
+
+
+@pytest.mark.asyncio
+async def test_score_one_sends_explicit_production_metro_identity():
+    client = FakePostClient()
+    metro = {
+        "cbsa_code": "47380",
+        "cbsa_name": "Waco, TX",
+        "state": "TX",
+        "population": 299_217,
+        "dataforseo_location_codes": [1026822],
+    }
+
+    result = await bulk_score.score_one(
+        client,
+        "https://whidby-1.onrender.com",
+        metro,
+        "roofing",
+    )
+
+    assert result == {"report_id": "report-1", "opportunity_score": 72}
+    assert client.posts == [
+        {
+            "url": "https://whidby-1.onrender.com/api/niches/score",
+            "json": {
+                "niche": "roofing",
+                "city": "Waco",
+                "state": "TX",
+                "cbsa_code": "47380",
+                "cbsa_name": "Waco, TX",
+                "population": 299_217,
+                "metadata_source": "fallback_cbsa",
+                "dataforseo_location_code": 1026822,
+            },
+            "timeout": 180.0,
+        }
+    ]
 
 
 def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):

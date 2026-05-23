@@ -59,6 +59,9 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
         assert kwargs["dry_run"] is True
         assert kwargs["place_id"] == "place.123"
         assert kwargs["dataforseo_location_code"] == 12345
+        assert kwargs["cbsa_code"] == "47380"
+        assert kwargs["cbsa_name"] == "Waco, TX"
+        assert kwargs["population"] == 299217
         assert kwargs["request_id"] == "req-123"
         return _FakeScoreResult()
 
@@ -75,6 +78,9 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
             "state": "AZ",
             "place_id": "place.123",
             "dataforseo_location_code": 12345,
+            "cbsa_code": "47380",
+            "cbsa_name": "Waco, TX",
+            "population": 299217,
             "metadata_source": "mapbox_selected",
             "dry_run": True,
         },

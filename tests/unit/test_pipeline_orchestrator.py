@@ -266,6 +266,67 @@ def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() 
     assert "cbp_establishments" not in metro["signals"]
 
 
+def test_score_niche_preserves_explicit_production_cbsa_target() -> None:
+    fake_dfs = _make_fake_dfs_client()
+    repo = _FakeBenchmarkRepository()
+    city_provider = _FakeCityDataProvider()
+    collect = AsyncMock(
+        return_value=RawCollectionResult(
+            metros={"47380": MetroCollectionResult(metro_id="47380")},
+            meta=RunMetadata(
+                total_api_calls=1,
+                total_cost_usd=0.01,
+                collection_time_seconds=0.1,
+            ),
+        )
+    )
+
+    with patch("src.pipeline.orchestrator.expand_keywords",
+               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
+         patch("src.pipeline.orchestrator.collect_data", new=collect), \
+         patch("src.pipeline.orchestrator.extract_signals",
+               return_value=_FAKE_SIGNALS), \
+         patch("src.pipeline.orchestrator.compute_scores",
+               return_value=_FAKE_SCORES), \
+         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
+         patch("src.pipeline.orchestrator.classify_serp_archetype",
+               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
+         patch("src.pipeline.orchestrator.compute_difficulty_tier",
+               return_value=_FAKE_DIFFICULTY_RESULT), \
+         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
+               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+        result = asyncio.run(
+            score_niche_for_metro(
+                niche="roofing",
+                city="Waco",
+                state="TX",
+                dataforseo_location_code=1026822,
+                cbsa_code="47380",
+                cbsa_name="Waco, TX",
+                population=299_217,
+                llm_client=object(),
+                dataforseo_client=fake_dfs,
+                benchmark_repository=repo,
+                city_data_provider=city_provider,
+            )
+        )
+
+    assert collect.await_args.kwargs["metros"] == [
+        {
+            "metro_id": "47380",
+            "location_code": 1026822,
+            "principal_city": "Waco",
+        }
+    ]
+    assert repo.calls == [("roofing", "medium_100_300k")]
+    assert city_provider.calls == [("47380", "238160")]
+    metro = result.report["metros"][0]
+    assert metro["cbsa_code"] == "47380"
+    assert metro["cbsa_name"] == "Waco, TX"
+    assert metro["population"] == 299_217
+    assert metro["v2_scores"]["cbsa_code"] == "47380"
+
+
 def test_v2_population_class_derives_from_population_when_signal_missing() -> None:
     from src.pipeline.orchestrator import _population_class_for_benchmarks
 

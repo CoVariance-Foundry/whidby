@@ -638,6 +638,9 @@ class NicheScoreRequest(BaseModel):
     state: str | None = None
     place_id: str | None = None
     dataforseo_location_code: int | None = None
+    cbsa_code: str | None = None
+    cbsa_name: str | None = None
+    population: int | None = None
     metadata_source: str = "typed"
     strategy_profile: str = "balanced"
     dry_run: bool = False
@@ -675,6 +678,23 @@ class NicheScoreRequest(BaseModel):
             return None
         if v <= 0:
             raise ValueError("must be a positive integer")
+        return v
+
+    @field_validator("cbsa_code", "cbsa_name")
+    @classmethod
+    def _normalize_optional_text(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        return trimmed or None
+
+    @field_validator("population")
+    @classmethod
+    def _validate_population(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < 0:
+            raise ValueError("must be non-negative")
         return v
 
     @field_validator("metadata_source")
@@ -1067,6 +1087,9 @@ async def niches_score(req: NicheScoreRequest, request: Request) -> dict[str, An
             state=req.state,
             place_id=req.place_id,
             dataforseo_location_code=req.dataforseo_location_code,
+            cbsa_code=req.cbsa_code,
+            cbsa_name=req.cbsa_name,
+            population=req.population,
             metadata_source=req.metadata_source,
             request_id=request_id,
             strategy_profile=req.strategy_profile,

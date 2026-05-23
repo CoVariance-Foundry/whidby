@@ -198,6 +198,7 @@ python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajv
 | Rule | Stop Condition |
 | --- | --- |
 | Project guard | Any expected-project mismatch aborts before reads or writes |
+| Target identity | Operational runners must send the production `cbsa_code`, `cbsa_name`, `population`, and verified DataForSEO location code into `/api/niches/score`; fallback/manual CBSA ids are not acceptable for coverage or Explore seed runs |
 | Canary | Abort the pilot unless the canary returns one successful API result and persists `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and a report-backed Explore row |
 | Concurrency | Canary concurrency is `1`; pilot concurrency is `2`; raising above `3` requires explicit operator approval |
 | API health | Stop the current bucket when API success for attempted rows drops below `80%` after at least four attempts |
@@ -235,6 +236,7 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 | Benchmark usability | Benchmark metrics classify cells below `sample_size_metros >= 8` as undersampled | `tests/scripts/test_scoring_strategy_audit.py` |
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
 | Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
+| Production target identity | Bulk scoring requests preserve Supabase metro identity through `/api/niches/score` so `metro_scores`, `metro_score_v2`, `seo_facts`, and Explore rows share the same CBSA | `tests/scripts/test_bulk_score.py`, `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py` |
 
 ## Metro DFS Readiness Tests
 
@@ -405,3 +407,4 @@ npm run lint
 | 1.7.2 | 2026-05-22 | Merge sync | Preserved scoring strategy audit obligations alongside Competitor Intel and coverage-first seed gates |
 | 1.7.3 | 2026-05-23 | WHI-99 scoring coverage experiment | Added source-of-truth sample frame, CLI commands, stop rules, and classification thresholds |
 | 1.7.4 | 2026-05-23 | WHI-101 DFS residual review path | Added residual classification, approval, and seed-exclusion policy |
+| 1.7.5 | 2026-05-23 | WHI-102 canary persistence gate | Added production target identity preservation as a canary/pilot test obligation |

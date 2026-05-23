@@ -583,15 +583,27 @@ def _build_retry_score_pairs(
 async def score_one(
     client: httpx.AsyncClient,
     api_url: str,
-    city_name: str,
-    state: str,
+    metro: dict[str, Any],
     service: str,
 ) -> dict[str, Any] | None:
+    city_name = city_short_name(str(metro["cbsa_name"]))
+    dfs_codes = metro.get("dataforseo_location_codes") or []
+    dataforseo_location_code = dfs_codes[0] if dfs_codes else None
     payload = {
         "niche": service,
         "city": city_name,
-        "state": state,
+        "state": metro.get("state"),
     }
+    if dataforseo_location_code is not None:
+        payload.update(
+            {
+                "cbsa_code": str(metro.get("cbsa_code") or ""),
+                "cbsa_name": str(metro.get("cbsa_name") or ""),
+                "population": metro.get("population"),
+                "metadata_source": "fallback_cbsa",
+                "dataforseo_location_code": dataforseo_location_code,
+            }
+        )
     try:
         resp = await client.post(
             f"{api_url}/api/niches/score",
@@ -1259,7 +1271,7 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
 
             attempt_started_at = datetime.now(timezone.utc)
             attempt_start = time.monotonic()
-            result = await score_one(client, api_url, city_name, state, service)
+            result = await score_one(client, api_url, metro, service)
 
         completed += 1
         elapsed_ms = int((time.monotonic() - attempt_start) * 1000)
