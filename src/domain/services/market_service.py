@@ -28,6 +28,9 @@ class ScoreRequest:
     state: str | None = None
     place_id: str | None = None
     dataforseo_location_code: int | None = None
+    cbsa_code: str | None = None
+    cbsa_name: str | None = None
+    population: int | None = None
     metadata_source: str = "typed"
     request_id: str | None = None
     strategy_profile: str = "balanced"
@@ -120,6 +123,9 @@ class MarketService:
                 state=request.state,
                 place_id=request.place_id,
                 dataforseo_location_code=request.dataforseo_location_code,
+                cbsa_code=request.cbsa_code,
+                cbsa_name=request.cbsa_name,
+                population=request.population,
                 strategy_profile=request.strategy_profile,
                 llm_client=None,
                 dataforseo_client=None,
@@ -135,6 +141,9 @@ class MarketService:
                 state=request.state,
                 place_id=request.place_id,
                 dataforseo_location_code=request.dataforseo_location_code,
+                cbsa_code=request.cbsa_code,
+                cbsa_name=request.cbsa_name,
+                population=request.population,
                 strategy_profile=request.strategy_profile,
                 llm_client=self._llm,
                 dataforseo_client=self._dfs,

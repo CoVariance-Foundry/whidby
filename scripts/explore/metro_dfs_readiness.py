@@ -80,6 +80,7 @@ class MetroDfsReadinessMatch:
     cbsa_code: str
     cbsa_name: str
     state: str
+    population: int | None
     population_class: str
     status: str
     selected_location_code: int | None
@@ -133,6 +134,7 @@ def match_metro(
     cbsa_code = str(metro.get("cbsa_code") or "")
     cbsa_name = str(metro.get("cbsa_name") or "")
     state = str(metro.get("state") or "")
+    population = _int_or_none(metro.get("population"))
     population_class = str(metro.get("population_class") or "")
     existing_codes = _existing_codes(metro.get("dataforseo_location_codes"))
 
@@ -153,6 +155,7 @@ def match_metro(
             cbsa_code=cbsa_code,
             cbsa_name=cbsa_name,
             state=state,
+            population=population,
             population_class=population_class,
             status="already_ready",
             selected_location_code=selected.location_code,
@@ -169,6 +172,7 @@ def match_metro(
             cbsa_code=cbsa_code,
             cbsa_name=cbsa_name,
             state=state,
+            population=population,
             population_class=population_class,
             status="invalid_existing_code",
             selected_location_code=None,
@@ -258,6 +262,11 @@ def match_metro(
 def summarize_matches(matches: list[MetroDfsReadinessMatch]) -> dict[str, Any]:
     by_status = Counter(match.status for match in matches)
     by_population_class_status: dict[str, Counter[str]] = defaultdict(Counter)
+    residual_review = Counter(
+        residual_review_classification(match.status)
+        for match in matches
+        if match.status in RESIDUAL_STATUSES
+    )
     for match in matches:
         population_class = match.population_class or "<unknown>"
         by_population_class_status[population_class][match.status] += 1
@@ -270,7 +279,25 @@ def summarize_matches(matches: list[MetroDfsReadinessMatch]) -> dict[str, Any]:
                 by_population_class_status.items()
             )
         },
+        "residual_review_classification": dict(sorted(residual_review.items())),
     }
+
+
+RESIDUAL_STATUSES = {"ambiguous", "invalid_existing_code", "no_match"}
+
+
+def residual_review_classification(status: str) -> str:
+    return {
+        "ambiguous": "approve",
+        "invalid_existing_code": "correct",
+        "no_match": "needs_alternate_target",
+    }.get(status, "exclude")
+
+
+def residual_seed_policy(status: str) -> str:
+    if status in RESIDUAL_STATUSES:
+        return "excluded_until_reviewed"
+    return "eligible_if_selected"
 
 
 def candidate_principal_cities(metro: dict[str, Any]) -> list[str]:
@@ -385,6 +412,7 @@ def _match_result(
         cbsa_code=str(metro.get("cbsa_code") or ""),
         cbsa_name=str(metro.get("cbsa_name") or ""),
         state=str(metro.get("state") or ""),
+        population=_int_or_none(metro.get("population")),
         population_class=str(metro.get("population_class") or ""),
         status=status,
         selected_location_code=row.location_code if row else None,

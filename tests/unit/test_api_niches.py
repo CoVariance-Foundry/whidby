@@ -4,10 +4,12 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import src.research_agent.api as api_module
-from src.research_agent.api import app
+from src.research_agent.api import NicheScoreRequest, app
 from src.domain.services.market_service import MarketService
 from tests.domain.services.fakes import FakeMarketStore, FakeKnowledgeStore
 
@@ -59,6 +61,9 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
         assert kwargs["dry_run"] is True
         assert kwargs["place_id"] == "place.123"
         assert kwargs["dataforseo_location_code"] == 12345
+        assert kwargs["cbsa_code"] == "47380"
+        assert kwargs["cbsa_name"] == "Waco, TX"
+        assert kwargs["population"] == 299217
         assert kwargs["request_id"] == "req-123"
         return _FakeScoreResult()
 
@@ -75,6 +80,9 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
             "state": "AZ",
             "place_id": "place.123",
             "dataforseo_location_code": 12345,
+            "cbsa_code": "47380",
+            "cbsa_name": "Waco, TX",
+            "population": 299217,
             "metadata_source": "mapbox_selected",
             "dry_run": True,
         },
@@ -108,6 +116,42 @@ def test_post_niches_score_validation_error_on_invalid_metadata_source() -> None
         json={"niche": "roofing", "city": "Phoenix", "metadata_source": "unknown"},
     )
     assert res.status_code == 400
+
+
+def test_niche_score_request_requires_dfs_code_for_explicit_cbsa() -> None:
+    with pytest.raises(ValidationError, match="cbsa_code requires"):
+        NicheScoreRequest(niche="roofing", city="Waco", cbsa_code="47380")
+
+
+def test_niche_score_request_requires_population_for_explicit_cbsa() -> None:
+    with pytest.raises(ValidationError, match="positive population"):
+        NicheScoreRequest(
+            niche="roofing",
+            city="Waco",
+            cbsa_code="47380",
+            dataforseo_location_code=1026822,
+        )
+    with pytest.raises(ValidationError, match="positive population"):
+        NicheScoreRequest(
+            niche="roofing",
+            city="Waco",
+            cbsa_code="47380",
+            dataforseo_location_code=1026822,
+            population=0,
+        )
+
+
+def test_niche_score_request_accepts_explicit_cbsa_metadata_source() -> None:
+    req = NicheScoreRequest(
+        niche="roofing",
+        city="Waco",
+        cbsa_code="47380",
+        dataforseo_location_code=1026822,
+        population=299217,
+        metadata_source="explicit_cbsa",
+    )
+
+    assert req.metadata_source == "explicit_cbsa"
 
 
 def test_get_niches_report_reads_from_supabase(monkeypatch: Any) -> None:

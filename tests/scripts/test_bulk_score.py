@@ -231,6 +231,46 @@ def test_fetch_metros_supports_population_class_filters():
     assert [metro["cbsa_code"] for metro in metros] == ["40000"]
 
 
+def test_fetch_metros_require_dfs_excludes_unresolved_residual_rows():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "metros": [
+                {
+                    "cbsa_code": "11111",
+                    "cbsa_name": "Ready, TX",
+                    "state": "TX",
+                    "population": 250_000,
+                    "population_class": "medium_100_300k",
+                    "dataforseo_location_codes": [1],
+                    "dataforseo_location_match_confidence": "exact",
+                },
+                {
+                    "cbsa_code": "22222",
+                    "cbsa_name": "Invalid, TX",
+                    "state": "TX",
+                    "population": 240_000,
+                    "population_class": "medium_100_300k",
+                    "dataforseo_location_codes": [999999],
+                    "dataforseo_location_match_confidence": "invalid_existing_code",
+                },
+            ]
+        }
+    )
+
+    metros = bulk_score.fetch_metros(
+        supabase,
+        limit=5,
+        strategy="rank-and-rent",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=True,
+        mega_cap=5,
+    )
+
+    assert [metro["cbsa_code"] for metro in metros] == ["11111"]
+
+
 def test_fetch_metros_top_population_uses_true_top_n_without_mega_cap():
     supabase = FakeSupabase(
         rows_by_table={
@@ -514,7 +554,7 @@ def test_load_retry_pairs_reads_failed_and_partial_rows(tmp_path):
 def test_run_bulk_score_retries_audit_pairs_outside_current_selection(
     monkeypatch, tmp_path
 ):
-    result_dir = tmp_path / "scripts" / "explore"
+    result_dir = tmp_path / "reports" / "scoring_audit"
     result_dir.mkdir(parents=True)
     audit = tmp_path / "bulk_score_results.jsonl"
     audit.write_text(
@@ -552,13 +592,17 @@ def test_run_bulk_score_retries_audit_pairs_outside_current_selection(
     monkeypatch.setattr(bulk_score, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
     monkeypatch.setattr(bulk_score, "_supabase_client", lambda: supabase)
+    monkeypatch.setenv(
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "https://eoajvifhbmqmoluiokcj.supabase.co",
+    )
     monkeypatch.setattr(
         bulk_score,
         "fetch_metros",
         lambda *_args, **_kwargs: pytest.fail("retry mode should not fetch selection"),
     )
     monkeypatch.setattr(bulk_score.httpx, "AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr(bulk_score, "refresh_matview_sql", lambda: None)
+    monkeypatch.setattr(bulk_score, "refresh_matview_sql", lambda *_args: None)
     monkeypatch.setattr(
         bulk_score,
         "verify_persistence",
@@ -568,11 +612,20 @@ def test_run_bulk_score_retries_audit_pairs_outside_current_selection(
             "metro_scores_count": 1,
             "metro_score_v2_count": 1,
             "seo_facts_count": 1,
+            "explore_market_cells_count": 1,
+            "explore_visible": True,
+            "benchmark_cell": {
+                "status": "usable",
+                "sample_size_metros": 8,
+                "confidence_label": "medium",
+            },
             "missing": [],
         },
     )
 
-    async def score_success(_client, _api_url, city_name, state, service):
+    async def score_success(_client, _api_url, metro, service):
+        city_name = bulk_score.city_short_name(metro["cbsa_name"])
+        state = metro["state"]
         scored.append((city_name, state, service))
         return {"report_id": "report-1", "opportunity_score": 72}
 
@@ -601,8 +654,20 @@ def test_run_bulk_score_retries_audit_pairs_outside_current_selection(
         json.loads(line)
         for line in (result_dir / "bulk_score_results.jsonl").read_text().splitlines()
     ]
+    summary = json.loads((result_dir / "bulk_score_summary.json").read_text())
     assert scored == [("Dallas", "TX", "roofing contractor")]
     assert records[0]["request"]["niche_normalized"] == "roofing contractor"
+    assert records[0]["metro_size_class"] == "mega_5m_plus"
+    assert records[0]["api_status"] == "success"
+    assert records[0]["persistence_status"] == "success"
+    assert records[0]["benchmark_cell_status"] == "usable"
+    assert records[0]["explore_visible"] is True
+    assert summary["mode"] == "apply"
+    assert summary["status_counts"] == {
+        "success": 1,
+        "partial_failure": 0,
+        "failed": 0,
+    }
 
 
 def test_verify_persistence_requires_v2_rows_when_enabled():
@@ -624,6 +689,103 @@ def test_verify_persistence_requires_v2_rows_when_enabled():
 
     assert result["ok"] is False
     assert result["missing"] == ["metro_score_v2", "seo_facts"]
+
+
+def test_verify_persistence_classifies_missing_benchmark_cell_and_explore_visibility():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "reports": [{"id": "report-1"}],
+            "metro_scores": [{"report_id": "report-1", "cbsa_code": "11111"}],
+            "metro_score_v2": [{"report_id": "report-1", "cbsa_code": "11111"}],
+            "seo_facts": [{"report_id": "report-1", "cbsa_code": "11111"}],
+            "seo_benchmarks": [],
+            "explore_market_cells": [],
+        }
+    )
+
+    result = bulk_score.verify_persistence(
+        supabase,
+        report_id="report-1",
+        cbsa_code="11111",
+        require_v2=True,
+        niche_normalized="roofing",
+        population_class="medium_100_300k",
+    )
+
+    assert result["ok"] is True
+    assert result["benchmark_cell"]["status"] == "missing"
+    assert result["explore_visible"] is False
+
+
+def test_classify_benchmark_cell_marks_undersampled_and_usable_cells():
+    undersampled = FakeSupabase(
+        rows_by_table={
+            "seo_benchmarks": [
+                {
+                    "niche_normalized": "roofing",
+                    "population_class": "medium_100_300k",
+                    "sample_size_metros": 7,
+                    "confidence_label": "low",
+                }
+            ]
+        }
+    )
+    usable = FakeSupabase(
+        rows_by_table={
+            "seo_benchmarks": [
+                {
+                    "niche_normalized": "roofing",
+                    "population_class": "medium_100_300k",
+                    "sample_size_metros": 8,
+                    "confidence_label": "medium",
+                }
+            ]
+        }
+    )
+
+    assert bulk_score.classify_benchmark_cell(
+        undersampled,
+        niche_normalized="roofing",
+        population_class="medium_100_300k",
+    ) == {
+        "status": "undersampled",
+        "sample_size_metros": 7,
+        "confidence_label": "low",
+    }
+    assert bulk_score.classify_benchmark_cell(
+        usable,
+        niche_normalized="roofing",
+        population_class="medium_100_300k",
+    ) == {
+        "status": "usable",
+        "sample_size_metros": 8,
+        "confidence_label": "medium",
+    }
+
+
+def test_classify_benchmark_cell_marks_null_sample_size_unknown():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "seo_benchmarks": [
+                {
+                    "niche_normalized": "roofing",
+                    "population_class": "medium_100_300k",
+                    "sample_size_metros": None,
+                    "confidence_label": "low",
+                }
+            ]
+        }
+    )
+
+    assert bulk_score.classify_benchmark_cell(
+        supabase,
+        niche_normalized="roofing",
+        population_class="medium_100_300k",
+    ) == {
+        "status": "unknown",
+        "sample_size_metros": None,
+        "confidence_label": "low",
+    }
 
 
 def test_status_treats_persist_warning_as_partial_failure():
@@ -654,6 +816,13 @@ def test_persistence_verification_error_records_query_failures():
         "metro_scores_count": 0,
         "metro_score_v2_count": 0,
         "seo_facts_count": 0,
+        "explore_market_cells_count": 0,
+        "explore_visible": False,
+        "benchmark_cell": {
+            "status": "schema_failure",
+            "sample_size_metros": None,
+            "confidence_label": None,
+        },
         "missing": ["persistence_verification"],
         "error": "network failed",
     }
@@ -677,6 +846,41 @@ def test_error_for_status_distinguishes_api_and_persistence_failures():
         == "save failed; persistence verification failed: query timed out; missing seo_facts"
     )
     assert bulk_score._error_for_status("success", {"report_id": "report-1"}, {}) is None
+
+
+def test_audit_record_records_api_failure_contract_fields():
+    record = bulk_score.build_audit_record(
+        status="failed",
+        metro={
+            "cbsa_code": "11111",
+            "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+            "state": "TX",
+            "population": 2_300_000,
+            "population_class": "metro_1m_5m",
+        },
+        city_name="Austin",
+        service="roofing",
+        api_url="http://localhost:8000",
+        started_at=bulk_score.datetime(2026, 5, 21, tzinfo=bulk_score.timezone.utc),
+        elapsed_ms=1200,
+        result=None,
+        persistence=bulk_score.persistence_verification_error(RuntimeError("api failed")),
+        error="Scoring API request failed before returning a response.",
+    )
+
+    assert record["api_status"] == "failed"
+    assert record["persistence_status"] == "schema_failure"
+    assert record["score_system"] is None
+    assert record["dimension_coverage"] == {
+        "demand": False,
+        "organic": False,
+        "local": False,
+        "monetization": False,
+        "ai_resilience": False,
+    }
+    assert record["failure_reason"] == (
+        "Scoring API request failed before returning a response."
+    )
 
 
 def test_audit_record_omits_full_report_body_and_keeps_recovery_fields():
@@ -706,6 +910,13 @@ def test_audit_record_omits_full_report_body_and_keeps_recovery_fields():
             "metro_scores_count": 1,
             "metro_score_v2_count": 1,
             "seo_facts_count": 3,
+            "explore_market_cells_count": 1,
+            "explore_visible": True,
+            "benchmark_cell": {
+                "status": "usable",
+                "sample_size_metros": 8,
+                "confidence_label": "medium",
+            },
             "missing": [],
         },
     )
@@ -714,6 +925,23 @@ def test_audit_record_omits_full_report_body_and_keeps_recovery_fields():
     assert record["request"]["niche_normalized"] == "roofing services"
     assert record["score"]["score_system"] == "v2"
     assert record["persistence"]["seo_facts_count"] == 3
+    assert record["metro_size_class"] == "metro_1m_5m"
+    assert record["cbsa_code"] == "11111"
+    assert record["service"] == "roofing services"
+    assert record["api_status"] == "success"
+    assert record["persistence_status"] == "success"
+    assert record["score_system"] == "v2"
+    assert record["dimension_coverage"] == {
+        "demand": True,
+        "organic": False,
+        "local": False,
+        "monetization": False,
+        "ai_resilience": False,
+    }
+    assert record["benchmark_cell_status"] == "usable"
+    assert record["explore_visible"] is True
+    assert record["failure_reason"] is None
+    assert record["cost_estimate"]["estimated"] == 0.01
 
 
 class FakeHealthResponse:
@@ -729,6 +957,116 @@ class FakeAsyncClient:
 
     async def get(self, *_args, **_kwargs):
         return FakeHealthResponse()
+
+
+class FakePostResponse:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"report_id": "report-1", "opportunity_score": 72}
+
+
+class FakePostClient:
+    def __init__(self):
+        self.posts = []
+
+    async def post(self, url, *, json, timeout):
+        self.posts.append({"url": url, "json": json, "timeout": timeout})
+        return FakePostResponse()
+
+
+@pytest.mark.asyncio
+async def test_score_one_sends_explicit_production_metro_identity():
+    client = FakePostClient()
+    metro = {
+        "cbsa_code": "47380",
+        "cbsa_name": "Waco, TX",
+        "state": "TX",
+        "population": 299_217,
+        "dataforseo_location_codes": [1026822],
+        "dataforseo_location_match_confidence": "exact",
+    }
+
+    result = await bulk_score.score_one(
+        client,
+        "https://whidby-1.onrender.com",
+        metro,
+        "roofing",
+    )
+
+    assert result == {"report_id": "report-1", "opportunity_score": 72}
+    assert client.posts == [
+        {
+            "url": "https://whidby-1.onrender.com/api/niches/score",
+            "json": {
+                "niche": "roofing",
+                "city": "Waco",
+                "state": "TX",
+                "cbsa_code": "47380",
+                "cbsa_name": "Waco, TX",
+                "population": 299_217,
+                "metadata_source": "explicit_cbsa",
+                "dataforseo_location_code": 1026822,
+            },
+            "timeout": 180.0,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_score_one_omits_explicit_identity_for_unresolved_dfs_residual():
+    client = FakePostClient()
+    metro = {
+        "cbsa_code": "47380",
+        "cbsa_name": "Waco, TX",
+        "state": "TX",
+        "population": 299_217,
+        "dataforseo_location_codes": [999999],
+        "dataforseo_location_match_confidence": "invalid_existing_code",
+    }
+
+    result = await bulk_score.score_one(
+        client,
+        "https://whidby-1.onrender.com",
+        metro,
+        "roofing",
+    )
+
+    assert result == {"report_id": "report-1", "opportunity_score": 72}
+    assert client.posts[0]["json"] == {
+        "niche": "roofing",
+        "city": "Waco",
+        "state": "TX",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("population", [None, 0])
+async def test_score_one_omits_explicit_identity_without_positive_population(population):
+    client = FakePostClient()
+    metro = {
+        "cbsa_code": "47380",
+        "cbsa_name": "Waco, TX",
+        "state": "TX",
+        "population": population,
+        "dataforseo_location_codes": [1026822],
+        "dataforseo_location_match_confidence": "exact",
+    }
+
+    result = await bulk_score.score_one(
+        client,
+        "https://whidby-1.onrender.com",
+        metro,
+        "roofing",
+    )
+
+    assert result == {"report_id": "report-1", "opportunity_score": 72}
+    assert client.posts[0]["json"] == {
+        "niche": "roofing",
+        "city": "Waco",
+        "state": "TX",
+    }
 
 
 def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
@@ -781,7 +1119,7 @@ def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):
 def test_run_bulk_score_records_persistence_verification_errors(
     monkeypatch, tmp_path
 ):
-    result_dir = tmp_path / "scripts" / "explore"
+    result_dir = tmp_path / "reports" / "scoring_audit"
     result_dir.mkdir(parents=True)
     monkeypatch.setattr(bulk_score, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
@@ -846,11 +1184,73 @@ def test_run_bulk_score_records_persistence_verification_errors(
     ]
     assert to_thread_calls == [fail_verify]
     assert records[0]["status"] == "partial_failure"
+    assert records[0]["persistence_status"] == "schema_failure"
+    assert records[0]["benchmark_cell_status"] == "schema_failure"
     assert records[0]["persistence"]["missing"] == ["persistence_verification"]
     assert records[0]["error"] == (
         "persistence verification failed: query timed out; "
         "missing persistence_verification"
     )
+
+
+def test_run_bulk_score_preview_writes_machine_readable_plan(monkeypatch, tmp_path):
+    result_dir = tmp_path / "reports" / "scoring_audit"
+    result_dir.mkdir(parents=True)
+    supabase = FakeSupabase(
+        rows_by_table={
+            "metros": [
+                {
+                    "cbsa_code": "11111",
+                    "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                    "state": "TX",
+                    "population": 2_300_000,
+                    "population_class": "metro_1m_5m",
+                    "dataforseo_location_codes": [1],
+                }
+            ],
+            "niche_naics_mapping": [{"niche_normalized": "roofing"}],
+        }
+    )
+
+    monkeypatch.setattr(bulk_score, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(bulk_score, "_load_env", lambda: None)
+    monkeypatch.setattr(bulk_score, "_supabase_client", lambda: supabase)
+    monkeypatch.setenv(
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "https://eoajvifhbmqmoluiokcj.supabase.co",
+    )
+
+    async def fail_score(*_args, **_kwargs):
+        raise AssertionError("preview must not call the scoring API")
+
+    monkeypatch.setattr(bulk_score, "score_one", fail_score)
+    args = SimpleNamespace(
+        api_url="https://whidby-1.onrender.com",
+        cities=1,
+        services=1,
+        service_names=["roofing"],
+        resume=False,
+        resume_v2=False,
+        preview=True,
+        concurrency=1,
+        strategy="rank-and-rent",
+        population_classes=None,
+        min_population=None,
+        max_population=None,
+        require_dfs=True,
+        mega_cap=5,
+        require_v2_persistence=True,
+        expected_project_ref="eoajvifhbmqmoluiokcj",
+    )
+
+    asyncio.run(bulk_score.run_bulk_score(args))
+
+    plan = json.loads((result_dir / "bulk_score_summary.json").read_text())
+    assert plan["mode"] == "preview"
+    assert plan["expected_project_ref"] == "eoajvifhbmqmoluiokcj"
+    assert plan["pair_count"] == 1
+    assert plan["pairs"][0]["metro_size_class"] == "metro_1m_5m"
+    assert plan["pairs"][0]["service"] == "roofing"
 
 
 class FakeRpcCall:

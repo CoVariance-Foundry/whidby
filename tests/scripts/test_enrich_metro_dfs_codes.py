@@ -58,6 +58,7 @@ def match(
         cbsa_code=cbsa_code,
         cbsa_name=f"Metro {cbsa_code}",
         state="TX",
+        population=950_000,
         population_class="large_300k_1m",
         status=status,
         selected_location_code=selected_location_code,

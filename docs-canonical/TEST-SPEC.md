@@ -123,6 +123,111 @@ tests/
 | Explore cache validation | `/explore` read models surface the seeded city/service rows with V2 preference and legacy fallback intact |
 | 50x16 seed | Full seed proceeds only after the prior gates pass |
 
+## Scoring Coverage Experiment Spec
+
+Linear: `WHI-99`. This is the required source-of-truth experiment contract before any paid coverage run for the `Scoring Coverage & Benchmark Hardening` project. No broad paid scoring run is authorized until this section is satisfied and the preview/canary gates below pass.
+
+### Sample Frame
+
+| Dimension | Required Scope |
+| --- | --- |
+| Supabase project | Production only, guarded by expected project ref `eoajvifhbmqmoluiokcj` |
+| Metro eligibility | `metros.dataforseo_location_codes` must contain a verified native DataForSEO location code; residual ambiguous/invalid/no-match rows are excluded unless a later Linear issue explicitly approves a comparison row |
+| Population classes | `micro_under_50k`, `small_50_100k`, `medium_100_300k`, `large_300k_1m`, `metro_1m_5m`, `mega_5m_plus` |
+| Core services | `roofing`, `plumbing`, `hvac`, `tree service`, `auto repair`, `water damage restoration`, `electrician`, `locksmith` |
+| Minimum pilot size | 12 metros x 8 services: 1 micro, 3 small, 3 medium, 3 large, 1 metro, 1 mega |
+| Benchmark usability | `seo_benchmarks.sample_size_metros >= 8` is the minimum usable cell threshold |
+
+### Required Metrics
+
+| Metric Family | Required Evidence |
+| --- | --- |
+| API outcome | Success, partial failure, failure, latency, and error class by service and population class |
+| Persistence | Report-backed rows in `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and `explore_market_cells` |
+| Demand | Commercial volume, CPC, intent mix, and demand benchmark cell coverage |
+| Organic difficulty | Aggregator/local-business counts plus top-5 DA and Lighthouse missingness; top-5 DA/Lighthouse remain telemetry and must not block scoring by themselves |
+| Local difficulty | Local-pack known rate, `top3_review_count_min`, `top3_review_velocity_avg`, and local benchmark coverage |
+| Monetization | CBP-backed business density, paid ads, LSA, CPC, and monetization benchmark coverage |
+| AI resilience | AIO presence, PAA density, intent mix, and persisted V2 AI resilience coverage |
+| App visibility | V2 score existence, benchmark confidence metadata, Explore visible row, and Explore V2 preference |
+
+### CLI Commands
+
+Run from the repo root after `npm run env:sync:local` and `npm run runtime:check`. All apply commands use `--require-dfs`, `--require-v2-persistence`, `--expected-project-ref eoajvifhbmqmoluiokcj`, and production API `https://whidby-1.onrender.com`.
+
+Preview the exact sample before paid calls:
+
+```bash
+python -m scripts.explore.bulk_score --preview --cities 1 --population-class micro_under_50k --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --require-dfs --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --preview --cities 3 --population-class small_50_100k --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --require-dfs --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --preview --cities 3 --population-class medium_100_300k --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --require-dfs --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --preview --cities 3 --population-class large_300k_1m --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --require-dfs --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --preview --cities 1 --population-class metro_1m_5m --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --require-dfs --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --preview --cities 1 --population-class mega_5m_plus --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --require-dfs --expected-project-ref eoajvifhbmqmoluiokcj
+```
+
+Run a one-pair canary before the 12x8 pilot:
+
+```bash
+python -m scripts.explore.bulk_score --apply --cities 1 --population-class medium_100_300k --service-name roofing --concurrency 1 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_canary.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.audit_scoring_strategy --read-only --expected-project-ref eoajvifhbmqmoluiokcj --service-name roofing --population-class medium_100_300k --pilot-results reports/scoring_audit/coverage_canary.jsonl --stdout-only
+```
+
+Run the bounded 12x8 pilot only after the canary passes:
+
+```bash
+python -m scripts.explore.bulk_score --apply --cities 1 --population-class micro_under_50k --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --concurrency 2 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_micro.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --apply --cities 3 --population-class small_50_100k --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --concurrency 2 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_small.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --apply --cities 3 --population-class medium_100_300k --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --concurrency 2 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_medium.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --apply --cities 3 --population-class large_300k_1m --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --concurrency 2 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_large.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --apply --cities 1 --population-class metro_1m_5m --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --concurrency 2 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_metro.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --apply --cities 1 --population-class mega_5m_plus --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --concurrency 2 --api-url https://whidby-1.onrender.com --results-path reports/scoring_audit/coverage_mega.jsonl --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+```
+
+Analyze pilot output and benchmark readiness:
+
+```bash
+python -m scripts.explore.audit_scoring_strategy --read-only --expected-project-ref eoajvifhbmqmoluiokcj --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --population-class micro_under_50k --population-class small_50_100k --population-class medium_100_300k --population-class large_300k_1m --population-class metro_1m_5m --population-class mega_5m_plus --pilot-results reports/scoring_audit/coverage_micro.jsonl --pilot-results reports/scoring_audit/coverage_small.jsonl --pilot-results reports/scoring_audit/coverage_medium.jsonl --pilot-results reports/scoring_audit/coverage_large.jsonl --pilot-results reports/scoring_audit/coverage_metro.jsonl --pilot-results reports/scoring_audit/coverage_mega.jsonl
+python -m scripts.explore.audit_signal_coverage --coverage-threshold 0.6 --min-benchmark-cells 48 --min-benchmark-sample-size 8 --expected-project-ref eoajvifhbmqmoluiokcj
+BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m scripts.benchmarks.recompute_benchmarks 120 --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajvifhbmqmoluiokcj
+```
+
+### Cost And Stop Rules
+
+| Rule | Stop Condition |
+| --- | --- |
+| Project guard | Any expected-project mismatch aborts before reads or writes |
+| Target identity | Operational runners must send the production `cbsa_code`, `cbsa_name`, `population`, and verified DataForSEO location code into `/api/niches/score`; fallback/manual CBSA ids are not acceptable for coverage or Explore seed runs |
+| Canary | Abort the pilot unless the canary returns one successful API result and persists `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and a report-backed Explore row |
+| Concurrency | Canary concurrency is `1`; pilot concurrency is `2`; raising above `3` requires explicit operator approval |
+| API health | Stop the current bucket when API success for attempted rows drops below `80%` after at least four attempts |
+| Persistence | Stop immediately on schema failure, missing required table/column, V2 persistence failure, or Explore refresh failure |
+| Paid spend | Do not continue to the next population class if the prior class produced more than `25%` `failed` or `partial_failure` rows |
+| Residual DFS rows | Ambiguous, invalid, and no-match DFS residuals are excluded until `WHI-112`, `WHI-113`, or `WHI-114` explicitly approves a bounded batch |
+
+### DFS Residual Review Path
+
+Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `ambiguous=136`, `invalid_existing_code=52`, and `no_match=31`. Residual rows do not block the coverage experiment, but they are excluded from paid scoring samples until review produces an approval artifact.
+
+| Residual Status | Review Classification | Required Action | Production Seed Policy |
+| --- | --- | --- | --- |
+| `ambiguous` | `approve` | Human reviewer selects one clear DFS city-level code in the review CSV, or leaves the row excluded | Excluded until approved CSV/equivalent artifact exists |
+| `invalid_existing_code` | `correct` | Correct to a compatible DFS city-level code with provenance, or explicitly exclude | Excluded while marked invalid |
+| `no_match` | `needs_alternate_target` | Decide whether to exclude, defer source work, or map an approved alternate city-level target | Excluded until alternate target policy is approved |
+
+`scripts/explore/audit_metro_dfs_readiness.py` writes JSON plus candidates/review CSV under ignored `reports/metro_readiness/`. Review CSV rows include population, population class, residual review classification, production seed policy, approval-artifact requirement, and blank review notes. `scripts/explore/enrich_metro_dfs_codes.py` only applies exact rows automatically and only applies strong rows with an approved CSV. `scripts/explore/bulk_score.py --require-dfs` excludes rows whose DFS match confidence is already marked `ambiguous`, `invalid_existing_code`, or `no_match`; residual opt-in requires a dedicated follow-up issue.
+
+### Classification Thresholds
+
+| Classification | Threshold | Scoring Policy |
+| --- | --- | --- |
+| Reliable | Overall coverage `>= 0.80`, every required population slice `>= 0.60`, and benchmark cells meet `sample_size_metros >= 8` | Keep scored |
+| Score-with-warning | Overall coverage `>= 0.40` but below reliable, or a required slice below `0.60` with nonzero evidence | Use in V2 scoring with warning/confidence penalty |
+| Telemetry-only | Optional signal is present but below `0.40`, or top-5 DA/Lighthouse is sparse/missing | Record and display as evidence only; do not let missingness block scoring |
+| Remove | Non-critical signal remains below `0.05` across all successful API rows and does not affect an accepted product requirement | Propose removal from formula in `WHI-106`; do not change formula inside the experiment |
+| Acquire-more-data | Required scoring or benchmark input is missing, benchmark cells are undersampled, or app visibility is blocked | Open/route follow-up before scale-out seed |
+
 ## Scoring Strategy Audit Tests
 
 | Coverage | Expected | Tests |
@@ -131,6 +236,7 @@ tests/
 | Benchmark usability | Benchmark metrics classify cells below `sample_size_metros >= 8` as undersampled | `tests/scripts/test_scoring_strategy_audit.py` |
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
 | Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
+| Production target identity | Bulk scoring requests preserve Supabase metro identity through `/api/niches/score` so `metro_scores`, `metro_score_v2`, `seo_facts`, and Explore rows share the same CBSA | `tests/scripts/test_bulk_score.py`, `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py` |
 
 ## Metro DFS Readiness Tests
 
@@ -299,3 +405,6 @@ npm run lint
 | 1.7.0 | 2026-05-22 | Competitor Intel | Added paid dossier, durable competitor facts, two-scan quota, and UI/API test obligations |
 | 1.7.1 | 2026-05-22 | Merge sync | Preserved coverage-first seed gates alongside Competitor Intel test obligations |
 | 1.7.2 | 2026-05-22 | Merge sync | Preserved scoring strategy audit obligations alongside Competitor Intel and coverage-first seed gates |
+| 1.7.3 | 2026-05-23 | WHI-99 scoring coverage experiment | Added source-of-truth sample frame, CLI commands, stop rules, and classification thresholds |
+| 1.7.4 | 2026-05-23 | WHI-101 DFS residual review path | Added residual classification, approval, and seed-exclusion policy |
+| 1.7.5 | 2026-05-23 | WHI-102 canary persistence gate | Added production target identity preservation as a canary/pilot test obligation |

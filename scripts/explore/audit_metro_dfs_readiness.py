@@ -15,6 +15,8 @@ from urllib.parse import urlparse
 from scripts.explore.metro_dfs_readiness import (
     MetroDfsReadinessMatch,
     match_metros,
+    residual_review_classification,
+    residual_seed_policy,
     summarize_matches,
 )
 from src.clients.dataforseo.client import DataForSEOClient
@@ -246,13 +248,27 @@ def _extract_location_rows(data: Any) -> list[dict[str, Any]]:
 
 
 def _write_match_csv(path: Path, matches: list[MetroDfsReadinessMatch]) -> None:
-    fieldnames = list(MetroDfsReadinessMatch.__dataclass_fields__.keys())
+    fieldnames = [
+        *list(MetroDfsReadinessMatch.__dataclass_fields__.keys()),
+        "residual_review_classification",
+        "production_seed_policy",
+        "approval_artifact_required",
+        "review_notes",
+    ]
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for match in matches:
             row = match.asdict()
             row["existing_codes"] = ",".join(str(code) for code in match.existing_codes)
+            row["residual_review_classification"] = residual_review_classification(
+                match.status
+            )
+            row["production_seed_policy"] = residual_seed_policy(match.status)
+            row["approval_artifact_required"] = (
+                "yes" if row["production_seed_policy"] == "excluded_until_reviewed" else "no"
+            )
+            row["review_notes"] = ""
             writer.writerow(row)
 
 

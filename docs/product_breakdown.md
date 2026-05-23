@@ -867,7 +867,7 @@ tests/
 
 ### Pipeline Orchestrator (operational wiring)
 
-**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Geo resolution is delegated to `GeoResolver` (via `MetroDBGeoLookup`), which handles three paths: explicit DataForSEO code, CBSA seed lookup, and state-level DFS code fallback. The orchestrator then threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
+**What it does:** Composes M4 → M5 → M6 → M7 → M8 → M9 end-to-end for a single `(niche, city, state)` tuple, producing a persisted report and a surface-ready `ScoreNicheResult`. Geo resolution is delegated to `GeoResolver` (via `MetroDBGeoLookup`), which handles four paths: explicit production CBSA identity with a verified DataForSEO code, explicit DataForSEO code, CBSA seed lookup, and state-level DFS code fallback. The orchestrator then threads real client objects through M4 and M5, converts M5 dataclasses to dicts for M6, and wraps the output in a `run_input` that satisfies `REQUIRED_REPORT_INPUT_PATHS` / `REQUIRED_METRO_ENTRY_PATHS` before calling `generate_report`.
 
 **Files:**
 ```
@@ -877,7 +877,7 @@ tests/integration/test_pipeline_orchestrator_live.py
 ```
 
 **Public interface:**
-- `async def score_niche_for_metro(*, niche, city, state, strategy_profile="balanced", llm_client, dataforseo_client, metro_db=None, dry_run=False) -> ScoreNicheResult`
+- `async def score_niche_for_metro(*, niche, city, state, cbsa_code=None, cbsa_name=None, population=None, dataforseo_location_code=None, strategy_profile="balanced", llm_client, dataforseo_client, metro_db=None, dry_run=False) -> ScoreNicheResult`
 - `ScoreNicheResult` frozen dataclass: `report: dict`, `opportunity_score: int`, `evidence: list[dict]`
 - `dry_run=True` loads from `tests.fixtures.m6_signal_extraction_fixtures` + `tests.fixtures.keyword_expansion_fixtures` and skips live APIs; still runs real M7 / M8 / M9
 
@@ -899,7 +899,7 @@ tests/unit/test_supabase_persistence.py
 
 Exposed on the existing research-agent bridge (`src/research_agent/api.py`):
 
-- `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run` in the request body.
+- `POST /api/niches/score` — runs orchestrator + persists, returns `{report_id, opportunity_score, classification_label, evidence, report}`. Accepts `dry_run` and optional production target fields (`cbsa_code`, `cbsa_name`, `population`, `dataforseo_location_code`) in the request body. Supplying `cbsa_code` without a positive `dataforseo_location_code` is rejected before scoring so operational seed runs cannot persist synthetic fallback CBSA rows.
 - `GET /api/niches/{report_id}` — reads the row back from Supabase.
 - `GET /api/metros/suggest?q=<prefix>&limit=<int>` — city autocomplete. Matches `q` (min 2 chars) against `principal_cities` (prefix) and `cbsa_name` (prefix fallback); emits one row per matching principal city. Returns highest-population matches first, capped at `limit` (default 10, max 20). Response shape: `[{cbsa_code, city, state, cbsa_name, population}]`. Module-level `MetroDB` singleton loaded once at import time.
 
@@ -917,7 +917,7 @@ Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/explo
 5. DFS cost log flushing
 6. Feedback logging
 
-**Input:** `ScoreRequest(niche, city, state?, place_id?, dataforseo_location_code?, strategy_profile, dry_run)`
+**Input:** `ScoreRequest(niche, city, state?, cbsa_code?, cbsa_name?, population?, place_id?, dataforseo_location_code?, metadata_source?, strategy_profile, dry_run)`. User-facing metadata sources remain `typed`, `mapbox_selected`, `recent_history`, and `fallback_cbsa`; backend operational seed requests may use `explicit_cbsa` when paired with a verified production CBSA and positive DataForSEO location code.
 **Output:** `ScoreResult(report_id, opportunity_score, classification_label, evidence, report, entity_id, snapshot_id, persist_warning?)`
 
 **Adapters:**

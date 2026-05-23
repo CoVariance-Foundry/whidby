@@ -13,6 +13,7 @@ from src.classification.guidance_generator import classify_and_generate_guidance
 from src.classification.serp_archetype import classify_serp_archetype
 from src.data.metro_db import MetroDB
 from src.data.metro_db_adapter import MetroDBGeoLookup
+from src.domain.entities import City
 from src.domain.ports import CityDataProvider
 from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
@@ -42,6 +43,9 @@ async def score_niche_for_metro(
     state: str | None = None,
     place_id: str | None = None,
     dataforseo_location_code: int | None = None,
+    cbsa_code: str | None = None,
+    cbsa_name: str | None = None,
+    population: int | None = None,
     strategy_profile: str = "balanced",
     llm_client: Any,
     dataforseo_client: Any,
@@ -56,9 +60,9 @@ async def score_niche_for_metro(
     Runs M4 -> M5 -> M6 -> M7 -> M8 -> M9 against the single metro whose
     `principal_cities` (or fallback `cbsa_name`) matches `city`. If `state`
     is provided it narrows the search (useful when a city name collides
-    across states). If `dataforseo_location_code` is provided, it is used
-    directly for DFS targeting (with a synthetic metro id) to support
-    canonical place selections outside the static seed.
+    across states). If production callers provide `cbsa_code` plus
+    `dataforseo_location_code`, that explicit metro identity is preserved for
+    persistence while using the supplied DFS target.
     Raises ValueError if no target can be resolved.
     """
     started = time.monotonic()
@@ -66,15 +70,25 @@ async def score_niche_for_metro(
         "score_niche_for_metro START request_id=%s niche=%r city=%r state=%r dry_run=%s",
         request_id, niche, city, state, dry_run,
     )
-    metros_db = metro_db or MetroDB.from_seed()
-    geo_lookup = MetroDBGeoLookup(metros_db)
-    resolver = GeoResolver(geo_lookup)
-    resolved = resolver.resolve(
+    resolved = _explicit_target(
         city=city,
         state=state,
         place_id=place_id,
         dataforseo_location_code=dataforseo_location_code,
+        cbsa_code=cbsa_code,
+        cbsa_name=cbsa_name,
+        population=population,
     )
+    if resolved is None:
+        metros_db = metro_db or MetroDB.from_seed()
+        geo_lookup = MetroDBGeoLookup(metros_db)
+        resolver = GeoResolver(geo_lookup)
+        resolved = resolver.resolve(
+            city=city,
+            state=state,
+            place_id=place_id,
+            dataforseo_location_code=dataforseo_location_code,
+        )
     resolved_state = resolved.state_code
 
     logger.info("Metro resolved: cbsa=%s name=%r state=%s", resolved.cbsa_code, resolved.metro_name, resolved_state)
@@ -268,6 +282,57 @@ async def score_niche_for_metro(
         report=report,
         opportunity_score=int(round(scores["opportunity"])),
         evidence=evidence,
+    )
+
+
+def _explicit_target(
+    *,
+    city: str,
+    state: str | None,
+    place_id: str | None,
+    dataforseo_location_code: int | None,
+    cbsa_code: str | None,
+    cbsa_name: str | None,
+    population: int | None,
+) -> ResolvedTarget | None:
+    """Build a production Supabase metro target without consulting the seed file."""
+    cleaned_cbsa = str(cbsa_code or "").strip()
+    if not cleaned_cbsa:
+        return None
+    if not isinstance(dataforseo_location_code, int) or dataforseo_location_code <= 0:
+        raise ValueError("cbsa_code requires a positive dataforseo_location_code")
+    if population is None or population <= 0:
+        raise ValueError(
+            "cbsa_code requires a positive population for benchmark class resolution"
+        )
+
+    state_code = state.strip().upper() if isinstance(state, str) and state.strip() else ""
+    metro_name = str(cbsa_name or "").strip() or (
+        f"{city}, {state_code}" if state_code else city
+    )
+    population_value = int(population)
+    city_record = City(
+        city_id=cleaned_cbsa,
+        name=city,
+        state=state_code,
+        population=population_value,
+        cbsa_code=cleaned_cbsa,
+        dataforseo_location_codes=[dataforseo_location_code],
+        principal_cities=[city],
+    )
+    geo_key = city.strip().lower()
+    if state_code:
+        geo_key = f"{geo_key}, {state_code}"
+    return ResolvedTarget(
+        city=city_record,
+        metro_name=metro_name,
+        state_code=state_code,
+        location_code=dataforseo_location_code,
+        cbsa_code=cleaned_cbsa,
+        population=population_value,
+        geo_key=geo_key,
+        place_id=place_id,
+        is_synthetic=False,
     )
 
 
