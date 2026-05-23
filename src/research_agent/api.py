@@ -701,9 +701,12 @@ class NicheScoreRequest(BaseModel):
     @classmethod
     def _validate_metadata_source(cls, v: str) -> str:
         normalized = v.strip().lower()
-        allowed = {"typed", "mapbox_selected", "recent_history", "fallback_cbsa"}
+        allowed = {"typed", "mapbox_selected", "recent_history", "fallback_cbsa", "explicit_cbsa"}
         if normalized not in allowed:
-            raise ValueError("metadata_source must be one of typed|mapbox_selected|recent_history|fallback_cbsa")
+            raise ValueError(
+                "metadata_source must be one of "
+                "typed|mapbox_selected|recent_history|fallback_cbsa|explicit_cbsa"
+            )
         return normalized
 
     @field_validator("owner_account_id", "created_by_user_id")
@@ -719,6 +722,12 @@ class NicheScoreRequest(BaseModel):
         except ValueError as exc:
             raise ValueError("must be a valid UUID") from exc
         return trimmed
+
+    @model_validator(mode="after")
+    def _explicit_cbsa_requires_dfs_code(self) -> "NicheScoreRequest":
+        if self.cbsa_code and self.dataforseo_location_code is None:
+            raise ValueError("cbsa_code requires a positive dataforseo_location_code")
+        return self
 
 
 class ExploreRefreshFlagsPayload(BaseModel):

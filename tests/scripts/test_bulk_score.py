@@ -763,6 +763,31 @@ def test_classify_benchmark_cell_marks_undersampled_and_usable_cells():
     }
 
 
+def test_classify_benchmark_cell_marks_null_sample_size_unknown():
+    supabase = FakeSupabase(
+        rows_by_table={
+            "seo_benchmarks": [
+                {
+                    "niche_normalized": "roofing",
+                    "population_class": "medium_100_300k",
+                    "sample_size_metros": None,
+                    "confidence_label": "low",
+                }
+            ]
+        }
+    )
+
+    assert bulk_score.classify_benchmark_cell(
+        supabase,
+        niche_normalized="roofing",
+        population_class="medium_100_300k",
+    ) == {
+        "status": "unknown",
+        "sample_size_metros": None,
+        "confidence_label": "low",
+    }
+
+
 def test_status_treats_persist_warning_as_partial_failure():
     persistence = {
         "ok": True,
@@ -960,6 +985,7 @@ async def test_score_one_sends_explicit_production_metro_identity():
         "state": "TX",
         "population": 299_217,
         "dataforseo_location_codes": [1026822],
+        "dataforseo_location_match_confidence": "exact",
     }
 
     result = await bulk_score.score_one(
@@ -980,12 +1006,39 @@ async def test_score_one_sends_explicit_production_metro_identity():
                 "cbsa_code": "47380",
                 "cbsa_name": "Waco, TX",
                 "population": 299_217,
-                "metadata_source": "fallback_cbsa",
+                "metadata_source": "explicit_cbsa",
                 "dataforseo_location_code": 1026822,
             },
             "timeout": 180.0,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_score_one_omits_explicit_identity_for_unresolved_dfs_residual():
+    client = FakePostClient()
+    metro = {
+        "cbsa_code": "47380",
+        "cbsa_name": "Waco, TX",
+        "state": "TX",
+        "population": 299_217,
+        "dataforseo_location_codes": [999999],
+        "dataforseo_location_match_confidence": "invalid_existing_code",
+    }
+
+    result = await bulk_score.score_one(
+        client,
+        "https://whidby-1.onrender.com",
+        metro,
+        "roofing",
+    )
+
+    assert result == {"report_id": "report-1", "opportunity_score": 72}
+    assert client.posts[0]["json"] == {
+        "niche": "roofing",
+        "city": "Waco",
+        "state": "TX",
+    }
 
 
 def test_run_bulk_score_propagates_unexpected_worker_exceptions(monkeypatch):

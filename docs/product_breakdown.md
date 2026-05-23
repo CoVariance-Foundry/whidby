@@ -917,7 +917,7 @@ Consumed by the Next.js admin proxies `/api/agent/scoring` and `/api/agent/explo
 5. DFS cost log flushing
 6. Feedback logging
 
-**Input:** `ScoreRequest(niche, city, state?, cbsa_code?, cbsa_name?, population?, place_id?, dataforseo_location_code?, strategy_profile, dry_run)`
+**Input:** `ScoreRequest(niche, city, state?, cbsa_code?, cbsa_name?, population?, place_id?, dataforseo_location_code?, metadata_source?, strategy_profile, dry_run)`. User-facing metadata sources remain `typed`, `mapbox_selected`, `recent_history`, and `fallback_cbsa`; backend operational seed requests may use `explicit_cbsa` when paired with a verified production CBSA and positive DataForSEO location code.
 **Output:** `ScoreResult(report_id, opportunity_score, classification_label, evidence, report, entity_id, snapshot_id, persist_warning?)`
 
 **Adapters:**

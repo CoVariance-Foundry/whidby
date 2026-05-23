@@ -594,13 +594,13 @@ async def score_one(
         "city": city_name,
         "state": metro.get("state"),
     }
-    if dataforseo_location_code is not None:
+    if dataforseo_location_code is not None and _has_dfs_location(metro):
         payload.update(
             {
                 "cbsa_code": str(metro.get("cbsa_code") or ""),
                 "cbsa_name": str(metro.get("cbsa_name") or ""),
                 "population": metro.get("population"),
-                "metadata_source": "fallback_cbsa",
+                "metadata_source": "explicit_cbsa",
                 "dataforseo_location_code": dataforseo_location_code,
             }
         )
@@ -775,7 +775,14 @@ def classify_benchmark_cell(
             "confidence_label": None,
         }
     row = rows[0]
-    sample_size = _int_value(row.get("sample_size_metros"))
+    raw_sample_size = row.get("sample_size_metros")
+    if raw_sample_size is None:
+        return {
+            "status": "unknown",
+            "sample_size_metros": None,
+            "confidence_label": row.get("confidence_label"),
+        }
+    sample_size = _int_value(raw_sample_size)
     return {
         "status": "usable" if sample_size >= min_sample_size else "undersampled",
         "sample_size_metros": sample_size,
