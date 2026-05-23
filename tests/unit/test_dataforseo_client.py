@@ -138,6 +138,33 @@ class TestStandardQueue:
 
         assert result.status == "ok"
 
+    @pytest.mark.asyncio
+    async def test_google_reviews_can_target_place_id_and_sort_newest(self, mocker):
+        client = _make_client()
+        post = mocker.patch.object(
+            client,
+            "_post",
+            side_effect=[SERP_TASK_POST_RESPONSE, SERP_TASK_GET_RESPONSE],
+        )
+        mocker.patch("asyncio.sleep", return_value=None)
+
+        result = await client.google_reviews(
+            location_code=1012873,
+            place_id="place-123",
+            depth=10,
+            sort_by="newest",
+        )
+
+        assert result.status == "ok"
+        assert post.call_args_list[0].args[1] == [
+            {
+                "location_code": 1012873,
+                "depth": 10,
+                "place_id": "place-123",
+                "sort_by": "newest",
+            }
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Live endpoints

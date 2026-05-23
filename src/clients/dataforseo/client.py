@@ -204,11 +204,28 @@ class DataForSEOClient:
 
     async def google_reviews(
         self,
-        keyword: str,
-        location_code: int,
+        keyword: str | None = None,
+        location_code: int | None = None,
         depth: int = 20,
+        *,
+        cid: str | int | None = None,
+        place_id: str | None = None,
+        sort_by: str | None = None,
     ) -> APIResponse:
-        params = {"keyword": keyword, "location_code": location_code, "depth": depth}
+        if location_code is None:
+            raise ValueError("location_code is required for Google reviews")
+        if not any((keyword, cid, place_id)):
+            raise ValueError("keyword, cid, or place_id is required for Google reviews")
+
+        params: dict[str, Any] = {"location_code": location_code, "depth": depth}
+        if place_id:
+            params["place_id"] = place_id
+        elif cid:
+            params["cid"] = cid
+        else:
+            params["keyword"] = keyword
+        if sort_by:
+            params["sort_by"] = sort_by
         return await self._queued_request(ep.GOOGLE_REVIEWS, params)
 
     async def google_my_business_info(

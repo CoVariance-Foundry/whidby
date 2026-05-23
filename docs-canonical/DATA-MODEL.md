@@ -78,6 +78,8 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 - `avg_top5_da` is the nullable average domain authority across usable top-5 organic competitors after existing aggregator/missing-URL exclusions.
 - `avg_top5_lighthouse` is the nullable average Lighthouse/site quality score across usable top-5 organic competitors. `top5_da_coverage`, `top5_lighthouse_coverage`, and `top5_organic_data_confidence` record sparse top-5 evidence so missing measurements do not become easy zero-DA or zero-Lighthouse facts.
 - During the coverage-first production seed audit, top-5 DA and Lighthouse are optional telemetry. `null` values lower confidence/evidence completeness only; they must not block V2 scoring, guidance classification, persistence, benchmark recompute, or Explore cache reads.
+- Benchmark acquisition runners may populate top-5 organic telemetry through DataForSEO Backlinks Summary and Lighthouse only when explicitly invoked with `--collect-organic-telemetry`; preflight and ordinary pilot runs leave these fields `null`.
+- Benchmark acquisition runners may populate `top3_review_velocity_avg` through DataForSEO Google Reviews only when explicitly invoked with `--collect-review-velocity`, using local-pack `cid` or `place_id` identifiers before falling back to the listing title.
 - `organic_competitor_facts` stores durable per-result organic evidence for Competitor Intel. Its grain is `(cbsa_code, niche_normalized, keyword, result_rank, result_type, snapshot_date)` and it preserves rank, result type, title, domain, URL, DA, backlinks/referring-domain counts, Lighthouse score, schema/title-match signals, aggregator/local-business flags, source, and optional report lineage. Competitor Intel service-role reads should enforce visible report lineage when `report_id` is present and may include `report_id IS NULL` rows as shared report-agnostic facts.
 - `competitor_intel_runs` stores paid run lineage for account/user/report context, service/niche/keyword input, quota consumed, status, durable result summary, and error payloads. It is a lineage table, not the primary fact table; dossier reconstruction reads durable fact tables.
 - Multi-unit quota is handled by `consume_usage_quota(account, metric_key, units)` and `refund_usage_quota(account, metric_key, units)`. Existing report quota RPCs remain one-unit wrappers over the same `fresh_report` usage counter; consume is callable by authenticated account members, while refunds are service-role only so browser-authenticated clients cannot reset their own counters.
@@ -87,6 +89,8 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 Production seed acceptance is staged, not a single bulk-write event: verify schema parity and the expected Supabase project, run a canary, complete a 12x8 coverage pilot, recompute benchmarks, validate Explore cache reads, then run the 50x16 seed. Seeded rows must reuse canonical tables (`reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, `seo_benchmarks`, and Explore read models); do not create duplicate seed-specific tables.
 
 `scripts/explore/audit_scoring_strategy.py` is the read-only scoring-strategy audit over the same canonical tables. It builds the intended service x population-class matrix, measures V2 component input coverage, checks usable benchmark cells at `sample_size_metros >= 8`, identifies legacy-only and missing Explore rows, and emits generated JSON/Markdown artifacts under ignored `reports/scoring_audit/`.
+
+`scripts/benchmarks/run_pilot.py` is the bounded benchmark acquisition runner for missing SEO fact inputs. Its opt-in telemetry flags enrich existing `seo_facts` grain and do not create side tables or authorize benchmark recompute by themselves; benchmark usability remains gated by `seo_benchmarks.sample_size_metros >= 8`.
 
 
 ### Sonar Slice-Lite Entities
@@ -686,3 +690,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.7.0   | 2026-05-22 | Competitor Intel | Added organic competitor facts, competitor-intel run lineage, and multi-unit quota model |
 | 1.7.1   | 2026-05-22 | Merge sync | Preserved coverage-first seed contract alongside Competitor Intel schema lineage |
 | 1.7.2   | 2026-05-22 | Merge sync | Preserved scoring strategy audit contract alongside Competitor Intel and coverage-first seed docs |
+| 1.7.3   | 2026-05-23 | WHI-102 acquisition backfill contract | Documented opt-in DataForSEO acquisition fields for organic telemetry and local review velocity |
