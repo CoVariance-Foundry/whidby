@@ -1,5 +1,15 @@
 # Project Context
 
+## Scoring Coverage & Benchmark Hardening
+
+`WHI-99` defines the production scoring coverage experiment in `docs-canonical/TEST-SPEC.md`. The source-of-truth spec gates paid production sampling behind the expected Supabase project ref `eoajvifhbmqmoluiokcj`, DFS-ready metros only, a one-pair canary, and a bounded 12x8 pilot across micro/small/medium/large/metro/mega population classes and the core services roofing, plumbing, hvac, tree service, auto repair, water damage restoration, electrician, and locksmith.
+
+The experiment measures API success, persistence through `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and `explore_market_cells`, signal coverage by scoring component, benchmark usability at `sample_size_metros >= 8`, and app visibility. Classification thresholds are reliable, score-with-warning, telemetry-only, remove, and acquire-more-data. Top-5 DA and Lighthouse stay telemetry; missing values lower confidence but do not block scoring.
+
+`WHI-100` hardens `scripts/explore/bulk_score.py` as the production-safe coverage experiment runner. Its default machine-readable outputs now live under ignored `reports/scoring_audit/`: JSONL attempt rows at `bulk_score_results.jsonl` and aggregate preview/apply JSON at `bulk_score_summary.json`. Each attempt row includes stable analysis fields for `metro_size_class`, `cbsa_code`, `service`, `api_status`, `persistence_status`, `score_system`, `dimension_coverage`, `benchmark_cell_status`, `explore_visible`, `failure_reason`, and `cost_estimate`, while preserving the existing nested request/score/persistence fields for retries.
+
+`WHI-101` codifies DFS residual handling without creating a side doc. `scripts/explore/audit_metro_dfs_readiness.py` review CSVs now carry each residual row's population, population class, residual review classification, production seed policy, approval-artifact requirement, and review notes. Residual classifications are `approve` for ambiguous rows, `correct` for invalid existing codes, and `needs_alternate_target` for no-match rows; all are excluded from production scoring samples until a reviewed artifact or follow-up issue explicitly opts them in. `bulk_score.py --require-dfs` now excludes rows whose DFS match confidence is already marked `ambiguous`, `invalid_existing_code`, or `no_match`.
+
 ## Consumer Visual System
 
 The consumer app now has shared WHI-10 score primitives in `apps/app/src/lib/design-tokens.ts` and `apps/app/src/components/ScoreVisuals.tsx`. Use `scoreToneForValue` for 80/60/40 score tone decisions and `ScoreCircle` / `ScoreBar` for visible score displays before adding route-local threshold helpers. Numeric score displays should stay on `var(--mono)` with no negative letter spacing.

@@ -85,9 +85,10 @@ DEFAULT_CONCURRENCY = 10
 PAGE_SIZE = 1000
 MAX_METRO_FETCH = 1000
 RETRYABLE_STATUSES = {"failed", "partial_failure"}
+MIN_BENCHMARK_SAMPLE_SIZE = 8
 METRO_SELECT_COLUMNS = (
     "cbsa_code, cbsa_name, state, population, population_class, "
-    "dataforseo_location_codes"
+    "dataforseo_location_codes, dataforseo_location_match_confidence"
 )
 RANK_AND_RENT_CLASS_ORDER = (
     "large_300k_1m",
@@ -105,7 +106,11 @@ CATALOG_SERVICE_KEYS = {MULTI_SPACE.sub(" ", service.strip().lower()) for servic
 
 
 def default_results_path() -> Path:
-    return PROJECT_ROOT / "scripts" / "explore" / "bulk_score_results.jsonl"
+    return PROJECT_ROOT / "reports" / "scoring_audit" / "bulk_score_results.jsonl"
+
+
+def default_summary_path() -> Path:
+    return PROJECT_ROOT / "reports" / "scoring_audit" / "bulk_score_summary.json"
 
 
 def _load_env() -> None:
@@ -254,7 +259,17 @@ def _metro_matches_filters(
 
 def _has_dfs_location(metro: dict[str, Any]) -> bool:
     codes = metro.get("dataforseo_location_codes")
-    return isinstance(codes, list) and any(code is not None for code in codes)
+    confidence = str(metro.get("dataforseo_location_match_confidence") or "")
+    unresolved_residual = {
+        "ambiguous",
+        "invalid_existing_code",
+        "no_match",
+    }
+    return (
+        confidence not in unresolved_residual
+        and isinstance(codes, list)
+        and any(code is not None for code in codes)
+    )
 
 
 def _rank_and_rent_order(metros: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -607,6 +622,9 @@ def verify_persistence(
     report_id: str | None,
     cbsa_code: str,
     require_v2: bool,
+    niche_normalized: str | None = None,
+    population_class: str | None = None,
+    min_benchmark_sample_size: int = MIN_BENCHMARK_SAMPLE_SIZE,
 ) -> dict[str, Any]:
     if not report_id:
         return {
@@ -615,9 +633,12 @@ def verify_persistence(
             "metro_scores_count": 0,
             "metro_score_v2_count": 0,
             "seo_facts_count": 0,
+            "explore_market_cells_count": 0,
+            "benchmark_cell": benchmark_cell_not_checked(),
             "missing": ["report_id"],
         }
 
+    service_key = service_key_text(niche_normalized or "")
     report_rows = _select_rows(
         supabase,
         "reports",
@@ -647,6 +668,25 @@ def verify_persistence(
             filters={"report_id": report_id, "cbsa_code": cbsa_code},
         )
 
+    explore_rows: list[dict[str, Any]] = []
+    if service_key:
+        explore_rows = _select_rows(
+            supabase,
+            "explore_market_cells",
+            "report_id, cbsa_code, niche_normalized, score_system",
+            filters={"cbsa_code": cbsa_code, "niche_normalized": service_key},
+        )
+    benchmark_cell = (
+        classify_benchmark_cell(
+            supabase,
+            niche_normalized=service_key,
+            population_class=population_class,
+            min_sample_size=min_benchmark_sample_size,
+        )
+        if service_key and population_class
+        else benchmark_cell_not_checked()
+    )
+
     missing = []
     if not report_rows:
         missing.append("reports")
@@ -663,6 +703,9 @@ def verify_persistence(
         "metro_scores_count": len(score_rows),
         "metro_score_v2_count": len(score_v2_rows),
         "seo_facts_count": len(seo_fact_rows),
+        "explore_market_cells_count": len(explore_rows),
+        "explore_visible": any(row.get("report_id") for row in explore_rows),
+        "benchmark_cell": benchmark_cell,
         "missing": missing,
     }
 
@@ -674,9 +717,65 @@ def persistence_verification_error(exc: Exception) -> dict[str, Any]:
         "metro_scores_count": 0,
         "metro_score_v2_count": 0,
         "seo_facts_count": 0,
+        "explore_market_cells_count": 0,
+        "explore_visible": False,
+        "benchmark_cell": {
+            "status": "schema_failure",
+            "sample_size_metros": None,
+            "confidence_label": None,
+        },
         "missing": ["persistence_verification"],
         "error": str(exc),
     }
+
+
+def benchmark_cell_not_checked() -> dict[str, Any]:
+    return {
+        "status": "not_checked",
+        "sample_size_metros": None,
+        "confidence_label": None,
+    }
+
+
+def classify_benchmark_cell(
+    supabase: Any,
+    *,
+    niche_normalized: str,
+    population_class: str | None,
+    min_sample_size: int = MIN_BENCHMARK_SAMPLE_SIZE,
+) -> dict[str, Any]:
+    if not niche_normalized or not population_class:
+        return benchmark_cell_not_checked()
+    rows = _select_rows(
+        supabase,
+        "seo_benchmarks",
+        "niche_normalized, population_class, sample_size_metros, confidence_label",
+        filters={
+            "niche_normalized": niche_normalized,
+            "population_class": population_class,
+        },
+        limit=1,
+    )
+    if not rows:
+        return {
+            "status": "missing",
+            "sample_size_metros": None,
+            "confidence_label": None,
+        }
+    row = rows[0]
+    sample_size = _int_value(row.get("sample_size_metros"))
+    return {
+        "status": "usable" if sample_size >= min_sample_size else "undersampled",
+        "sample_size_metros": sample_size,
+        "confidence_label": row.get("confidence_label"),
+    }
+
+
+def _int_value(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _select_rows(
@@ -711,6 +810,10 @@ def build_audit_record(
 ) -> dict[str, Any]:
     report_id = result.get("report_id") if result else None
     persist_warning = result.get("persist_warning") if result else None
+    api_status = _api_status(result)
+    persistence_status = _persistence_status(persistence)
+    score_system = _score_system(result)
+    failure_reason = error
     return {
         "status": status,
         "started_at": started_at.isoformat(),
@@ -727,17 +830,73 @@ def build_audit_record(
             "population": metro.get("population"),
             "population_class": metro.get("population_class"),
         },
+        "metro_size_class": metro.get("population_class"),
+        "cbsa_code": metro.get("cbsa_code"),
+        "service": service_key_text(service),
+        "api_status": api_status,
+        "persistence_status": persistence_status,
+        "score_system": score_system,
+        "dimension_coverage": dimension_coverage(result),
+        "benchmark_cell_status": persistence.get("benchmark_cell", {}).get("status"),
+        "explore_visible": bool(persistence.get("explore_visible")),
+        "failure_reason": failure_reason,
+        "cost_estimate": cost_estimate_for_pair(),
         "report_id": report_id,
         "score": {
             "opportunity_score": result.get("opportunity_score") if result else None,
             "classification_label": result.get("classification_label") if result else None,
-            "score_system": _score_system(result),
+            "score_system": score_system,
             "v2_score_count": _v2_score_count(result),
         },
         "persist_warning": persist_warning,
         "persistence": persistence,
         "error": error,
     }
+
+
+def _api_status(result: dict[str, Any] | None) -> str:
+    if result is None:
+        return "failed"
+    return "success" if result.get("report_id") else "response_without_report_id"
+
+
+def _persistence_status(persistence: dict[str, Any]) -> str:
+    if persistence.get("ok"):
+        return "success"
+    if persistence.get("error"):
+        return "schema_failure"
+    return "partial"
+
+
+def cost_estimate_for_pair() -> dict[str, Any]:
+    return {
+        "currency": "USD",
+        "estimated": 0.01,
+        "source": "static_per_pair_estimate",
+    }
+
+
+def dimension_coverage(result: dict[str, Any] | None) -> dict[str, Any]:
+    scores = _first_v2_scores(result)
+    return {
+        "demand": scores.get("demand_strength") is not None,
+        "organic": scores.get("organic_difficulty") is not None,
+        "local": scores.get("local_difficulty") is not None,
+        "monetization": scores.get("monetization_signal") is not None,
+        "ai_resilience": scores.get("ai_resilience") is not None,
+    }
+
+
+def _first_v2_scores(result: dict[str, Any] | None) -> dict[str, Any]:
+    if result is None:
+        return {}
+    report = result.get("report")
+    if not isinstance(report, dict):
+        return {}
+    for metro in report.get("metros", []):
+        if isinstance(metro, dict) and isinstance(metro.get("v2_scores"), dict):
+            return metro["v2_scores"]
+    return {}
 
 
 def _score_system(result: dict[str, Any] | None) -> str | None:
@@ -791,6 +950,88 @@ def _error_for_status(
     if missing:
         errors.append(f"missing {missing}")
     return "; ".join(errors) if errors else None
+
+
+def resolve_output_path(path: Path | None, default_path: Path) -> Path:
+    resolved = path or default_path
+    if not resolved.is_absolute():
+        resolved = PROJECT_ROOT / resolved
+    return resolved
+
+
+def build_experiment_plan(
+    *,
+    mode: str,
+    pairs: list[tuple[dict[str, Any], str]],
+    services: list[str],
+    api_url: str,
+    args: argparse.Namespace,
+    results_path: Path,
+    summary_path: Path,
+    skipped_count: int,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": mode,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "api_url": api_url,
+        "expected_project_ref": getattr(args, "expected_project_ref", None),
+        "require_dfs": getattr(args, "require_dfs", None),
+        "require_v2_persistence": getattr(args, "require_v2_persistence", None),
+        "concurrency": getattr(args, "concurrency", None),
+        "results_path": str(results_path),
+        "summary_path": str(summary_path),
+        "pair_count": len(pairs),
+        "skipped_count": skipped_count,
+        "services": services,
+        "population_class_mix": summarize_metro_selection(
+            list({metro["cbsa_code"]: metro for metro, _service in pairs}.values())
+        ),
+        "pairs": [
+            {
+                "metro_size_class": metro.get("population_class"),
+                "cbsa_code": metro.get("cbsa_code"),
+                "cbsa_name": metro.get("cbsa_name"),
+                "state": metro.get("state"),
+                "population": metro.get("population"),
+                "service": service_key_text(service),
+                "cost_estimate": cost_estimate_for_pair(),
+            }
+            for metro, service in pairs
+        ],
+    }
+
+
+def build_run_summary(
+    *,
+    plan: dict[str, Any],
+    succeeded: int,
+    partial_failed: int,
+    failed: int,
+    elapsed_seconds: float,
+    results_path: Path,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "mode": "apply",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "plan": {
+            key: value for key, value in plan.items() if key != "pairs"
+        },
+        "results_path": str(results_path),
+        "status_counts": {
+            "success": succeeded,
+            "partial_failure": partial_failed,
+            "failed": failed,
+        },
+        "attempted_count": succeeded + partial_failed + failed,
+        "elapsed_seconds": round(elapsed_seconds, 3),
+    }
+
+
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def refresh_matview(supabase: Any) -> None:
@@ -922,6 +1163,26 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             if _pair_key(metro, service) not in scored_pairs
         ]
 
+    results_path = resolve_output_path(
+        getattr(args, "results_path", None),
+        default_results_path(),
+    )
+    summary_path = resolve_output_path(
+        getattr(args, "summary_path", None),
+        default_summary_path(),
+    )
+    skipped_count = total_pairs - len(pairs)
+    plan = build_experiment_plan(
+        mode="preview" if args.preview else "apply",
+        pairs=pairs,
+        services=services,
+        api_url=api_url,
+        args=args,
+        results_path=results_path,
+        summary_path=summary_path,
+        skipped_count=skipped_count,
+    )
+
     if args.preview:
         logger.info("\n=== PREVIEW: %d pairs to score ===", len(pairs))
         logger.info("Cities (%d):", len(metros))
@@ -950,12 +1211,14 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
             avg_time_per_pair,
             args.concurrency,
         )
+        write_json(summary_path, plan)
+        logger.info("Wrote preview plan: %s", summary_path)
         return
 
     logger.info(
         "Scoring %d pairs (%d skipped as already scored), concurrency=%d...",
         len(pairs),
-        total_pairs - len(pairs),
+        skipped_count,
         args.concurrency,
     )
 
@@ -974,9 +1237,6 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
     failed = 0
     partial_failed = 0
     completed = 0
-    results_path = getattr(args, "results_path", None) or default_results_path()
-    if not results_path.is_absolute():
-        results_path = PROJECT_ROOT / results_path
     results_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     write_lock = asyncio.Lock()
@@ -1010,6 +1270,8 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
                 report_id=result.get("report_id") if result else None,
                 cbsa_code=metro["cbsa_code"],
                 require_v2=args.require_v2_persistence,
+                niche_normalized=service_key_text(service),
+                population_class=str(metro.get("population_class") or ""),
             )
         except Exception as exc:
             persistence = persistence_verification_error(exc)
@@ -1062,10 +1324,22 @@ async def run_bulk_score(args: argparse.Namespace) -> None:
         total_time / 60,
         results_path,
     )
+    write_json(
+        summary_path,
+        build_run_summary(
+            plan=plan,
+            succeeded=succeeded,
+            partial_failed=partial_failed,
+            failed=failed,
+            elapsed_seconds=total_time,
+            results_path=results_path,
+        ),
+    )
+    logger.info("Wrote summary: %s", summary_path)
 
     if succeeded > 0:
         logger.info("Refreshing materialized view...")
-        refresh_matview_sql()
+        refresh_matview_sql(getattr(args, "expected_project_ref", None))
 
 
 def main() -> None:
@@ -1179,7 +1453,16 @@ def main() -> None:
         type=Path,
         default=None,
         help=(
-            "JSONL audit output path. Defaults to scripts/explore/bulk_score_results.jsonl."
+            "JSONL audit output path. Defaults to reports/scoring_audit/bulk_score_results.jsonl."
+        ),
+    )
+    parser.add_argument(
+        "--summary-path",
+        type=Path,
+        default=None,
+        help=(
+            "Aggregate JSON summary/preview path. Defaults to "
+            "reports/scoring_audit/bulk_score_summary.json."
         ),
     )
     parser.add_argument(

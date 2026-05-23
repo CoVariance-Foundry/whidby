@@ -1,5 +1,36 @@
 # Active Work
 
+## Scoring Coverage & Benchmark Hardening
+
+Status: `WHI-99`, `WHI-100`, and `WHI-101` done in Linear; implementation is local on `codex/whi-99-scoring-coverage-experiment`.
+
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Next issue is `WHI-102`.
+
+Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
+
+Current contract:
+
+- Production project guard is `eoajvifhbmqmoluiokcj`.
+- Pilot scope is 12 metros x 8 services: 1 micro, 3 small, 3 medium, 3 large, 1 metro, and 1 mega, using DFS-ready metros only.
+- Core services are roofing, plumbing, hvac, tree service, auto repair, water damage restoration, electrician, and locksmith.
+- Apply commands require `--require-dfs`, `--require-v2-persistence`, and `--expected-project-ref eoajvifhbmqmoluiokcj`.
+- No paid pilot should run until preview and one-pair canary gates pass.
+- `scripts/explore/bulk_score.py` now emits WHI-100 stable JSONL fields plus aggregate preview/apply JSON under ignored `reports/scoring_audit/` by default.
+- `scripts/explore/audit_metro_dfs_readiness.py` review CSVs now include WHI-101 residual review classification, production seed policy, approval-artifact requirement, and population context.
+- `bulk_score.py --require-dfs` excludes rows whose DFS match confidence is marked `ambiguous`, `invalid_existing_code`, or `no_match`.
+
+Verified:
+
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/scripts/test_bulk_score.py -q` passed 32 tests with the existing `asyncio_mode` warning.
+- `ruff check scripts/explore/bulk_score.py tests/scripts/test_bulk_score.py` passed.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p asyncio tests/scripts/test_metro_dfs_readiness.py tests/scripts/test_enrich_metro_dfs_codes.py tests/scripts/test_bulk_score.py -q` passed 58 tests.
+- `ruff check scripts/explore/metro_dfs_readiness.py scripts/explore/audit_metro_dfs_readiness.py scripts/explore/enrich_metro_dfs_codes.py scripts/explore/bulk_score.py tests/scripts/test_metro_dfs_readiness.py tests/scripts/test_enrich_metro_dfs_codes.py tests/scripts/test_bulk_score.py` passed.
+- `git diff --check` passed.
+
+Next:
+
+- Start `WHI-102` for the guarded production API coverage experiment only after operator approval for any paid run.
+
 ## Billing Hardening And Admin Issue Visibility
 
 Status: merge conflicts with `origin/main` resolved on `codex/billing-hardening-admin-visibility`; implementation and final checkout reservation race fix are already pushed.

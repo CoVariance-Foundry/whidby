@@ -1,3 +1,5 @@
+import csv
+
 from scripts.explore import audit_metro_dfs_readiness
 from scripts.explore.metro_dfs_readiness import match_metro, summarize_matches
 
@@ -41,6 +43,7 @@ def metro(**overrides):
         "cbsa_code": "38060",
         "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
         "state": "AZ",
+        "population": 5_000_000,
         "population_class": "metro_1m_5m",
         "principal_cities": [],
         "dataforseo_location_codes": [],
@@ -180,6 +183,34 @@ def test_summarize_matches_groups_by_status_and_population_class():
     assert summary["by_population_class_status"]["metro_1m_5m"] == {"exact": 1}
     assert summary["by_population_class_status"]["large_300k_1m"] == {"strong": 1}
     assert summary["by_population_class_status"]["medium_100_300k"] == {"no_match": 1}
+    assert summary["residual_review_classification"] == {
+        "needs_alternate_target": 1
+    }
+
+
+def test_review_csv_includes_residual_classification_and_seed_policy(tmp_path):
+    matches = [
+        match_metro(
+            metro(
+                cbsa_code="99999",
+                cbsa_name="Missing, OH",
+                state="OH",
+                population=80_000,
+                population_class="small_50_100k",
+            ),
+            DFS_ROWS,
+        )
+    ]
+    path = tmp_path / "review.csv"
+
+    audit_metro_dfs_readiness._write_match_csv(path, matches)
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["population"] == "80000"
+    assert rows[0]["residual_review_classification"] == "needs_alternate_target"
+    assert rows[0]["production_seed_policy"] == "excluded_until_reviewed"
+    assert rows[0]["approval_artifact_required"] == "yes"
 
 
 async def test_fetch_dfs_locations_disables_persistent_cache(monkeypatch):
