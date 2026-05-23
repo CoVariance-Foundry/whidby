@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: `WHI-99`, `WHI-100`, and `WHI-101` done in Linear; implementation is local on `codex/whi-99-scoring-coverage-experiment`.
+Status: `WHI-99`, `WHI-100`, and `WHI-101` done in Linear; `WHI-102` is in progress and stopped at the canary persistence gate. Draft PR: https://github.com/CoVariance-Foundry/whidby/pull/78.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Next issue is `WHI-102`.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-102`.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -18,6 +18,9 @@ Current contract:
 - `scripts/explore/bulk_score.py` now emits WHI-100 stable JSONL fields plus aggregate preview/apply JSON under ignored `reports/scoring_audit/` by default.
 - `scripts/explore/audit_metro_dfs_readiness.py` review CSVs now include WHI-101 residual review classification, production seed policy, approval-artifact requirement, and population context.
 - `bulk_score.py --require-dfs` excludes rows whose DFS match confidence is marked `ambiguous`, `invalid_existing_code`, or `no_match`.
+- WHI-102 previews passed for all six buckets using `uv run python -m scripts.explore.bulk_score --preview` and wrote ignored summary files under `reports/scoring_audit/preview_*.json`.
+- WHI-102 one-pair production canary ran Waco, TX x roofing against `https://whidby-1.onrender.com` with `--require-dfs`, `--require-v2-persistence`, and project guard `eoajvifhbmqmoluiokcj`. It returned API HTTP 200 and created report `69d8dccf-b1c9-453d-9ff7-7dffaf0c9850`, but stopped as `partial_failure` because `metro_scores`, `metro_score_v2`, and `seo_facts` were missing. `explore_market_cells` had one row but it was not report-backed/V2-visible.
+- The read-only canary audit exited fail with `persistence_partial_failure`; top app-surface gaps were missing Explore V2 preference and missing report-backed Explore visibility.
 
 Verified:
 
@@ -26,10 +29,14 @@ Verified:
 - `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p asyncio tests/scripts/test_metro_dfs_readiness.py tests/scripts/test_enrich_metro_dfs_codes.py tests/scripts/test_bulk_score.py -q` passed 58 tests.
 - `ruff check scripts/explore/metro_dfs_readiness.py scripts/explore/audit_metro_dfs_readiness.py scripts/explore/enrich_metro_dfs_codes.py scripts/explore/bulk_score.py tests/scripts/test_metro_dfs_readiness.py tests/scripts/test_enrich_metro_dfs_codes.py tests/scripts/test_bulk_score.py` passed.
 - `git diff --check` passed.
+- `npm run env:sync:local` synced ignored env files from the main checkout.
+- `npm run runtime:check` passed with network access: production service role, staging service role, production publishable key, staging publishable key, and Python 3.13 Supabase client all worked.
+- `uv run python -m scripts.explore.audit_scoring_strategy --read-only --expected-project-ref eoajvifhbmqmoluiokcj --service-name roofing --population-class medium_100_300k --pilot-results reports/scoring_audit/coverage_canary.jsonl --stdout-only` exited fail because the canary was a persistence partial failure.
 
 Next:
 
-- Start `WHI-102` for the guarded production API coverage experiment only after operator approval for any paid run.
+- Do not run the full 12x8 paid pilot until the canary persistence gap is fixed or explained.
+- Debug the production API persistence path for report `69d8dccf-b1c9-453d-9ff7-7dffaf0c9850`: the API returned a V2 score payload, but database persistence did not create `metro_scores`, `metro_score_v2`, or `seo_facts` for `cbsa_code=47380`, `service=roofing`.
 
 ## Billing Hardening And Admin Issue Visibility
 
