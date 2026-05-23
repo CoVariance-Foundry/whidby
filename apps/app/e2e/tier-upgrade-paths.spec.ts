@@ -33,9 +33,9 @@ const scenarios: TierScenario[] = [
     label: "Free",
     reportLimit: 0,
     account: accountFromEnv({
-      emailKeys: ["E2E_FREE_EMAIL", "WHIDBY_TEST_USER_EMAIL"],
-      passwordKeys: ["E2E_FREE_PASSWORD", "WHIDBY_TEST_USER_PASSWORD"],
-      defaultEmail: "user-test@widby.dev",
+      emailKeys: ["E2E_FREE_EMAIL"],
+      passwordKeys: ["E2E_FREE_PASSWORD"],
+      defaultEmail: "e2e-free@widby.dev",
     }),
     verifyUpgradePath: async (page, recorder) => {
       await expect(page.getByRole("button", { name: /upgrade to plus/i })).toBeVisible();
@@ -43,7 +43,10 @@ const scenarios: TierScenario[] = [
 
       await page.getByRole("button", { name: /upgrade to plus/i }).click();
       await page.waitForURL(/\/settings\?billing=success&mock_checkout=plus$/);
-      expect(recorder.checkoutPlanKeys).toEqual(["plus"]);
+
+      await page.getByRole("button", { name: /upgrade to pro/i }).click();
+      await page.waitForURL(/\/settings\?billing=success&mock_checkout=pro$/);
+      expect(recorder.checkoutPlanKeys).toEqual(["plus", "pro"]);
     },
   },
   {
@@ -53,6 +56,7 @@ const scenarios: TierScenario[] = [
     account: accountFromEnv({
       emailKeys: ["E2E_PLUS_EMAIL"],
       passwordKeys: ["E2E_PLUS_PASSWORD"],
+      defaultEmail: "e2e-plus@widby.dev",
     }),
     verifyUpgradePath: async (page, recorder) => {
       await expect(page.getByRole("button", { name: /change in stripe/i })).toBeVisible();
@@ -67,9 +71,9 @@ const scenarios: TierScenario[] = [
     label: "Pro",
     reportLimit: 50,
     account: accountFromEnv({
-      emailKeys: ["E2E_PRO_EMAIL", "WHIDBY_BETA_LUKE_EMAIL"],
-      passwordKeys: ["E2E_PRO_PASSWORD", "WHIDBY_BETA_LUKE_PASSWORD"],
-      defaultEmail: "lm13vand@gmail.com",
+      emailKeys: ["E2E_PRO_EMAIL"],
+      passwordKeys: ["E2E_PRO_PASSWORD"],
+      defaultEmail: "e2e-pro@widby.dev",
     }),
     verifyUpgradePath: async (page, recorder) => {
       await expect(page.getByRole("button", { name: /change in stripe/i })).toBeVisible();
@@ -215,6 +219,11 @@ async function verifyPortalPathOrMissingBillingProfile(
   recorder: BillingRecorder,
   buttonName: RegExp,
 ): Promise<void> {
+  await expect(
+    page.getByText(
+      /payment details are managed in stripe|no stripe billing profile exists yet/i,
+    ),
+  ).toBeVisible();
   const hasBillingProfile = await page
     .getByText(/payment details are managed in stripe/i)
     .isVisible();
