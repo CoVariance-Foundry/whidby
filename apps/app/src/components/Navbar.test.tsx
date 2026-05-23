@@ -44,6 +44,7 @@ const user: NavbarUser = {
   scansLimit: 10,
   adminUrl: "https://admin.example.com",
   isAdmin: true,
+  freshReportQuotaExempt: false,
 };
 
 afterEach(() => {
@@ -72,6 +73,24 @@ describe("Navbar", () => {
     expect(screen.queryByRole("link", { name: /recommendations/i })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("4/10 scans");
     expect(screen.getByLabelText("Plan usage")).toHaveTextContent("Plus");
+  });
+
+  it("renders quota-exempt usage as unlimited scans", () => {
+    render(
+      <Navbar
+        user={{
+          ...user,
+          planLabel: "Free",
+          scansUsed: 0,
+          scansLimit: 0,
+          freshReportQuotaExempt: true,
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Plan usage")).toHaveTextContent("Unlimited scans");
+    expect(screen.getByLabelText("Plan usage")).toHaveTextContent("Free");
+    expect(screen.getByLabelText("Plan usage")).not.toHaveTextContent("0/0 scans");
   });
 
   it("opens the profile menu and preserves settings, admin, password, and sign-out actions for admins", async () => {

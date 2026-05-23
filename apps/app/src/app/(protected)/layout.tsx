@@ -48,6 +48,7 @@ export default async function ProtectedLayout({
       scansLimit: 0,
       adminUrl,
       isAdmin: false,
+      freshReportQuotaExempt: false,
     };
 
     try {
@@ -60,6 +61,7 @@ export default async function ProtectedLayout({
         scansUsed: summary.fresh_reports_used,
         scansLimit: summary.monthly_report_limit,
         isAdmin: entitlement.member_role === "admin",
+        freshReportQuotaExempt: entitlement.fresh_report_quota_exempt,
       };
     } catch (error) {
       if (isRedirectError(error)) throw error;
@@ -69,6 +71,7 @@ export default async function ProtectedLayout({
         scansUsed: 0,
         scansLimit: 0,
         isAdmin: false,
+        freshReportQuotaExempt: false,
       };
     }
   } catch (error) {

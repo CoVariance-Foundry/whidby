@@ -15,6 +15,7 @@ export interface NavbarUser {
   scansLimit: number;
   adminUrl: string;
   isAdmin: boolean;
+  freshReportQuotaExempt: boolean;
 }
 
 const NAV_ITEMS = [
@@ -127,13 +128,14 @@ export default function Navbar({ user }: { user: NavbarUser }) {
 function UsagePill({ user }: { user: NavbarUser }) {
   const scansLimit = Math.max(0, user.scansLimit);
   const scansUsed = Math.max(0, user.scansUsed);
+  const usageLabel = user.freshReportQuotaExempt
+    ? "Unlimited scans"
+    : `${scansUsed}/${scansLimit} scans`;
 
   return (
     <div className="navbar-usage" aria-label="Plan usage">
       {/* Assumption for WHI-46: scans map to the existing fresh-report quota model. */}
-      <span className="navbar-usage-count">
-        {scansUsed}/{scansLimit} scans
-      </span>
+      <span className="navbar-usage-count">{usageLabel}</span>
       <span className="navbar-usage-separator" aria-hidden="true">
         /
       </span>
