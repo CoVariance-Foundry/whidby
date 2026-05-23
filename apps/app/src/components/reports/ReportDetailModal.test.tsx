@@ -125,4 +125,18 @@ describe("ReportDetailModal", () => {
     expect(url.searchParams.get("service")).toBe("plumber");
     expect(url.searchParams.get("cbsa_code")).toBe("38060");
   });
+
+  it("links secondary next moves only to launch-ready strategies", () => {
+    render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByRole("link", { name: /validate rank ease/i })).toHaveAttribute(
+      "href",
+      "/strategies/easy_win",
+    );
+    expect(screen.getByRole("link", { name: /find lookalike cities/i })).toHaveAttribute(
+      "href",
+      "/strategies/expand_conquer",
+    );
+    expect(screen.queryByRole("link", { name: /check economics/i })).not.toBeInTheDocument();
+  });
 });

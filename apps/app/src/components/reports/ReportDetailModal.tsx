@@ -274,7 +274,7 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
 function buildCompetitorIntelHref(report: FullReportData, metro: ReportMetro): string {
   const params = new URLSearchParams();
   params.set("report_id", report.id);
-  params.set("city", metro.cbsa_name || report.geo_target);
+  params.set("city", metro.cbsa_name);
   params.set("service", report.niche_keyword);
   if (metro.cbsa_code) params.set("cbsa_code", metro.cbsa_code);
   return `/competitor-intel?${params.toString()}`;
@@ -373,9 +373,9 @@ function ReportNextMoves({ report, metro }: { report: FullReportData; metro: Rep
           primary
         />
         <NextMoveCard
-          href="/strategies/cash_cow"
-          title="Check economics"
-          subtitle="Pressure-test monetization and lead value."
+          href="/strategies/easy_win"
+          title="Validate rank ease"
+          subtitle="Run Easy Win on this market."
         />
         <NextMoveCard
           href="/strategies/expand_conquer"
