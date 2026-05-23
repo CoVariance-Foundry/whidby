@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
@@ -270,6 +271,122 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
   );
 }
 
+function buildCompetitorIntelHref(report: FullReportData, metro: ReportMetro): string {
+  const params = new URLSearchParams();
+  params.set("report_id", report.id);
+  params.set("city", metro.cbsa_name || report.geo_target);
+  params.set("service", report.niche_keyword);
+  if (metro.cbsa_code) params.set("cbsa_code", metro.cbsa_code);
+  return `/competitor-intel?${params.toString()}`;
+}
+
+function NextMoveCard({
+  href,
+  title,
+  subtitle,
+  primary = false,
+}: {
+  href: string;
+  title: string;
+  subtitle: string;
+  primary?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "block",
+        padding: 16,
+        borderRadius: 8,
+        border: primary ? "1px solid var(--ink)" : "1px solid var(--rule)",
+        background: "var(--card)",
+        color: "inherit",
+        textDecoration: "none",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "var(--sans)",
+          fontWeight: 700,
+          fontSize: 14,
+          color: "var(--ink)",
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          marginTop: 4,
+          fontFamily: "var(--sans)",
+          fontSize: 12.5,
+          color: "var(--ink-2)",
+          lineHeight: 1.45,
+        }}
+      >
+        {subtitle}
+      </div>
+      <div
+        style={{
+          marginTop: 12,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          color: "var(--accent)",
+          fontFamily: "var(--sans)",
+          fontSize: 12,
+          fontWeight: 700,
+        }}
+      >
+        Continue <Icon d={I.arrow} />
+      </div>
+    </Link>
+  );
+}
+
+function ReportNextMoves({ report, metro }: { report: FullReportData; metro: ReportMetro }) {
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <h3
+        style={{
+          fontFamily: "var(--sans)",
+          fontSize: 11.5,
+          fontWeight: 800,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "var(--ink-3)",
+          margin: "0 0 12px",
+        }}
+      >
+        Next moves
+      </h3>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: 12,
+        }}
+      >
+        <NextMoveCard
+          href={buildCompetitorIntelHref(report, metro)}
+          title="Run Competitor Intel"
+          subtitle="See who is ranking and how to win this market."
+          primary
+        />
+        <NextMoveCard
+          href="/strategies/cash_cow"
+          title="Check economics"
+          subtitle="Pressure-test monetization and lead value."
+        />
+        <NextMoveCard
+          href="/strategies/expand_conquer"
+          title="Find lookalike cities"
+          subtitle="Replicate this playbook in similar markets."
+        />
+      </div>
+    </section>
+  );
+}
+
 export default function ReportDetailModal({ report, onClose, onDelete }: Props) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -294,6 +411,7 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
   }, [onClose]);
 
   const meta = report.meta;
+  const topMetro = report.metros[0];
 
   return createPortal(
     <div
@@ -465,6 +583,8 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
               </div>
             </section>
           )}
+
+          {topMetro && <ReportNextMoves report={report} metro={topMetro} />}
 
           {/* Meta */}
           {meta && Object.keys(meta).length > 0 && (
