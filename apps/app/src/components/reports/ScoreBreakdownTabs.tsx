@@ -1,5 +1,3 @@
-"use client";
-
 import type { MetroScores } from "@/lib/niche-finder/types";
 import BreakdownPanel from "@/components/reports/BreakdownPanel";
 

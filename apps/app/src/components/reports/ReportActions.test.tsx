@@ -95,6 +95,25 @@ describe("ReportActions", () => {
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith("rpt_123"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /delete report/i })).not.toBeDisabled(),
+    );
+    expect(screen.queryByRole("button", { name: /deleting/i })).not.toBeInTheDocument();
+  });
+
+  it("clears a failed delete error when the confirmation is canceled", async () => {
+    const onDelete = vi.fn().mockRejectedValue(new Error("Delete failed"));
+
+    render(<ReportActions report={report} onDelete={onDelete} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete report/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    expect(await screen.findByText("Delete failed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.queryByText("Delete failed")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete report/i })).toBeInTheDocument();
   });
 
   it("archives the report and returns to reports when archive delete is enabled", async () => {

@@ -73,6 +73,8 @@ export default function ReportActions({
     try {
       if (onDelete) {
         await onDelete(report.id);
+        setDeleting(false);
+        setConfirming(false);
       } else {
         const supabase = createClient();
         const { data: archived, error: archiveError } = await supabase.rpc("archive_account_report", {
@@ -148,7 +150,10 @@ export default function ReportActions({
           <button
             type="button"
             disabled={deleting}
-            onClick={() => setConfirming(false)}
+            onClick={() => {
+              setConfirming(false);
+              setError(null);
+            }}
             style={{
               ...buttonStyle("ghost"),
               minHeight: 28,
