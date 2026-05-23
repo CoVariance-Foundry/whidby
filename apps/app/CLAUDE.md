@@ -82,6 +82,7 @@ cd apps/app && npx vitest run  # Once tests are added
 Currently uses:
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — auth
+- `WIDBY_APP_BASE_URL` — production self-fetch base URL for SSR routes; set to `https://app.thewidby.com`
 - `NEXT_PUBLIC_APP_FRONTEND_URL` — auth redirect origin
 - `NEXT_PUBLIC_API_URL` — FastAPI bridge base (required for scoring + places autocomplete)
 - `NEXT_PUBLIC_NICHE_DRY_RUN` — dev/E2E override
@@ -89,6 +90,8 @@ Currently uses:
 Note: `MAPBOX_ACCESS_TOKEN` is set on the FastAPI side (Render env), not the frontend. The frontend proxies through `/api/agent/places/suggest`.
 
 Operational note (2026-04-22): Render API env has been updated with `MAPBOX_ACCESS_TOKEN`; consumer `/niche-finder` autocomplete now returns small-city suggestions such as Tuskegee, AL and Macon, GA.
+
+Operational note (2026-05-22): Production `/reports` and the dashboard reports summary failed with `HTTP 401` after Supabase key rotation/env drift. The fix was on Vercel project `whidby-agent` Production, not the marketing `whidby` project: refresh `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, add `WIDBY_APP_BASE_URL=https://app.thewidby.com`, then redeploy. Without `WIDBY_APP_BASE_URL`, SSR self-fetches can prefer `VERCEL_URL`, hit a protected deployment URL, and receive Vercel SSO `401` before `/api/agent/reports` runs.
 
 ## Auth rate limits
 
