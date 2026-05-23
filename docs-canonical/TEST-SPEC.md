@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.6.1 -->
+<!-- docguard:version 1.7.2 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-17 -->
 <!-- docguard:owner @widby-team -->
@@ -106,6 +106,27 @@ tests/
 | Competitor Intel persistence | Organic/local competitor facts are persisted as durable read-model rows without reading `api_response_cache`; run lineage records account/user/quota/status | `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py` |
 | Competitor Intel APIs | Free users receive upgrade state; Plus/Pro users can read/run; run creation consumes/refunds two `fresh_report` units atomically; service-role reads enforce account visibility | `apps/app/src/app/api/competitor-intel/route.test.ts`, `apps/app/src/app/api/competitor-intel/runs/route.test.ts`, `tests/unit/test_api_competitor_intel.py`, `tests/unit/test_competitor_intel_service.py` |
 | Competitor Intel UI | Locked, ready, running, aggregate-only, dossier, and error states render without leaking paid details or null-heavy cards | `apps/app/src/components/competitor-intel/CompetitorIntelClient.test.tsx` |
+
+## Coverage-First Production Seed Acceptance
+
+| Gate | Expected |
+|------|----------|
+| Schema parity | Local migrations and target Supabase schema agree before seed writes |
+| Expected-project guard | Seed and recompute commands fail closed when pointed at the wrong project |
+| Canary | One city/service pair persists report, V2 score, SEO facts, and readable Explore cache output |
+| 12x8 coverage pilot | Pilot records success, partial, and failure audit rows without treating nullable top-5 DA/Lighthouse telemetry as blocking |
+| Benchmark recompute | `seo_benchmarks` is rebuilt from accepted `seo_facts` after pilot coverage is reviewed |
+| Explore cache validation | `/explore` read models surface the seeded city/service rows with V2 preference and legacy fallback intact |
+| 50x16 seed | Full seed proceeds only after the prior gates pass |
+
+## Scoring Strategy Audit Tests
+
+| Coverage | Expected | Tests |
+|----------|----------|-------|
+| Component coverage | Demand, organic, local, monetization, AI resilience, and app-surface metrics summarize by service, population class, and benchmark cell | `tests/scripts/test_scoring_strategy_audit.py` |
+| Benchmark usability | Benchmark metrics classify cells below `sample_size_metros >= 8` as undersampled | `tests/scripts/test_scoring_strategy_audit.py` |
+| Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
+| Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
 
 ## E2E Scoring Tests (Playwright)
 
@@ -249,4 +270,8 @@ npm run lint
 | 1.4.0 | 2026-05-16 | Consumer onboarding flow | Added schema, routing, API, UI, first-report handoff, and auth-resume test obligations |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy projection, discovery service, API, and consumer entitlement test obligations |
 | 1.6.0 | 2026-05-17 | Internal entitlements and staging accounts | Added quota-exempt admin, seed script, and migration parity test obligations |
+| 1.6.2 | 2026-05-22 | Coverage-first production seed acceptance | Added schema parity, expected-project guard, canary, pilot, benchmark, Explore cache, and full-seed gates |
+| 1.6.3 | 2026-05-22 | Scoring strategy audit | Added component coverage, benchmark usability, pilot-result, and project-guard test obligations |
 | 1.7.0 | 2026-05-22 | Competitor Intel | Added paid dossier, durable competitor facts, two-scan quota, and UI/API test obligations |
+| 1.7.1 | 2026-05-22 | Merge sync | Preserved coverage-first seed gates alongside Competitor Intel test obligations |
+| 1.7.2 | 2026-05-22 | Merge sync | Preserved scoring strategy audit obligations alongside Competitor Intel and coverage-first seed gates |
