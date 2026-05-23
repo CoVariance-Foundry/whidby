@@ -365,8 +365,9 @@ export default function AgencyPage() {
     () => validCustomRows.map((row) => customRowToTarget(row, primaryKeyword)),
     [validCustomRows, primaryKeyword],
   );
-  const incompleteCustomRows = customRows.filter(
-    (row) => hasCustomInput(row) && !customRowReady(row),
+  const incompleteCustomRows = useMemo(
+    () => customRows.filter((row) => hasCustomInput(row) && !customRowReady(row)),
+    [customRows],
   );
   const maxTargetPairs = selectedServices.length * maxMarkets;
   const totalTargetPairs = maxTargetPairs + validCustomTargets.length;
@@ -414,6 +415,7 @@ export default function AgencyPage() {
   );
   const latestPrepareSnapshotRef = useRef(prepareSnapshot);
   const prepareRequestIdRef = useRef(0);
+  const customRowIdCounterRef = useRef(0);
   useEffect(() => {
     latestPrepareSnapshotRef.current = prepareSnapshot;
   }, [prepareSnapshot]);
@@ -436,10 +438,12 @@ export default function AgencyPage() {
 
   function addCustomRow() {
     setDiscoveryEmpty(false);
+    customRowIdCounterRef.current += 1;
+    const nextCustomRowId = customRowIdCounterRef.current;
     setCustomRows((current) => [
       ...current,
       {
-        id: `custom-${Date.now()}-${current.length}`,
+        id: `custom-${nextCustomRowId}`,
         city: "",
         state: "",
         service: "",
@@ -752,10 +756,10 @@ export default function AgencyPage() {
             justifyContent: "space-between",
             gap: 12,
             flexWrap: "wrap",
-            border: "1px solid var(--accent)",
+            border: "1px solid var(--warn)",
             borderRadius: 8,
-            background: "var(--accent-soft)",
-            color: "var(--accent-ink)",
+            background: "var(--warn-soft)",
+            color: "var(--warn)",
             padding: "12px 14px",
             fontSize: 13,
           }}
