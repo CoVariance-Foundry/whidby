@@ -828,6 +828,10 @@ def build_seo_evidence_artifact_rows_from_cost_records(
         if collected_at is not None:
             artifact["collected_at"] = collected_at
 
+        collection_context_id = _record_value(record, "collection_context_id")
+        if collection_context_id is not None:
+            artifact["collection_context_id"] = collection_context_id
+
         response_hash = _record_value(record, "response_hash")
         if response_hash is not None:
             artifact["response_hash"] = response_hash

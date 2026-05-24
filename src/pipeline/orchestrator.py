@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from typing import Any
 from uuid import uuid4
@@ -114,8 +115,6 @@ async def score_niche_for_metro(
             run_id=f"score-dry-{uuid4()}",
         )
 
-    cost_log_start = _cost_log_len(dataforseo_client)
-
     m5_metro_input: dict[str, Any] = {
         "metro_id": resolved.cbsa_code,
         "location_code": resolved.location_code,
@@ -125,35 +124,36 @@ async def score_niche_for_metro(
     run_id = f"score-{uuid4()}"
     rid = request_id or run_id
 
-    # --- M4 keyword expansion ---
-    m4_start = time.monotonic()
-    logger.info("[%s] M4 keyword expansion START request_id=%s", run_id, rid)
-    expansion = await expand_keywords(
-        niche,
-        llm_client=llm_client,
-        dataforseo_client=dataforseo_client,
-    )
-    m4_ms = int((time.monotonic() - m4_start) * 1000)
-    logger.info(
-        "[%s] M4 keyword expansion DONE — %d keywords, confidence=%s, duration_ms=%d",
-        run_id, len(expansion.get("expanded_keywords", [])),
-        expansion.get("expansion_confidence"), m4_ms,
-    )
+    with _cost_capture_context(dataforseo_client, run_id):
+        # --- M4 keyword expansion ---
+        m4_start = time.monotonic()
+        logger.info("[%s] M4 keyword expansion START request_id=%s", run_id, rid)
+        expansion = await expand_keywords(
+            niche,
+            llm_client=llm_client,
+            dataforseo_client=dataforseo_client,
+        )
+        m4_ms = int((time.monotonic() - m4_start) * 1000)
+        logger.info(
+            "[%s] M4 keyword expansion DONE — %d keywords, confidence=%s, duration_ms=%d",
+            run_id, len(expansion.get("expanded_keywords", [])),
+            expansion.get("expansion_confidence"), m4_ms,
+        )
 
-    # --- M5 data collection ---
-    m5_start = time.monotonic()
-    logger.info("[%s] M5 data collection START", run_id)
-    raw = await collect_data(
-        keywords=expansion["expanded_keywords"],
-        metros=[m5_metro_input],
-        strategy_profile=strategy_profile,
-        client=dataforseo_client,
-    )
-    m5_ms = int((time.monotonic() - m5_start) * 1000)
-    logger.info(
-        "[%s] M5 data collection DONE — api_calls=%d cost=$%.4f duration_ms=%d",
-        run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd, m5_ms,
-    )
+        # --- M5 data collection ---
+        m5_start = time.monotonic()
+        logger.info("[%s] M5 data collection START", run_id)
+        raw = await collect_data(
+            keywords=expansion["expanded_keywords"],
+            metros=[m5_metro_input],
+            strategy_profile=strategy_profile,
+            client=dataforseo_client,
+        )
+        m5_ms = int((time.monotonic() - m5_start) * 1000)
+        logger.info(
+            "[%s] M5 data collection DONE — api_calls=%d cost=$%.4f duration_ms=%d",
+            run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd, m5_ms,
+        )
 
     # --- M6 signal extraction ---
     m6_start = time.monotonic()
@@ -272,13 +272,7 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
-    current_cost_records = _cost_records_for_scoring_run(
-        dfs_cost_log[cost_log_start:],
-        niche=niche,
-        location_code=resolved.location_code,
-        expanded_keywords=expansion.get("expanded_keywords", []),
-        metro_result=metro_result,
-    )
+    current_cost_records = _cost_records_for_context(dfs_cost_log, run_id)
     evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(current_cost_records)
     local_pack_listing_facts = _build_local_pack_listing_facts(
         report=report,
@@ -491,8 +485,28 @@ def _log_dfs_cost_summary(
     logger.info(" — ".join(parts))
 
 
-def _cost_log_len(dataforseo_client: Any) -> int:
-    return len(getattr(dataforseo_client, "cost_log", []) or [])
+def _cost_capture_context(dataforseo_client: Any, run_id: str) -> Any:
+    tracker = getattr(dataforseo_client, "cost_tracker", None)
+    capture_context = getattr(tracker, "capture_context", None)
+    if callable(capture_context):
+        return capture_context(run_id)
+    return nullcontext()
+
+
+def _cost_records_for_context(records: list[Any], context_id: str) -> list[Any]:
+    return [
+        record
+        for record in records
+        if _record_context_id(record) == context_id
+    ]
+
+
+def _record_context_id(record: Any) -> str | None:
+    if isinstance(record, dict):
+        value = record.get("collection_context_id")
+    else:
+        value = getattr(record, "collection_context_id", None)
+    return str(value) if value is not None else None
 
 
 def _build_local_pack_listing_facts(
@@ -504,6 +518,7 @@ def _build_local_pack_listing_facts(
 ) -> list[dict[str, Any]]:
     keyword = _primary_report_keyword(report)
     generated_at = report.get("generated_at")
+    local_enrichment = _local_review_enrichment_lookup(raw_metro)
     rows: list[dict[str, Any]] = []
     for maps_result in getattr(raw_metro, "serp_maps", []) or []:
         source_query = _text(maps_result.get("keyword")) or keyword
@@ -515,6 +530,11 @@ def _build_local_pack_listing_facts(
             if not business_name:
                 continue
             listing_url = _text(item.get("listing_url") or item.get("url"))
+            enrichment = _local_review_enrichment_for_item(
+                item,
+                business_name=business_name,
+                lookup=local_enrichment,
+            )
             rows.append(
                 {
                     "cbsa_code": cbsa_code,
@@ -531,9 +551,12 @@ def _build_local_pack_listing_facts(
                     "review_retrieval_mode": _text(
                         item.get("review_retrieval_mode")
                         or item.get("review_collection_mode")
+                        or enrichment.get("review_retrieval_mode")
                     ),
-                    "review_window_start": item.get("review_window_start"),
-                    "review_window_end": item.get("review_window_end"),
+                    "review_window_start": item.get("review_window_start")
+                    or enrichment.get("review_window_start"),
+                    "review_window_end": item.get("review_window_end")
+                    or enrichment.get("review_window_end"),
                     "upstream_result_at": _first_present(
                         item,
                         maps_result,
@@ -551,81 +574,96 @@ def _build_local_pack_listing_facts(
     return rows
 
 
-def _cost_records_for_scoring_run(
-    records: list[Any],
-    *,
-    niche: str,
-    location_code: int,
-    expanded_keywords: list[dict[str, Any]],
-    metro_result: Any,
-) -> list[Any]:
-    keywords = {
-        _norm_text(niche),
-        *(_norm_text(item.get("keyword")) for item in expanded_keywords),
-    }
-    keywords.discard("")
-    local_queries = {
-        _norm_text(row.get("keyword"))
-        for row in getattr(metro_result, "serp_maps", []) or []
-        if isinstance(row, dict)
-    }
-    keywords.update(query for query in local_queries if query)
-    local_identifiers = _local_identifiers(metro_result)
-    keywords.update(_local_business_names(metro_result))
-    domains = _organic_domains(metro_result)
-    urls = _organic_urls(metro_result)
-    current: list[Any] = []
-    for record in records:
-        params = _record_params(record)
-        if _record_matches_scoring_run(
-            params,
-            location_code=location_code,
-            keywords=keywords,
-            local_identifiers=local_identifiers,
-            domains=domains,
-            urls=urls,
-        ):
-            current.append(record)
-    return current
+def _local_review_enrichment_lookup(raw_metro: Any) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+    for row in getattr(raw_metro, "gbp_info", []) or []:
+        if isinstance(row, dict):
+            _add_local_enrichment(lookup, row, _local_enrichment_from_row(row))
+    for row in getattr(raw_metro, "google_reviews", []) or []:
+        if isinstance(row, dict):
+            _add_local_enrichment(lookup, row, _local_enrichment_from_row(row))
+    return lookup
 
 
-def _record_matches_scoring_run(
-    params: dict[str, Any],
+def _local_enrichment_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    window_start, window_end = _review_window_from_row(row)
+    return {
+        "review_retrieval_mode": _text(
+            row.get("review_retrieval_mode")
+            or row.get("review_collection_mode")
+            or row.get("preferred_identifier_mode")
+        ),
+        "review_window_start": window_start,
+        "review_window_end": window_end,
+    }
+
+
+def _add_local_enrichment(
+    lookup: dict[str, dict[str, Any]],
+    row: dict[str, Any],
+    enrichment: dict[str, Any],
+) -> None:
+    if not any(value is not None for value in enrichment.values()):
+        return
+    for key in _local_lookup_keys(row):
+        existing = lookup.setdefault(key, {})
+        for field, value in enrichment.items():
+            if value is not None:
+                existing[field] = value
+
+
+def _local_review_enrichment_for_item(
+    item: dict[str, Any],
     *,
-    location_code: int,
-    keywords: set[str],
-    local_identifiers: set[str],
-    domains: set[str],
-    urls: set[str],
-) -> bool:
-    param_location = _int_or_none(params.get("location_code"))
-    if param_location is not None and param_location != location_code:
-        return False
-    param_identifiers = {
-        _norm_text(value)
-        for value in _param_values(params.get("cid")) + _param_values(params.get("place_id"))
+    business_name: str,
+    lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    candidate = {
+        **item,
+        "business_name": business_name,
     }
-    param_identifiers.discard("")
-    if param_identifiers:
-        return bool(param_identifiers & local_identifiers)
-    param_keywords = {
-        _norm_text(value)
-        for value in (
-            _param_values(params.get("keyword"))
-            + _param_values(params.get("keywords"))
-            + _param_values(params.get("categories"))
-        )
-    }
-    param_keywords.discard("")
-    if param_keywords:
-        return bool(param_keywords & keywords)
-    target = _norm_text(params.get("target"))
-    if target:
-        return target in domains
-    url = _text(params.get("url"))
-    if url:
-        return url in urls or normalize_domain(url) in domains
-    return param_location == location_code
+    for key in _local_lookup_keys(candidate):
+        if key in lookup:
+            return lookup[key]
+    return {}
+
+
+def _local_lookup_keys(row: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for field in ("cid", "place_id"):
+        value = _norm_text(row.get(field))
+        if value:
+            keys.append(f"{field}:{value}")
+    name = _norm_text(row.get("business_name") or row.get("title") or row.get("name"))
+    if name:
+        keys.append(f"name:{name}")
+    return keys
+
+
+def _review_window_from_row(row: dict[str, Any]) -> tuple[Any, Any]:
+    start = row.get("review_window_start") or row.get("source_window_start")
+    end = row.get("review_window_end") or row.get("source_window_end")
+    if start or end:
+        return start, end
+
+    timestamps = _review_timestamps_from_row(row)
+    if not timestamps:
+        return None, None
+    ordered = sorted(timestamps)
+    return ordered[0], ordered[-1]
+
+
+def _review_timestamps_from_row(row: dict[str, Any]) -> list[str]:
+    timestamps: list[str] = []
+    raw = row.get("review_timestamps")
+    if isinstance(raw, list):
+        timestamps.extend(str(value) for value in raw if value)
+    items = row.get("items")
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and item.get("timestamp"):
+                timestamps.append(str(item["timestamp"]))
+    return timestamps
 
 
 def _primary_report_keyword(report: dict[str, Any]) -> str | None:
@@ -681,75 +719,6 @@ def _first_present(
     return None
 
 
-def _record_params(record: Any) -> dict[str, Any]:
-    params = record.get("parameters") if isinstance(record, dict) else getattr(record, "parameters", {})
-    return params if isinstance(params, dict) else {}
-
-
-def _organic_domains(metro_result: Any) -> set[str]:
-    domains: set[str] = set()
-    for result in getattr(metro_result, "serp_organic", []) or []:
-        if not isinstance(result, dict):
-            continue
-        items = result.get("items") if isinstance(result.get("items"), list) else []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            domain = normalize_domain(str(item.get("domain") or item.get("url") or ""))
-            if domain:
-                domains.add(domain)
-    return domains
-
-
-def _local_identifiers(metro_result: Any) -> set[str]:
-    identifiers: set[str] = set()
-    for item in _local_map_items(metro_result):
-        for field in ("cid", "place_id"):
-            identifier = _norm_text(item.get(field))
-            if identifier:
-                identifiers.add(identifier)
-    return identifiers
-
-
-def _local_business_names(metro_result: Any) -> set[str]:
-    names: set[str] = set()
-    for item in _local_map_items(metro_result):
-        name = _norm_text(item.get("title") or item.get("name") or item.get("business_name"))
-        if name:
-            names.add(name)
-    return names
-
-
-def _local_map_items(metro_result: Any) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    for result in getattr(metro_result, "serp_maps", []) or []:
-        if not isinstance(result, dict):
-            continue
-        raw_items = result.get("items") if isinstance(result.get("items"), list) else []
-        items.extend(item for item in raw_items if isinstance(item, dict))
-    return items
-
-
-def _organic_urls(metro_result: Any) -> set[str]:
-    urls: set[str] = set()
-    for result in getattr(metro_result, "serp_organic", []) or []:
-        if not isinstance(result, dict):
-            continue
-        items = result.get("items") if isinstance(result.get("items"), list) else []
-        for item in items:
-            if isinstance(item, dict) and item.get("url"):
-                urls.add(str(item["url"]).strip())
-    return urls
-
-
-def _param_values(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    return [value]
-
-
 def _norm_text(value: Any) -> str:
     text = _text(value)
     return text.lower() if text else ""
@@ -760,13 +729,6 @@ def _text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _int_or_none(value: Any) -> int | None:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _population_class_for_benchmarks(population: int | None) -> str | None:

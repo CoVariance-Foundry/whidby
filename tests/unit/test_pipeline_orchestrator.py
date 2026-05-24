@@ -200,8 +200,9 @@ def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
             0.002,
             False,
             90,
-            {"keyword": "hvac near me", "location_code": 2000020},
+            {"keyword": "roofing near me", "location_code": 1012873},
             collected_at="2026-05-24T14:00:00+00:00",
+            collection_context_id="score-other",
             response_hash="maps-other-hash",
         )
         fake_dfs.cost_tracker.record(
@@ -230,8 +231,9 @@ def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
             0.005,
             False,
             300,
-            {"cid": "cid-other", "location_code": 1012873},
+            {"cid": "cid-current", "location_code": 1012873},
             collected_at="2026-05-24T14:00:03+00:00",
+            collection_context_id="score-other",
             response_hash="reviews-other-hash",
         )
         fake_dfs.cost_tracker.record(
@@ -363,7 +365,17 @@ def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> N
                 keyword_volume=[],
                 backlinks=[],
                 lighthouse=[],
-                google_reviews=[],
+                google_reviews=[
+                    {
+                        "cid": "cid-1",
+                        "business_name": "Phoenix Roof Pros",
+                        "review_retrieval_mode": "cid",
+                        "review_timestamps": [
+                            "2026-05-01T00:00:00+00:00",
+                            "2026-05-20T00:00:00+00:00",
+                        ],
+                    }
+                ],
                 gbp_info=[],
                 business_listings=[],
             )
@@ -407,6 +419,9 @@ def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> N
     assert first["listing_url"] == "https://phoenixroof.example/maps"
     assert first["domain"] == "phoenixroof.example"
     assert first["upstream_result_at"] == "2026-05-24T13:59:00+00:00"
+    assert first["review_retrieval_mode"] == "cid"
+    assert first["review_window_start"] == "2026-05-01T00:00:00+00:00"
+    assert first["review_window_end"] == "2026-05-20T00:00:00+00:00"
 
 
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:

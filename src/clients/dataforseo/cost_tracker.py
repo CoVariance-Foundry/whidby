@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
+from contextlib import contextmanager
+import contextvars
 import logging
 from typing import Any
 
 from .types import CostRecord
 
 logger = logging.getLogger(__name__)
+_ACTIVE_COLLECTION_CONTEXT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "dataforseo_collection_context_id",
+    default=None,
+)
 
 
 class CostTracker:
@@ -16,6 +23,14 @@ class CostTracker:
 
     def __init__(self) -> None:
         self._records: list[CostRecord] = []
+
+    @contextmanager
+    def capture_context(self, context_id: str) -> Iterator[None]:
+        token = _ACTIVE_COLLECTION_CONTEXT.set(context_id)
+        try:
+            yield
+        finally:
+            _ACTIVE_COLLECTION_CONTEXT.reset(token)
 
     def record(
         self,
@@ -27,6 +42,7 @@ class CostTracker:
         parameters: dict[str, Any] | None = None,
         *,
         collected_at: str | None = None,
+        collection_context_id: str | None = None,
         response_hash: str | None = None,
         response_storage_uri: str | None = None,
         response_payload: dict[str, Any] | None = None,
@@ -40,6 +56,9 @@ class CostTracker:
                 latency_ms=latency_ms,
                 parameters=parameters or {},
                 collected_at=collected_at,
+                collection_context_id=collection_context_id
+                if collection_context_id is not None
+                else _ACTIVE_COLLECTION_CONTEXT.get(),
                 response_hash=response_hash,
                 response_storage_uri=response_storage_uri,
                 response_payload=response_payload,

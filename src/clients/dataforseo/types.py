@@ -30,6 +30,7 @@ class CostRecord:
     latency_ms: int
     parameters: dict[str, Any] = field(default_factory=dict)
     collected_at: str | None = None
+    collection_context_id: str | None = None
     response_hash: str | None = None
     response_storage_uri: str | None = None
     response_payload: dict[str, Any] | None = None

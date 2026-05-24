@@ -256,13 +256,31 @@ class TestCostTracking:
         client = _make_client()
         mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
 
-        await client.serp_maps(keyword="plumber", location_code=1012873)
+        with client.cost_tracker.capture_context("score-run-1"):
+            await client.serp_maps(keyword="plumber", location_code=1012873)
 
         record = client.cost_log[0]
+        assert record.collection_context_id == "score-run-1"
         assert record.collected_at
         assert record.response_hash
         assert record.response_payload is not None
         assert record.response_payload["sha256"] == record.response_hash
+
+    @pytest.mark.asyncio
+    async def test_cost_context_is_task_local_for_overlapping_async_calls(self, mocker):
+        client = _make_client(cache_ttl=0)
+        mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
+
+        async def call_in_context(context_id: str) -> None:
+            with client.cost_tracker.capture_context(context_id):
+                await client.serp_maps(keyword="plumber", location_code=1012873)
+
+        await asyncio.gather(call_in_context("score-a"), call_in_context("score-b"))
+
+        assert {record.collection_context_id for record in client.cost_log} == {
+            "score-a",
+            "score-b",
+        }
 
     @pytest.mark.asyncio
     async def test_cached_cost_records_hash_cached_payload(self, mocker):
