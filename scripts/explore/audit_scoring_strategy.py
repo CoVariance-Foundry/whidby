@@ -701,18 +701,17 @@ def classify_metric(
     return SPARSE_STATUS, "score with warning"
 
 
-def benchmark_run_by_cell(
+def benchmark_run_id_by_cell(
     benchmarks: list[dict[str, Any]],
-) -> dict[tuple[str, str], str]:
+) -> dict[tuple[str, str], str | None]:
     return {
         (
             normalize_service_key(str(row.get("niche_normalized") or "")),
             str(row.get("population_class") or ""),
-        ): str(row.get("benchmark_run_id") or "")
+        ): str(row.get("benchmark_run_id")) if row.get("benchmark_run_id") else None
         for row in benchmarks
         if row.get("niche_normalized")
         and row.get("population_class")
-        and row.get("benchmark_run_id")
     }
 
 
@@ -773,7 +772,7 @@ def select_metric_sufficiency_rows(
     rows: list[dict[str, Any]],
     benchmarks: list[dict[str, Any]],
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
-    run_by_cell = benchmark_run_by_cell(benchmarks)
+    run_id_by_cell = benchmark_run_id_by_cell(benchmarks)
     selected: dict[tuple[str, str, str], dict[str, Any]] = {}
     for row in rows:
         niche = normalize_service_key(str(row.get("niche_normalized") or ""))
@@ -781,8 +780,11 @@ def select_metric_sufficiency_rows(
         family = str(row.get("metric_family") or "")
         if not niche or not population_class or family not in METRIC_FAMILIES:
             continue
+        cell_key = (niche, population_class)
+        if cell_key not in run_id_by_cell:
+            continue
         key = (niche, population_class, family)
-        target_run_id = run_by_cell.get((niche, population_class))
+        target_run_id = run_id_by_cell[cell_key]
         row_run_id = str(row.get("benchmark_run_id") or "")
         if target_run_id and row_run_id != target_run_id:
             continue

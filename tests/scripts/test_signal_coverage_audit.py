@@ -469,6 +469,90 @@ def test_metric_sufficiency_reports_family_statuses_and_canary_guidance():
     assert any("benchmark metric family sufficiency gap" in failure for failure in report["failures"])
 
 
+def test_metric_sufficiency_ignores_orphan_rows_without_benchmark_cell():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+    )
+
+    families = report["metric_sufficiency"]["cells"][0]["families"]
+    assert families["demand"]["status"] == "metric_missing"
+    assert report["strategy_readiness"]["strategy_totals"]["Easy Win"]["blocked"] == 1
+    assert any("lack benchmark cells" in failure for failure in report["failures"])
+
+
+def test_metric_sufficiency_allows_legacy_fallback_when_benchmark_cell_has_no_run_id():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": None,
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+    )
+
+    families = report["metric_sufficiency"]["cells"][0]["families"]
+    assert families["demand"]["status"] == "metric_ready"
+    assert report["strategy_readiness"]["strategy_totals"]["Easy Win"]["ready"] == 1
+
+
 def test_explore_visibility_slice_gets_coverage_gate():
     report = audit_signal_coverage.build_report(
         facts=[

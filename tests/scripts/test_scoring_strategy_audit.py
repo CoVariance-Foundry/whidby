@@ -331,6 +331,41 @@ def test_metric_sufficiency_ignores_stale_rows_from_wrong_benchmark_run():
     assert any(blocker["metric_family"] == "demand" for blocker in easy_win["blockers"])
 
 
+def test_metric_sufficiency_ignores_orphan_rows_without_benchmark_cell():
+    data = full_data()
+    data["seo_benchmarks"] = []
+
+    report = build_report(data)
+    demand = report["metric_sufficiency"]["cells"][0]["families"]["demand"]
+    easy_win = next(
+        strategy
+        for strategy in report["strategy_readiness"]["cells"][0]["strategies"]
+        if strategy["strategy"] == "Easy Win"
+    )
+
+    assert demand["status"] == "metric_missing"
+    assert demand["benchmark_run_id"] is None
+    assert easy_win["status"] == "blocked"
+    assert any(blocker["metric_family"] == "demand" for blocker in easy_win["blockers"])
+
+
+def test_metric_sufficiency_allows_legacy_fallback_when_benchmark_cell_has_no_run_id():
+    data = full_data()
+    data["seo_benchmarks"][0]["benchmark_run_id"] = None
+
+    report = build_report(data)
+    demand = report["metric_sufficiency"]["cells"][0]["families"]["demand"]
+    easy_win = next(
+        strategy
+        for strategy in report["strategy_readiness"]["cells"][0]["strategies"]
+        if strategy["strategy"] == "Easy Win"
+    )
+
+    assert demand["status"] == "metric_ready"
+    assert demand["benchmark_run_id"] == "run-1"
+    assert easy_win["status"] == "ready"
+
+
 def test_missing_top5_signal_is_telemetry_only_not_scored_reliable():
     data = full_data()
     data["seo_facts"][0]["avg_top5_da"] = None
