@@ -1,6 +1,7 @@
 import pytest
 
 from scripts.explore import audit_signal_coverage
+from scripts.explore import audit_scoring_strategy
 
 
 class FakeResponse:
@@ -42,6 +43,33 @@ class FakeSupabase:
             self.rows_by_table.get(table_name, []),
             failure=self.failing_tables.get(table_name),
         )
+
+
+def metric_rows(
+    *,
+    niche: str = "roofing",
+    population_class: str = "metro_1m_5m",
+    non_null_metros: int = 8,
+    confidence_label: str = "medium",
+):
+    return [
+        {
+            "benchmark_run_id": "run-1",
+            "niche_normalized": niche,
+            "population_class": population_class,
+            "metric_family": family,
+            "attempted_metros": 8,
+            "non_null_metros": non_null_metros,
+            "attempted_observations": 16,
+            "non_null_observations": non_null_metros * 2,
+            "confidence_label": confidence_label,
+            "source_endpoint": "benchmark_fixture",
+            "source_window_start": "2026-05-01",
+            "source_window_end": "2026-05-24",
+            "created_at": "2026-05-24T00:00:00+00:00",
+        }
+        for family in audit_scoring_strategy.METRIC_FAMILIES
+    ]
 
 
 def test_build_report_passes_when_coverage_benchmarks_and_explore_cache_are_ready():
@@ -375,6 +403,70 @@ def test_usable_benchmark_count_excludes_undersampled_cells():
     assert report["benchmark_cells"]["count"] == 2
     assert report["benchmark_cells"]["usable_count"] == 1
     assert any("usable benchmark cell count" in failure for failure in report["failures"])
+
+
+def test_metric_sufficiency_reports_family_statuses_and_canary_guidance():
+    rows = metric_rows()
+    for row in rows:
+        if row["metric_family"] == "review_velocity":
+            row["non_null_metros"] = 2
+            row["non_null_observations"] = 4
+            row["confidence_label"] = "low"
+        if row["metric_family"] == "gbp_profile":
+            row["non_null_metros"] = 0
+            row["non_null_observations"] = 0
+            row["confidence_label"] = "insufficient"
+
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+            }
+        ],
+        metric_sufficiency_rows=rows,
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+    )
+
+    families = report["metric_sufficiency"]["cells"][0]["families"]
+    assert report["status"] == "fail"
+    assert families["demand"]["status"] == "metric_ready"
+    assert families["review_velocity"]["status"] == "metric_undersampled"
+    assert families["gbp_profile"]["status"] == "metric_missing"
+    assert report["strategy_readiness"]["strategy_totals"]["GBP Blitz"]["blocked"] == 1
+    assert any(
+        candidate["metric_family"] == "review_velocity"
+        for candidate in report["canary_guidance"]["paid_collection_candidates"]
+    )
+    assert any("benchmark metric family sufficiency gap" in failure for failure in report["failures"])
 
 
 def test_explore_visibility_slice_gets_coverage_gate():

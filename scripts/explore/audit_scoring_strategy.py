@@ -68,6 +68,7 @@ REQUIRED_COLUMNS = {
         "report_id",
     ),
     "seo_benchmarks": (
+        "benchmark_run_id",
         "niche_normalized",
         "population_class",
         "sample_size_metros",
@@ -82,6 +83,21 @@ REQUIRED_COLUMNS = {
         "median_lsa_present_rate",
         "median_ads_present_rate",
         "median_aio_trigger_rate",
+    ),
+    "seo_benchmark_metric_sufficiency": (
+        "benchmark_run_id",
+        "niche_normalized",
+        "population_class",
+        "metric_family",
+        "attempted_metros",
+        "non_null_metros",
+        "attempted_observations",
+        "non_null_observations",
+        "confidence_label",
+        "source_endpoint",
+        "source_window_start",
+        "source_window_end",
+        "created_at",
     ),
     "metro_score_v2": (
         "niche_normalized",
@@ -120,6 +136,60 @@ RELIABLE_STATUS = "reliable"
 SPARSE_STATUS = "sparse"
 MISSING_STATUS = "missing"
 UNDERSAMPLED_STATUS = "undersampled"
+
+METRIC_FAMILIES = (
+    "demand",
+    "organic_serp",
+    "organic_authority",
+    "lighthouse_site_quality",
+    "local_pack",
+    "review_velocity",
+    "gbp_profile",
+    "monetization",
+    "ai_serp_displacement",
+)
+METRIC_MISSING_STATUS = "metric_missing"
+METRIC_UNDERSAMPLED_STATUS = "metric_undersampled"
+METRIC_READY_STATUS = "metric_ready"
+READY_CONFIDENCE_LABELS = {"medium", "high"}
+STRATEGY_REQUIREMENTS = {
+    "Easy Win": {
+        "required": (
+            "demand",
+            "organic_serp",
+            "monetization",
+            "ai_serp_displacement",
+        ),
+        "warning": ("organic_authority", "lighthouse_site_quality"),
+    },
+    "GBP Blitz": {
+        "required": ("local_pack", "review_velocity", "gbp_profile", "demand"),
+        "warning": (),
+    },
+    "Keyword Hijack": {
+        "required": (
+            "demand",
+            "organic_serp",
+            "organic_authority",
+            "ai_serp_displacement",
+        ),
+        "warning": (),
+    },
+    "Expand & Conquer": {
+        "required": ("demand", "monetization", "local_pack", "organic_serp"),
+        "warning": (),
+    },
+    "/agency target review": {
+        "required": (
+            "demand",
+            "local_pack",
+            "review_velocity",
+            "monetization",
+            "organic_serp",
+        ),
+        "warning": (),
+    },
+}
 
 
 def load_env(env_path: Path | None = None) -> None:
@@ -620,6 +690,338 @@ def classify_metric(
     return SPARSE_STATUS, "score with warning"
 
 
+def benchmark_run_by_cell(
+    benchmarks: list[dict[str, Any]],
+) -> dict[tuple[str, str], str]:
+    return {
+        (
+            normalize_service_key(str(row.get("niche_normalized") or "")),
+            str(row.get("population_class") or ""),
+        ): str(row.get("benchmark_run_id") or "")
+        for row in benchmarks
+        if row.get("niche_normalized")
+        and row.get("population_class")
+        and row.get("benchmark_run_id")
+    }
+
+
+def metric_sufficiency_reason(
+    row: dict[str, Any] | None,
+    *,
+    min_benchmark_sample_size: int,
+) -> str:
+    if row is None:
+        return "no seo_benchmark_metric_sufficiency row for this metric family"
+    confidence = str(row.get("confidence_label") or "unknown")
+    attempted_metros = int(numeric_value(row.get("attempted_metros")))
+    non_null_metros = int(numeric_value(row.get("non_null_metros")))
+    attempted_observations = int(numeric_value(row.get("attempted_observations")))
+    non_null_observations = int(numeric_value(row.get("non_null_observations")))
+    if attempted_metros == 0 or attempted_observations == 0:
+        return "metric family has no attempted evidence in the benchmark run"
+    if non_null_metros == 0 or non_null_observations == 0:
+        return "metric family was attempted but produced no non-null evidence"
+    if non_null_metros < min_benchmark_sample_size:
+        return (
+            f"non_null_metros {non_null_metros} below minimum "
+            f"{min_benchmark_sample_size}"
+        )
+    if confidence not in READY_CONFIDENCE_LABELS:
+        return f"confidence_label {confidence} is below ready confidence"
+    return "metric family meets non-null sample and confidence requirements"
+
+
+def classify_metric_sufficiency(
+    row: dict[str, Any] | None,
+    *,
+    min_benchmark_sample_size: int,
+) -> str:
+    if row is None:
+        return METRIC_MISSING_STATUS
+    confidence = str(row.get("confidence_label") or "")
+    attempted_metros = int(numeric_value(row.get("attempted_metros")))
+    non_null_metros = int(numeric_value(row.get("non_null_metros")))
+    attempted_observations = int(numeric_value(row.get("attempted_observations")))
+    non_null_observations = int(numeric_value(row.get("non_null_observations")))
+    if (
+        attempted_metros == 0
+        or attempted_observations == 0
+        or non_null_metros == 0
+        or non_null_observations == 0
+    ):
+        return METRIC_MISSING_STATUS
+    if (
+        non_null_metros < min_benchmark_sample_size
+        or confidence not in READY_CONFIDENCE_LABELS
+    ):
+        return METRIC_UNDERSAMPLED_STATUS
+    return METRIC_READY_STATUS
+
+
+def select_metric_sufficiency_rows(
+    rows: list[dict[str, Any]],
+    benchmarks: list[dict[str, Any]],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    run_by_cell = benchmark_run_by_cell(benchmarks)
+    selected: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        niche = normalize_service_key(str(row.get("niche_normalized") or ""))
+        population_class = str(row.get("population_class") or "")
+        family = str(row.get("metric_family") or "")
+        if not niche or not population_class or family not in METRIC_FAMILIES:
+            continue
+        key = (niche, population_class, family)
+        current = selected.get(key)
+        target_run_id = run_by_cell.get((niche, population_class))
+        row_run_id = str(row.get("benchmark_run_id") or "")
+        row_matches = bool(target_run_id and row_run_id == target_run_id)
+        current_matches = bool(
+            current
+            and target_run_id
+            and str(current.get("benchmark_run_id") or "") == target_run_id
+        )
+        if current is None:
+            selected[key] = row
+            continue
+        if row_matches and not current_matches:
+            selected[key] = row
+            continue
+        if row_matches == current_matches and str(row.get("created_at") or "") >= str(
+            current.get("created_at") or ""
+        ):
+            selected[key] = row
+    return selected
+
+
+def metric_sufficiency_detail(
+    row: dict[str, Any] | None,
+    *,
+    min_benchmark_sample_size: int,
+) -> dict[str, Any]:
+    status = classify_metric_sufficiency(
+        row,
+        min_benchmark_sample_size=min_benchmark_sample_size,
+    )
+    detail = {
+        "status": status,
+        "reason": metric_sufficiency_reason(
+            row,
+            min_benchmark_sample_size=min_benchmark_sample_size,
+        ),
+        "attempted_metros": int(numeric_value((row or {}).get("attempted_metros"))),
+        "non_null_metros": int(numeric_value((row or {}).get("non_null_metros"))),
+        "attempted_observations": int(
+            numeric_value((row or {}).get("attempted_observations"))
+        ),
+        "non_null_observations": int(
+            numeric_value((row or {}).get("non_null_observations"))
+        ),
+        "confidence_label": (row or {}).get("confidence_label"),
+        "source_endpoint": (row or {}).get("source_endpoint"),
+        "source_window_start": (row or {}).get("source_window_start"),
+        "source_window_end": (row or {}).get("source_window_end"),
+        "benchmark_run_id": (row or {}).get("benchmark_run_id"),
+    }
+    return detail
+
+
+def summarize_metric_sufficiency(
+    *,
+    benchmark_cells: set[tuple[str, str]],
+    benchmarks: list[dict[str, Any]],
+    metric_sufficiency_rows: list[dict[str, Any]],
+    min_benchmark_sample_size: int,
+) -> dict[str, Any]:
+    selected_rows = select_metric_sufficiency_rows(metric_sufficiency_rows, benchmarks)
+    benchmark_samples = {
+        (
+            normalize_service_key(str(row.get("niche_normalized") or "")),
+            str(row.get("population_class") or ""),
+        ): int(numeric_value(row.get("sample_size_metros")))
+        for row in benchmarks
+        if row.get("niche_normalized") and row.get("population_class")
+    }
+    cells: list[dict[str, Any]] = []
+    for niche, population_class in sorted(benchmark_cells):
+        families = {
+            family: metric_sufficiency_detail(
+                selected_rows.get((niche, population_class, family)),
+                min_benchmark_sample_size=min_benchmark_sample_size,
+            )
+            for family in METRIC_FAMILIES
+        }
+        blocked = [
+            family
+            for family, detail in families.items()
+            if detail["status"] == METRIC_MISSING_STATUS
+        ]
+        undersampled = [
+            family
+            for family, detail in families.items()
+            if detail["status"] == METRIC_UNDERSAMPLED_STATUS
+        ]
+        ready = [
+            family
+            for family, detail in families.items()
+            if detail["status"] == METRIC_READY_STATUS
+        ]
+        cells.append(
+            {
+                "niche_normalized": niche,
+                "population_class": population_class,
+                "sample_size_metros": benchmark_samples.get((niche, population_class), 0),
+                "families": families,
+                "blocked_metric_families": blocked,
+                "undersampled_metric_families": undersampled,
+                "ready_metric_families": ready,
+            }
+        )
+
+    summary_by_family = []
+    for family in METRIC_FAMILIES:
+        family_statuses = [
+            cell["families"][family]["status"]
+            for cell in cells
+        ]
+        summary_by_family.append(
+            {
+                "metric_family": family,
+                "metric_missing": family_statuses.count(METRIC_MISSING_STATUS),
+                "metric_undersampled": family_statuses.count(METRIC_UNDERSAMPLED_STATUS),
+                "metric_ready": family_statuses.count(METRIC_READY_STATUS),
+            }
+        )
+
+    return {
+        "metric_families": list(METRIC_FAMILIES),
+        "cell_count": len(cells),
+        "summary_by_family": summary_by_family,
+        "cells": cells,
+    }
+
+
+def summarize_strategy_readiness(
+    metric_sufficiency: dict[str, Any],
+) -> dict[str, Any]:
+    cells = []
+    strategy_totals: dict[str, dict[str, int]] = {
+        strategy: {"blocked": 0, "warning": 0, "ready": 0}
+        for strategy in STRATEGY_REQUIREMENTS
+    }
+    for cell in metric_sufficiency["cells"]:
+        strategies = []
+        for strategy, requirements in STRATEGY_REQUIREMENTS.items():
+            blockers = [
+                {
+                    "metric_family": family,
+                    **cell["families"][family],
+                }
+                for family in requirements["required"]
+                if cell["families"][family]["status"] != METRIC_READY_STATUS
+            ]
+            warnings = [
+                {
+                    "metric_family": family,
+                    **cell["families"][family],
+                }
+                for family in requirements["warning"]
+                if cell["families"][family]["status"] != METRIC_READY_STATUS
+            ]
+            if blockers:
+                status = "blocked"
+                reason = "required metric families are not ready"
+            elif warnings:
+                status = "warning"
+                reason = "optional warning metric families are not ready"
+            else:
+                status = "ready"
+                reason = "required metric families are ready"
+            strategy_totals[strategy][status] += 1
+            strategies.append(
+                {
+                    "strategy": strategy,
+                    "status": status,
+                    "reason": reason,
+                    "required_metric_families": list(requirements["required"]),
+                    "warning_metric_families": list(requirements["warning"]),
+                    "blockers": blockers,
+                    "warnings": warnings,
+                }
+            )
+        cells.append(
+            {
+                "niche_normalized": cell["niche_normalized"],
+                "population_class": cell["population_class"],
+                "strategies": strategies,
+            }
+        )
+    return {
+        "strategy_totals": strategy_totals,
+        "cells": cells,
+    }
+
+
+def build_canary_guidance(
+    metric_sufficiency: dict[str, Any],
+    strategy_readiness: dict[str, Any],
+    *,
+    limit: int = 50,
+) -> dict[str, Any]:
+    paid_collection_candidates = []
+    blocked_cells = []
+    ready_strategy_cells = []
+    for cell in metric_sufficiency["cells"]:
+        blocked_families = (
+            cell["blocked_metric_families"] + cell["undersampled_metric_families"]
+        )
+        if blocked_families:
+            blocked_cells.append(
+                {
+                    "niche_normalized": cell["niche_normalized"],
+                    "population_class": cell["population_class"],
+                    "blocked_metric_families": blocked_families,
+                }
+            )
+        for family in blocked_families:
+            detail = cell["families"][family]
+            paid_collection_candidates.append(
+                {
+                    "niche_normalized": cell["niche_normalized"],
+                    "population_class": cell["population_class"],
+                    "metric_family": family,
+                    "status": detail["status"],
+                    "reason": detail["reason"],
+                    "source_endpoint": detail.get("source_endpoint"),
+                }
+            )
+    for cell in strategy_readiness["cells"]:
+        ready_or_warning = [
+            strategy
+            for strategy in cell["strategies"]
+            if strategy["status"] in {"ready", "warning"}
+        ]
+        if ready_or_warning:
+            ready_strategy_cells.append(
+                {
+                    "niche_normalized": cell["niche_normalized"],
+                    "population_class": cell["population_class"],
+                    "strategies": [
+                        {
+                            "strategy": strategy["strategy"],
+                            "status": strategy["status"],
+                        }
+                        for strategy in ready_or_warning
+                    ],
+                }
+            )
+    return {
+        "blocked_cells": blocked_cells[:limit],
+        "paid_collection_candidates": paid_collection_candidates[:limit],
+        "ready_or_warning_strategy_cells": ready_strategy_cells[:limit],
+        "example_limit": limit,
+    }
+
+
 def summarize_metric(
     pairs: list[dict[str, Any]],
     definition: dict[str, Any],
@@ -870,6 +1272,18 @@ def build_report(
         service_names=services,
         data=data,
     )
+    benchmark_cells = {
+        (pair["niche_normalized"], pair["population_class"])
+        for pair in pairs
+    }
+    metric_sufficiency = summarize_metric_sufficiency(
+        benchmark_cells=benchmark_cells,
+        benchmarks=data["seo_benchmarks"],
+        metric_sufficiency_rows=data.get("seo_benchmark_metric_sufficiency", []),
+        min_benchmark_sample_size=min_benchmark_sample_size,
+    )
+    strategy_readiness = summarize_strategy_readiness(metric_sufficiency)
+    canary_guidance = build_canary_guidance(metric_sufficiency, strategy_readiness)
     metrics = [
         summarize_metric(
             pairs,
@@ -886,6 +1300,20 @@ def build_report(
         for metric in metrics
         if metric["status"] in {MISSING_STATUS, UNDERSAMPLED_STATUS}
     ]
+    blocked_strategy_cells = [
+        (
+            cell["niche_normalized"],
+            cell["population_class"],
+            strategy["strategy"],
+        )
+        for cell in strategy_readiness["cells"]
+        for strategy in cell["strategies"]
+        if strategy["status"] == "blocked"
+    ]
+    if blocked_strategy_cells:
+        critical_failures.append(
+            f"{len(blocked_strategy_cells)} strategy readiness cell(s) are blocked"
+        )
     if missing_services:
         critical_failures.append(
             "service catalog missing: " + ", ".join(missing_services)
@@ -914,6 +1342,9 @@ def build_report(
             "intended_market_pairs": len(pairs),
             "seo_fact_rows": len(data["seo_facts"]),
             "seo_benchmark_cells": len(data["seo_benchmarks"]),
+            "seo_benchmark_metric_sufficiency_rows": len(
+                data.get("seo_benchmark_metric_sufficiency", [])
+            ),
             "metro_score_v2_rows": len(data["metro_score_v2"]),
             "explore_market_cell_rows": len(data["explore_market_cells"]),
             "missing_catalog_services": missing_services,
@@ -921,6 +1352,9 @@ def build_report(
         "component_summaries": component_summaries,
         "metrics": metrics,
         "top_gaps": summarize_gaps(metrics),
+        "metric_sufficiency": metric_sufficiency,
+        "strategy_readiness": strategy_readiness,
+        "canary_guidance": canary_guidance,
         "app_surface_gaps": app_surface_gaps,
         "pilot": {
             "recommended_command": build_pilot_command(
@@ -1013,6 +1447,18 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "```json",
         json.dumps(report["app_surface_gaps"], indent=2, sort_keys=True),
+        "```",
+        "",
+        "## Strategy Readiness",
+        "",
+        "```json",
+        json.dumps(report["strategy_readiness"], indent=2, sort_keys=True),
+        "```",
+        "",
+        "## Canary Guidance",
+        "",
+        "```json",
+        json.dumps(report["canary_guidance"], indent=2, sort_keys=True),
         "```",
         "",
         "## API Pilot",

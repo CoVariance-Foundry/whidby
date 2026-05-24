@@ -26,6 +26,25 @@ def full_data(*, sample_size: int = 8, include_second_class_gap: bool = False):
             }
         )
 
+    metric_sufficiency = [
+        {
+            "benchmark_run_id": "run-1",
+            "niche_normalized": "roofing",
+            "population_class": "metro_1m_5m",
+            "metric_family": family,
+            "attempted_metros": sample_size,
+            "non_null_metros": sample_size,
+            "attempted_observations": sample_size * 2,
+            "non_null_observations": sample_size * 2,
+            "confidence_label": "medium" if sample_size >= 8 else "low",
+            "source_endpoint": "benchmark_fixture",
+            "source_window_start": "2026-05-01",
+            "source_window_end": "2026-05-24",
+            "created_at": "2026-05-24T00:00:00+00:00",
+        }
+        for family in audit_scoring_strategy.METRIC_FAMILIES
+    ]
+
     return {
         "metros": metros,
         "niche_naics_mapping": [
@@ -60,6 +79,7 @@ def full_data(*, sample_size: int = 8, include_second_class_gap: bool = False):
         ],
         "seo_benchmarks": [
             {
+                "benchmark_run_id": "run-1",
                 "niche_normalized": "roofing",
                 "population_class": "metro_1m_5m",
                 "sample_size_metros": sample_size,
@@ -76,6 +96,7 @@ def full_data(*, sample_size: int = 8, include_second_class_gap: bool = False):
                 "median_aio_trigger_rate": 0.2,
             }
         ],
+        "seo_benchmark_metric_sufficiency": metric_sufficiency,
         "metro_score_v2": [
             {
                 "niche_normalized": "roofing",
@@ -215,6 +236,44 @@ def test_benchmark_metric_is_undersampled_below_sample_size_threshold():
     assert demand_benchmark["status"] == "undersampled"
     assert demand_benchmark["recommendation"] == "requires data acquisition"
     assert any("demand.demand_benchmark is undersampled" in failure for failure in report["critical_failures"])
+    demand_sufficiency = report["metric_sufficiency"]["cells"][0]["families"]["demand"]
+    assert demand_sufficiency["status"] == "metric_undersampled"
+    assert report["strategy_readiness"]["strategy_totals"]["Easy Win"]["blocked"] == 1
+    assert any(
+        candidate["metric_family"] == "demand"
+        and candidate["status"] == "metric_undersampled"
+        for candidate in report["canary_guidance"]["paid_collection_candidates"]
+    )
+
+
+def test_strategy_readiness_blocks_required_families_and_warns_on_optional_families():
+    data = full_data()
+    for row in data["seo_benchmark_metric_sufficiency"]:
+        if row["metric_family"] == "local_pack":
+            row["non_null_metros"] = 0
+            row["non_null_observations"] = 0
+            row["confidence_label"] = "insufficient"
+        if row["metric_family"] == "organic_authority":
+            row["non_null_metros"] = 0
+            row["non_null_observations"] = 0
+            row["confidence_label"] = "insufficient"
+
+    report = build_report(data)
+    cell = report["strategy_readiness"]["cells"][0]
+    strategies = {item["strategy"]: item for item in cell["strategies"]}
+
+    assert report["metric_sufficiency"]["cells"][0]["families"]["local_pack"]["status"] == "metric_missing"
+    assert strategies["GBP Blitz"]["status"] == "blocked"
+    assert strategies["GBP Blitz"]["blockers"][0]["metric_family"] == "local_pack"
+    assert strategies["Easy Win"]["status"] == "warning"
+    assert strategies["Easy Win"]["warnings"][0]["metric_family"] == "organic_authority"
+    assert report["canary_guidance"]["blocked_cells"] == [
+        {
+            "niche_normalized": "roofing",
+            "population_class": "metro_1m_5m",
+            "blocked_metric_families": ["organic_authority", "local_pack"],
+        }
+    ]
 
 
 def test_missing_top5_signal_is_telemetry_only_not_scored_reliable():
@@ -387,6 +446,8 @@ def test_render_markdown_includes_component_summary_and_pilot_command():
     assert "# Scoring Strategy Audit" in markdown
     assert "Component Summary" in markdown
     assert "App Surface Gaps" in markdown
+    assert "Strategy Readiness" in markdown
+    assert "Canary Guidance" in markdown
     assert "scripts/explore/bulk_score.py --apply" in markdown
 
 

@@ -21,6 +21,13 @@ from scripts.utils.supabase_guard import (  # noqa: E402
     is_postgrest_missing_column_error,
     supabase_project_ref,
 )
+from scripts.explore.audit_scoring_strategy import (  # noqa: E402
+    METRIC_MISSING_STATUS,
+    METRIC_UNDERSAMPLED_STATUS,
+    build_canary_guidance,
+    summarize_metric_sufficiency,
+    summarize_strategy_readiness,
+)
 
 PAGE_SIZE = 1000
 
@@ -35,9 +42,25 @@ REQUIRED_COLUMNS = {
     ),
     "metros": ("cbsa_code", "cbsa_name", "population_class"),
     "seo_benchmarks": (
+        "benchmark_run_id",
         "niche_normalized",
         "population_class",
         "sample_size_metros",
+    ),
+    "seo_benchmark_metric_sufficiency": (
+        "benchmark_run_id",
+        "niche_normalized",
+        "population_class",
+        "metric_family",
+        "attempted_metros",
+        "non_null_metros",
+        "attempted_observations",
+        "non_null_observations",
+        "confidence_label",
+        "source_endpoint",
+        "source_window_start",
+        "source_window_end",
+        "created_at",
     ),
     "explore_market_cells": ("cbsa_code", "niche_normalized", "report_id"),
 }
@@ -220,6 +243,7 @@ def build_report(
     threshold: float,
     min_benchmark_cells: int,
     min_benchmark_sample_size: int,
+    metric_sufficiency_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     metro_by_cbsa = {str(row.get("cbsa_code")): row for row in metros}
     benchmark_sample_sizes: dict[tuple[str, str], int] = {}
@@ -326,7 +350,31 @@ def build_report(
     for fact in enriched_facts:
         by_explore_visibility[str(bool(fact["explore_visible"])).lower()].append(fact)
 
-    return {
+    metric_sufficiency = None
+    strategy_readiness = None
+    canary_guidance = None
+    if metric_sufficiency_rows is not None:
+        metric_cells = set(benchmark_keys) | missing_benchmark_keys | undersampled_benchmark_keys
+        metric_sufficiency = summarize_metric_sufficiency(
+            benchmark_cells=metric_cells,
+            benchmarks=benchmarks,
+            metric_sufficiency_rows=metric_sufficiency_rows,
+            min_benchmark_sample_size=min_benchmark_sample_size,
+        )
+        strategy_readiness = summarize_strategy_readiness(metric_sufficiency)
+        canary_guidance = build_canary_guidance(metric_sufficiency, strategy_readiness)
+        metric_gap_count = sum(
+            1
+            for cell in metric_sufficiency["cells"]
+            for detail in cell["families"].values()
+            if detail["status"] in {METRIC_MISSING_STATUS, METRIC_UNDERSAMPLED_STATUS}
+        )
+        if metric_gap_count:
+            failures.append(
+                f"{metric_gap_count} benchmark metric family sufficiency gap(s) need collection"
+            )
+
+    report = {
         "status": "fail" if failures else "pass",
         "failures": failures,
         "threshold": threshold,
@@ -376,6 +424,11 @@ def build_report(
             )
         ),
     }
+    if metric_sufficiency is not None:
+        report["metric_sufficiency"] = metric_sufficiency
+        report["strategy_readiness"] = strategy_readiness
+        report["canary_guidance"] = canary_guidance
+    return report
 
 
 def audit_signal_coverage(
@@ -392,6 +445,11 @@ def audit_signal_coverage(
         "seo_benchmarks",
         REQUIRED_COLUMNS["seo_benchmarks"],
     )
+    metric_sufficiency_rows = fetch_pages(
+        supabase,
+        "seo_benchmark_metric_sufficiency",
+        REQUIRED_COLUMNS["seo_benchmark_metric_sufficiency"],
+    )
     explore_cells = fetch_pages(
         supabase,
         "explore_market_cells",
@@ -402,6 +460,7 @@ def audit_signal_coverage(
         metros=metros,
         benchmarks=benchmarks,
         explore_cells=explore_cells,
+        metric_sufficiency_rows=metric_sufficiency_rows,
         threshold=threshold,
         min_benchmark_cells=min_benchmark_cells,
         min_benchmark_sample_size=min_benchmark_sample_size,
