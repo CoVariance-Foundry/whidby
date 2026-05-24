@@ -10,8 +10,12 @@ CREATE TABLE IF NOT EXISTS public.seo_benchmark_runs (
     sample_frame_version TEXT NOT NULL DEFAULT 'coverage-hardening-v1',
     source_window_start DATE,
     source_window_end DATE,
-    source_mix JSONB NOT NULL DEFAULT '{}'::jsonb,
-    acquisition_flags JSONB NOT NULL DEFAULT '{}'::jsonb,
+    source_mix JSONB NOT NULL DEFAULT '{}'::jsonb
+        CONSTRAINT seo_benchmark_runs_source_mix_object_check
+        CHECK (jsonb_typeof(source_mix) = 'object'),
+    acquisition_flags JSONB NOT NULL DEFAULT '{}'::jsonb
+        CONSTRAINT seo_benchmark_runs_acquisition_flags_object_check
+        CHECK (jsonb_typeof(acquisition_flags) = 'object'),
     benchmark_mode TEXT NOT NULL DEFAULT 'exact'
         CHECK (
             benchmark_mode IN (
@@ -22,11 +26,62 @@ CREATE TABLE IF NOT EXISTS public.seo_benchmark_runs (
                 'manual'
             )
         ),
-    pool_definition JSONB NOT NULL DEFAULT '{}'::jsonb,
+    pool_definition JSONB NOT NULL DEFAULT '{}'::jsonb
+        CONSTRAINT seo_benchmark_runs_pool_definition_object_check
+        CHECK (jsonb_typeof(pool_definition) = 'object'),
     recomputed_at TIMESTAMPTZ,
-    cost_summary JSONB NOT NULL DEFAULT '{}'::jsonb,
+    cost_summary JSONB NOT NULL DEFAULT '{}'::jsonb
+        CONSTRAINT seo_benchmark_runs_cost_summary_object_check
+        CHECK (jsonb_typeof(cost_summary) = 'object'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'seo_benchmark_runs_source_mix_object_check'
+          AND conrelid = 'public.seo_benchmark_runs'::regclass
+    ) THEN
+        ALTER TABLE public.seo_benchmark_runs
+            ADD CONSTRAINT seo_benchmark_runs_source_mix_object_check
+            CHECK (jsonb_typeof(source_mix) = 'object');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'seo_benchmark_runs_acquisition_flags_object_check'
+          AND conrelid = 'public.seo_benchmark_runs'::regclass
+    ) THEN
+        ALTER TABLE public.seo_benchmark_runs
+            ADD CONSTRAINT seo_benchmark_runs_acquisition_flags_object_check
+            CHECK (jsonb_typeof(acquisition_flags) = 'object');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'seo_benchmark_runs_pool_definition_object_check'
+          AND conrelid = 'public.seo_benchmark_runs'::regclass
+    ) THEN
+        ALTER TABLE public.seo_benchmark_runs
+            ADD CONSTRAINT seo_benchmark_runs_pool_definition_object_check
+            CHECK (jsonb_typeof(pool_definition) = 'object');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'seo_benchmark_runs_cost_summary_object_check'
+          AND conrelid = 'public.seo_benchmark_runs'::regclass
+    ) THEN
+        ALTER TABLE public.seo_benchmark_runs
+            ADD CONSTRAINT seo_benchmark_runs_cost_summary_object_check
+            CHECK (jsonb_typeof(cost_summary) = 'object');
+    END IF;
+END $$;
 
 ALTER TABLE public.seo_benchmarks
     ADD COLUMN IF NOT EXISTS benchmark_run_id UUID
@@ -36,17 +91,38 @@ ALTER TABLE public.seo_benchmarks
     ADD COLUMN IF NOT EXISTS sample_frame_version TEXT,
     ADD COLUMN IF NOT EXISTS metric_confidence_rollup JSONB NOT NULL DEFAULT '{}'::jsonb;
 
-ALTER TABLE public.seo_benchmarks
-    ADD CONSTRAINT seo_benchmarks_benchmark_mode_check
-    CHECK (
-        benchmark_mode IN (
-            'exact',
-            'pooled_population',
-            'pooled_service_group',
-            'global_service',
-            'manual'
-        )
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'seo_benchmarks_benchmark_mode_check'
+          AND conrelid = 'public.seo_benchmarks'::regclass
+    ) THEN
+        ALTER TABLE public.seo_benchmarks
+            ADD CONSTRAINT seo_benchmarks_benchmark_mode_check
+            CHECK (
+                benchmark_mode IN (
+                    'exact',
+                    'pooled_population',
+                    'pooled_service_group',
+                    'global_service',
+                    'manual'
+                )
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'seo_benchmarks_metric_confidence_rollup_object_check'
+          AND conrelid = 'public.seo_benchmarks'::regclass
+    ) THEN
+        ALTER TABLE public.seo_benchmarks
+            ADD CONSTRAINT seo_benchmarks_metric_confidence_rollup_object_check
+            CHECK (jsonb_typeof(metric_confidence_rollup) = 'object');
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.seo_benchmark_metric_sufficiency (
     benchmark_run_id UUID NOT NULL

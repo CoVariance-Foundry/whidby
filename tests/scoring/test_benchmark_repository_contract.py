@@ -138,6 +138,11 @@ def test_invalid_benchmark_mode_raises_value_error() -> None:
         SeoBenchmarkCell.from_mapping(_row(benchmark_mode="nearest_neighbor"))
 
 
+def test_non_mapping_metric_confidence_rollup_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="metric_confidence_rollup must be a mapping"):
+        SeoBenchmarkCell.from_mapping(_row(metric_confidence_rollup=["demand"]))
+
+
 def test_whi126_migration_adds_lineage_and_metric_sufficiency_schema() -> None:
     migration = (
         Path(__file__).parents[2]
@@ -148,6 +153,14 @@ def test_whi126_migration_adds_lineage_and_metric_sufficiency_schema() -> None:
     assert "CREATE TABLE IF NOT EXISTS public.seo_benchmark_metric_sufficiency" in migration
     assert "benchmark_run_id UUID" in migration
     assert "metric_confidence_rollup JSONB NOT NULL DEFAULT '{}'::jsonb" in migration
+    assert "FROM pg_constraint" in migration
+    assert "conname = 'seo_benchmarks_benchmark_mode_check'" in migration
+    assert "conrelid = 'public.seo_benchmarks'::regclass" in migration
+    assert "jsonb_typeof(source_mix) = 'object'" in migration
+    assert "jsonb_typeof(acquisition_flags) = 'object'" in migration
+    assert "jsonb_typeof(pool_definition) = 'object'" in migration
+    assert "jsonb_typeof(cost_summary) = 'object'" in migration
+    assert "jsonb_typeof(metric_confidence_rollup) = 'object'" in migration
     for metric_family in (
         "demand",
         "organic_serp",

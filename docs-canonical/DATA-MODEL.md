@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.7.3`     |
-| **Last Updated** | 2026-05-22  |
+| **Version**      | `1.7.4`     |
+| **Last Updated** | 2026-05-24  |
 | **Owner**        | @widby-team |
 
 

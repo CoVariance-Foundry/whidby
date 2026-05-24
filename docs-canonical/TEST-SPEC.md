@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.7.2 -->
+<!-- docguard:version 1.7.7 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-05-17 -->
+<!-- docguard:last-reviewed 2026-05-24 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
