@@ -43,6 +43,9 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.clients.dataforseo import DataForSEOClient  # noqa: E402
 from src.clients.llm.client import LLMClient  # noqa: E402
+from src.clients.supabase_persistence import (  # noqa: E402
+    build_seo_evidence_artifact_rows_from_cost_records,
+)
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
 from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
 
@@ -740,6 +743,37 @@ def upsert_facts(rows: list[dict]) -> tuple[int, str]:
         return e.code, e.read().decode()[:500]
 
 
+def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
+    if not rows:
+        return 200, ""
+    url = (
+        f"{SUPABASE_URL}/rest/v1/seo_evidence_artifacts"
+        f"?on_conflict=provider,endpoint_path,request_hash"
+    )
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    body = json.dumps(rows).encode("utf-8")
+    req = urlreq.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urlreq.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read().decode()
+    except urlerror.HTTPError as e:
+        return e.code, e.read().decode()[:500]
+
+
+def evidence_artifacts_from_dfs_cost_log(
+    dfs: DataForSEOClient,
+    *,
+    start_index: int = 0,
+) -> list[dict[str, Any]]:
+    cost_records = (getattr(dfs, "cost_log", []) or [])[start_index:]
+    return build_seo_evidence_artifact_rows_from_cost_records(cost_records)
+
+
 # -------------------------------------------------------------------
 # Per-niche keyword expansion (cached)
 # -------------------------------------------------------------------
@@ -805,6 +839,7 @@ async def score_one(
     name = metro["cbsa_name"]
     log.info(f"[start] {niche!r} × {name} ({cbsa})")
     stats.reports_attempted += 1
+    cost_log_start = len(getattr(dfs, "cost_log", []) or [])
 
     try:
         expansion = await expansion_cache.get(niche)
@@ -947,6 +982,29 @@ async def score_one(
 
         # 4) Persist
         if rows:
+            evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
+                dfs,
+                start_index=cost_log_start,
+            )
+            if evidence_artifact_rows:
+                evidence_status, evidence_body = upsert_evidence_artifacts(
+                    evidence_artifact_rows
+                )
+                if evidence_status >= 300:
+                    log.error(
+                        "  evidence artifact upsert failed: %s %s",
+                        evidence_status,
+                        evidence_body[:200],
+                    )
+                    stats.reports_failed += 1
+                    stats.record_failure(
+                        niche,
+                        cbsa,
+                        "evidence_upsert_failed",
+                        f"status={evidence_status}",
+                    )
+                    return 0
+
             status, body = upsert_facts(rows)
             if status >= 300:
                 log.error(f"  upsert failed: {status} {body[:200]}")

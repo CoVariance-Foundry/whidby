@@ -15,6 +15,9 @@ from src.data.metro_db import MetroDB
 from src.data.metro_db_adapter import MetroDBGeoLookup
 from src.domain.entities import City
 from src.domain.ports import CityDataProvider
+from src.clients.supabase_persistence import (
+    build_seo_evidence_artifact_rows_from_cost_records,
+)
 from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
 from src.pipeline.keyword_expansion import expand_keywords
@@ -264,6 +267,9 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
+    evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(dfs_cost_log)
+    if evidence_artifacts:
+        report["seo_evidence_artifacts"] = evidence_artifacts
     m9_ms = int((time.monotonic() - m9_start) * 1000)
     logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
                 run_id, report.get("report_id"), m9_ms)

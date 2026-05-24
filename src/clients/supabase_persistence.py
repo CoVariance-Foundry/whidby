@@ -370,6 +370,43 @@ def _artifact_response_payload(artifact: dict[str, Any]) -> Any:
     return None
 
 
+def _record_value(record: Any, key: str) -> Any:
+    if isinstance(record, dict):
+        return record.get(key)
+    return getattr(record, key, None)
+
+
+def evidence_family_from_endpoint(endpoint_path: str | None) -> str | None:
+    """Map known DataForSEO endpoint paths to benchmark evidence families."""
+    endpoint = (endpoint_path or "").strip().lower().lstrip("/")
+    if not endpoint:
+        return None
+    if "keywords_data/google/search_volume" in endpoint:
+        return "keyword_volume"
+    if (
+        "dataforseo_labs/google/keyword" in endpoint
+        or "keyword_overview" in endpoint
+        or "keywords_data/google_trends" in endpoint
+    ):
+        return "keyword_overview"
+    if "serp/google/maps" in endpoint:
+        return "maps"
+    if "serp/google/organic" in endpoint:
+        return "serp"
+    if "business_data/google/reviews" in endpoint:
+        return "reviews"
+    if endpoint.startswith("backlinks/") or "/backlinks/" in endpoint:
+        return "backlinks"
+    if "on_page/lighthouse" in endpoint:
+        return "lighthouse"
+    if (
+        "business_data/google/my_business_info" in endpoint
+        or "business_data/business_listings" in endpoint
+    ):
+        return "maps"
+    return None
+
+
 def _primary_keyword(report: dict[str, Any]) -> str | None:
     keywords = _expanded_keywords(report)
     if keywords:
@@ -706,6 +743,63 @@ def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, A
     return rows
 
 
+def build_seo_evidence_artifact_rows_from_cost_records(
+    cost_records: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """Build raw evidence metadata rows from DataForSEO cost records."""
+    artifacts: list[dict[str, Any]] = []
+    for record in cost_records:
+        endpoint_path = _str_or_none(_record_value(record, "endpoint"))
+        evidence_family = evidence_family_from_endpoint(endpoint_path)
+        if endpoint_path is None or evidence_family is None:
+            continue
+
+        cached = _record_value(record, "cached")
+        if cached is True:
+            cache_status = "hit"
+        elif cached is False:
+            cache_status = "miss"
+        else:
+            cache_status = "unknown"
+
+        artifact: dict[str, Any] = {
+            "provider": "dataforseo",
+            "endpoint_path": endpoint_path,
+            "evidence_family": evidence_family,
+            "normalized_request_params": _json_object_or_empty(
+                _record_value(record, "parameters")
+            ),
+            "cache_status": cache_status,
+        }
+
+        cost = _record_value(record, "cost")
+        if cost is not None:
+            artifact["cost_usd"] = cost
+
+        collected_at = _record_value(record, "collected_at")
+        if collected_at is not None:
+            artifact["collected_at"] = collected_at
+
+        artifacts.append(artifact)
+
+    rows = build_seo_evidence_artifact_rows({"seo_evidence_artifacts": artifacts})
+    deduped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (row["provider"], row["endpoint_path"], row["request_hash"])
+        existing = deduped.get(key)
+        if existing is None:
+            deduped[key] = row
+            continue
+        existing_cost = _float_or_none(existing.get("cost_usd")) or 0.0
+        row_cost = _float_or_none(row.get("cost_usd")) or 0.0
+        if existing.get("cache_status") == "hit" and row.get("cache_status") == "miss":
+            deduped[key] = row
+        elif existing_cost == 0.0 and row_cost > 0.0:
+            deduped[key] = row
+
+    return list(deduped.values())
+
+
 def build_organic_competitor_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     """Build top organic competitor read-model facts from compact report payloads."""
     report_id = report["report_id"]
@@ -870,7 +964,7 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
                     "business_name": business_name,
                     "cid": _str_or_none(item.get("cid")),
                     "place_id": _str_or_none(item.get("place_id")),
-                    "source_query": _str_or_none(item.get("source_query")) or keyword,
+                    "source_query": _str_or_none(item.get("source_query")),
                     "dataforseo_location_code": _int_or_none(
                         item.get(
                             "dataforseo_location_code",
@@ -879,7 +973,7 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
                     ),
                     "result_type": _str_or_none(
                         item.get("result_type", item.get("type"))
-                    ) or "local_pack",
+                    ),
                     "listing_url": listing_url,
                     "domain": _domain_from_item(item),
                     "review_retrieval_mode": _str_or_none(

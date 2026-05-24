@@ -186,6 +186,15 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert "serp/google/organic/task_post" in breakdown
     assert breakdown["serp/google/organic/task_post"]["calls"] == 2
     assert breakdown["serp/google/organic/task_post"]["cached"] == 1
+    artifacts = result.report["seo_evidence_artifacts"]
+    assert [artifact["evidence_family"] for artifact in artifacts] == [
+        "serp",
+        "keyword_volume",
+    ]
+    assert artifacts[0]["endpoint_path"] == "serp/google/organic/task_post"
+    assert artifacts[0]["cache_status"] == "miss"
+    assert artifacts[1]["normalized_request_params"] == {}
+    assert artifacts[1]["cost_usd"] == 0.05
 
 
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:

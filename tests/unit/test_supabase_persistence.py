@@ -11,6 +11,7 @@ import pytest
 
 from src.clients.supabase_persistence import (
     SupabasePersistence,
+    build_seo_evidence_artifact_rows_from_cost_records,
     build_organic_competitor_fact_rows,
     build_local_pack_listing_fact_rows,
     build_report_row,
@@ -20,7 +21,9 @@ from src.clients.supabase_persistence import (
     build_metro_score_v2_rows,
     build_seo_fact_rows,
     build_seo_evidence_artifact_rows,
+    evidence_family_from_endpoint,
 )
+from src.clients.dataforseo.types import CostRecord
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
 
@@ -476,6 +479,8 @@ def test_build_local_pack_listing_fact_rows_maps_existing_fact_shape() -> None:
     assert rows[1]["business_name"] == "Desert Roofing"
     assert rows[1]["cid"] is None
     assert rows[1]["place_id"] is None
+    assert rows[1]["source_query"] is None
+    assert rows[1]["result_type"] is None
     assert rows[1]["review_retrieval_mode"] is None
     assert rows[1]["review_count"] == 51
     assert rows[1]["rating"] == 4.4
@@ -539,6 +544,69 @@ def test_build_seo_evidence_artifact_rows_skips_incomplete_artifacts() -> None:
     }
 
     assert build_seo_evidence_artifact_rows(report) == []
+
+
+def test_evidence_family_from_endpoint_maps_dataforseo_families() -> None:
+    assert (
+        evidence_family_from_endpoint("keywords_data/google/search_volume/task_post")
+        == "keyword_volume"
+    )
+    assert (
+        evidence_family_from_endpoint("dataforseo_labs/google/keyword_suggestions/live")
+        == "keyword_overview"
+    )
+    assert evidence_family_from_endpoint("serp/google/organic/live/advanced") == "serp"
+    assert evidence_family_from_endpoint("serp/google/maps/live/advanced") == "maps"
+    assert evidence_family_from_endpoint("business_data/google/reviews/task_post") == "reviews"
+    assert evidence_family_from_endpoint("backlinks/summary/live") == "backlinks"
+    assert evidence_family_from_endpoint("on_page/lighthouse/live") == "lighthouse"
+    assert evidence_family_from_endpoint("serp/google/locations") is None
+
+
+def test_build_seo_evidence_artifact_rows_from_cost_records() -> None:
+    rows = build_seo_evidence_artifact_rows_from_cost_records(
+        [
+            CostRecord(
+                endpoint="keywords_data/google/search_volume/task_post",
+                task_id="task-volume",
+                cost=0.05,
+                cached=False,
+                latency_ms=200,
+                parameters={"keywords": ["roof repair"], "location_code": 1000013},
+            ),
+            CostRecord(
+                endpoint="serp/google/organic/live/advanced",
+                task_id="cached",
+                cost=0,
+                cached=True,
+                latency_ms=0,
+                parameters={"keyword": "roof repair", "location_code": 1000013},
+            ),
+            CostRecord(
+                endpoint="serp/google/locations",
+                task_id="direct",
+                cost=0,
+                cached=False,
+                latency_ms=10,
+                parameters={},
+            ),
+        ]
+    )
+
+    assert [row["evidence_family"] for row in rows] == ["keyword_volume", "serp"]
+    assert rows[0]["provider"] == "dataforseo"
+    assert rows[0]["endpoint_path"] == "keywords_data/google/search_volume/task_post"
+    assert rows[0]["normalized_request_params"] == {
+        "keywords": ["roof repair"],
+        "location_code": 1000013,
+    }
+    assert rows[0]["cache_status"] == "miss"
+    assert rows[0]["cost_usd"] == 0.05
+    assert rows[0]["request_hash"]
+    assert rows[0]["response_hash"] is None
+    assert rows[0]["response_storage_uri"] is None
+    assert rows[1]["cache_status"] == "hit"
+    assert rows[1]["cost_usd"] == 0.0
 
 
 def test_whi127_migration_adds_local_identifiers_and_evidence_artifacts() -> None:

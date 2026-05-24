@@ -3,12 +3,13 @@ import pytest
 from scripts.benchmarks.run_pilot import (
     collect_organic_telemetry,
     collect_top3_review_velocity,
+    evidence_artifacts_from_dfs_cost_log,
     parse_backlinks_domain_authority,
     parse_lighthouse_performance_score,
     parse_serp_items,
     propagate_head_feature,
 )
-from src.clients.dataforseo.types import APIResponse
+from src.clients.dataforseo.types import APIResponse, CostRecord
 
 
 def test_parse_serp_items_extracts_top3_review_floor_and_rating():
@@ -114,6 +115,7 @@ class _FakeDFS:
     def __init__(self) -> None:
         self.backlink_calls = []
         self.review_calls = []
+        self.cost_log = []
 
     async def backlinks_summary(self, target, *, rank_scale=None):
         self.backlink_calls.append({"target": target, "rank_scale": rank_scale})
@@ -243,3 +245,55 @@ async def test_collect_top3_review_velocity_skips_missing_review_identifiers():
             "sort_by": "newest",
         }
     ]
+
+
+def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
+    dfs = _FakeDFS()
+    dfs.cost_log = [
+        CostRecord(
+            endpoint="serp/google/maps/live/advanced",
+            task_id="maps-1",
+            cost=0.002,
+            cached=False,
+            latency_ms=120,
+            parameters={"keyword": "roof repair", "location_code": 1000013},
+        ),
+        CostRecord(
+            endpoint="business_data/google/reviews/task_post",
+            task_id="reviews-1",
+            cost=0.005,
+            cached=False,
+            latency_ms=400,
+            parameters={"cid": "123", "location_code": 1000013, "depth": 10},
+        ),
+        CostRecord(
+            endpoint="backlinks/summary/live",
+            task_id="backlinks-1",
+            cost=0.002,
+            cached=False,
+            latency_ms=80,
+            parameters={"target": "example.com", "rank_scale": "one_hundred"},
+        ),
+        CostRecord(
+            endpoint="on_page/lighthouse/live",
+            task_id="lighthouse-1",
+            cost=0.006,
+            cached=True,
+            latency_ms=0,
+            parameters={"url": "https://example.com/"},
+        ),
+    ]
+
+    rows = evidence_artifacts_from_dfs_cost_log(dfs)
+
+    assert [row["evidence_family"] for row in rows] == [
+        "maps",
+        "reviews",
+        "backlinks",
+        "lighthouse",
+    ]
+    assert rows[0]["cache_status"] == "miss"
+    assert rows[0]["request_hash"]
+    assert rows[1]["normalized_request_params"]["cid"] == "123"
+    assert rows[2]["cost_usd"] == 0.002
+    assert rows[3]["cache_status"] == "hit"
