@@ -5,6 +5,43 @@ import pytest
 from scripts.explore import audit_scoring_strategy
 
 
+class FakeResponse:
+    def __init__(self, data):
+        self.data = data
+
+
+class FakeQuery:
+    def __init__(self, rows, *, failure=None):
+        self._rows = rows
+        self._failure = failure
+        self._range = (0, len(rows) - 1)
+
+    def select(self, _columns):
+        if self._failure:
+            raise self._failure
+        return self
+
+    def range(self, start, end):
+        self._range = (start, end)
+        return self
+
+    def execute(self):
+        start, end = self._range
+        return FakeResponse(self._rows[start : end + 1])
+
+
+class FakeSupabase:
+    def __init__(self, rows_by_table, failing_tables=None):
+        self.rows_by_table = rows_by_table
+        self.failing_tables = failing_tables or {}
+
+    def table(self, table_name):
+        return FakeQuery(
+            self.rows_by_table.get(table_name, []),
+            failure=self.failing_tables.get(table_name),
+        )
+
+
 def full_data(*, sample_size: int = 8, include_second_class_gap: bool = False):
     metros = [
         {
@@ -276,6 +313,24 @@ def test_strategy_readiness_blocks_required_families_and_warns_on_optional_famil
     ]
 
 
+def test_metric_sufficiency_ignores_stale_rows_from_wrong_benchmark_run():
+    data = full_data()
+    data["seo_benchmarks"][0]["benchmark_run_id"] = "run-2"
+
+    report = build_report(data)
+    demand = report["metric_sufficiency"]["cells"][0]["families"]["demand"]
+    easy_win = next(
+        strategy
+        for strategy in report["strategy_readiness"]["cells"][0]["strategies"]
+        if strategy["strategy"] == "Easy Win"
+    )
+
+    assert demand["status"] == "metric_missing"
+    assert demand["benchmark_run_id"] is None
+    assert easy_win["status"] == "blocked"
+    assert any(blocker["metric_family"] == "demand" for blocker in easy_win["blockers"])
+
+
 def test_missing_top5_signal_is_telemetry_only_not_scored_reliable():
     data = full_data()
     data["seo_facts"][0]["avg_top5_da"] = None
@@ -428,6 +483,52 @@ def test_expected_project_ref_guard_rejects_mismatch_and_suffixed_hosts(monkeypa
         audit_scoring_strategy.validate_expected_project_ref("abc123")
 
 
+def test_fetch_pages_wraps_missing_column_errors(monkeypatch):
+    class FakePostgrestError(Exception):
+        code = "42703"
+
+    monkeypatch.setattr(
+        audit_scoring_strategy,
+        "POSTGREST_API_ERROR_TYPES",
+        (FakePostgrestError,),
+    )
+    supabase = FakeSupabase(
+        rows_by_table={"seo_facts": []},
+        failing_tables={"seo_facts": FakePostgrestError("column does not exist")},
+    )
+
+    with pytest.raises(RuntimeError, match="seo_facts missing required column"):
+        audit_scoring_strategy.fetch_pages(supabase, "seo_facts", ("avg_top5_da",))
+
+
+def test_fetch_pages_preserves_non_schema_postgrest_errors(monkeypatch):
+    class FakePostgrestError(Exception):
+        code = "PGRST301"
+
+    monkeypatch.setattr(
+        audit_scoring_strategy,
+        "POSTGREST_API_ERROR_TYPES",
+        (FakePostgrestError,),
+    )
+    supabase = FakeSupabase(
+        rows_by_table={"seo_facts": []},
+        failing_tables={"seo_facts": FakePostgrestError("JWT expired")},
+    )
+
+    with pytest.raises(FakePostgrestError, match="JWT expired"):
+        audit_scoring_strategy.fetch_pages(supabase, "seo_facts", ("avg_top5_da",))
+
+
+def test_fetch_pages_preserves_transport_errors():
+    supabase = FakeSupabase(
+        rows_by_table={"seo_facts": []},
+        failing_tables={"seo_facts": TimeoutError("request timed out")},
+    )
+
+    with pytest.raises(TimeoutError, match="request timed out"):
+        audit_scoring_strategy.fetch_pages(supabase, "seo_facts", ("avg_top5_da",))
+
+
 def test_parse_args_uses_plan_defaults():
     args = audit_scoring_strategy.parse_args([])
 
@@ -445,6 +546,8 @@ def test_render_markdown_includes_component_summary_and_pilot_command():
 
     assert "# Scoring Strategy Audit" in markdown
     assert "Component Summary" in markdown
+    assert "Metric Sufficiency" in markdown
+    assert "| Metric family | Ready | Undersampled | Missing |" in markdown
     assert "App Surface Gaps" in markdown
     assert "Strategy Readiness" in markdown
     assert "Canary Guidance" in markdown

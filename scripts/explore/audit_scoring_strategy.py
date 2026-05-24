@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,14 @@ from urllib.parse import urlparse
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.utils.supabase_guard import (  # noqa: E402
+    POSTGREST_API_ERROR_TYPES,
+    is_postgrest_missing_column_error,
+)
+
 PAGE_SIZE = 1000
 PRODUCTION_API_URL = "https://whidby-1.onrender.com"
 
@@ -266,9 +275,11 @@ def fetch_pages(supabase: Any, table: str, columns: tuple[str, ...]) -> list[dic
                 .range(offset, offset + PAGE_SIZE - 1)
                 .execute()
             )
-        except Exception as exc:
+        except POSTGREST_API_ERROR_TYPES as exc:
+            if not is_postgrest_missing_column_error(exc):
+                raise
             raise RuntimeError(
-                f"{table} missing required column(s): {select_columns}; {exc}"
+                f"{table} missing required column(s): {select_columns}"
             ) from exc
         page = list(response.data or [])
         rows.extend(page)
@@ -771,22 +782,12 @@ def select_metric_sufficiency_rows(
         if not niche or not population_class or family not in METRIC_FAMILIES:
             continue
         key = (niche, population_class, family)
-        current = selected.get(key)
         target_run_id = run_by_cell.get((niche, population_class))
         row_run_id = str(row.get("benchmark_run_id") or "")
-        row_matches = bool(target_run_id and row_run_id == target_run_id)
-        current_matches = bool(
-            current
-            and target_run_id
-            and str(current.get("benchmark_run_id") or "") == target_run_id
-        )
-        if current is None:
-            selected[key] = row
+        if target_run_id and row_run_id != target_run_id:
             continue
-        if row_matches and not current_matches:
-            selected[key] = row
-            continue
-        if row_matches == current_matches and str(row.get("created_at") or "") >= str(
+        current = selected.get(key)
+        if current is None or str(row.get("created_at") or "") >= str(
             current.get("created_at") or ""
         ):
             selected[key] = row
@@ -1379,6 +1380,54 @@ def markdown_table(headers: tuple[str, ...], rows: list[tuple[Any, ...]]) -> str
     return "\n".join(lines)
 
 
+def metric_sufficiency_markdown(report: dict[str, Any], *, limit: int = 10) -> list[str]:
+    metric_sufficiency = report.get("metric_sufficiency") or {}
+    summary_rows = [
+        (
+            item["metric_family"],
+            item["metric_ready"],
+            item["metric_undersampled"],
+            item["metric_missing"],
+        )
+        for item in metric_sufficiency.get("summary_by_family", [])
+    ]
+    blocked_rows = []
+    for cell in metric_sufficiency.get("cells", []):
+        blocked_families = (
+            cell.get("blocked_metric_families", [])
+            + cell.get("undersampled_metric_families", [])
+        )
+        if blocked_families:
+            blocked_rows.append(
+                (
+                    cell["niche_normalized"],
+                    cell["population_class"],
+                    ", ".join(blocked_families),
+                )
+            )
+    lines = [
+        "## Metric Sufficiency",
+        "",
+        markdown_table(
+            ("Metric family", "Ready", "Undersampled", "Missing"),
+            summary_rows,
+        ),
+    ]
+    if blocked_rows:
+        lines.extend(
+            [
+                "",
+                f"Top blocked/undersampled cells (limit {limit}):",
+                "",
+                markdown_table(
+                    ("Service", "Population class", "Metric families"),
+                    blocked_rows[:limit],
+                ),
+            ]
+        )
+    return lines
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     if "component_summaries" not in report:
         lines = [
@@ -1442,6 +1491,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             ),
             gap_rows,
         ),
+        "",
+        *metric_sufficiency_markdown(report),
         "",
         "## App Surface Gaps",
         "",
