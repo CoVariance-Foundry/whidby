@@ -594,7 +594,7 @@ The governing policy is:
 | --- | --- | --- | --- |
 | Population | Overall coverage `1.0000`; every city-size slice `1.0000`. | Keep scored | Safe normalization anchor across the target launch bands and the broader population-class matrix. |
 | Commercial search volume | Demand component average `0.2523`; demand benchmark coverage is `0.0000`. | Score with warning | Useful raw evidence, but benchmark-relative claims are not qualified. |
-| CPC | Overall coverage `0.0035`; minimum city-size slice `0.0000`. | Score with warning, cap influence | CPC should support demand/monetization, not dominate while sparse. |
+| CPC | Overall coverage `0.0035`; minimum city-size slice `0.0000`. | Score with warning | CPC should support demand/monetization explanations while sparse. This slice does not change CPC weighting. |
 | Volume-per-capita benchmark | Usable benchmark cells are `0/48`. | Acquire more data | Defaults can keep the vector computable, but cannot support qualified benchmark claims. |
 | Aggregator count | Organic component average `0.0064`; benchmark cells undersampled. | Score with warning when observed | SERP composition is useful, but not benchmark-reliable yet. |
 | Local-business count | Organic component average `0.0064`; benchmark cells undersampled. | Score with warning when observed | Same policy as aggregator count; avoid treating sparse observations as complete competition truth. |
@@ -608,7 +608,7 @@ The governing policy is:
 | AIO / PAA / local fulfillment | AI resilience component average `0.0113`. | Score with warning | Directional product signal; defer formula changes until stronger SERP-feature coverage exists. |
 | App-surface V2 visibility | V2-preferred Explore visibility is `64/3,208`; V2 score rows are `81/3,208`. | Acquire more data; release gate | Not a formula input. Use as readiness evidence before product claims or seed expansion. |
 
-No current signal should be removed from the formula based on this slice alone. The only fields below the `0.05` removal threshold are either required product evidence, required benchmark inputs, or explicitly telemetry/acquisition fields. Removing them now would hide the evidence gap instead of fixing it.
+No current signal should be removed from the formula based on this slice alone. The `0.05` removal threshold is the canonical coverage floor from `docs-canonical/TEST-SPEC.md` for proposing formula removal. The fields below that floor are either required product evidence, required benchmark inputs, or explicitly telemetry/acquisition fields. Removing them now would hide the evidence gap instead of fixing it.
 
 ### Default Posture By Metro Size
 
