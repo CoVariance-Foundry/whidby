@@ -257,6 +257,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=False,
             latency_ms=120,
             parameters={"keyword": "hvac repair", "location_code": 2000020},
+            collected_at="2026-05-24T14:00:00+00:00",
+            response_hash="other-maps-hash",
         ),
         CostRecord(
             endpoint="serp/google/maps/live/advanced",
@@ -265,6 +267,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=False,
             latency_ms=120,
             parameters={"keyword": "roof repair", "location_code": 1000013},
+            collected_at="2026-05-24T14:00:01+00:00",
+            response_hash="maps-hash",
         ),
         CostRecord(
             endpoint="business_data/google/reviews/task_post",
@@ -273,6 +277,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=False,
             latency_ms=400,
             parameters={"cid": "123", "location_code": 1000013, "depth": 10},
+            collected_at="2026-05-24T14:00:02+00:00",
+            response_hash="reviews-hash",
         ),
         CostRecord(
             endpoint="backlinks/summary/live",
@@ -281,6 +287,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=False,
             latency_ms=80,
             parameters={"target": "other.example", "rank_scale": "one_hundred"},
+            collected_at="2026-05-24T14:00:03+00:00",
+            response_hash="other-backlinks-hash",
         ),
         CostRecord(
             endpoint="backlinks/summary/live",
@@ -289,6 +297,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=False,
             latency_ms=80,
             parameters={"target": "example.com", "rank_scale": "one_hundred"},
+            collected_at="2026-05-24T14:00:04+00:00",
+            response_hash="backlinks-hash",
         ),
         CostRecord(
             endpoint="on_page/lighthouse/live",
@@ -297,6 +307,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=True,
             latency_ms=0,
             parameters={"url": "https://example.com/"},
+            collected_at="2026-05-24T14:00:05+00:00",
+            response_hash="lighthouse-hash",
         ),
     ]
 
@@ -320,6 +332,8 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
     ]
     assert rows[0]["cache_status"] == "miss"
     assert rows[0]["request_hash"]
+    assert rows[0]["response_hash"] == "maps-hash"
+    assert rows[0]["collected_at"] == "2026-05-24T14:00:01+00:00"
     assert rows[1]["normalized_request_params"]["cid"] == "123"
     assert rows[2]["cost_usd"] == 0.002
     assert rows[3]["cache_status"] == "hit"

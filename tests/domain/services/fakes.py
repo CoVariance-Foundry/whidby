@@ -11,6 +11,7 @@ class FakePipelineResult:
     opportunity_score: int
     evidence: list[dict[str, Any]]
     seo_evidence_artifacts: list[dict[str, Any]] = field(default_factory=list)
+    local_pack_listing_facts: list[dict[str, Any]] = field(default_factory=list)
 
 
 def make_fake_report(

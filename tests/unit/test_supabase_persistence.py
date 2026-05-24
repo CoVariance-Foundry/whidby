@@ -226,16 +226,20 @@ def test_build_report_row_maps_core_fields() -> None:
 def test_build_report_row_scrubs_private_artifact_payloads() -> None:
     report = _sample_report()
     report["seo_evidence_artifacts"] = [{"provider": "dataforseo"}]
+    report["local_pack_listing_facts"] = [{"cid": "cid-1"}]
     report["keyword_expansion"]["raw_evidence_artifacts"] = [{"private": True}]
     report["metros"][0]["seo_evidence_artifacts"] = [{"private": True}]
+    report["metros"][0]["local_pack_listing_facts"] = [{"private": True}]
     report["metros"][0]["signals"]["raw_evidence_artifacts"] = [{"private": True}]
     report["meta"]["seo_evidence_artifacts"] = [{"private": True}]
 
     row = build_report_row(report)
 
     assert "seo_evidence_artifacts" not in row
+    assert "local_pack_listing_facts" not in row
     assert "raw_evidence_artifacts" not in row["keyword_expansion"]
     assert "seo_evidence_artifacts" not in row["metros"][0]
+    assert "local_pack_listing_facts" not in row["metros"][0]
     assert "raw_evidence_artifacts" not in row["metros"][0]["signals"]
     assert "seo_evidence_artifacts" not in row["meta"]
 
@@ -507,6 +511,33 @@ def test_build_local_pack_listing_fact_rows_maps_existing_fact_shape() -> None:
     assert rows[0]["domain"] == "google.com"
 
 
+def test_build_local_pack_listing_fact_rows_reads_private_top_level_side_channel() -> None:
+    report = _sample_competitor_report()
+    report["metros"][0].pop("local_pack_listing_facts", None)
+    report["local_pack_listing_facts"] = [
+        {
+            "cbsa_code": "38060",
+            "keyword": "roof repair phoenix",
+            "listing_rank": 1,
+            "business_name": "Phoenix Roof Pros",
+            "cid": "cid-top",
+            "place_id": "place-top",
+            "source_query": "roof repair phoenix",
+            "dataforseo_location_code": 1000013,
+            "result_type": "maps_search",
+            "listing_url": "https://phoenixroof.example/maps",
+            "review_retrieval_mode": "cid",
+        }
+    ]
+
+    rows = build_local_pack_listing_fact_rows(report)
+
+    side_channel_row = next(row for row in rows if row["cid"] == "cid-top")
+    assert side_channel_row["place_id"] == "place-top"
+    assert side_channel_row["listing_url"] == "https://phoenixroof.example/maps"
+    assert side_channel_row["domain"] == "phoenixroof.example"
+
+
 def test_build_seo_evidence_artifact_rows_maps_and_hashes_provenance() -> None:
     report = _sample_competitor_report()
 
@@ -617,6 +648,9 @@ def test_build_seo_evidence_artifact_rows_from_cost_records() -> None:
                 cached=False,
                 latency_ms=200,
                 parameters={"keywords": ["roof repair"], "location_code": 1000013},
+                collected_at="2026-05-24T14:00:00+00:00",
+                response_hash="volume-response-hash",
+                response_payload={"sha256": "volume-response-hash", "type": "list"},
             ),
             CostRecord(
                 endpoint="serp/google/organic/live/advanced",
@@ -625,6 +659,8 @@ def test_build_seo_evidence_artifact_rows_from_cost_records() -> None:
                 cached=True,
                 latency_ms=0,
                 parameters={"keyword": "roof repair", "location_code": 1000013},
+                collected_at="2026-05-24T14:00:01+00:00",
+                response_hash="serp-response-hash",
             ),
             CostRecord(
                 endpoint="serp/google/locations",
@@ -647,10 +683,16 @@ def test_build_seo_evidence_artifact_rows_from_cost_records() -> None:
     assert rows[0]["cache_status"] == "miss"
     assert rows[0]["cost_usd"] == 0.05
     assert rows[0]["request_hash"]
-    assert rows[0]["response_hash"] is None
+    assert rows[0]["response_hash"] == "volume-response-hash"
+    assert rows[0]["response_payload"] == {
+        "sha256": "volume-response-hash",
+        "type": "list",
+    }
     assert rows[0]["response_storage_uri"] is None
+    assert rows[0]["collected_at"] == "2026-05-24T14:00:00+00:00"
     assert rows[1]["cache_status"] == "hit"
     assert rows[1]["cost_usd"] == 0.0
+    assert rows[1]["response_hash"] == "serp-response-hash"
 
 
 def test_whi127_migration_adds_local_identifiers_and_evidence_artifacts() -> None:

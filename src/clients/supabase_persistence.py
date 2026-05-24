@@ -21,6 +21,7 @@ _EVIDENCE_ARTIFACT_COLLECTION_KEYS = (
     "raw_evidence_artifacts",
 )
 _EVIDENCE_ARTIFACT_KEYS = set(_EVIDENCE_ARTIFACT_COLLECTION_KEYS)
+_PRIVATE_PERSISTENCE_KEYS = _EVIDENCE_ARTIFACT_KEYS | {"local_pack_listing_facts"}
 _ALLOWED_EVIDENCE_FAMILIES = {
     "serp",
     "maps",
@@ -483,7 +484,7 @@ def _without_artifact_keys(value: Any) -> Any:
         return {
             key: _without_artifact_keys(item)
             for key, item in value.items()
-            if key not in _EVIDENCE_ARTIFACT_KEYS
+            if key not in _PRIVATE_PERSISTENCE_KEYS
         }
     if isinstance(value, list):
         return [_without_artifact_keys(item) for item in value]
@@ -827,6 +828,18 @@ def build_seo_evidence_artifact_rows_from_cost_records(
         if collected_at is not None:
             artifact["collected_at"] = collected_at
 
+        response_hash = _record_value(record, "response_hash")
+        if response_hash is not None:
+            artifact["response_hash"] = response_hash
+
+        response_storage_uri = _record_value(record, "response_storage_uri")
+        if response_storage_uri is not None:
+            artifact["response_storage_uri"] = response_storage_uri
+
+        response_payload = _record_value(record, "response_payload")
+        if response_payload is not None:
+            artifact["response_payload"] = response_payload
+
         artifacts.append(artifact)
 
     rows = build_seo_evidence_artifact_rows({"seo_evidence_artifacts": artifacts})
@@ -962,9 +975,16 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
     rows: list[dict[str, Any]] = []
 
     for metro in report.get("metros", []):
+        cbsa_code = metro.get("cbsa_code")
+        top_level_listing_facts = [
+            item
+            for item in report.get("local_pack_listing_facts", [])
+            if isinstance(item, dict) and item.get("cbsa_code") == cbsa_code
+        ]
         signals = metro.get("signals") or {}
         local_signals = signals.get("local_competition") or {}
         sources = [
+            top_level_listing_facts,
             metro.get("local_pack_listing_facts"),
             metro.get("local_pack_listings"),
             metro.get("serp_maps"),
@@ -996,7 +1016,7 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
             listing_url = _str_or_none(item.get("listing_url", item.get("url")))
             rows.append(
                 {
-                    "cbsa_code": metro.get("cbsa_code"),
+                    "cbsa_code": cbsa_code,
                     "niche_normalized": niche_normalized,
                     "keyword": keyword,
                     "listing_rank": _rank_or_index(

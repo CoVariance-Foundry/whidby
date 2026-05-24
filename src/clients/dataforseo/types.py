@@ -21,7 +21,7 @@ class APIResponse:
 
 @dataclass
 class CostRecord:
-    """Single row written to the api_usage_log table."""
+    """Single DataForSEO call record with cost and private response lineage."""
 
     endpoint: str
     task_id: str
@@ -29,3 +29,7 @@ class CostRecord:
     cached: bool
     latency_ms: int
     parameters: dict[str, Any] = field(default_factory=dict)
+    collected_at: str | None = None
+    response_hash: str | None = None
+    response_storage_uri: str | None = None
+    response_payload: dict[str, Any] | None = None

@@ -20,6 +20,7 @@ from src.domain.entities import City
 from src.domain.ports import CityDataProvider
 from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
+from src.pipeline.domain_classifier import normalize_domain
 from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
 from src.pipeline.signal_extraction import extract_signals
@@ -38,6 +39,7 @@ class ScoreNicheResult:
     opportunity_score: int
     evidence: list[dict[str, Any]]
     seo_evidence_artifacts: list[dict[str, Any]]
+    local_pack_listing_facts: list[dict[str, Any]]
 
 
 async def score_niche_for_metro(
@@ -270,8 +272,19 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
-    evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(
-        dfs_cost_log[cost_log_start:]
+    current_cost_records = _cost_records_for_scoring_run(
+        dfs_cost_log[cost_log_start:],
+        niche=niche,
+        location_code=resolved.location_code,
+        expanded_keywords=expansion.get("expanded_keywords", []),
+        metro_result=metro_result,
+    )
+    evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(current_cost_records)
+    local_pack_listing_facts = _build_local_pack_listing_facts(
+        report=report,
+        raw_metro=metro_result,
+        cbsa_code=resolved.cbsa_code,
+        location_code=resolved.location_code,
     )
     m9_ms = int((time.monotonic() - m9_start) * 1000)
     logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
@@ -292,6 +305,7 @@ async def score_niche_for_metro(
         opportunity_score=int(round(scores["opportunity"])),
         evidence=evidence,
         seo_evidence_artifacts=evidence_artifacts,
+        local_pack_listing_facts=local_pack_listing_facts,
     )
 
 
@@ -453,6 +467,7 @@ async def _dry_run_result(
         opportunity_score=int(round(scores["opportunity"])),
         evidence=_build_evidence_from_signals(signals),
         seo_evidence_artifacts=[],
+        local_pack_listing_facts=[],
     )
 
 
@@ -478,6 +493,280 @@ def _log_dfs_cost_summary(
 
 def _cost_log_len(dataforseo_client: Any) -> int:
     return len(getattr(dataforseo_client, "cost_log", []) or [])
+
+
+def _build_local_pack_listing_facts(
+    *,
+    report: dict[str, Any],
+    raw_metro: Any,
+    cbsa_code: str,
+    location_code: int,
+) -> list[dict[str, Any]]:
+    keyword = _primary_report_keyword(report)
+    generated_at = report.get("generated_at")
+    rows: list[dict[str, Any]] = []
+    for maps_result in getattr(raw_metro, "serp_maps", []) or []:
+        source_query = _text(maps_result.get("keyword")) or keyword
+        items = maps_result.get("items") if isinstance(maps_result.get("items"), list) else []
+        for index, item in enumerate(_top_ranked_items(items, limit=3), start=1):
+            business_name = _text(
+                item.get("business_name") or item.get("title") or item.get("name")
+            )
+            if not business_name:
+                continue
+            listing_url = _text(item.get("listing_url") or item.get("url"))
+            rows.append(
+                {
+                    "cbsa_code": cbsa_code,
+                    "keyword": source_query or keyword,
+                    "listing_rank": _rank_value(item) or index,
+                    "business_name": business_name,
+                    "cid": _text(item.get("cid")),
+                    "place_id": _text(item.get("place_id")),
+                    "source_query": source_query,
+                    "dataforseo_location_code": location_code,
+                    "result_type": _text(item.get("result_type") or item.get("type")),
+                    "listing_url": listing_url,
+                    "domain": normalize_domain(_text(item.get("domain")) or listing_url or ""),
+                    "review_retrieval_mode": _text(
+                        item.get("review_retrieval_mode")
+                        or item.get("review_collection_mode")
+                    ),
+                    "review_window_start": item.get("review_window_start"),
+                    "review_window_end": item.get("review_window_end"),
+                    "upstream_result_at": _first_present(
+                        item,
+                        maps_result,
+                        keys=("upstream_result_at", "datetime", "timestamp"),
+                    ),
+                    "rating": item.get("rating"),
+                    "review_count": _review_count_from_maps_item(item),
+                    "photo_count": item.get("photo_count") or item.get("total_photos"),
+                    "categories": item.get("categories") or item.get("category"),
+                    "source": "dataforseo",
+                    "snapshot_date": generated_at,
+                    "report_id": report.get("report_id"),
+                }
+            )
+    return rows
+
+
+def _cost_records_for_scoring_run(
+    records: list[Any],
+    *,
+    niche: str,
+    location_code: int,
+    expanded_keywords: list[dict[str, Any]],
+    metro_result: Any,
+) -> list[Any]:
+    keywords = {
+        _norm_text(niche),
+        *(_norm_text(item.get("keyword")) for item in expanded_keywords),
+    }
+    keywords.discard("")
+    local_queries = {
+        _norm_text(row.get("keyword"))
+        for row in getattr(metro_result, "serp_maps", []) or []
+        if isinstance(row, dict)
+    }
+    keywords.update(query for query in local_queries if query)
+    local_identifiers = _local_identifiers(metro_result)
+    keywords.update(_local_business_names(metro_result))
+    domains = _organic_domains(metro_result)
+    urls = _organic_urls(metro_result)
+    current: list[Any] = []
+    for record in records:
+        params = _record_params(record)
+        if _record_matches_scoring_run(
+            params,
+            location_code=location_code,
+            keywords=keywords,
+            local_identifiers=local_identifiers,
+            domains=domains,
+            urls=urls,
+        ):
+            current.append(record)
+    return current
+
+
+def _record_matches_scoring_run(
+    params: dict[str, Any],
+    *,
+    location_code: int,
+    keywords: set[str],
+    local_identifiers: set[str],
+    domains: set[str],
+    urls: set[str],
+) -> bool:
+    param_location = _int_or_none(params.get("location_code"))
+    if param_location is not None and param_location != location_code:
+        return False
+    param_identifiers = {
+        _norm_text(value)
+        for value in _param_values(params.get("cid")) + _param_values(params.get("place_id"))
+    }
+    param_identifiers.discard("")
+    if param_identifiers:
+        return bool(param_identifiers & local_identifiers)
+    param_keywords = {
+        _norm_text(value)
+        for value in (
+            _param_values(params.get("keyword"))
+            + _param_values(params.get("keywords"))
+            + _param_values(params.get("categories"))
+        )
+    }
+    param_keywords.discard("")
+    if param_keywords:
+        return bool(param_keywords & keywords)
+    target = _norm_text(params.get("target"))
+    if target:
+        return target in domains
+    url = _text(params.get("url"))
+    if url:
+        return url in urls or normalize_domain(url) in domains
+    return param_location == location_code
+
+
+def _primary_report_keyword(report: dict[str, Any]) -> str | None:
+    for item in (report.get("keyword_expansion") or {}).get("expanded_keywords", []) or []:
+        if isinstance(item, dict) and item.get("keyword"):
+            return str(item["keyword"])
+    return _text((report.get("input") or {}).get("niche_keyword"))
+
+
+def _top_ranked_items(items: list[Any], *, limit: int) -> list[dict[str, Any]]:
+    rows = [item for item in items if isinstance(item, dict)]
+    if any(_rank_value(row) is not None for row in rows):
+        rows = [
+            row
+            for _, row in sorted(
+                enumerate(rows),
+                key=lambda pair: (
+                    _rank_value(pair[1]) is None,
+                    _rank_value(pair[1]) if _rank_value(pair[1]) is not None else 0,
+                    pair[0],
+                ),
+            )
+        ]
+    return rows[:limit]
+
+
+def _rank_value(row: dict[str, Any]) -> int | None:
+    for field in ("listing_rank", "rank_group", "rank", "position", "rank_absolute"):
+        try:
+            rank = int(row.get(field))
+        except (TypeError, ValueError):
+            continue
+        if rank > 0:
+            return rank
+    return None
+
+
+def _review_count_from_maps_item(item: dict[str, Any]) -> Any:
+    rating = item.get("rating")
+    if isinstance(rating, dict) and rating.get("votes_count") is not None:
+        return rating.get("votes_count")
+    return item.get("review_count") or item.get("reviews_count") or item.get("votes_count")
+
+
+def _first_present(
+    *sources: dict[str, Any],
+    keys: tuple[str, ...],
+) -> Any:
+    for source in sources:
+        for key in keys:
+            if source.get(key) is not None:
+                return source[key]
+    return None
+
+
+def _record_params(record: Any) -> dict[str, Any]:
+    params = record.get("parameters") if isinstance(record, dict) else getattr(record, "parameters", {})
+    return params if isinstance(params, dict) else {}
+
+
+def _organic_domains(metro_result: Any) -> set[str]:
+    domains: set[str] = set()
+    for result in getattr(metro_result, "serp_organic", []) or []:
+        if not isinstance(result, dict):
+            continue
+        items = result.get("items") if isinstance(result.get("items"), list) else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            domain = normalize_domain(str(item.get("domain") or item.get("url") or ""))
+            if domain:
+                domains.add(domain)
+    return domains
+
+
+def _local_identifiers(metro_result: Any) -> set[str]:
+    identifiers: set[str] = set()
+    for item in _local_map_items(metro_result):
+        for field in ("cid", "place_id"):
+            identifier = _norm_text(item.get(field))
+            if identifier:
+                identifiers.add(identifier)
+    return identifiers
+
+
+def _local_business_names(metro_result: Any) -> set[str]:
+    names: set[str] = set()
+    for item in _local_map_items(metro_result):
+        name = _norm_text(item.get("title") or item.get("name") or item.get("business_name"))
+        if name:
+            names.add(name)
+    return names
+
+
+def _local_map_items(metro_result: Any) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for result in getattr(metro_result, "serp_maps", []) or []:
+        if not isinstance(result, dict):
+            continue
+        raw_items = result.get("items") if isinstance(result.get("items"), list) else []
+        items.extend(item for item in raw_items if isinstance(item, dict))
+    return items
+
+
+def _organic_urls(metro_result: Any) -> set[str]:
+    urls: set[str] = set()
+    for result in getattr(metro_result, "serp_organic", []) or []:
+        if not isinstance(result, dict):
+            continue
+        items = result.get("items") if isinstance(result.get("items"), list) else []
+        for item in items:
+            if isinstance(item, dict) and item.get("url"):
+                urls.add(str(item["url"]).strip())
+    return urls
+
+
+def _param_values(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _norm_text(value: Any) -> str:
+    text = _text(value)
+    return text.lower() if text else ""
+
+
+def _text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _population_class_for_benchmarks(population: int | None) -> str | None:

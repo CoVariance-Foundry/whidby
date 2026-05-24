@@ -18,7 +18,11 @@ from src.pipeline.feedback_logger import log_feedback
 from src.scoring.benchmark_repository import SeoBenchmarkRepository
 
 logger = logging.getLogger(__name__)
-_PRIVATE_ARTIFACT_KEYS = {"seo_evidence_artifacts", "raw_evidence_artifacts"}
+_PRIVATE_ARTIFACT_KEYS = {
+    "seo_evidence_artifacts",
+    "raw_evidence_artifacts",
+    "local_pack_listing_facts",
+}
 
 
 @dataclass
@@ -171,6 +175,10 @@ class MarketService:
                 if getattr(result, "seo_evidence_artifacts", None):
                     persistence_report["seo_evidence_artifacts"] = (
                         result.seo_evidence_artifacts
+                    )
+                if getattr(result, "local_pack_listing_facts", None):
+                    persistence_report["local_pack_listing_facts"] = (
+                        result.local_pack_listing_facts
                     )
                 report_id = self._store.persist_report(persistence_report)
             except Exception:

@@ -251,6 +251,32 @@ class TestCostTracking:
         assert all(r.cost >= 0 for r in client.cost_log)
         assert client.total_cost > 0
 
+    @pytest.mark.asyncio
+    async def test_cost_records_capture_response_lineage(self, mocker):
+        client = _make_client()
+        mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
+
+        await client.serp_maps(keyword="plumber", location_code=1012873)
+
+        record = client.cost_log[0]
+        assert record.collected_at
+        assert record.response_hash
+        assert record.response_payload is not None
+        assert record.response_payload["sha256"] == record.response_hash
+
+    @pytest.mark.asyncio
+    async def test_cached_cost_records_hash_cached_payload(self, mocker):
+        client = _make_client(cache_ttl=300)
+        mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
+
+        await client.serp_organic(keyword="plumber", location_code=1012873)
+        await client.serp_organic(keyword="plumber", location_code=1012873)
+
+        cached_record = client.cost_log[1]
+        assert cached_record.cached is True
+        assert cached_record.collected_at
+        assert cached_record.response_hash == client.cost_log[0].response_hash
+
 
 # ---------------------------------------------------------------------------
 # Error handling

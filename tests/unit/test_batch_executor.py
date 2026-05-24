@@ -27,6 +27,40 @@ class OrganicResultsClient(FakeDataForSEOClient):
         )
 
 
+class MapsIdentifierClient(FakeDataForSEOClient):
+    async def serp_maps(self, keyword: str, location_code: int) -> APIResponse:
+        self.calls.append(("serp_maps", {"keyword": keyword, "location_code": location_code}))
+        return APIResponse(
+            status="ok",
+            data=[
+                {
+                    "keyword": keyword,
+                    "items": [
+                        {
+                            "type": "maps_search",
+                            "rank_group": 1,
+                            "title": "CID Biz",
+                            "cid": "cid-1",
+                            "place_id": "place-1",
+                        },
+                        {
+                            "type": "maps_search",
+                            "rank_group": 2,
+                            "title": "Place Biz",
+                            "place_id": "place-2",
+                        },
+                        {
+                            "type": "maps_search",
+                            "rank_group": 3,
+                            "title": "Title Biz",
+                        },
+                    ],
+                }
+            ],
+            cost=0.0006,
+        )
+
+
 @pytest.mark.asyncio
 async def test_executor_runs_base_and_dependent_categories() -> None:
     request = build_collection_request(SAMPLE_KEYWORDS, [SAMPLE_METROS[0]], "balanced")
@@ -42,6 +76,59 @@ async def test_executor_runs_base_and_dependent_categories() -> None:
     assert "backlinks" in categories
     assert "lighthouse" in categories
     assert state.total_api_calls > 0
+
+
+@pytest.mark.asyncio
+async def test_executor_prefers_maps_identifiers_for_reviews_and_preserves_gbp_provenance() -> None:
+    request = build_collection_request(SAMPLE_KEYWORDS, [SAMPLE_METROS[0]], "balanced")
+    plan = build_collection_plan(request)
+    client = MapsIdentifierClient()
+
+    state = await execute_collection_plan(plan, request, client)
+
+    review_payloads = [
+        payload for name, payload in client.calls if name == "google_reviews"
+    ]
+    assert review_payloads[:3] == [
+        {
+            "keyword": "cid-1",
+            "location_code": 1012873,
+            "cid": "cid-1",
+            "place_id": None,
+        },
+        {
+            "keyword": "place-2",
+            "location_code": 1012873,
+            "cid": None,
+            "place_id": "place-2",
+        },
+        {
+            "keyword": "Title Biz",
+            "location_code": 1012873,
+            "cid": None,
+            "place_id": None,
+        },
+    ]
+    gbp_payloads = [
+        state.task_payloads[task_id]
+        for task_id, category in sorted(state.task_categories.items())
+        if category == "gbp_info"
+    ]
+    assert [payload["keyword"] for payload in gbp_payloads] == [
+        "CID Biz",
+        "Place Biz",
+        "Title Biz",
+    ]
+    assert [payload["preferred_identifier_mode"] for payload in gbp_payloads] == [
+        "cid",
+        "place_id",
+        "title",
+    ]
+    assert [payload["gbp_retrieval_mode"] for payload in gbp_payloads] == [
+        "keyword",
+        "keyword",
+        "keyword",
+    ]
 
 
 @pytest.mark.asyncio

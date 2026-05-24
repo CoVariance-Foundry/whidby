@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 from collections import defaultdict
-from dataclasses import asdict
+import logging
 from typing import Any
 
 from .types import CostRecord
@@ -26,6 +25,11 @@ class CostTracker:
         cached: bool,
         latency_ms: int,
         parameters: dict[str, Any] | None = None,
+        *,
+        collected_at: str | None = None,
+        response_hash: str | None = None,
+        response_storage_uri: str | None = None,
+        response_payload: dict[str, Any] | None = None,
     ) -> None:
         self._records.append(
             CostRecord(
@@ -35,6 +39,10 @@ class CostTracker:
                 cached=cached,
                 latency_ms=latency_ms,
                 parameters=parameters or {},
+                collected_at=collected_at,
+                response_hash=response_hash,
+                response_storage_uri=response_storage_uri,
+                response_payload=response_payload,
             )
         )
 
@@ -99,9 +107,17 @@ class CostTracker:
 
         rows = []
         for r in self._records:
-            row = asdict(r)
-            row["report_id"] = report_id
-            rows.append(row)
+            rows.append(
+                {
+                    "endpoint": r.endpoint,
+                    "task_id": r.task_id,
+                    "cost": r.cost,
+                    "cached": r.cached,
+                    "latency_ms": r.latency_ms,
+                    "parameters": r.parameters,
+                    "report_id": report_id,
+                }
+            )
 
         client.table("api_usage_log").insert(rows).execute()
         count = len(rows)
