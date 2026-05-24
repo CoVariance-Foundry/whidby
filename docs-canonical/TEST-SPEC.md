@@ -107,6 +107,7 @@ tests/
 | Top-5 organic facts | `avg_top5_da` and `avg_top5_lighthouse` use canonical top-5 organic competitors and exclude aggregators/missing URLs | `tests/unit/test_batch_executor.py`, `tests/unit/test_signal_extraction.py`, `tests/unit/test_signal_extractors.py`, `tests/scoring/test_v2_scoring.py` |
 | V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
 | Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
+| Benchmark lineage | `seo_benchmarks` reads tolerate nullable lineage fields, benchmark modes are validated, and migration tests assert run plus metric-family sufficiency schema | `tests/scoring/test_benchmark_repository_contract.py`, `tests/clients/test_seo_benchmark_repository.py` |
 | Competitor Intel persistence | Organic/local competitor facts are persisted as durable read-model rows without reading `api_response_cache`; run lineage records account/user/quota/status | `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py` |
 | Competitor Intel APIs | Free users receive upgrade state; Plus/Pro users can read/run; run creation consumes/refunds two `fresh_report` units atomically; service-role reads enforce account visibility | `apps/app/src/app/api/competitor-intel/route.test.ts`, `apps/app/src/app/api/competitor-intel/runs/route.test.ts`, `tests/unit/test_api_competitor_intel.py`, `tests/unit/test_competitor_intel_service.py` |
 | Competitor Intel UI | Locked, ready, running, aggregate-only, dossier, and error states render without leaking paid details or null-heavy cards | `apps/app/src/components/competitor-intel/CompetitorIntelClient.test.tsx` |
@@ -259,6 +260,7 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 | DA/Lighthouse parsing | Backlinks Summary and Lighthouse response shapes produce nullable top-5 telemetry and coverage fields | `tests/scripts/test_benchmark_serp_parsing.py` |
 | Review velocity acquisition | Google Reviews can target local-pack `cid` or `place_id` identifiers and request newest reviews for top-3 velocity | `tests/scripts/test_benchmark_serp_parsing.py`, `tests/unit/test_dataforseo_client.py` |
 | Sampling guardrails | Benchmark pilot sampling still rejects invalid modes, population classes, and metro limits before paid calls | `tests/scripts/test_benchmark_sampling.py` |
+| Metric sufficiency schema | Benchmark lineage migrations preserve existing reads while adding per-family evidence counts, source windows, confidence labels, and non-null-count constraints | `tests/scoring/test_benchmark_repository_contract.py` |
 
 ## Metro DFS Readiness Tests
 
@@ -431,3 +433,4 @@ npm run lint
 | 1.7.4 | 2026-05-23 | WHI-101 DFS residual review path | Added residual classification, approval, and seed-exclusion policy |
 | 1.7.5 | 2026-05-23 | WHI-102 canary persistence gate | Added production target identity preservation as a canary/pilot test obligation |
 | 1.7.6 | 2026-05-23 | WHI-102 acquisition backfill gate | Added explicit opt-in benchmark acquisition flags and tests for top-5 organic telemetry plus top-3 review velocity |
+| 1.7.7 | 2026-05-24 | WHI-126 benchmark lineage schema | Added benchmark mode parsing and metric-family sufficiency migration test obligations |
