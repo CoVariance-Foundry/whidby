@@ -11,7 +11,10 @@ import json
 import os
 from typing import Any
 
+from src.clients.dataforseo import endpoints as dfs_endpoints
 from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.dataforseo.endpoints import Endpoint
+from src.clients.dataforseo.types import APIResponse
 from src.clients.llm.client import LLMClient
 from src.clients.serpapi.client import SerpAPIClient
 from src.data.metro_db import MetroDB
@@ -55,6 +58,41 @@ def _run_async(coro: Any) -> Any:
 # DataForSEO tools
 # ---------------------------------------------------------------------------
 
+def _dfs_tool_result(
+    resp: APIResponse,
+    *,
+    endpoint: Endpoint,
+    request_params: dict[str, Any],
+) -> str:
+    """Serialize a DataForSEO response with benchmark evidence lineage metadata."""
+    mode = "queued" if endpoint.get_path else "live"
+    cache_status = "hit" if resp.cached else "miss"
+    source = {
+        "provider": "dataforseo",
+        "endpoint_path": endpoint.post_path,
+        "mode": mode,
+        "cache_status": cache_status,
+        "request_params": request_params,
+    }
+    payload = {
+        "status": resp.status,
+        "data": resp.data,
+        "cost": resp.cost,
+        "cost_usd": resp.cost,
+        "task_id": resp.task_id,
+        "cached": resp.cached,
+        "source": source,
+        "metadata": {
+            **source,
+            "task_id": resp.task_id,
+            "cost_usd": resp.cost,
+            "latency_ms": resp.latency_ms,
+        },
+    }
+    if resp.error:
+        payload["error"] = resp.error
+    return json.dumps(payload)
+
 
 def fetch_serp_organic(keyword: str, location_code: int, depth: int = 10) -> str:
     """Fetch organic SERP results for a keyword at a specific DataForSEO location.
@@ -69,7 +107,15 @@ def fetch_serp_organic(keyword: str, location_code: int, depth: int = 10) -> str
     """
     client = _get_dfs_client()
     resp = _run_async(client.serp_organic(keyword, location_code, depth))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.SERP_ORGANIC,
+        request_params={
+            "keyword": keyword,
+            "location_code": location_code,
+            "depth": depth,
+        },
+    )
 
 
 def fetch_serp_maps(keyword: str, location_code: int, depth: int = 10) -> str:
@@ -85,7 +131,15 @@ def fetch_serp_maps(keyword: str, location_code: int, depth: int = 10) -> str:
     """
     client = _get_dfs_client()
     resp = _run_async(client.serp_maps(keyword, location_code, depth))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.SERP_MAPS,
+        request_params={
+            "keyword": keyword,
+            "location_code": location_code,
+            "depth": depth,
+        },
+    )
 
 
 def fetch_keyword_volume(keywords: list[str], location_code: int) -> str:
@@ -100,7 +154,11 @@ def fetch_keyword_volume(keywords: list[str], location_code: int) -> str:
     """
     client = _get_dfs_client()
     resp = _run_async(client.keyword_volume(keywords, location_code))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.KEYWORD_VOLUME,
+        request_params={"keywords": keywords, "location_code": location_code},
+    )
 
 
 def fetch_keyword_suggestions(
@@ -120,7 +178,15 @@ def fetch_keyword_suggestions(
     resp = _run_async(
         client.keyword_suggestions(keyword, location_name=location_name, limit=limit)
     )
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.KEYWORD_SUGGESTIONS,
+        request_params={
+            "keyword": keyword,
+            "location_name": location_name,
+            "limit": limit,
+        },
+    )
 
 
 def fetch_business_listings(
@@ -138,39 +204,93 @@ def fetch_business_listings(
     """
     client = _get_dfs_client()
     resp = _run_async(client.business_listings(category, location_code, limit))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.BUSINESS_LISTINGS,
+        request_params={
+            "category": category,
+            "location_code": location_code,
+            "limit": limit,
+        },
+    )
 
 
 def fetch_google_reviews(
-    keyword: str, location_code: int, depth: int = 20
+    keyword: str | None = None,
+    location_code: int | None = None,
+    depth: int = 20,
+    *,
+    cid: str | int | None = None,
+    place_id: str | None = None,
+    sort_by: str | None = "newest",
 ) -> str:
-    """Fetch Google review data for a keyword/location combination.
+    """Fetch Google review data for a keyword, cid, or place_id at a location.
 
     Args:
         keyword: Business search term.
         location_code: DataForSEO location code.
         depth: Number of review results (default 20).
+        cid: Google Maps CID identifier.
+        place_id: Google place identifier.
+        sort_by: Review sort mode (default ``newest`` for benchmark parity).
 
     Returns:
         JSON string of the API response.
     """
+    if location_code is None:
+        raise ValueError("location_code is required for Google reviews")
+    if not any((keyword, cid, place_id)):
+        raise ValueError("keyword, cid, or place_id is required for Google reviews")
+
+    request_params: dict[str, Any] = {"location_code": location_code, "depth": depth}
+    if place_id:
+        request_params["place_id"] = place_id
+    elif cid:
+        request_params["cid"] = cid
+    else:
+        request_params["keyword"] = keyword
+    if sort_by:
+        request_params["sort_by"] = sort_by
+
     client = _get_dfs_client()
-    resp = _run_async(client.google_reviews(keyword, location_code, depth))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    resp = _run_async(
+        client.google_reviews(
+            keyword=keyword,
+            location_code=location_code,
+            depth=depth,
+            cid=cid,
+            place_id=place_id,
+            sort_by=sort_by,
+        )
+    )
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.GOOGLE_REVIEWS,
+        request_params=request_params,
+    )
 
 
-def fetch_backlinks_summary(target: str) -> str:
+def fetch_backlinks_summary(target: str, rank_scale: str | None = "one_hundred") -> str:
     """Fetch backlink summary for a target domain.
 
     Args:
         target: Domain or URL to analyze.
+        rank_scale: DataForSEO rank scale (default ``one_hundred`` for benchmark parity).
 
     Returns:
         JSON string of the API response.
     """
+    request_params: dict[str, Any] = {"target": target}
+    if rank_scale:
+        request_params["rank_scale"] = rank_scale
+
     client = _get_dfs_client()
-    resp = _run_async(client.backlinks_summary(target))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    resp = _run_async(client.backlinks_summary(target, rank_scale=rank_scale))
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.BACKLINKS_SUMMARY,
+        request_params=request_params,
+    )
 
 
 def fetch_lighthouse(url: str) -> str:
@@ -184,7 +304,11 @@ def fetch_lighthouse(url: str) -> str:
     """
     client = _get_dfs_client()
     resp = _run_async(client.lighthouse(url))
-    return json.dumps({"status": resp.status, "data": resp.data, "cost": resp.cost})
+    return _dfs_tool_result(
+        resp,
+        endpoint=dfs_endpoints.LIGHTHOUSE,
+        request_params={"url": url},
+    )
 
 
 # ---------------------------------------------------------------------------

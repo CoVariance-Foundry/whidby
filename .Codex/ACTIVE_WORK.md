@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: this worktree is implementing `WHI-128` on `codex/whi-128-metric-readiness-audits`, stacked after the WHI-127 evidence-lineage work. Earlier WHI-99 through WHI-106 notes below remain historical context for the Scoring Coverage & Benchmark Hardening project.
+Status: this worktree is implementing `WHI-129` on `codex/whi-129-dfs-wrapper-parity`, stacked after the WHI-128 metric-readiness audit work. Earlier WHI-99 through WHI-106 notes below remain historical context for the Scoring Coverage & Benchmark Hardening project.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue for this worktree is `WHI-128`: report metric-level benchmark sufficiency and strategy readiness in audits.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue for this worktree is `WHI-129`: bring DataForSEO agent wrappers to benchmark-runner parity.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -32,6 +32,7 @@ Current contract:
 - WHI-105 reran the read-only app-surface audit against production project `eoajvifhbmqmoluiokcj` on 2026-05-24 using the existing 96 pilot JSONL artifacts. The audit still exits fail, but the cause is now pinned to surface coverage: 3,208 current strategy-audit pairs have materialized Explore rows, 81 have V2 score/benchmark-confidence metadata, 110 have report-backed Explore visibility, 64 are V2-preferred in Explore, 3,127 are missing V2 scores, and 3,144 are non-V2 fallback/catalog rows. Report-detail routing is not the blocker for rows with lineage: all 110 unique report-backed IDs exist in `reports`, and five sampled `GET https://whidby-1.onrender.com/api/niches/{report_id}` calls returned HTTP 200 with matching IDs and `metros` arrays.
 - WHI-106 adds the Milestone 3 coverage-weighted scoring recommendation to `docs/scoring-coverage-analysis.md`. The issue scope is `small_50_100k`, `medium_100_300k`, and `large_300k_1m`, but the recommendation keeps the same warning-only benchmark fallback policy for every scored population class until required benchmark and metric families meet sufficiency gates. Population stays scored; demand, organic SERP composition, monetization, and AI resilience stay scored with warnings; DA/Lighthouse stay telemetry-only; local review count/velocity and benchmark-relative claims require acquisition. No current signal should be removed based on this slice alone.
 - WHI-128 adds read-only metric-sufficiency audit output from `seo_benchmark_metric_sufficiency`. Audits now report `metric_missing`, `metric_undersampled`, and `metric_ready` by benchmark cell and metric family; roll those families into Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, and `/agency` target review readiness; and emit canary guidance for blocked cells/families. This slice does not run paid acquisition, live Supabase reads, or benchmark recompute.
+- WHI-129 makes the agent-facing DataForSEO wrappers match the benchmark acquisition contract before agents participate in benchmark collection. `fetch_google_reviews` now accepts `cid`, `place_id`, and `sort_by` with `newest` as the default; `fetch_backlinks_summary` defaults `rank_scale` to `one_hundred`; DataForSEO tool results include endpoint path, mode, cache status, task id, and request params; and plugin execution preserves that lineage metadata instead of returning only data/cost/status. This slice does not run paid acquisition.
 
 Verified:
 
@@ -52,6 +53,9 @@ Verified:
 - `npx docguard-cli guard` ran with network escalation and exited warn-only with the existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.
 - `/Users/antwoineflowers/.codex/worktrees/6aa7/whidby/.venv/bin/python audit_scoring_strategy.py --read-only --expected-project-ref eoajvifhbmqmoluiokcj ... --output-dir reports/scoring_audit` wrote ignored `reports/scoring_audit/scoring_audit_20260524T040729Z.*` artifacts in the active WHI-105 worktree and exited fail because the expected app-surface/benchmark gates remain below threshold.
 - A read-only Supabase plus Render API smoke verified the 110 report-backed Explore IDs: zero missing `reports` rows and five sampled `GET /api/niches/{report_id}` calls returned HTTP 200.
+- `pytest tests/unit/test_dataforseo_client.py tests/unit/test_api_tools_dataforseo.py tests/unit/test_plugin_registry.py -q` passed 43 tests.
+- `ruff check src/research_agent/tools/api_tools.py src/research_agent/plugins/dataforseo_plugin.py tests/unit/test_api_tools_dataforseo.py tests/unit/test_plugin_registry.py` passed.
+- `git diff --check` passed.
 
 Next:
 
