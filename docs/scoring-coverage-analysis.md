@@ -400,6 +400,46 @@ The benchmark/data-collection update should be able to persist or derive the fol
 
 Phase 4 should turn these catalog gaps into required benchmark/data-model changes: canonical demand source decision, metric-level sufficiency schema, local-place lineage, raw evidence retention, agent tool parity, and paid acquisition guardrails.
 
+## Benchmark Development Research: Stage 4 Gap Analysis
+
+Stage 4 converts the Phase 1-3 research into platform and data-model gaps. This review includes the Strategy Discovery plan in `docs/superpowers/plans/2026-05-16-strategy-discovery-system.md` because strategy surfaces are downstream consumers of the same cached market intelligence. Strategy Discovery is intentionally a set of ranking lenses over canonical facts and benchmarks, not a separate scoring engine, so weak benchmark lineage becomes weak product guidance.
+
+### Strategy Platform Needs
+
+| Strategy/platform surface | Required evidence | Current risk |
+| --- | --- | --- |
+| Easy Win | Demand strength, organic difficulty, local difficulty, AI resilience, and benchmark confidence. | A single cell confidence label can hide which score dimensions are actually missing or stale. |
+| GBP Blitz | Local-pack presence, top-3 review floor, review velocity, GBP/profile completeness, ratings, and stable local business identity. | Current core benchmark cells have null local review medians, and the strategy evidence table lacks stable `cid`/`place_id` lineage for repeat review acquisition. |
+| Keyword Hijack | Primary keyword volume, CPC/commercial intent, local-pack presence, and exact-match GBP name availability. | Demand source is not yet canonicalized across DataForSEO keyword surfaces, and local name availability depends on local-pack evidence that is not sufficiently versioned. |
+| Expand & Conquer | Metro feature vectors plus equal-or-lower organic and local competition versus a reference city. | `metro_feature_vectors` can rank similarity, but the competition baseline is only as reliable as the benchmark and V2 fact coverage behind each candidate. |
+| `/agency` multi-market runs | Cached target discovery, batch caps, fresh-run lineage, and explicit target-level warnings. | Sparse benchmark cells can make broad target discovery appear complete while the underlying metric evidence is insufficient. |
+| Strategy cache and run items | Source report ids, scored timestamps, evidence JSON, warnings, and strategy id. | The cache/run schema can store warnings but does not currently require benchmark version, metric sufficiency, pooling mode, or raw evidence lineage. |
+
+### Gap Matrix
+
+| Gap | Current state | Why it matters | Required update |
+| --- | --- | --- | --- |
+| Metric-level sufficiency | `seo_benchmarks.confidence_label` is a cell rollup; present cells can still have missing DA, Lighthouse, local review, or demand evidence. | Strategy scores need to distinguish weak markets from unknown markets. | Add metric-specific sufficiency fields or a child table keyed by benchmark cell, metric family, source window, attempted count, non-null count, and confidence label. |
+| Demand source ambiguity | Whidby currently uses `keywords_data/google/search_volume/*`; DataForSEO also offers richer Google Ads Search Volume and Keyword Overview surfaces. | Keyword Hijack and demand scoring should not mix incompatible volume, CPC, competition, and intent semantics. | Choose the canonical demand endpoint before paid scale-out, then store endpoint path, source month/window, `location_code`, language, volume, CPC, competition, and monthly-search metadata. |
+| Local-place lineage | Maps and Reviews can use stable `cid` and `place_id`, but `local_pack_listing_facts` is centered on rank, name, and keyword evidence. | GBP Blitz, Keyword Hijack, Competitor Intel, and review velocity refreshes need repeatable business identity, not title matching. | Persist `cid`, `place_id`, source query, DataForSEO `location_code`, listing URL/domain, review collection window, and review retrieval mode for top local-pack businesses. |
+| Raw evidence retention | Benchmark aggregates are stored, but raw SERP, local-pack, review, backlink, and Lighthouse evidence is not a first-class benchmark recompute artifact. | Future formula/version changes should not require rerunning all paid collection. | Add or reuse an evidence-artifact layer with provider endpoint, request hash, response hash/location, collection timestamp, cache status, cost, and benchmark run id. |
+| Benchmark versioning | Existing timestamps do not fully encode formula version, sample frame, source mix, acquisition flags, or pooling policy. | Moz/SISTRIX-style comparative scores are only comparable within a known data and formula universe. | Add `benchmark_run_id`, formula version, sample-frame version, source window, acquisition flags, and source mix to benchmark outputs and downstream strategy cache rows. |
+| Pooling policy | The only possible current pooled core grouping is ad hoc; pooling is not represented as its own benchmark mode. | Hidden pooling can make a city-size-specific strategy recommendation look more precise than it is. | Define explicit benchmark modes such as `cell`, `pooled_adjacent_population`, and `service_family`, with product-visible warning codes and separate cache keys. |
+| Agent tool parity | `run_pilot.py` supports richer review/backlink collection than the research-agent API wrappers. | Agent-driven acquisition can silently collect lower-quality evidence than the benchmark runner. | Expose review `cid`/`place_id`/`sort_by`, backlink `rank_scale`, queued task retrieval, and source-cost metadata through `DataForSEOPlugin` and `api_tools.py`. |
+| Strategy warning semantics | Strategy results carry warning arrays, but benchmark warnings are mostly coarse strings such as low confidence or missing local pack. | Product surfaces need actionable warning copy: missing demand, missing local reviews, stale facts, pooled benchmark, or benchmark undersampled. | Standardize warning codes by metric family and make Explore, Reports, Strategies, and `/agency` render the same evidence-quality vocabulary. |
+| Feature-vector readiness | `metro_feature_vectors` supports Expand & Conquer, but vector quality depends on source tables and feature completeness. | Similarity ranking can look authoritative even when candidate/reference competition data is sparse. | Version feature vectors with source tables, feature completeness, computed timestamp, and reference benchmark readiness before using them as paid-run targets. |
+| Paid acquisition gates | Prior slices require canary and pilot gates, but Stage 4 gaps imply a more granular acquisition order. | The smallest useful paid work should fill the missing metric family that blocks product decisions, not just add more rows. | Keep no broad paid recompute. Sequence paid work as canary metric acquisition, metric-sufficiency audit, bounded cell backfill, then benchmark recompute only after read-only gates pass. |
+
+### Required Platform Updates
+
+1. Data model: add benchmark run/version lineage, metric-level sufficiency, local-place identifiers, raw evidence artifacts, pooling mode, and downstream strategy cache lineage.
+2. Data collection: canonicalize demand collection, preserve local identifiers from Maps before Reviews, collect review velocity by `cid`/`place_id`, keep Backlinks Summary on `rank_scale=one_hundred`, and store Lighthouse separately from authority.
+3. Strategy platform: treat benchmark confidence as structured evidence quality, not a single badge. Strategy results should know whether a score is weak because the market is easy or because demand/local/organic evidence is missing.
+4. Product surfaces: reuse the same warning vocabulary across Explore, report detail, strategy gallery/detail pages, and `/agency` target review so sparse benchmark cells cannot be mistaken for completed market intelligence.
+5. Guardrails: continue to block broad paid expansion and benchmark recompute until the read-only audits show usable metric-level coverage for the intended benchmark universe.
+
+Stage 5 should turn these gaps into an implementation recommendation: schema changes first, then runner/tool parity, then the smallest paid acquisition batch needed to raise core-service cells above metric-level sufficiency thresholds.
+
 ## App Surface Visibility
 
 | Measure | Result |
