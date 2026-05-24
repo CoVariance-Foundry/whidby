@@ -440,6 +440,73 @@ Stage 4 converts the Phase 1-3 research into platform and data-model gaps. This 
 
 Stage 5 should turn these gaps into an implementation recommendation: schema changes first, then runner/tool parity, then the smallest paid acquisition batch needed to raise core-service cells above metric-level sufficiency thresholds.
 
+## Benchmark Development Research: Stage 5 Recommendations
+
+Stage 5 recommends updating the benchmark approach as a data contract upgrade before buying more coverage. The main change is to stop treating a benchmark cell as one all-or-nothing aggregate and instead make every downstream product surface read the same metric-level sufficiency, source lineage, and warning vocabulary.
+
+### Recommended Implementation Sequence
+
+| Step | Recommendation | Why this comes first | Acceptance signal |
+| --- | --- | --- | --- |
+| 1 | Add benchmark run and metric-sufficiency schema before recompute changes. | The current `seo_benchmarks` primary key can store aggregate values, but not enough provenance to explain or compare them later. | Every benchmark row can point to a benchmark run/version and every metric family has attempted/non-null counts, confidence, and source window. |
+| 2 | Preserve local-place and raw evidence lineage during collection. | Review velocity, GBP Blitz, Keyword Hijack, and Competitor Intel all need stable local business identity before reviews become a benchmark-critical input. | Top local-pack rows preserve `cid`, `place_id`, source query, DataForSEO `location_code`, listing URL/domain, and review collection window. |
+| 3 | Freeze demand v1, then canary enriched demand before migration. | Switching demand sources during a sparse benchmark build would make old and new cells hard to compare. | Current `keywords_data/google/search_volume/*` remains `demand_v1`; Google Ads Search Volume or Keyword Overview runs behind an explicit `demand_v2_candidate` source until a comparison audit approves it. |
+| 4 | Update runner and agent tool parity before agent-led acquisition. | `run_pilot.py` already has richer review/backlink behavior than the research-agent wrappers. | `DataForSEOPlugin` and `api_tools.py` expose review `cid`/`place_id`/`sort_by`, backlink `rank_scale`, queued result retrieval, endpoint path, cost, and cache status. |
+| 5 | Add product warning semantics before broad strategy ranking. | Explore, Reports, Strategies, and `/agency` must interpret sparse evidence the same way. | Shared warning codes distinguish `metric_missing`, `metric_undersampled`, `pooled_benchmark`, `stale_evidence`, `local_identifier_missing`, and `demand_source_candidate`. |
+| 6 | Run a paid metric canary, then bounded cell backfill, then recompute. | Paid work should answer the smallest blocking question before expanding coverage. | Read-only audits show metric-level coverage improves for the selected cells before `recompute_seo_benchmarks` becomes eligible. |
+
+### Data Model Updates
+
+| Area | Recommended change | Notes |
+| --- | --- | --- |
+| Benchmark runs | Add a benchmark-run lineage record with formula version, sample-frame version, source window, source mix, acquisition flags, pooling mode, recompute timestamp, and cost summary. | This can be a new `seo_benchmark_runs` table or equivalent lineage envelope; do not overload `last_recomputed_at` with all version semantics. |
+| Metric sufficiency | Add a child table keyed by benchmark cell and metric family: demand, organic SERP, organic authority, Lighthouse/site quality, local pack, review velocity, GBP profile, monetization, and AI/SERP displacement. | Store attempted metros, non-null metros, attempted observations, non-null observations, confidence label, source endpoint, and source window. |
+| Benchmark cells | Extend or version `seo_benchmarks` with `benchmark_run_id`, `benchmark_mode`, `formula_version`, `sample_frame_version`, and metric-confidence rollups. | `confidence_label` should remain a rollup, but the product should be able to show the metric-level cause. |
+| Local-pack facts | Extend `local_pack_listing_facts` with stable identifiers and request lineage: `cid`, `place_id`, source query, location code, result type, listing URL/domain, review retrieval mode, review window start/end, and upstream result timestamp. | Use `cid`/`place_id` first for review collection; keyword/name matching should be a flagged fallback. |
+| Raw evidence | Add or reuse an evidence artifact layer for SERP, Maps, Reviews, Backlinks, Lighthouse, Keyword Volume, and Keyword Overview responses. | Store provider, endpoint path, normalized request params, request hash, response hash or storage pointer, cache status, cost, and collection timestamp. |
+| Strategy cache | Add benchmark lineage and metric-confidence summaries to `strategy_score_cache` and strategy run items. | Strategy results should explain whether ranking is based on real weakness or incomplete evidence. |
+| Feature vectors | Version `metro_feature_vectors` with source-table versions, feature completeness, and benchmark readiness. | Expand & Conquer should not treat a similarity score as enough when candidate/reference competition data is sparse. |
+
+### Collection Approach Updates
+
+1. Keep the current DataForSEO Search Volume endpoint as canonical `demand_v1` for the next benchmark recompute. Run Google Ads Search Volume or Keyword Overview as `demand_v2_candidate` only in a comparison canary.
+2. Collect Maps before Reviews. Persist local-pack `cid` and `place_id`, then collect reviews by stable identifier with `sort_by=newest`; use keyword/title fallback only with an explicit warning.
+3. Keep Backlinks Summary on `rank_scale=one_hundred` and store Lighthouse as site-quality evidence, not authority evidence.
+4. Preserve request parameters that change comparability: keyword, location code, language, device/depth where applicable, rank scale, sort order, endpoint mode, and source window.
+5. Backfill from existing pilot artifacts only into the new lineage fields where the source can be proven. Unknown provenance should stay unknown instead of being inferred.
+6. Treat Business Listings and Google My Business Info as supplemental local-profile evidence. CBP remains the canonical monetization density source.
+
+### Paid Acquisition Recommendation
+
+Do not run broad paid expansion yet. The next paid work should be a metric canary with a hard cost cap and an audit gate:
+
+| Paid slice | Scope | Gate |
+| --- | --- | --- |
+| Metric canary | One or two benchmark cells that already have V2 facts but lack DA/Lighthouse and review velocity. | `audit_signal_coverage` shows non-zero organic authority, Lighthouse, and review-velocity coverage for those cells. |
+| Missing-service seed | Small batch for absent core services, especially `hvac`, `tree service`, and `electrician`, across the most product-relevant population classes. | Each selected service/population cell reaches enough non-null metric evidence to classify why it is still blocked or ready. |
+| Cell-depth backfill | Bring selected core cells from sample sizes 1-4 toward `sample_size_metros >= 8`. | Metric-level confidence reaches at least medium for demand, organic SERP, local pack/reviews where applicable, and monetization. |
+| Benchmark recompute | Run only after the read-only metric-sufficiency audit passes for selected cells. | New `seo_benchmarks` rows carry benchmark run/version lineage and do not hide metric-level insufficiency behind the rollup label. |
+
+### Product And Strategy Recommendation
+
+Strategy Discovery should use benchmark-backed rankings only when required metric families meet the strategy's minimum confidence:
+
+| Strategy surface | Minimum required confidence before normal ranking | Fallback behavior |
+| --- | --- | --- |
+| Easy Win | Demand, organic SERP, local difficulty if local pack exists, and AI/SERP displacement. | Rank below qualified rows and show missing metric warnings. |
+| GBP Blitz | Local pack, review velocity, GBP/profile completeness, and demand. | Show as evidence-needed, not as a low-competition win. |
+| Keyword Hijack | Demand v1 plus local-pack/name-availability evidence; enriched demand can be shown only as candidate evidence until approved. | Block high-confidence recommendation if volume, local pack, or exact-match availability is missing. |
+| Expand & Conquer | Feature-vector readiness plus candidate/reference organic and local competition sufficiency. | Allow exploration, but block paid target selection when benchmark readiness is incomplete. |
+| `/agency` | Target-level warning rollup across the selected strategy's required metrics. | Keep targets selectable only with explicit sparse-evidence warnings and cost-aware confirmation. |
+
+### Immediate Next Work
+
+1. Draft the schema/data-model slice for benchmark run lineage, metric-level sufficiency, local identifiers, and raw evidence artifacts.
+2. Update audit scripts to report metric-level sufficiency and strategy-surface readiness, not just cell sample size.
+3. Update DataForSEO agent wrappers to match `run_pilot.py` collection quality.
+4. Run a no-paid replay/backfill audit against existing artifacts to populate only proven lineage.
+5. Approve a small paid metric canary with a cost cap after the schema and audit gates exist.
+
 ## App Surface Visibility
 
 | Measure | Result |
