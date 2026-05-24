@@ -383,10 +383,24 @@ def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> N
         meta=RunMetadata(total_api_calls=1, total_cost_usd=0.002, collection_time_seconds=0.2),
     )
 
+    async def collect_with_maps_cost(*args, **kwargs):
+        fake_dfs.cost_tracker.record(
+            "serp/google/maps/live/advanced",
+            "maps-current",
+            0.002,
+            False,
+            110,
+            {"keyword": "roofing near me", "location_code": 1012873},
+            collected_at="2026-05-24T14:00:01+00:00",
+            response_hash="maps-current-hash",
+        )
+        fake_dfs.cost_log = fake_dfs.cost_tracker.records
+        return raw
+
     with patch("src.pipeline.orchestrator.expand_keywords",
                new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
          patch("src.pipeline.orchestrator.collect_data",
-               new=AsyncMock(return_value=raw)), \
+               new=AsyncMock(side_effect=collect_with_maps_cost)), \
          patch("src.pipeline.orchestrator.extract_signals",
                return_value=_FAKE_SIGNALS), \
          patch("src.pipeline.orchestrator.compute_scores",
@@ -422,6 +436,9 @@ def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> N
     assert first["review_retrieval_mode"] == "cid"
     assert first["review_window_start"] == "2026-05-01T00:00:00+00:00"
     assert first["review_window_end"] == "2026-05-20T00:00:00+00:00"
+    maps_artifact = result.seo_evidence_artifacts[0]
+    assert maps_artifact["evidence_family"] == "maps"
+    assert first["evidence_artifact_id"] == maps_artifact["id"]
 
 
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:

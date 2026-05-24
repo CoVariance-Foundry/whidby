@@ -89,46 +89,22 @@ async def test_executor_prefers_maps_identifiers_for_reviews_and_preserves_gbp_p
     review_payloads = [
         payload for name, payload in client.calls if name == "google_reviews"
     ]
-    assert review_payloads[:3] == [
+    assert review_payloads == [
         {
             "keyword": "cid-1",
             "location_code": 1012873,
             "cid": "cid-1",
             "place_id": None,
-        },
-        {
-            "keyword": "place-2",
-            "location_code": 1012873,
-            "cid": None,
-            "place_id": "place-2",
-        },
-        {
-            "keyword": "Title Biz",
-            "location_code": 1012873,
-            "cid": None,
-            "place_id": None,
-        },
+        }
     ]
     gbp_payloads = [
         state.task_payloads[task_id]
         for task_id, category in sorted(state.task_categories.items())
         if category == "gbp_info"
     ]
-    assert [payload["keyword"] for payload in gbp_payloads] == [
-        "CID Biz",
-        "Place Biz",
-        "Title Biz",
-    ]
-    assert [payload["preferred_identifier_mode"] for payload in gbp_payloads] == [
-        "cid",
-        "place_id",
-        "title",
-    ]
-    assert [payload["gbp_retrieval_mode"] for payload in gbp_payloads] == [
-        "keyword",
-        "keyword",
-        "keyword",
-    ]
+    assert [payload["keyword"] for payload in gbp_payloads] == ["CID Biz"]
+    assert [payload["preferred_identifier_mode"] for payload in gbp_payloads] == ["cid"]
+    assert [payload["gbp_retrieval_mode"] for payload in gbp_payloads] == ["keyword"]
 
 
 @pytest.mark.asyncio

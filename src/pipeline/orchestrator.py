@@ -279,6 +279,7 @@ async def score_niche_for_metro(
         raw_metro=metro_result,
         cbsa_code=resolved.cbsa_code,
         location_code=resolved.location_code,
+        maps_evidence_artifact_ids=_maps_evidence_artifact_ids(evidence_artifacts),
     )
     m9_ms = int((time.monotonic() - m9_start) * 1000)
     logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
@@ -515,6 +516,7 @@ def _build_local_pack_listing_facts(
     raw_metro: Any,
     cbsa_code: str,
     location_code: int,
+    maps_evidence_artifact_ids: dict[tuple[str, int], str] | None = None,
 ) -> list[dict[str, Any]]:
     keyword = _primary_report_keyword(report)
     generated_at = report.get("generated_at")
@@ -522,6 +524,9 @@ def _build_local_pack_listing_facts(
     rows: list[dict[str, Any]] = []
     for maps_result in getattr(raw_metro, "serp_maps", []) or []:
         source_query = _text(maps_result.get("keyword")) or keyword
+        evidence_artifact_id = (maps_evidence_artifact_ids or {}).get(
+            (source_query or "", location_code)
+        )
         items = maps_result.get("items") if isinstance(maps_result.get("items"), list) else []
         for index, item in enumerate(_top_ranked_items(items, limit=3), start=1):
             business_name = _text(
@@ -562,6 +567,7 @@ def _build_local_pack_listing_facts(
                         maps_result,
                         keys=("upstream_result_at", "datetime", "timestamp"),
                     ),
+                    "evidence_artifact_id": evidence_artifact_id,
                     "rating": item.get("rating"),
                     "review_count": _review_count_from_maps_item(item),
                     "photo_count": item.get("photo_count") or item.get("total_photos"),
@@ -572,6 +578,24 @@ def _build_local_pack_listing_facts(
                 }
             )
     return rows
+
+
+def _maps_evidence_artifact_ids(
+    evidence_artifacts: list[dict[str, Any]],
+) -> dict[tuple[str, int], str]:
+    artifact_ids: dict[tuple[str, int], str] = {}
+    for artifact in evidence_artifacts:
+        if artifact.get("evidence_family") != "maps":
+            continue
+        artifact_id = _text(artifact.get("id"))
+        params = artifact.get("normalized_request_params")
+        if not artifact_id or not isinstance(params, dict):
+            continue
+        keyword = _text(params.get("keyword"))
+        location_code = _int_or_none(params.get("location_code"))
+        if keyword and location_code is not None:
+            artifact_ids[(keyword, location_code)] = artifact_id
+    return artifact_ids
 
 
 def _local_review_enrichment_lookup(raw_metro: Any) -> dict[str, dict[str, Any]]:
@@ -729,6 +753,13 @@ def _text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _population_class_for_benchmarks(population: int | None) -> str | None:

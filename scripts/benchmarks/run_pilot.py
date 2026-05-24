@@ -30,12 +30,14 @@ import logging
 import os
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib import error as urlerror
 from urllib import request as urlreq
+from uuid import uuid4
 
 # Repo root + path injection so we can import src.* modules
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -755,7 +757,7 @@ def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal",
+        "Prefer": "resolution=ignore-duplicates,return=minimal",
     }
     body = json.dumps(rows).encode("utf-8")
     req = urlreq.Request(url, data=body, headers=headers, method="POST")
@@ -770,6 +772,7 @@ def evidence_artifacts_from_dfs_cost_log(
     dfs: DataForSEOClient,
     *,
     start_index: int = 0,
+    collection_context_id: str | None = None,
     niche: str | None = None,
     location_codes: list[int] | None = None,
     keywords: list[str] | None = None,
@@ -778,6 +781,14 @@ def evidence_artifacts_from_dfs_cost_log(
     organic_targets: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     cost_records = (getattr(dfs, "cost_log", []) or [])[start_index:]
+    if collection_context_id is not None:
+        filtered_records = [
+            record
+            for record in cost_records
+            if _record_field(record, "collection_context_id") == collection_context_id
+        ]
+        return build_seo_evidence_artifact_rows_from_cost_records(filtered_records)
+
     filtered_records = [
         record
         for record in cost_records
@@ -869,6 +880,14 @@ def _record_field(record: Any, key: str) -> Any:
     if isinstance(record, dict):
         return record.get(key)
     return getattr(record, key, None)
+
+
+def _dfs_capture_context(dfs: DataForSEOClient, context_id: str) -> Any:
+    tracker = getattr(dfs, "cost_tracker", None)
+    capture_context = getattr(tracker, "capture_context", None)
+    if callable(capture_context):
+        return capture_context(context_id)
+    return nullcontext()
 
 
 def _norm_text(value: Any) -> str:
@@ -965,7 +984,9 @@ async def score_one(
     name = metro["cbsa_name"]
     log.info(f"[start] {niche!r} × {name} ({cbsa})")
     stats.reports_attempted += 1
-    cost_log_start = len(getattr(dfs, "cost_log", []) or [])
+    pair_context_id = f"benchmark:{niche.lower()}:{cbsa}:{uuid4()}"
+    capture_context = _dfs_capture_context(dfs, pair_context_id)
+    capture_context.__enter__()
 
     try:
         expansion = await expansion_cache.get(niche)
@@ -1110,15 +1131,7 @@ async def score_one(
         if rows:
             evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
                 dfs,
-                start_index=cost_log_start,
-                niche=niche,
-                location_codes=list(
-                    dict.fromkeys([*loc_codes, *volume_result.valid_location_codes])
-                ),
-                keywords=kw_strs,
-                serp_keywords=[k["keyword"] for k in head_kws],
-                local_pack_items=list(head_features.get("top_local_pack_items") or []),
-                organic_targets=list(head_features.get("organic_targets") or []),
+                collection_context_id=pair_context_id,
             )
             if evidence_artifact_rows:
                 evidence_status, evidence_body = upsert_evidence_artifacts(
@@ -1159,6 +1172,8 @@ async def score_one(
         stats.reports_failed += 1
         stats.record_failure(niche, cbsa, type(e).__name__, str(e))
         return 0
+    finally:
+        capture_context.__exit__(None, None, None)
 
 
 # -------------------------------------------------------------------

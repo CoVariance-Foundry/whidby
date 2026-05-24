@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Protocol
+from uuid import NAMESPACE_URL, uuid5
 
 from src.domain.services.explore_refresh_service import RefreshTarget
 from src.pipeline.domain_classifier import is_aggregator, normalize_domain
@@ -772,6 +773,12 @@ def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, A
         artifact_id = _str_or_none(artifact.get("id", artifact.get("artifact_id")))
         if artifact_id:
             row["id"] = artifact_id
+        else:
+            row["id"] = _deterministic_evidence_artifact_id(
+                provider,
+                endpoint_path,
+                request_hash,
+            )
 
         cost_usd = artifact.get("cost_usd", artifact.get("cost"))
         if cost_usd is not None:
@@ -862,6 +869,14 @@ def build_seo_evidence_artifact_rows_from_cost_records(
             deduped[key] = row
 
     return list(deduped.values())
+
+
+def _deterministic_evidence_artifact_id(
+    provider: str,
+    endpoint_path: str,
+    request_hash: str,
+) -> str:
+    return str(uuid5(NAMESPACE_URL, f"seo-evidence:{provider}:{endpoint_path}:{request_hash}"))
 
 
 def build_organic_competitor_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1566,6 +1581,7 @@ class SupabasePersistence:
             evidence_artifact_table.upsert(
                 evidence_artifact_rows,
                 on_conflict="provider,endpoint_path,request_hash",
+                ignore_duplicates=True,
             ).execute()
             evidence_ms = int((time.monotonic() - t0) * 1000)
             logger.info(

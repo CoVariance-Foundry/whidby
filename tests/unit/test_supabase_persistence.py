@@ -862,7 +862,8 @@ def test_persist_report_upserts_competitor_read_model_facts() -> None:
         if call["table"] == "seo_evidence_artifacts" and call["method"] == "upsert"
     )
     assert evidence_call["kwargs"] == {
-        "on_conflict": "provider,endpoint_path,request_hash"
+        "on_conflict": "provider,endpoint_path,request_hash",
+        "ignore_duplicates": True,
     }
     organic_call = next(
         call
@@ -880,6 +881,20 @@ def test_persist_report_upserts_competitor_read_model_facts() -> None:
     assert local_pack_call["kwargs"] == {
         "on_conflict": "cbsa_code,niche_normalized,keyword,listing_rank,snapshot_date"
     }
+
+
+def test_persist_report_preserves_original_evidence_on_duplicate_requests() -> None:
+    fake = _FakeSupabase()
+    adapter = SupabasePersistence(client=fake)
+
+    adapter.persist_report(_sample_competitor_report())
+
+    evidence_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "seo_evidence_artifacts" and call["method"] == "upsert"
+    )
+    assert evidence_call["kwargs"]["ignore_duplicates"] is True
 
 
 def test_persist_report_still_works_for_legacy_report_without_v2_scores() -> None:

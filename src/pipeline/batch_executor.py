@@ -82,14 +82,8 @@ def _materialize_dependent_tasks(
 
         metro = metros[template.metro_id]
         if template.task_type in {"google_reviews", "gbp_info"}:
-            for profile in _top_maps_profiles_for_metro(template.metro_id, state, limit=3):
-                concrete_key = (
-                    f"{template.dedup_key}:{profile['dedup_key']}"
-                    if template.dedup_key
-                    else None
-                )
-                if concrete_key and concrete_key in state.seen_dedup_keys:
-                    continue
+            profile = _best_maps_profile_for_metro(template.metro_id, state)
+            if profile is not None:
                 payload = dict(template.payload)
                 query = profile["query"]
                 if template.task_type == "gbp_info":
@@ -117,6 +111,9 @@ def _materialize_dependent_tasks(
                         ),
                     }
                 )
+                concrete_key = template.dedup_key
+                if concrete_key and concrete_key in state.seen_dedup_keys:
+                    continue
                 tasks.append(
                     CollectionTask(
                         task_id=f"dep-{next_id:05d}",
@@ -366,6 +363,14 @@ def _first_maps_keyword_for_metro(metro_id: str, state: ExecutionState) -> str |
             if keyword:
                 return str(keyword)
     return None
+
+
+def _best_maps_profile_for_metro(
+    metro_id: str,
+    state: ExecutionState,
+) -> dict[str, str | None] | None:
+    profiles = _top_maps_profiles_for_metro(metro_id, state, limit=3)
+    return profiles[0] if profiles else None
 
 
 def _top_maps_profiles_for_metro(
