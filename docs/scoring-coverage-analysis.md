@@ -1,6 +1,6 @@
 # Scoring Coverage Analysis
 
-Linear: `WHI-103`, `WHI-104`, `WHI-105`
+Linear: `WHI-103`, `WHI-104`, `WHI-105`, `WHI-106`
 
 Source artifacts:
 
@@ -562,3 +562,90 @@ Explore has broad catalog/read-model coverage, but not enough V2-backed visibili
 4. Route WHI-104 to benchmark-cell sufficiency. The first question is which service x population cells can reach sample size 8 with the least paid work.
 5. Route WHI-105 to app visibility. After benchmark and V2 facts improve, verify Explore/report surfaces prefer V2 rows and expose benchmark confidence without legacy-only fallbacks hiding the gap.
 6. Defer scoring-framework changes to WHI-106. Formula changes should be based on a rerun of the read-only audits after data acquisition, not on this failing audit alone.
+
+## Coverage-Weighted Scoring Framework Recommendation
+
+Linear: `WHI-106`
+
+WHI-106 recommends a coverage-weighted posture around the existing V2 score vector, not an immediate formula rewrite. The issue scope is the target `small_50_100k`, `medium_100_300k`, and `large_300k_1m` launch bands, and the measured data says those bands are not ready for normal benchmark-backed rankings or high-confidence strategy claims. The same benchmark fallback policy applies to micro, metro, and mega rows: they remain warning-only until their cells and required metric families pass sufficiency gates.
+
+The governing policy is:
+
+1. Keep the V2 vector computable for analysis and product continuity.
+2. Treat every target launch-band score as preliminary unless its required benchmark cell and metric families meet the canonical sufficiency gates; keep other scored population classes warning-only under the same benchmark fallback policy.
+3. Move weak or missing signals into warnings, telemetry, or acquisition work rather than letting defaults imply market strength or weakness.
+4. Route schema, API, audit, and formula refactors through the Milestone 4 implementation issues instead of changing scoring behavior inside this recommendation slice.
+
+### Current V2 Behavior To Preserve Or Wrap
+
+| Dimension | Current behavior | Coverage-weighted implication |
+| --- | --- | --- |
+| Benchmark lookup | V2 reads `seo_benchmarks` through `SeoBenchmarkRepository` by `niche_normalized + population_class`. Missing cells become `confidence_label=insufficient`, `sample_size=0`, and `benchmark_undersampled=true`. | Keep the repository boundary, but product and strategy surfaces must treat undersampled cells as preliminary. A computed score is not the same as a qualified score. |
+| Demand strength | Uses commercial volume per capita against benchmark median or `DEFAULT_VOLUME_PER_CAPITA`, then multiplies by CPC relative to benchmark CPC or the global local-service median. | Keep scored with warning. Population is reliable, but demand benchmarks and CPC coverage are sparse, so high-confidence demand claims require acquisition. |
+| Organic difficulty | Uses aggregator count and local-business count; top-5 DA contributes only when present. Missing DA does not lower difficulty. | Keep aggregator/local-business counts as warning-backed score inputs. Keep DA/backlink authority and Lighthouse as telemetry-only until metric-level sufficiency exists. |
+| Local difficulty | If no local pack is detected, `local_difficulty` is `null`. If a local pack exists, missing review floor/velocity falls back to benchmark/default values. | Preserve `null` for no local pack. When local pack exists but review evidence is missing, label the dimension evidence-needed rather than treating defaults as local weakness. |
+| Monetization signal | Uses CBP establishments per 100k against benchmark density or `DEFAULT_ESTABLISHMENTS_PER_100K`; missing CBP becomes neutral. LSA and paid ads add support. | Keep CBP-backed monetization scored when present, with warnings while benchmark cells remain undersampled. LSA/ads are supporting evidence, not a substitute for density sufficiency. |
+| AI resilience | Computes a directional score from AIO rate, transactional intent, local fulfillment, PAA density, and niche type. | Score with warning. Keep it directional until SERP-feature coverage is stronger and metric-level AI/SERP displacement sufficiency exists. |
+| Strategy projections | Easy Win only warns on coarse benchmark confidence. GBP Blitz defaults missing review evidence to hard-coded values. Keyword Hijack blocks missing primary/local/name evidence. Expand & Conquer blocks missing competition baselines. | Strategy ranking needs shared metric-specific warnings before broad ranking. GBP Blitz is the highest-risk current projection because missing review evidence can look like an opportunity. |
+
+### Per-Signal Decision Table
+
+| Signal | Observed coverage state | WHI-106 action | Reason |
+| --- | --- | --- | --- |
+| Population | Overall coverage `1.0000`; every city-size slice `1.0000`. | Keep scored | Safe normalization anchor across the target launch bands and the broader population-class matrix. |
+| Commercial search volume | Demand component average `0.2523`; demand benchmark coverage is `0.0000`. | Score with warning | Useful raw evidence, but benchmark-relative claims are not qualified. |
+| CPC | Overall coverage `0.0035`; minimum city-size slice `0.0000`. | Score with warning, cap influence | CPC should support demand/monetization, not dominate while sparse. |
+| Volume-per-capita benchmark | Usable benchmark cells are `0/48`. | Acquire more data | Defaults can keep the vector computable, but cannot support qualified benchmark claims. |
+| Aggregator count | Organic component average `0.0064`; benchmark cells undersampled. | Score with warning when observed | SERP composition is useful, but not benchmark-reliable yet. |
+| Local-business count | Organic component average `0.0064`; benchmark cells undersampled. | Score with warning when observed | Same policy as aggregator count; avoid treating sparse observations as complete competition truth. |
+| Top-5 DA / backlink authority | DA measurement and value coverage are `0.0000`. | Telemetry-only | Missing authority evidence must not make organic competition appear easier. |
+| Lighthouse / site quality | Lighthouse measurement and value coverage are `0.0000`. | Telemetry-only | Site quality is separate from authority and should wait for acquisition. |
+| Local-pack presence | Required for local strategy context; no-local-pack already produces `local_difficulty=null`. | Keep as gating/context signal | A missing local pack should suppress GBP Blitz-style claims, not produce a fake local win. |
+| Top-3 review count | Local difficulty inputs coverage is `0.0000`; present benchmark medians are null. | Acquire more data | Review floors are required before normal local difficulty ranking. |
+| Top-3 review velocity | Local difficulty inputs coverage is `0.0000`; present benchmark medians are null. | Acquire more data | Velocity is required for GBP Blitz and local difficulty confidence. |
+| CBP establishments / density | Monetization component average `0.2041`; monetization benchmark coverage is `0.0000`. | Keep scored with warning | CBP remains canonical density evidence, but benchmark-relative density is not qualified yet. |
+| LSA and paid ads | Present in benchmark rows but every cell is below the sample floor. | Score with warning | Useful commercial signal, not a standalone confidence source. |
+| AIO / PAA / local fulfillment | AI resilience component average `0.0113`. | Score with warning | Directional product signal; defer formula changes until stronger SERP-feature coverage exists. |
+| App-surface V2 visibility | V2-preferred Explore visibility is `64/3,208`; V2 score rows are `81/3,208`. | Acquire more data; release gate | Not a formula input. Use as readiness evidence before product claims or seed expansion. |
+
+No current signal should be removed from the formula based on this slice alone. The only fields below the `0.05` removal threshold are either required product evidence, required benchmark inputs, or explicitly telemetry/acquisition fields. Removing them now would hide the evidence gap instead of fixing it.
+
+### Default Posture By Metro Size
+
+| Population class | Measured state | Default scoring posture |
+| --- | --- | --- |
+| `small_50_100k` | 24/24 API and persistence success; 24/24 V2 rows; 0/24 Explore-visible pilot rows; 15 missing benchmark cells and 9 undersampled. | Preliminary scoring only. Allow computed vectors for analysis, but rank below qualified rows and block high-confidence strategy copy until demand, organic SERP, local evidence, and benchmark confidence are explicit. |
+| `medium_100_300k` | 24/24 API and persistence success; 24/24 V2 rows; 1/24 Explore-visible pilot rows; 15 missing benchmark cells and 9 undersampled. | Preliminary scoring with warnings. Suitable for no-paid framework comparison, but not normal strategy ranking or recompute-backed claims. |
+| `large_300k_1m` | 24/24 API and persistence success; 24/24 V2 rows; 1/24 Explore-visible pilot rows; 18 missing benchmark cells and 6 undersampled. | Preliminary scoring with warnings. Do not use large markets as a proxy for small/medium unless an explicit pooling policy is approved and surfaced. |
+
+Default across all three WHI-106 target classes: show computed scores only with an evidence-quality envelope. Micro, metro, and mega rows are outside the WHI-106 recommendation table, but they stay governed by the same benchmark fallback policy and should not be presented as qualified while their cells are missing or undersampled. Product surfaces should explain which metric families are missing, undersampled, pooled, stale, or candidate-source evidence.
+
+### Benchmark Fallback Policy
+
+| Fallback case | Policy |
+| --- | --- |
+| Missing benchmark cell | Allow deterministic V2 computation against defaults, mark `benchmark_undersampled`, and block high-confidence ranking/copy. |
+| `sample_size_metros < 8` or `low`/`insufficient` confidence | Treat as warning-only. The existing `SeoBenchmarkCell.is_undersampled` behavior is the right minimum gate. |
+| Metric missing inside a present benchmark cell | Do not let the cell rollup hide it. Milestone 4 must add metric-level sufficiency before product surfaces can explain this accurately. |
+| Pooled population fallback | Only allow with explicit `benchmark_mode`, pool definition, source sample counts, and `pooled_benchmark` warning. Current data has only one candidate pooled core grouping: `auto repair` across small + medium + large. |
+| Local pack absent | Keep `local_difficulty=null` and suppress GBP Blitz-style claims. |
+| Local pack present but review evidence missing | Score with warning or mark local difficulty evidence-needed; do not interpret review defaults as low competition. |
+| Top-5 DA or Lighthouse missing | Keep as telemetry-only; missing values must not improve organic ease. |
+| CBP missing | Keep neutral monetization with `cbp_data_missing`; paid ads/LSA cannot rescue an undersampled benchmark cell. |
+
+### Implementation Routing
+
+Immediate no-code policy changes from WHI-106:
+
+1. Use this section as the Milestone 3 scoring-framework recommendation.
+2. Keep the current V2 formulas stable until metric acquisition or read-only audits justify a formula change.
+3. Require product and strategy surfaces to treat target launch-band scores as preliminary when benchmark or metric sufficiency is missing, while applying the same warning-only fallback to every other population class.
+
+Milestone 4 implementation work:
+
+1. `WHI-126`: benchmark run lineage and metric-level sufficiency schema.
+2. `WHI-127`: local-place identifiers and raw SEO evidence lineage.
+3. `WHI-128`: metric-level benchmark sufficiency and strategy-readiness audits.
+4. `WHI-129`: DataForSEO agent wrapper parity.
+5. `WHI-130`: shared benchmark/scoring warning semantics.
+6. Open an additional formula/API refactor only after a rerun of read-only audits shows a specific scored dimension should change, not just because the current audit failed.
