@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.pipeline.canonical_key import normalize_niche
+from src.scoring.benchmark_warnings import warning_codes_from_mapping
 
 
 SORT_COLUMNS = {
@@ -173,4 +174,5 @@ def _cached_score(row: dict[str, Any]) -> dict[str, Any]:
         "confidence_score": row.get("confidence_score"),
         "ai_resilience_score": row.get("ai_resilience_score"),
         "ai_exposure": row.get("ai_exposure"),
+        "warning_codes": warning_codes_from_mapping(row),
     }

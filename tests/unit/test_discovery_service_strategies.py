@@ -16,6 +16,7 @@ from src.domain.lenses import (
 )
 from src.domain.queries import MarketQuery
 from src.domain.services.discovery_service import DiscoveryService
+from src.scoring.benchmark_warnings import METRIC_UNDERSAMPLED
 
 
 BOISE = City(city_id="boise-id", name="Boise", state="ID", population=235_000)
@@ -90,7 +91,7 @@ def test_easy_win_uses_strategy_projection_score_and_evidence():
         "local_difficulty": 20,
         "ai_resilience": 90,
     }
-    assert results[1].warnings == ["benchmark_confidence_low"]
+    assert results[1].warnings == [METRIC_UNDERSAMPLED]
 
 
 def test_gbp_blitz_uses_strategy_projection():

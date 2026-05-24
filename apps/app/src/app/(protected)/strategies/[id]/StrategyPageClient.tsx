@@ -87,7 +87,7 @@ function readStringArray(value: unknown): string[] {
     .map((item) => {
       if (typeof item === "string") return item;
       const record = asRecord(item);
-      return readString(record, ["message", "label", "description", "evidence"], "");
+      return readString(record, ["message", "label", "code", "description", "evidence"], "");
     })
     .filter(Boolean);
 }

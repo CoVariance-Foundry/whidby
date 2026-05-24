@@ -17,6 +17,7 @@ from src.domain.explore.metrics import (
     weighted_establishments,
 )
 from src.pipeline.canonical_key import normalize_niche
+from src.scoring.benchmark_warnings import warning_codes_from_mapping
 
 
 class ExploreCityRepository(Protocol):
@@ -251,6 +252,7 @@ def _cached_score_from_cell_row(row: Mapping[str, Any]) -> ExploreServiceMetric:
         "business_density_per_1k": row.get("business_density_per_1k"),
         "establishment_growth_yoy": row.get("establishment_growth_yoy"),
         "growth_available": row.get("growth_available"),
+        "warning_codes": warning_codes_from_mapping(row),
     }
 
 
@@ -295,7 +297,13 @@ def _latest_unique_scores(scores: Sequence[Mapping[str, Any]]) -> list[dict[str,
         if current is None or _prefer_score(score, current):
             latest_by_service[service_key] = score
 
-    return [dict(score) for score in latest_by_service.values()]
+    return [_score_with_warning_codes(score) for score in latest_by_service.values()]
+
+
+def _score_with_warning_codes(score: Mapping[str, Any]) -> dict[str, Any]:
+    row = dict(score)
+    row["warning_codes"] = warning_codes_from_mapping(score)
+    return row
 
 
 def _prefer_score(candidate: Mapping[str, Any], current: Mapping[str, Any]) -> bool:

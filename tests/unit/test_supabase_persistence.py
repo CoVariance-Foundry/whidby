@@ -117,6 +117,7 @@ def _sample_v2_report() -> dict[str, Any]:
             "confidence_label": "medium",
             "sample_size": 9,
         },
+        "warning_codes": ["metric_undersampled", "pooled_benchmark"],
         "flags": {
             "no_local_pack_detected": False,
             "benchmark_undersampled": True,
@@ -294,6 +295,7 @@ def test_build_metro_score_v2_rows_maps_score_vector() -> None:
             "benchmark_population_class": "metro_1m_5m",
             "benchmark_confidence": "medium",
             "benchmark_sample_size": 9,
+            "warning_codes": ["metric_undersampled", "pooled_benchmark"],
             "no_local_pack_detected": False,
             "benchmark_undersampled": True,
             "cbp_data_missing": False,

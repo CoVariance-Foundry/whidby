@@ -14,6 +14,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from src.domain.services.explore_refresh_service import RefreshTarget
 from src.pipeline.domain_classifier import is_aggregator, normalize_domain
+from src.scoring.benchmark_warnings import dedupe_warning_codes
 
 logger = logging.getLogger(__name__)
 
@@ -480,6 +481,14 @@ def _score_value(v2_scores: dict[str, Any], dimension: str) -> Any:
     return None
 
 
+def _score_warning_codes(v2_scores: dict[str, Any]) -> list[str]:
+    raw_codes = v2_scores.get("warning_codes")
+    benchmark = v2_scores.get("benchmark")
+    if raw_codes is None and isinstance(benchmark, dict):
+        raw_codes = benchmark.get("warning_codes")
+    return dedupe_warning_codes(raw_codes or [])
+
+
 def _without_artifact_keys(value: Any) -> Any:
     if isinstance(value, dict):
         return {
@@ -641,6 +650,7 @@ def build_metro_score_v2_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
             row["benchmark_population_class"] = benchmark.get("population_class")
             row["benchmark_confidence"] = benchmark.get("confidence_label")
             row["benchmark_sample_size"] = benchmark.get("sample_size")
+        row["warning_codes"] = _score_warning_codes(v2_scores)
 
         flags = v2_scores.get("flags") or {}
         if isinstance(flags, dict):

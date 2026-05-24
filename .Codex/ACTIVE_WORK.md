@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: this worktree is implementing `WHI-129` on `codex/whi-129-dfs-wrapper-parity`, stacked after the WHI-128 metric-readiness audit work. Earlier WHI-99 through WHI-106 notes below remain historical context for the Scoring Coverage & Benchmark Hardening project.
+Status: this worktree is implementing `WHI-130` on `codex/whi-130-warning-semantics`, stacked after the WHI-129 DataForSEO wrapper parity work. Earlier WHI-99 through WHI-106 notes below remain historical context for the Scoring Coverage & Benchmark Hardening project.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue for this worktree is `WHI-129`: bring DataForSEO agent wrappers to benchmark-runner parity.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue for this worktree is `WHI-130`: standardize benchmark and scoring warning semantics across product surfaces.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -33,9 +33,15 @@ Current contract:
 - WHI-106 adds the Milestone 3 coverage-weighted scoring recommendation to `docs/scoring-coverage-analysis.md`. The issue scope is `small_50_100k`, `medium_100_300k`, and `large_300k_1m`, but the recommendation keeps the same warning-only benchmark fallback policy for every scored population class until required benchmark and metric families meet sufficiency gates. Population stays scored; demand, organic SERP composition, monetization, and AI resilience stay scored with warnings; DA/Lighthouse stay telemetry-only; local review count/velocity and benchmark-relative claims require acquisition. No current signal should be removed based on this slice alone.
 - WHI-128 adds read-only metric-sufficiency audit output from `seo_benchmark_metric_sufficiency`. Audits now report `metric_missing`, `metric_undersampled`, and `metric_ready` by benchmark cell and metric family; roll those families into Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, and `/agency` target review readiness; and emit canary guidance for blocked cells/families. This slice does not run paid acquisition, live Supabase reads, or benchmark recompute.
 - WHI-129 makes the agent-facing DataForSEO wrappers match the benchmark acquisition contract before agents participate in benchmark collection. `fetch_google_reviews` now accepts `cid`, `place_id`, and `sort_by` with `newest` as the default; `fetch_backlinks_summary` defaults `rank_scale` to `one_hundred`; DataForSEO tool results include endpoint path, mode, cache status, task id, and request params; and plugin execution preserves that lineage metadata instead of returning only data/cost/status. This slice does not run paid acquisition.
+- WHI-130 standardizes product-facing warning semantics without paid acquisition or recompute. Canonical warning codes live in `src/scoring/benchmark_warnings.py`; V2 scoring emits `warning_codes` alongside legacy `flags.benchmark_undersampled`; `metro_score_v2.warning_codes` persists them for Strategies and Explore, `explore_market_cells` projects them, and Strategy result cards plus `/agency` target preview preserve/derive the same string codes.
 
 Verified:
 
+- `PYTHONDONTWRITEBYTECODE=1 pytest tests/scoring/test_v2_scoring.py tests/scoring/test_benchmark_repository_contract.py tests/unit/test_strategy_projection.py tests/unit/test_discovery_service_strategies.py tests/unit/test_api_strategy_discovery.py tests/unit/test_strategy_repository.py tests/unit/test_explore_city_service.py tests/unit/test_explore_repository.py tests/unit/test_api_explore_cities.py tests/unit/test_supabase_schema.py tests/unit/test_supabase_persistence.py -q` passed 141 tests.
+- `ruff check src/scoring/benchmark_warnings.py src/scoring/v2.py src/domain/strategy_projection.py src/clients/strategy_repository.py src/domain/explore/entities.py src/domain/services/explore_city_service.py src/clients/explore_repository.py src/clients/supabase_persistence.py tests/scoring/test_v2_scoring.py tests/scoring/test_benchmark_repository_contract.py tests/unit/test_strategy_projection.py tests/unit/test_discovery_service_strategies.py tests/unit/test_strategy_repository.py tests/unit/test_explore_city_service.py tests/unit/test_explore_repository.py tests/unit/test_api_explore_cities.py tests/unit/test_supabase_schema.py tests/unit/test_supabase_persistence.py` passed.
+- `git diff --check` passed.
+- `npx --no-install docguard-cli guard` failed in the sandbox on npm registry DNS, then ran with network escalation and completed warn-only at 217/338 with existing medium warnings around docs sync, traceability, freshness, TODO tracking, Spec-Kit, and metrics consistency.
+- App Vitest was attempted with `npm --workspace apps/app run test -- --run apps/app/src/app/(protected)/agency/page.test.tsx apps/app/src/app/(protected)/strategies/[id]/StrategyPageClient.test.tsx`, but this worktree lacks installed frontend dependencies (`vitest: command not found`).
 - `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/scripts/test_bulk_score.py -q` passed 32 tests with the existing `asyncio_mode` warning.
 - `ruff check scripts/explore/bulk_score.py tests/scripts/test_bulk_score.py` passed.
 - `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -p asyncio tests/scripts/test_metro_dfs_readiness.py tests/scripts/test_enrich_metro_dfs_codes.py tests/scripts/test_bulk_score.py -q` passed 58 tests.

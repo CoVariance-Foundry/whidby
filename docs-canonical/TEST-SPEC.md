@@ -1,6 +1,6 @@
 # Test Specification
 
-<!-- docguard:version 1.7.8 -->
+<!-- docguard:version 1.7.10 -->
 <!-- docguard:status approved -->
 <!-- docguard:last-reviewed 2026-05-24 -->
 <!-- docguard:owner @widby-team -->
@@ -87,6 +87,7 @@ tests/
 | Explore default mode lineage | `/api/explore/cities` with no service | Does not present density/growth as city-only facts unless row includes `metric_service` lineage |
 | Explore frontend pagination | Next loader and page controls | Does not filter or sort only the first 100 metros in React |
 | Explore growth unavailable | CBP only has one year | API returns `growth_available=false`; UI disables growth-only filtering |
+| Explore warning semantics | Cached score/read-model rows expose persisted `warning_codes` | API cached scores preserve canonical product warning codes through the source-controlled read-model contract |
 | Business density formula | Weighted CBP rows + population | Returns establishments per 1,000 residents using `niche_naics_mapping.weight`; missing population returns null with a quality flag |
 | Establishment growth formula | Prior/latest weighted CBP rows | Returns annualized growth; missing historical CBP year returns `growth_available=false` |
 | Freshness calculation | Latest score timestamp + cadence | Marks stale when older than cadence; null score timestamp is stale only for cached-service targets |
@@ -105,8 +106,9 @@ tests/
 | Dependency wiring | FastAPI/orchestrator scoring receives benchmark repositories by injection and never instantiates Supabase in formulas | `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py`, `tests/scoring/test_benchmark_repository_contract.py` |
 | Signal semantics | `top3_review_count_min`, `top3_review_velocity_avg`, CBP density/growth, missing-data confidence penalties, and benchmark confidence | `tests/scoring/test_v2_scoring.py`, `tests/unit/test_strategy_projection.py` |
 | Top-5 organic facts | `avg_top5_da` and `avg_top5_lighthouse` use canonical top-5 organic competitors and exclude aggregators/missing URLs | `tests/unit/test_batch_executor.py`, `tests/unit/test_signal_extraction.py`, `tests/unit/test_signal_extractors.py`, `tests/scoring/test_v2_scoring.py` |
-| V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
+| V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage, canonical warning codes, and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
 | Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
+| Warning semantics | V2 score payloads and persisted/read-model rows expose canonical `warning_codes` for benchmark lineage, metric sufficiency, pooling, stale evidence, local identifier, and demand-source caveats while preserving legacy flags | `tests/scoring/test_v2_scoring.py`, `tests/scoring/test_benchmark_repository_contract.py`, `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py`, `tests/unit/test_strategy_projection.py`, `tests/unit/test_discovery_service_strategies.py`, `tests/unit/test_api_strategy_discovery.py`, `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py` |
 | Benchmark lineage | `seo_benchmarks` reads tolerate nullable lineage fields, benchmark modes are validated, and migration tests assert run plus metric-family sufficiency schema | `tests/scoring/test_benchmark_repository_contract.py`, `tests/clients/test_seo_benchmark_repository.py` |
 | SEO evidence lineage | Local-pack rows preserve `cid`/`place_id` plus explicit provenance fields; raw SEO evidence artifact builders/upserts cover request/response hashes, cache status, cost, collection timestamp, RLS, and schema constraints | `tests/unit/test_supabase_persistence.py` |
 | Competitor Intel persistence | Organic/local competitor facts are persisted as durable read-model rows without reading `api_response_cache`; run lineage records account/user/quota/status | `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py` |
@@ -249,6 +251,7 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 |----------|----------|-------|
 | Component coverage | Demand, organic, local, monetization, AI resilience, and app-surface metrics summarize by service, population class, and benchmark cell | `tests/scripts/test_scoring_strategy_audit.py` |
 | Metric sufficiency | Benchmark cells classify each metric family as `metric_missing`, `metric_undersampled`, or `metric_ready` using `seo_benchmark_metric_sufficiency` non-null evidence and confidence | `tests/scripts/test_scoring_strategy_audit.py`, `tests/scripts/test_signal_coverage_audit.py` |
+| Product warning mapping | Audit/read-model metric states map to canonical product warnings: `metric_missing`, `metric_undersampled`, and `stale_evidence`; pooled benchmark and missing lineage fields map to shared warning codes | `tests/scoring/test_benchmark_repository_contract.py`, `tests/unit/test_strategy_repository.py`, `tests/unit/test_explore_city_service.py` |
 | Strategy readiness | Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, and `/agency` target review roll up required/warning metric families and emit paid canary guidance | `tests/scripts/test_scoring_strategy_audit.py`, `tests/scripts/test_signal_coverage_audit.py` |
 | Benchmark usability | Legacy benchmark metrics still classify cells below `sample_size_metros >= 8` as undersampled for backward-compatible audit fields | `tests/scripts/test_scoring_strategy_audit.py` |
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
@@ -324,7 +327,7 @@ Additional contract checks for scoring/autocomplete:
 
 | Scope | Required Coverage | Required Tests |
 | --- | --- | --- |
-| Multi-market page flow | `/agency` renders the batch-cost indicator, configure/confirm/complete states, service and state filters, target discovery payloads, and fresh strategy-run queue payloads | `apps/app/src/app/(protected)/agency/page.test.tsx` |
+| Multi-market page flow | `/agency` renders the batch-cost indicator, configure/confirm/complete states, service and state filters, target discovery payloads, cached target warning chips, and fresh strategy-run queue payloads | `apps/app/src/app/(protected)/agency/page.test.tsx` |
 | Shared state selector | State multiselect keeps Explore and Multi-market state filtering accessible and preserves selected-state query behavior | `apps/app/src/app/(protected)/agency/page.test.tsx`, `apps/app/src/components/explore/ExplorePageClient.test.tsx` |
 | Backend queue boundary | Fresh strategy runs cap targets at 100, inject account/user ids, consume or refund one fresh-report quota, and forward explicit targets to FastAPI `/api/strategy-runs` | `apps/app/src/app/api/strategies/runs/route.test.ts`, `tests/unit/test_api_strategy_runs.py` |
 
@@ -333,6 +336,7 @@ Additional contract checks for scoring/autocomplete:
 | Scope | Required Coverage | Required Tests |
 | --- | --- | --- |
 | Strategy catalog | Launch strategies, phase-2 status, AI modifier behavior | `tests/unit/test_strategy_projection.py` |
+| Strategy warnings | Strategy discovery normalizes benchmark/readiness warning semantics as strings, including object-shaped API warnings by `message`, `label`, or `code` for surface-safe rendering | `tests/unit/test_strategy_projection.py`, `tests/unit/test_api_strategy_discovery.py`, `apps/app/src/app/(protected)/strategies/[id]/StrategyPageClient.test.tsx` |
 | Easy Win | Weak organic/local competition projection from V2 vector and facts | `tests/unit/test_strategy_projection.py` |
 | GBP Blitz | Review barrier, review velocity, profile completeness, map-pack presence | `tests/unit/test_strategy_projection.py` |
 | Keyword Hijack | Primary keyword volume floor, map-pack presence, exact-match GBP name availability | `tests/unit/test_strategy_projection.py`, `tests/unit/test_api_strategy_discovery.py` |
@@ -438,3 +442,5 @@ npm run lint
 | 1.7.6 | 2026-05-23 | WHI-102 acquisition backfill gate | Added explicit opt-in benchmark acquisition flags and tests for top-5 organic telemetry plus top-3 review velocity |
 | 1.7.7 | 2026-05-24 | WHI-126 benchmark lineage schema | Added benchmark mode parsing and metric-family sufficiency migration test obligations |
 | 1.7.8 | 2026-05-24 | WHI-127 evidence lineage schema | Added local-place identifier and raw SEO evidence artifact persistence test obligations |
+| 1.7.9 | 2026-05-24 | WHI-130 warning semantics | Added canonical benchmark/scoring warning semantics obligations for V2, strategy, Explore, and Multi-market surfaces |
+| 1.7.10 | 2026-05-24 | WHI-130 warning-code read models | Added Supabase persistence and schema obligations for warning-code read-model contracts |
