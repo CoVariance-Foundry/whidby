@@ -88,20 +88,16 @@ npx docguard-cli diff     # Show documentation/code drift details
 <claude-mem-context>
 # Memory Context
 
-# [whidby] recent context, 2026-05-22 10:27pm PDT
+# [whidby/whidby] recent context, 2026-05-23 3:24pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (18,478t read) | 938,169t work | 98% savings
+Stats: 50 obs (20,098t read) | 446,582t work | 95% savings
 
-### Apr 29, 2026
-S233 Execute Phase 7 Data Providers implementation plan (18 tasks across 4 task groups: Census ACS, Census CBP, BLS Wages, DataForSEO Trends) using the executing-plans skill (Apr 29 at 3:07 PM)
-S238 Phase 6 CI Enforcement Planning Session Initiated (Apr 29 at 4:28 PM)
 ### May 13, 2026
-S239 Phase 6 CI Enforcement — Plan and implement architecture enforcement tooling from spec (May 13 at 1:09 PM)
-S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:10 PM)
+S311 Git Worktree Workflow — Cannot Commit to Main Directly (May 13 at 1:26 PM)
 ### May 15, 2026
 S312 Git fetch vs checkout vs pull — explaining what git fetch does in the fetch/checkout/pull sequence (May 15 at 8:50 PM)
 S522 Diagnose git branch divergence between origin/dev and origin/main in the whidby project (May 15 at 8:52 PM)
@@ -109,58 +105,63 @@ S522 Diagnose git branch divergence between origin/dev and origin/main in the wh
 S523 Sync origin/dev with main — merge origin/main into local dev branch and resolve conflicts (May 20 at 12:41 PM)
 S524 Sync origin/dev with main — merge, resolve conflict, and push to GitHub (May 20 at 12:45 PM)
 S525 Complete Stripe billing integration for PR #51 — add secrets, webhooks, and env configuration so whidby can start taking customers (May 20 at 12:48 PM)
+### May 21, 2026
+S526 Begin Phase 2 in Linear / Phase 3 planning scope decision for Whidby project (May 21 at 9:45 AM)
+S527 Complete Stripe billing integration for PR #51 — add secrets, webhooks, and .env.local config so whidby can start accepting paying customers (May 21 at 10:23 PM)
 ### May 22, 2026
-S527 Complete Stripe billing integration for PR #51 — add secrets, webhooks, and .env.local config so whidby can start accepting paying customers (May 22 at 10:06 AM)
-2692 9:19p 🟣 Niche Finder Strategy Playbook Published as Linear Core Strategy Document
-2693 " 🟣 Added next/link mock and Competitor Intel CTA link test to ReportDetailModal
-2694 9:22p 🔵 Greptile Bot Review Findings on PR #76 Tier Upgrade E2E Tests
-2695 " 🔴 Fixed Three Greptile Review Issues in Tier Upgrade E2E Tests
-2696 " 🔵 Competitor Intelligence Report Page Missing CTA from New Prototype
-2697 9:23p 🟣 Added "Next Moves" CTA Section to ReportDetailModal with Competitor Intel Link
-2698 " ✅ Tier Upgrade E2E Test File Final State Confirmed Post-Patch
-2699 " ✅ ESLint Passed on Patched E2E File; Dev Server Started for E2E Re-run
-2700 9:24p 🟣 All 3 Tier Upgrade E2E Tests Pass After Review Fix
-2701 " ✅ E2E Request Traces Confirm All Three Tier Scenarios Exercised Billing Routes
-2702 " 🔄 Cosmetic Line-Wrap Reformatting Applied to verifyPortalPathOrMissingBillingProfile
-2703 " ✅ Final Patch Verified — 16 Insertions / 7 Deletions Ready to Commit on codex/tier-upgrade-e2e
-2704 9:25p ✅ Review Fix Committed and Pushed to codex/tier-upgrade-e2e
-2705 " ✅ Commit baf3dbc Successfully Pushed to GitHub — PR #76 Updated
-2706 " 🔵 GitHub API PR Comment Reply Returns 404 for greptile-apps Bot Comment
-2707 " 🔵 All Three greptile-apps Review Comment Reply Attempts Failed With 404
-2708 " ✅ All Three greptile Review Thread Replies Posted Successfully to PR #76
-2709 9:26p 🔵 PR #76 Post-Push CI Status: Quality Gates Passing, CodeQL and Greptile Review In Progress
-2710 " 🔵 chatgpt-codex-connector Bot Left 3 Additional Unaddressed Review Comments on PR #76
-2711 " 🔴 Refactored Env Loading to Fix Global Mutation and Load-Order Override Bug
-2712 " 🔴 testEnv Refactor Patch Applied and Lint Passed Clean
-2713 9:27p ✅ All 3 Tier Upgrade E2E Tests Pass After testEnv Refactor
-2714 9:28p ✅ Env Isolation Refactor Committed and Pushed — PR #76 Branch Advanced to caef353
-2718 " 🔵 WHI-2 App Frame Navbar Branch Exists Unmerged with Scans/Plan UI
-2719 " 🔵 Sidebar Plan Label Falls Back to "Free plan" on Any Entitlement Error
-2720 " 🔵 Luke's Staging Account Seeded as Pro but Staging Publishable Key May Be Invalid
-2715 " ✅ Two chatgpt-codex-connector Review Thread Replies Posted on PR #76
-2716 " ✅ All 6 PR #76 Inline Review Threads Now Have Exactly One Reply Each
-2717 " 🔵 PR #76 CI Status Post-caef353: All Quality Gates Pass, CodeQL and Greptile Still Pending
-2721 9:29p ✅ All CI Checks Pass on PR #76 After caef353 — Greptile Review and CodeQL Green
-2723 " 🔵 Luke's Staging Subscription Has Correct Pro Plan but Null Period Dates
-2724 " 🔵 Origin/Main Has Navbar Architecture with Shared ProtectedLayout — Not Local Main
-2722 " 🔵 Greptile Review Check Remains Pending After 30+ Seconds on caef353
-2725 9:30p 🔵 get_account_entitlement RPC Correctly Returns Pro for Luke — App Connection Is the Blocker
-2726 " 🔵 PR #76 mergeStateStatus BLOCKED Due to Greptile Review IN_PROGRESS
-2727 " 🔵 Root Cause Found: Luke Is Free/Admin in Production Supabase, Not Pro
-2732 9:37p 🔵 Orphaned gh pr checks watcher process detected and kill requested
-2738 9:47p 🔵 AGENTS.md Local Memory Update Blocking Git Fast-Forward Merge
-2739 " 🟣 Tier Upgrade E2E Playwright Coverage Shipped — PR #76 Merged to Branch
-2740 " 🟣 Niche Finder Strategy Playbook Published as Linear Core Strategy Document
-2744 9:50p 🔵 Git Worktree Rebase Permission Error on whidby PR Branch
-2745 9:53p 🟣 Navbar usage pill handles quota-exempt users with "Unlimited scans" label
-2746 " ⚖️ Quota-exempt test coverage scoped to Navbar.test.tsx only, not layout integration test
-2747 " ✅ Navbar quota-exempt patch finalized: layout.test.tsx fully reverted, 4 files in final diff
-2758 9:56p ⚖️ Trading Strategies Gated Behind PostHog Feature Flags
-2763 9:57p 🔵 Existing PostHog Flag Infrastructure in Whidby
-2764 " 🔵 Strategy Discovery Route Architecture and Entitlement Model
-2816 10:26p ✅ PR Pushed Including agents.md
-2817 " 🟣 Navbar Quota-Exempt Users Now Show "Unlimited Scans"
-2818 " 🔵 Git Branch Creation Requires Escalated Sandbox Permissions in whidby Repo
+S528 Continue the 12x8 scoring pilot — bulk scoring 12 metros × 8 services for rank-and-rent strategy analysis (May 22 at 10:06 AM)
+### May 23, 2026
+S529 Strategy feature flag design — modeling PostHog rollout controls for the Strategies surface in the Whidby app (May 23 at 6:27 AM)
+2906 8:25a 🔵 Large Bucket: Greenville SC Confirmed as CBSA 24860
+2907 8:35a 🟣 Bulk Scoring Pilot — Metro Bucket Execution (Post-PR-78)
+2908 8:42a 🟣 Metro bucket bulk scoring completed successfully for Phoenix, AZ pilot
+2909 " 🟣 Mega bucket bulk scoring command awaiting approval for mega_5m_plus pilot
+2910 8:49a 🟣 Bounded 96-pair Pilot Scoring Run Completed Successfully Across All Population Classes
+2911 8:53a ✅ WHI-102 Progress Docs Updated: Pilot Complete, Audit Gates Still Blocking
+2912 " 🔵 DocGuard CLI Unavailable in Codex Sandbox Due to Network DNS Failure
+2913 8:57a ✅ WHI-102 Pilot Closeout Documented and PR #80 Opened
+2914 2:31p ✅ Next-slice implementation plan initiated in whidby project
+2915 " 🔵 PR #80 (docs-only, WHI-102) was already merged before slice start
+2918 " 🔵 Local AGENTS.md changes blocked git pull/merge in worktree 6aa7
+2916 " ✅ WHI-102 Pilot Closeout PR #80 Opened and All Checks Green
+2917 " 🔵 WHI-102 Pilot Audit: DA/Lighthouse and Benchmark Coverage Gaps Quantified
+2919 " 🔵 Whidby worktree is a linked worktree rooted at Desktop development path
+2920 2:32p 🔵 WHI-102 Linear history: audit gates still closed, next slice targets DA/Lighthouse data acquisition
+2921 " 🔵 New worktree created for WHI-102 data-acquisition-gates branch at /private/tmp
+2922 " 🔵 DA/Lighthouse audit gap traced: run_pilot.py never calls backlinks_summary or lighthouse endpoints
+2923 2:33p 🔵 Extractor API contract and SERP maps gap identified for local difficulty inputs
+2924 " 🔵 DFS endpoint cost map and seo_facts schema contract fully mapped for acquisition planning
+2925 2:34p 🔵 Review velocity for benchmark facts uses DFS serp_maps reviews_per_month field, not timestamp computation
+2926 " ✅ Implementation phase started: opt-in DA/Lighthouse and review-velocity acquisition in run_pilot.py
+2927 2:35p 🟣 Opt-in DA/Lighthouse and review-velocity acquisition added to run_pilot.py
+2928 2:36p 🟣 Unit tests written for all new acquisition functions in run_pilot.py and DataForSEO client
+2929 " 🟣 Opt-in Organic Telemetry and Review Velocity Collection Added to Benchmark Pilot Runner
+2930 " 🔄 DataForSEO `google_reviews()` Client Method Generalized to Support cid, place_id, and sort_by
+2931 " 🔵 DataForSEO Backlinks Summary Returns `rank`/`domain_rank` Not `domain_authority`; Lighthouse Performance Score May Be 0–1 or 0–100
+2932 " 🔵 Test run failed: mocker fixture unavailable with PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+2933 " 🔴 Ruff F402 lint errors fixed: loop variable 'field' shadowed dataclasses import
+2934 2:37p 🔴 parse_serp_items counted empty-URL organic items as local_biz — fixed with domain guard
+2935 " ✅ All new acquisition tests passing and ruff clean — implementation verified
+2936 2:38p 🔵 TEST-SPEC and DATA-MODEL confirm opt-in telemetry approach aligns with canonical contracts
+2937 2:42p 🟣 WHI-102: Opt-in Benchmark Acquisition Added to Pilot Runner
+2938 " 🟣 DataForSEO Client: Google Reviews Supports `place_id` Targeting and `sort_by` Parameter
+2939 " ✅ TEST-SPEC.md: Benchmark Acquisition Tests Section Added
+2940 " ⚖️ DocGuard Skill Auto-Update Side Effect Reverted from Branch
+2941 2:45p ✅ Benchmark Acquisition Docs Updated to Pass CI Docs-Sync Gate
+2942 2:50p 🟣 WHI-102 Data Acquisition Slice — PR #81 Opened with Opt-in Flags
+2943 2:55p 🔴 Three Data Acquisition Review Issues Patched in WHI-102
+2944 " 🔵 docguard-cli Requires Network Access; Blocked in Sandbox
+2945 2:58p 🔴 Backlinks DA parser now prioritizes specific rank keys over generic `rank`
+2946 3:01p 🔵 PR #81 (whidby-whi102-data-acquisition) All CI Checks Passing Except Greptile
+2947 3:22p 🔵 Linear Skill Capabilities Reviewed for Post-PR Workflow
+2948 " ✅ PR #81 (WHI-102 Data Acquisition Gates) Merged to Main
+2949 3:23p ✅ WHI-102 Closeout Comment Posted to Linear with Detailed Summary
+2950 " 🟣 WHI-102: PR #81 Merged — Benchmark Acquisition Gates
+2951 " ✅ Post-Merge: Linear Update and Next Work Item Handoff Initiated
+2952 " 🔵 Scoring Coverage & Benchmark Hardening Backlog State Mapped
+2953 " 🔵 Coverage Experiment Reports Exist in Main Worktree for WHI-103 Analysis
+2954 3:24p 🔵 Scoring Audit Results: Near-Total Coverage Failure Across All Components
+2955 " 🔵 Git Fetch Fails in Codex Worktree Due to FETCH_HEAD Permission Error
 
-Access 938k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 447k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
