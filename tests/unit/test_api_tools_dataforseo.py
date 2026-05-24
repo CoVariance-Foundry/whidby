@@ -115,6 +115,34 @@ def test_fetch_google_reviews_supports_place_identifiers_with_newest_sort(
     }
 
 
+def test_fetch_google_reviews_preserves_keyword_call_path(
+    fake_dfs: _FakeDFSClient,
+) -> None:
+    raw = api_tools.fetch_google_reviews(
+        keyword="plumber",
+        location_code=1012873,
+        depth=10,
+    )
+
+    assert fake_dfs.review_calls == [
+        {
+            "keyword": "plumber",
+            "location_code": 1012873,
+            "depth": 10,
+            "cid": None,
+            "place_id": None,
+            "sort_by": "newest",
+        }
+    ]
+    payload = json.loads(raw)
+    assert payload["source"]["request_params"] == {
+        "keyword": "plumber",
+        "location_code": 1012873,
+        "depth": 10,
+        "sort_by": "newest",
+    }
+
+
 def test_fetch_google_reviews_requires_identifier(fake_dfs: _FakeDFSClient) -> None:
     with pytest.raises(ValueError, match="keyword, cid, or place_id"):
         api_tools.fetch_google_reviews(location_code=1012873)
