@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: `WHI-99`, `WHI-100`, `WHI-101`, `WHI-102`, `WHI-103`, and `WHI-104` are done in Linear. The current branch is `WHI-105`, recording the Explore/report-surface visibility closeout before Milestone 3 recommendation work.
+Status: `WHI-99`, `WHI-100`, `WHI-101`, `WHI-102`, `WHI-103`, and `WHI-104` are done in Linear. `WHI-105` is in PR review as the Explore/report-surface visibility closeout. The current branch is `WHI-106`, recording the coverage-weighted scoring framework recommendation for Milestone 3.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-105`; next milestone issue is `WHI-106`.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-106`; prior stacked PR is `WHI-105`.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -30,6 +30,7 @@ Current contract:
 - WHI-104 read live production `seo_benchmarks` after checking the Supabase schema in `supabase/migrations/010_v2_benchmarks.sql` and `012_recompute_seo_benchmarks.sql` because `.Codex/databricks-context/` is not present. The benchmark appendix in `docs/scoring-coverage-analysis.md` records 55 benchmark rows, 28/48 core-service cells present, 0/48 core-service cells usable at `sample_size_metros >= 8`, 20/48 core cells missing, all present core cells capped at sample size 4, and null local review-count/velocity medians across all present core cells.
 - The benchmark-development research plan is logged in Linear at `https://linear.app/covariancestudio/document/benchmark-development-research-plan-32e613154242` and linked from `WHI-104`. Phase 1 mapped the current plan in `docs/scoring-coverage-analysis.md`. Phase 2 added comparable benchmark research across Ahrefs, Semrush, Moz, SISTRIX, Google local ranking guidance, and Whitespark local factors. Phase 3 cataloged active SEO data APIs, centered on DataForSEO endpoint coverage, current Whidby wrappers, identifier stability, local cost estimates, and the metric-level sample counts each endpoint should support. Stage 4 converted those findings into a platform gap analysis that also accounts for Strategy Discovery needs: Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, `/agency`, strategy cache rows, and fresh strategy runs all depend on metric-level sufficiency, benchmark lineage, local-place identifiers, raw evidence retention, agent tool parity, structured warning semantics, feature-vector readiness, and guarded paid acquisition. Stage 5 recommends the implementation sequence: schema/data-model lineage first, metric-level audits second, runner and agent-tool parity third, then a small paid metric canary before any broader cell backfill or benchmark recompute.
 - WHI-105 reran the read-only app-surface audit against production project `eoajvifhbmqmoluiokcj` on 2026-05-24 using the existing 96 pilot JSONL artifacts. The audit still exits fail, but the cause is now pinned to surface coverage: 3,208 current strategy-audit pairs have materialized Explore rows, 81 have V2 score/benchmark-confidence metadata, 110 have report-backed Explore visibility, 64 are V2-preferred in Explore, 3,127 are missing V2 scores, and 3,144 are non-V2 fallback/catalog rows. Report-detail routing is not the blocker for rows with lineage: all 110 unique report-backed IDs exist in `reports`, and five sampled `GET https://whidby-1.onrender.com/api/niches/{report_id}` calls returned HTTP 200 with matching IDs and `metros` arrays.
+- WHI-106 adds the Milestone 3 coverage-weighted scoring recommendation to `docs/scoring-coverage-analysis.md`. The issue scope is `small_50_100k`, `medium_100_300k`, and `large_300k_1m`, but the recommendation keeps the same warning-only benchmark fallback policy for every scored population class until required benchmark and metric families meet sufficiency gates. Population stays scored; demand, organic SERP composition, monetization, and AI resilience stay scored with warnings; DA/Lighthouse stay telemetry-only; local review count/velocity and benchmark-relative claims require acquisition. No current signal should be removed based on this slice alone.
 
 Verified:
 
@@ -53,7 +54,7 @@ Verified:
 
 Next:
 
-- Close `WHI-105` after the app-surface visibility PR lands, then begin `WHI-106` in Milestone 3: review the scoring formulas/framework using the strategy-platform needs and the benchmark sufficiency findings.
+- Close `WHI-105` after the app-surface visibility PR lands, then finish `WHI-106` by validating the recommendation docs, updating Linear, and opening the stacked PR.
 - Keep paid work bounded to the smallest reviewed acquisition/backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
 
 ## Billing Hardening And Admin Issue Visibility
