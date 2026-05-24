@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: `WHI-99`, `WHI-100`, `WHI-101`, and `WHI-102` are done in Linear. PR #82 is open and green for `WHI-103`; the current branch is `WHI-104`, extending the coverage analysis with benchmark-cell sufficiency details.
+Status: `WHI-99`, `WHI-100`, `WHI-101`, `WHI-102`, `WHI-103`, and `WHI-104` are done in Linear. The current branch is `WHI-105`, recording the Explore/report-surface visibility closeout before Milestone 3 recommendation work.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-104`.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue is `WHI-105`; next milestone issue is `WHI-106`.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -29,6 +29,7 @@ Current contract:
 - WHI-103 records the durable analysis in `docs/scoring-coverage-analysis.md`, using the ignored `reports/scoring_audit/coverage_*.jsonl` and `scoring_audit_20260523T154926Z.*` artifacts. The conclusion is that the 96/96 pilot validates the guarded scoring and persistence path, but benchmark usability remains 0/48 at `sample_size_metros >= 8`, DA/Lighthouse telemetry is absent, local difficulty inputs are missing, and only 10/96 pilot rows are visible through V2-backed Explore rows.
 - WHI-104 read live production `seo_benchmarks` after checking the Supabase schema in `supabase/migrations/010_v2_benchmarks.sql` and `012_recompute_seo_benchmarks.sql` because `.Codex/databricks-context/` is not present. The benchmark appendix in `docs/scoring-coverage-analysis.md` records 55 benchmark rows, 28/48 core-service cells present, 0/48 core-service cells usable at `sample_size_metros >= 8`, 20/48 core cells missing, all present core cells capped at sample size 4, and null local review-count/velocity medians across all present core cells.
 - The benchmark-development research plan is logged in Linear at `https://linear.app/covariancestudio/document/benchmark-development-research-plan-32e613154242` and linked from `WHI-104`. Phase 1 mapped the current plan in `docs/scoring-coverage-analysis.md`. Phase 2 added comparable benchmark research across Ahrefs, Semrush, Moz, SISTRIX, Google local ranking guidance, and Whitespark local factors. Phase 3 cataloged active SEO data APIs, centered on DataForSEO endpoint coverage, current Whidby wrappers, identifier stability, local cost estimates, and the metric-level sample counts each endpoint should support. Stage 4 converted those findings into a platform gap analysis that also accounts for Strategy Discovery needs: Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, `/agency`, strategy cache rows, and fresh strategy runs all depend on metric-level sufficiency, benchmark lineage, local-place identifiers, raw evidence retention, agent tool parity, structured warning semantics, feature-vector readiness, and guarded paid acquisition. Stage 5 recommends the implementation sequence: schema/data-model lineage first, metric-level audits second, runner and agent-tool parity third, then a small paid metric canary before any broader cell backfill or benchmark recompute.
+- WHI-105 reran the read-only app-surface audit against production project `eoajvifhbmqmoluiokcj` on 2026-05-24 using the existing 96 pilot JSONL artifacts. The audit still exits fail, but the cause is now pinned to surface coverage: 3,208 current strategy-audit pairs have materialized Explore rows, 81 have V2 score/benchmark-confidence metadata, 110 have report-backed Explore visibility, 64 are V2-preferred in Explore, 3,127 are missing V2 scores, and 3,144 are non-V2 fallback/catalog rows. Report-detail routing is not the blocker for rows with lineage: all 110 unique report-backed IDs exist in `reports`, and five sampled `GET https://whidby-1.onrender.com/api/niches/{report_id}` calls returned HTTP 200 with matching IDs and `metros` arrays.
 
 Verified:
 
@@ -47,11 +48,13 @@ Verified:
 - `ruff check scripts/benchmarks/run_pilot.py src/clients/dataforseo/client.py tests/scripts/test_benchmark_serp_parsing.py tests/unit/test_dataforseo_client.py` passed.
 - `git diff --check` passed.
 - `npx docguard-cli guard` ran with network escalation and exited warn-only with the existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.
+- `/Users/antwoineflowers/.codex/worktrees/6aa7/whidby/.venv/bin/python audit_scoring_strategy.py --read-only --expected-project-ref eoajvifhbmqmoluiokcj ... --output-dir /private/tmp/whidby-whi103-coverage-analysis/reports/scoring_audit` wrote `scoring_audit_20260524T040729Z.*` and exited fail because the expected app-surface/benchmark gates remain below threshold.
+- A read-only Supabase plus Render API smoke verified the 110 report-backed Explore IDs: zero missing `reports` rows and five sampled `GET /api/niches/{report_id}` calls returned HTTP 200.
 
 Next:
 
-- Convert the Stage 5 recommendations into implementation slices: benchmark run lineage and metric-sufficiency schema, local identifier/raw evidence persistence, metric-level audit readiness, DataForSEO wrapper parity, then a cost-capped paid metric canary. Do not run broad paid expansion or benchmark recompute before those gates exist.
-- Open and merge the WHI-104 benchmark-sufficiency PR after WHI-103 PR #82 lands. Then move to `WHI-105` for Explore/report visibility. Keep paid work bounded to the smallest reviewed acquisition/backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
+- Close `WHI-105` after the app-surface visibility PR lands, then begin `WHI-106` in Milestone 3: review the scoring formulas/framework using the strategy-platform needs and the benchmark sufficiency findings.
+- Keep paid work bounded to the smallest reviewed acquisition/backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
 
 ## Billing Hardening And Admin Issue Visibility
 

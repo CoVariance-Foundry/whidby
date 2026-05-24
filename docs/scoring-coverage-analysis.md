@@ -1,6 +1,6 @@
 # Scoring Coverage Analysis
 
-Linear: `WHI-103`
+Linear: `WHI-103`, `WHI-104`, `WHI-105`
 
 Source artifacts:
 
@@ -12,6 +12,8 @@ Source artifacts:
 - `reports/scoring_audit/coverage_mega.jsonl`
 - `reports/scoring_audit/scoring_audit_20260523T154926Z.json`
 - `reports/scoring_audit/scoring_audit_20260523T154926Z.md`
+- `reports/scoring_audit/scoring_audit_20260524T040729Z.json`
+- `reports/scoring_audit/scoring_audit_20260524T040729Z.md`
 
 The artifacts above are generated audit outputs and remain ignored by git. This document records the durable analysis that should travel with the repo.
 
@@ -22,6 +24,8 @@ The coverage pilot proved the guarded production scoring path, but it did not pr
 The bounded 12 metro x 8 service pilot completed with 96 successful API and persistence outcomes, 0 partial failures, and 0 failures. Every pilot row persisted through the V2 scoring path, and every row used the production project guard, DFS-ready metro targeting, V2 persistence checks, and the production API.
 
 The follow-up scoring audit still failed. The failure is not API/runtime health; it is evidence sufficiency. Benchmark cells are not usable at the canonical `sample_size_metros >= 8` threshold, top-5 DA and Lighthouse telemetry are absent, local difficulty inputs are missing, and app-surface V2 visibility is too sparse for a scale-out seed.
+
+The WHI-105 app-surface pass confirms the same shape from the product side. Explore has materialized catalog rows for all 3,208 current audit pairs, and sampled production report-detail API lookups resolve, but only 64 pairs are V2-preferred in Explore and only 110 pairs have any report-backed detail row. The hidden-row cause is coverage, not routing: most rows have no V2 score/report lineage yet, and legacy/catalog fallback rows can still mask that gap in the UI.
 
 The next work should stay on the smallest data-acquisition and benchmark-sufficiency path. Do not run benchmark recompute or broader paid expansion until a reviewed acquisition batch produces usable benchmark cells and the read-only audits pass.
 
@@ -61,6 +65,7 @@ The next work should stay on the smallest data-acquisition and benchmark-suffici
 | 2026-05-23 | Post-PR #78 Waco, TX x roofing canary | Passed required `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and `explore_market_cells` persistence |
 | 2026-05-23 14:27-15:48 UTC | Six apply buckets generated `coverage_*.jsonl` | 96 successes, 0 partials, 0 failures |
 | 2026-05-23 15:49 UTC | `audit_scoring_strategy` generated the final scoring audit | Exited `fail` because benchmark, organic telemetry, local difficulty, and app-surface gates remain below threshold |
+| 2026-05-24 04:07 UTC | `audit_scoring_strategy` reran the WHI-105 app-surface verification with the 96 pilot artifacts | Exited `fail` because V2/report-backed Explore visibility is still sparse despite 96/96 pilot success |
 
 ### Environment And Stop Conditions
 
@@ -509,18 +514,45 @@ Strategy Discovery should use benchmark-backed rankings only when required metri
 
 ## App Surface Visibility
 
+Linear: `WHI-105`
+
+Schema source checked before querying:
+
+- `.Codex/databricks-context/` is not present in this repo checkout.
+- Supabase schema source is `supabase/migrations/001_core_schema.sql`, `supabase/migrations/010_v2_benchmarks.sql`, and `supabase/migrations/020_explore_market_cells.sql`.
+- The live read-only audit selected the documented `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, `seo_benchmarks`, and `explore_market_cells` columns used by `scripts/explore/audit_scoring_strategy.py`.
+
+WHI-105 verification scope is the current strategy audit universe: 401 medium/large/metro/mega metros x the 8 core services = 3,208 city-service pairs. The six ignored `coverage_*.jsonl` pilot artifacts were included only to confirm the original 96 pilot rows still classify as API/persistence successes.
+
 | Measure | Result |
 | --- | ---: |
+| Query time | 2026-05-24T04:07:29Z |
+| Production project | `eoajvifhbmqmoluiokcj` |
 | `explore_market_cells` rows in inventory | 131,835 |
-| `metro_score_v2` rows in inventory | 114 |
-| `seo_facts` rows in inventory | 8,315 |
-| Pilot rows visible in Explore | 10/96 |
-| Audit universe pairs missing V2 score | 7,368 |
-| Audit universe legacy Explore fallback pairs | 7,388 |
-| Audit universe missing Explore rows | 0 |
+| `metro_score_v2` rows in inventory | 116 |
+| `seo_facts` rows in inventory | 8,415 |
+| Pilot rows classified as success | 96/96 |
+| Audit pairs with a V2 score row | 81/3,208 |
+| Audit pairs with benchmark confidence metadata | 81/3,208 |
+| Audit pairs with report-backed Explore visibility | 110/3,208 |
+| Audit pairs with V2-preferred Explore visibility | 64/3,208 |
+| Audit pairs missing V2 score | 3,127/3,208 |
+| Audit pairs using non-V2 Explore fallback or catalog-only rows | 3,144/3,208 |
+| Audit pairs missing materialized Explore rows | 0/3,208 |
 | Legacy-only pairs | 93 |
 
-Explore has broad catalog/read-model coverage, but not enough V2-backed visibility for the scoring-hardening goal. The app can show many city-service rows through legacy or fallback paths, yet only a narrow slice has the V2 score and benchmark confidence metadata needed for the new scoring surface.
+Report-detail lookup is not the blocker for rows that already carry report lineage. After collapsing Explore rows with the same normalized city-service key used by the audit, all 110 unique report-backed `report_id` values resolved to `reports` rows. A five-report production smoke check against `GET https://whidby-1.onrender.com/api/niches/{report_id}` returned HTTP 200 for every sampled report, with a matching `report_id` and a `metros` array in the API response.
+
+Hidden-row causes:
+
+| Cause | Count | Product implication |
+| --- | ---: | --- |
+| No V2 score row exists | 3,127/3,208 | Explore can render the catalog cell, but it cannot show V2 dimensions or benchmark confidence. |
+| No report-backed Explore row exists | 3,098/3,208 | Report detail cannot open because the materialized cell has no `report_id`. |
+| Legacy report-backed fallback | 46/3,208 | A detail row exists, but Explore is not using the V2 scoring surface. |
+| V2 row exists but benchmark confidence is undersampled | 81/3,208 | The app can show V2 metadata, but the benchmark cell is still below the `sample_size_metros >= 8` usability gate. |
+
+Explore has broad catalog/read-model coverage, but not enough V2-backed visibility for the scoring-hardening goal. The app can show many city-service rows through legacy or catalog fallback paths, yet only a narrow slice has the V2 score and benchmark confidence metadata needed for the new scoring surface.
 
 ## Recommendations
 
