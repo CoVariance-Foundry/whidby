@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from collections.abc import Sequence
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -19,6 +20,17 @@ _EVIDENCE_ARTIFACT_COLLECTION_KEYS = (
     "seo_evidence_artifacts",
     "raw_evidence_artifacts",
 )
+_EVIDENCE_ARTIFACT_KEYS = set(_EVIDENCE_ARTIFACT_COLLECTION_KEYS)
+_ALLOWED_EVIDENCE_FAMILIES = {
+    "serp",
+    "maps",
+    "reviews",
+    "backlinks",
+    "lighthouse",
+    "keyword_volume",
+    "keyword_overview",
+}
+_ALLOWED_CACHE_STATUSES = {"hit", "miss", "bypass", "replay", "unknown"}
 
 
 class _SupabaseLike(Protocol):
@@ -370,6 +382,26 @@ def _artifact_response_payload(artifact: dict[str, Any]) -> Any:
     return None
 
 
+def _normalize_evidence_family(
+    value: Any,
+    endpoint_path: str | None,
+) -> str | None:
+    text = _str_or_none(value)
+    if text:
+        normalized = text.strip().lower().replace("-", "_")
+        if normalized in _ALLOWED_EVIDENCE_FAMILIES:
+            return normalized
+    return evidence_family_from_endpoint(endpoint_path)
+
+
+def _normalize_cache_status(value: Any) -> str:
+    text = _str_or_none(value)
+    if not text:
+        return "unknown"
+    normalized = text.strip().lower().replace("-", "_")
+    return normalized if normalized in _ALLOWED_CACHE_STATUSES else "unknown"
+
+
 def _record_value(record: Any, key: str) -> Any:
     if isinstance(record, dict):
         return record.get(key)
@@ -446,6 +478,18 @@ def _score_value(v2_scores: dict[str, Any], dimension: str) -> Any:
     return None
 
 
+def _without_artifact_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_artifact_keys(item)
+            for key, item in value.items()
+            if key not in _EVIDENCE_ARTIFACT_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_artifact_keys(item) for item in value]
+    return deepcopy(value)
+
+
 def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
     run_input = report["input"]
     return {
@@ -460,9 +504,9 @@ def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
         "resolved_weights": (
             report["metros"][0]["scores"].get("resolved_weights") if report["metros"] else None
         ),
-        "keyword_expansion": report["keyword_expansion"],
-        "metros": report["metros"],
-        "meta": report["meta"],
+        "keyword_expansion": _without_artifact_keys(report["keyword_expansion"]),
+        "metros": _without_artifact_keys(report["metros"]),
+        "meta": _without_artifact_keys(report["meta"]),
         "feedback_log_id": report["meta"].get("feedback_log_id"),
         "owner_account_id": report.get("owner_account_id"),
         "created_by_user_id": report.get("created_by_user_id"),
@@ -683,7 +727,10 @@ def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, A
     rows: list[dict[str, Any]] = []
     for artifact in _artifact_sources(report):
         endpoint_path = _artifact_endpoint_path(artifact)
-        evidence_family = _artifact_evidence_family(artifact)
+        evidence_family = _normalize_evidence_family(
+            _artifact_evidence_family(artifact),
+            endpoint_path,
+        )
         if not endpoint_path or not evidence_family:
             continue
 
@@ -718,7 +765,7 @@ def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, A
                 )
             ),
             "response_payload": response_payload,
-            "cache_status": _str_or_none(artifact.get("cache_status")) or "unknown",
+            "cache_status": _normalize_cache_status(artifact.get("cache_status")),
         }
 
         artifact_id = _str_or_none(artifact.get("id", artifact.get("artifact_id")))

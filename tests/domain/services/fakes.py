@@ -1,7 +1,7 @@
 """Shared test fakes for MarketService dependencies."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -10,6 +10,7 @@ class FakePipelineResult:
     report: dict[str, Any]
     opportunity_score: int
     evidence: list[dict[str, Any]]
+    seo_evidence_artifacts: list[dict[str, Any]] = field(default_factory=list)
 
 
 def make_fake_report(

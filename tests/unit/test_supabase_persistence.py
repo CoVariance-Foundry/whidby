@@ -223,6 +223,23 @@ def test_build_report_row_maps_core_fields() -> None:
     assert row["owner_account_id"] is None
 
 
+def test_build_report_row_scrubs_private_artifact_payloads() -> None:
+    report = _sample_report()
+    report["seo_evidence_artifacts"] = [{"provider": "dataforseo"}]
+    report["keyword_expansion"]["raw_evidence_artifacts"] = [{"private": True}]
+    report["metros"][0]["seo_evidence_artifacts"] = [{"private": True}]
+    report["metros"][0]["signals"]["raw_evidence_artifacts"] = [{"private": True}]
+    report["meta"]["seo_evidence_artifacts"] = [{"private": True}]
+
+    row = build_report_row(report)
+
+    assert "seo_evidence_artifacts" not in row
+    assert "raw_evidence_artifacts" not in row["keyword_expansion"]
+    assert "seo_evidence_artifacts" not in row["metros"][0]
+    assert "raw_evidence_artifacts" not in row["metros"][0]["signals"]
+    assert "seo_evidence_artifacts" not in row["meta"]
+
+
 def test_build_report_row_maps_account_ownership() -> None:
     report = _sample_report()
     report["owner_account_id"] = "33333333-3333-3333-3333-333333333333"
@@ -538,12 +555,39 @@ def test_build_seo_evidence_artifact_rows_skips_incomplete_artifacts() -> None:
     report = {
         **_sample_v2_report(),
         "seo_evidence_artifacts": [
-            {"endpoint_path": "/v3/serp/google/organic/live/advanced"},
+            {"endpoint_path": "/v3/unknown/provider/path"},
             {"evidence_family": "serp"},
         ],
     }
 
     assert build_seo_evidence_artifact_rows(report) == []
+
+
+def test_build_seo_evidence_artifact_rows_normalizes_invalid_enums() -> None:
+    rows = build_seo_evidence_artifact_rows(
+        {
+            "seo_evidence_artifacts": [
+                {
+                    "provider": "dataforseo",
+                    "endpoint_path": "serp/google/organic/live/advanced",
+                    "evidence_family": "not-a-family",
+                    "normalized_request_params": {"keyword": "roof repair"},
+                    "cache_status": "CACHED?",
+                },
+                {
+                    "provider": "dataforseo",
+                    "endpoint_path": "unknown/provider/path",
+                    "evidence_family": "also-invalid",
+                    "normalized_request_params": {},
+                    "cache_status": "miss",
+                },
+            ]
+        }
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["evidence_family"] == "serp"
+    assert rows[0]["cache_status"] == "unknown"
 
 
 def test_evidence_family_from_endpoint_maps_dataforseo_families() -> None:
@@ -633,7 +677,10 @@ def test_whi127_migration_adds_local_identifiers_and_evidence_artifacts() -> Non
         assert column in migration
     assert "idx_local_pack_listing_facts_cid" in migration
     assert "idx_local_pack_listing_facts_place_id" in migration
-    assert "REFERENCES public.seo_evidence_artifacts(id) ON DELETE SET NULL" in migration
+    assert "local_pack_listing_facts_evidence_artifact_id_fkey" in migration
+    assert "FOREIGN KEY (evidence_artifact_id)" in migration
+    assert "REFERENCES public.seo_evidence_artifacts(id)" in migration
+    assert "ON DELETE SET NULL" in migration
     assert "UNIQUE (provider, endpoint_path, request_hash)" in migration
     assert "jsonb_typeof(normalized_request_params) = 'object'" in migration
     assert "ALTER TABLE public.seo_evidence_artifacts ENABLE ROW LEVEL SECURITY" in migration

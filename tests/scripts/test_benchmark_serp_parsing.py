@@ -252,6 +252,14 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
     dfs.cost_log = [
         CostRecord(
             endpoint="serp/google/maps/live/advanced",
+            task_id="maps-other",
+            cost=0.002,
+            cached=False,
+            latency_ms=120,
+            parameters={"keyword": "hvac repair", "location_code": 2000020},
+        ),
+        CostRecord(
+            endpoint="serp/google/maps/live/advanced",
             task_id="maps-1",
             cost=0.002,
             cached=False,
@@ -265,6 +273,14 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             cached=False,
             latency_ms=400,
             parameters={"cid": "123", "location_code": 1000013, "depth": 10},
+        ),
+        CostRecord(
+            endpoint="backlinks/summary/live",
+            task_id="backlinks-other",
+            cost=0.002,
+            cached=False,
+            latency_ms=80,
+            parameters={"target": "other.example", "rank_scale": "one_hundred"},
         ),
         CostRecord(
             endpoint="backlinks/summary/live",
@@ -284,7 +300,17 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
         ),
     ]
 
-    rows = evidence_artifacts_from_dfs_cost_log(dfs)
+    rows = evidence_artifacts_from_dfs_cost_log(
+        dfs,
+        niche="roof repair",
+        location_codes=[1000013],
+        keywords=["roof repair"],
+        serp_keywords=["roof repair"],
+        local_pack_items=[{"title": "A", "cid": "123"}],
+        organic_targets=[
+            {"domain": "example.com", "url": "https://example.com/"},
+        ],
+    )
 
     assert [row["evidence_family"] for row in rows] == [
         "maps",

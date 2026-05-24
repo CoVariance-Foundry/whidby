@@ -186,15 +186,59 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert "serp/google/organic/task_post" in breakdown
     assert breakdown["serp/google/organic/task_post"]["calls"] == 2
     assert breakdown["serp/google/organic/task_post"]["cached"] == 1
-    artifacts = result.report["seo_evidence_artifacts"]
-    assert [artifact["evidence_family"] for artifact in artifacts] == [
-        "serp",
-        "keyword_volume",
+    assert "seo_evidence_artifacts" not in result.report
+    assert result.seo_evidence_artifacts == []
+
+
+def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
+    fake_dfs = _make_fake_dfs_client()
+
+    async def collect_with_current_cost(*args, **kwargs):
+        fake_dfs.cost_tracker.record(
+            "serp/google/maps/live/advanced",
+            "maps-current",
+            0.002,
+            False,
+            110,
+            {"keyword": "roofing near me", "location_code": 1012873},
+        )
+        fake_dfs.cost_log = fake_dfs.cost_tracker.records
+        return _FAKE_RAW_COLLECTION
+
+    with patch("src.pipeline.orchestrator.expand_keywords",
+               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
+         patch("src.pipeline.orchestrator.collect_data",
+               new=AsyncMock(side_effect=collect_with_current_cost)), \
+         patch("src.pipeline.orchestrator.extract_signals",
+               return_value=_FAKE_SIGNALS), \
+         patch("src.pipeline.orchestrator.compute_scores",
+               return_value=_FAKE_SCORES), \
+         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
+         patch("src.pipeline.orchestrator.classify_serp_archetype",
+               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
+         patch("src.pipeline.orchestrator.compute_difficulty_tier",
+               return_value=_FAKE_DIFFICULTY_RESULT), \
+         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
+               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+        result = asyncio.run(
+            score_niche_for_metro(
+                niche="roofing",
+                city="Phoenix",
+                state="AZ",
+                strategy_profile="balanced",
+                llm_client=object(),
+                dataforseo_client=fake_dfs,
+            )
+        )
+
+    assert "seo_evidence_artifacts" not in result.report
+    assert [artifact["evidence_family"] for artifact in result.seo_evidence_artifacts] == [
+        "maps"
     ]
-    assert artifacts[0]["endpoint_path"] == "serp/google/organic/task_post"
-    assert artifacts[0]["cache_status"] == "miss"
-    assert artifacts[1]["normalized_request_params"] == {}
-    assert artifacts[1]["cost_usd"] == 0.05
+    assert result.seo_evidence_artifacts[0]["endpoint_path"] == (
+        "serp/google/maps/live/advanced"
+    )
+    assert result.seo_evidence_artifacts[0]["request_hash"]
 
 
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:

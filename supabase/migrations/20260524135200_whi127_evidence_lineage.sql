@@ -107,11 +107,23 @@ ALTER TABLE public.local_pack_listing_facts
     ADD COLUMN IF NOT EXISTS review_window_start TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS review_window_end TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS upstream_result_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS evidence_artifact_id UUID
-        REFERENCES public.seo_evidence_artifacts(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS evidence_artifact_id UUID;
 
 DO $$
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'local_pack_listing_facts_evidence_artifact_id_fkey'
+          AND conrelid = 'public.local_pack_listing_facts'::regclass
+    ) THEN
+        ALTER TABLE public.local_pack_listing_facts
+            ADD CONSTRAINT local_pack_listing_facts_evidence_artifact_id_fkey
+            FOREIGN KEY (evidence_artifact_id)
+            REFERENCES public.seo_evidence_artifacts(id)
+            ON DELETE SET NULL;
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint

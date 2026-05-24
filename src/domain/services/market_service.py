@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from copy import deepcopy
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from src.pipeline.feedback_logger import log_feedback
 from src.scoring.benchmark_repository import SeoBenchmarkRepository
 
 logger = logging.getLogger(__name__)
+_PRIVATE_ARTIFACT_KEYS = {"seo_evidence_artifacts", "raw_evidence_artifacts"}
 
 
 @dataclass
@@ -158,13 +160,19 @@ class MarketService:
             result.report["owner_account_id"] = request.owner_account_id
             result.report["created_by_user_id"] = request.created_by_user_id
             result.report["access_scope"] = "account"
+        _scrub_private_artifacts(result.report)
 
         # --- Persist report ---
         report_id: str | None = None
         persist_failed = False
         if not request.dry_run:
             try:
-                report_id = self._store.persist_report(result.report)
+                persistence_report = deepcopy(result.report)
+                if getattr(result, "seo_evidence_artifacts", None):
+                    persistence_report["seo_evidence_artifacts"] = (
+                        result.seo_evidence_artifacts
+                    )
+                report_id = self._store.persist_report(persistence_report)
             except Exception:
                 logger.exception(
                     "Report persistence failed for report_id=%s",
@@ -264,3 +272,14 @@ class MarketService:
                 else None
             ),
         )
+
+
+def _scrub_private_artifacts(value: Any) -> None:
+    if isinstance(value, dict):
+        for key in _PRIVATE_ARTIFACT_KEYS:
+            value.pop(key, None)
+        for item in value.values():
+            _scrub_private_artifacts(item)
+    elif isinstance(value, list):
+        for item in value:
+            _scrub_private_artifacts(item)

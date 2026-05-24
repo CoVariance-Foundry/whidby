@@ -11,13 +11,13 @@ from src.classification.ai_exposure import classify_ai_exposure
 from src.classification.difficulty_tier import compute_difficulty_tier
 from src.classification.guidance_generator import classify_and_generate_guidance
 from src.classification.serp_archetype import classify_serp_archetype
+from src.clients.supabase_persistence import (
+    build_seo_evidence_artifact_rows_from_cost_records,
+)
 from src.data.metro_db import MetroDB
 from src.data.metro_db_adapter import MetroDBGeoLookup
 from src.domain.entities import City
 from src.domain.ports import CityDataProvider
-from src.clients.supabase_persistence import (
-    build_seo_evidence_artifact_rows_from_cost_records,
-)
 from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
 from src.pipeline.keyword_expansion import expand_keywords
@@ -37,6 +37,7 @@ class ScoreNicheResult:
     report: dict[str, Any]
     opportunity_score: int
     evidence: list[dict[str, Any]]
+    seo_evidence_artifacts: list[dict[str, Any]]
 
 
 async def score_niche_for_metro(
@@ -110,6 +111,8 @@ async def score_niche_for_metro(
             started=started,
             run_id=f"score-dry-{uuid4()}",
         )
+
+    cost_log_start = _cost_log_len(dataforseo_client)
 
     m5_metro_input: dict[str, Any] = {
         "metro_id": resolved.cbsa_code,
@@ -267,9 +270,9 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
-    evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(dfs_cost_log)
-    if evidence_artifacts:
-        report["seo_evidence_artifacts"] = evidence_artifacts
+    evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(
+        dfs_cost_log[cost_log_start:]
+    )
     m9_ms = int((time.monotonic() - m9_start) * 1000)
     logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
                 run_id, report.get("report_id"), m9_ms)
@@ -288,6 +291,7 @@ async def score_niche_for_metro(
         report=report,
         opportunity_score=int(round(scores["opportunity"])),
         evidence=evidence,
+        seo_evidence_artifacts=evidence_artifacts,
     )
 
 
@@ -448,6 +452,7 @@ async def _dry_run_result(
         report=report,
         opportunity_score=int(round(scores["opportunity"])),
         evidence=_build_evidence_from_signals(signals),
+        seo_evidence_artifacts=[],
     )
 
 
@@ -469,6 +474,10 @@ def _log_dfs_cost_summary(
             ep_parts.append(f"{short}={info['calls']}/${info['cost']:.4f}")
         parts.append("breakdown: " + ", ".join(ep_parts))
     logger.info(" — ".join(parts))
+
+
+def _cost_log_len(dataforseo_client: Any) -> int:
+    return len(getattr(dataforseo_client, "cost_log", []) or [])
 
 
 def _population_class_for_benchmarks(population: int | None) -> str | None:
