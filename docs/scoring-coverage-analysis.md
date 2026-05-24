@@ -335,6 +335,71 @@ Phase 2 researched comparable SEO benchmark structures on 2026-05-24. The goal w
 
 Phase 3 should catalog active SEO data APIs against these required evidence fields, with special attention to DataForSEO endpoint coverage, identifier stability, costs, and which fields can populate metric-level sample counts.
 
+## Benchmark Development Research: Phase 3 SEO API Catalog
+
+Phase 3 cataloged active SEO data APIs on 2026-05-24. The catalog combines the current Whidby client surface in `src/clients/dataforseo/endpoints.py`, `src/clients/dataforseo/client.py`, and `src/research_agent/tools/api_tools.py` with current DataForSEO documentation. Cost values below are local repo estimates; refresh live vendor pricing before any paid acquisition batch.
+
+### Current Whidby API Surface
+
+| Local endpoint constant | Local method/tool | DataForSEO path | Mode | Local estimated cost | Current benchmark role |
+| --- | --- | --- | --- | ---: | --- |
+| `SERP_ORGANIC` | `serp_organic`, `fetch_serp_organic` | `serp/google/organic/live/advanced` | Live | 0.002 | Organic SERP composition, top organic targets, ads/SERP-feature context, AIO presence where returned in SERP items. |
+| `SERP_MAPS` | `serp_maps`, `fetch_serp_maps` | `serp/google/maps/live/advanced` | Live | 0.002 | Local-pack rank, rating, review count, `cid`, `place_id`, category, claimed/listing metadata. |
+| `KEYWORD_VOLUME` | `keyword_volume`, `fetch_keyword_volume` | `keywords_data/google/search_volume/task_post` | Queued | 0.05 | Demand volume and CPC for selected keyword set. |
+| `KEYWORD_SUGGESTIONS` | `keyword_suggestions`, `fetch_keyword_suggestions` | `dataforseo_labs/google/keyword_suggestions/live` | Live | 0.05 | Keyword expansion and long-tail discovery. |
+| `BUSINESS_LISTINGS` | `business_listings`, `fetch_business_listings` | `business_data/business_listings/search/live` | Live | 0.01 | Supplemental local-business inventory, listing/domain/rating fields; not the canonical density source. |
+| `GOOGLE_MY_BUSINESS_INFO` | `google_my_business_info` | `business_data/google/my_business_info/live` | Live | 0.004 | Business profile detail lookup by establishment name, `cid`, or `place_id`; currently not exposed through the research-agent plugin. |
+| `GOOGLE_REVIEWS` | `google_reviews`, `fetch_google_reviews` | `business_data/google/reviews/task_post` | Queued | 0.005 | Review timestamps and review velocity; runner supports `cid`, `place_id`, and `sort_by=newest`. |
+| `BACKLINKS_SUMMARY` | `backlinks_summary`, `fetch_backlinks_summary` | `backlinks/summary/live` | Live | 0.002 | Domain/page authority telemetry for top organic targets; runner requests `rank_scale=one_hundred`. |
+| `LIGHTHOUSE` | `lighthouse`, `fetch_lighthouse` | `on_page/lighthouse/live` | Live | 0.006 | Page/site quality telemetry for top organic targets. |
+| `LIGHTHOUSE_QUEUED` | batch helper only | `on_page/lighthouse/task_post` | Queued | 0.002 | Lower-cost Lighthouse acquisition option; not the default runner path. |
+| `LOCATIONS` | `locations` | `serp/google/locations` | Live | 0.000 | DataForSEO location-code discovery/verification. |
+| `GOOGLE_TRENDS` | `google_trends` | `keywords_data/google_trends/explore/live` | Live | 0.05 | Seasonality/trend shape for up to five keywords; currently used through the trends adapter, not benchmark recompute. |
+
+DataForSEO also documents Google Ads Search Volume and Google Keyword Overview endpoints that overlap with Whidby's current demand source. The current Whidby path remains valid, but Phase 4 should decide whether to keep `keywords_data/google/search_volume/*` as canonical demand or migrate/augment with Google Ads Search Volume / Keyword Overview for richer `competition`, bid, monthly-search, intent, and update-timestamp fields.
+
+### API-To-Benchmark Evidence Map
+
+| Benchmark dimension | Active source | Key upstream fields | Repeatable identifier/provenance | Metric-level sample counts to derive |
+| --- | --- | --- | --- | --- |
+| Demand volume/CPC | DataForSEO Keywords Data Search Volume; candidate upgrade/augment from Google Ads Search Volume or Keyword Overview | keyword, `search_volume`, `cpc`, `competition`, `competition_level`, `monthly_searches`, `last_updated_time` where available | keyword, `location_code`, `language_code`, endpoint path, source window/month, keyword-intent class | `sample_size_keywords`, `sample_size_volume_non_null`, `sample_size_cpc_non_null`, `sample_size_monthly_searches_non_null` |
+| Keyword expansion | DataForSEO Labs Keyword Suggestions and Keyword Overview | suggested keyword, volume trend, CPC, paid competition, search intent, SERP/backlink info where available | seed keyword, location/language, suggestion endpoint, returned keyword, extraction timestamp | `sample_size_suggestions`, `sample_size_intent_labeled`, `sample_size_expanded_keywords_used` |
+| Organic SERP composition | DataForSEO Google Organic SERP Advanced | item type, `rank_group`, `rank_absolute`, title, URL, domain, SERP features, ads/local-pack/AIO item types | keyword, `location_code`, depth, device/language if configured, SERP datetime | `sample_size_serp_keywords`, `sample_size_top10_organic`, `sample_size_serp_features`, `sample_size_aio_observed` |
+| Organic authority | DataForSEO Backlinks Summary with `rank_scale=one_hundred` | rank/domain-rank fields, backlinks, referring domains, page/domain summary fields | organic URL/domain from SERP, rank scale, endpoint path, collection timestamp | `sample_size_top5_da_attempted`, `sample_size_top5_da_non_null`, `sample_size_referring_domains_non_null` |
+| Organic site quality | DataForSEO OnPage Lighthouse | performance score, SEO score, accessibility/best-practices categories, individual audits, Lighthouse version | canonical URL, device mode, Lighthouse version, endpoint mode, collection timestamp | `sample_size_top5_lighthouse_attempted`, `sample_size_top5_lighthouse_non_null`, `sample_size_lighthouse_versioned` |
+| Local-pack difficulty | DataForSEO Maps Live Advanced | `rank_group`, `rank_absolute`, rating value, `votes_count`, `rating_distribution`, category, `cid`, `place_id`, claimed/listing flags | keyword, `location_code`, local-pack rank, `cid`, `place_id`, collection timestamp | `sample_size_local_pack_keywords`, `sample_size_top3_review_count_non_null`, `sample_size_local_identifiers_non_null` |
+| Review velocity | DataForSEO Google Reviews | review timestamp/date, rating, review text/id/profile fields; supports `keyword`, `cid`, or `place_id`; supports `sort_by=newest` | `cid` or `place_id` first, fallback title keyword, `location_code`, sort, depth, review window | `sample_size_review_velocity_attempted`, `sample_size_review_velocity_non_null`, `sample_size_reviews_timestamped` |
+| Business profile completeness | DataForSEO Google My Business Info, Business Listings | category, address, phone, URL/domain, images/photos, rating distribution, work hours, claimed/open status where returned | `cid`, `place_id`, category, location, source endpoint | `sample_size_gbp_profiles`, `sample_size_profiles_with_domain`, `sample_size_profiles_with_hours`, `sample_size_profiles_with_phone` |
+| Monetization density | Census CBP remains canonical; DataForSEO Business Listings is supplemental | CBP establishments per NAICS/CBSA; DFS business count/listing quality can provide live market texture | CBSA, NAICS mapping version, CBP year; optional DFS category/location provenance | `sample_size_cbp_metros`, `sample_size_dfs_listings_non_null` |
+| AI resilience / SERP displacement | Current SERP Advanced item types; candidate DataForSEO AI Optimization/LLM APIs for future work | AIO/AI Overview item presence, PAA, ads, local services, SERP feature mix; possible LLM mention/domain metrics if adopted later | keyword, location, SERP datetime, model/provider if LLM APIs are used | `sample_size_aio_observed`, `sample_size_serp_feature_keywords`, future `sample_size_llm_mentions` |
+
+### Catalog Findings
+
+| Finding | Implication |
+| --- | --- |
+| DataForSEO covers every currently required SEO evidence family, but Whidby uses different surfaces for demand, SERP, local, review, backlink, Lighthouse, trends, and listings. | Benchmark recompute needs source lineage per metric, not just one cell timestamp. |
+| Stable local identifiers are available in Maps and Reviews through `cid` and `place_id`. | `seo_facts` or a companion evidence table should preserve these identifiers for top local-pack businesses before review velocity becomes benchmark-critical. |
+| The acquisition runner already uses the richer review/backlink client paths (`cid`/`place_id`, `sort_by=newest`, `rank_scale=one_hundred`), but the research-agent plugin/tool wrappers still expose keyword-only reviews and no backlink `rank_scale` option. | If agent-driven acquisition becomes part of the workflow, update the plugin schema and `api_tools.py` so it cannot silently collect lower-quality evidence than `run_pilot.py`. |
+| Current benchmark schema can store aggregate values but cannot prove per-metric evidence sufficiency. | Add metric-level sample counters or a benchmark-metric child table before enabling recompute-backed product claims. |
+| Demand collection should decide between the current `keywords_data/google/search_volume/*` path and the newer/richer Google Ads Search Volume or Keyword Overview surfaces. | Phase 4 should specify the canonical demand endpoint, migration risk, and whether to store both legacy and enriched demand metadata during transition. |
+| Business Listings and Google My Business Info are useful for local/GBP completeness, but CBP should remain canonical for establishment density. | Keep live business-listing counts as supplemental evidence rather than replacing census-backed monetization density. |
+| Lighthouse is a page-quality audit, not an organic authority metric. | Keep Lighthouse separate from DA/backlink authority in metric-level confidence and explanations. |
+| DataForSEO now documents broader AI/LLM/AI Optimization endpoints, but Whidby does not currently wrap them. | Keep current AI resilience based on SERP features until a separate Linear slice approves LLM/AI-search acquisition costs and schema. |
+
+### Phase 3 Storage Requirements
+
+The benchmark/data-collection update should be able to persist or derive the following for each paid evidence source:
+
+1. Source endpoint path and mode (`live` or `standard`).
+2. Request parameters that affect comparability: keyword, `location_code`, language, depth, device, sort, rank scale, Lighthouse version, and source window.
+3. Stable entity identifiers: organic URL/domain for top-5 organic targets; `cid` and `place_id` for top local-pack targets.
+4. Collection timestamp and upstream result datetime.
+5. Cost and cache status from the DataForSEO client.
+6. Metric-specific attempted/non-null counts.
+7. Per-metric confidence labels that roll up into, but do not get hidden by, `seo_benchmarks.confidence_label`.
+
+Phase 4 should turn these catalog gaps into required benchmark/data-model changes: canonical demand source decision, metric-level sufficiency schema, local-place lineage, raw evidence retention, agent tool parity, and paid acquisition guardrails.
+
 ## App Surface Visibility
 
 | Measure | Result |
