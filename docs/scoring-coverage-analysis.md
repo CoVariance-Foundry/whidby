@@ -288,6 +288,53 @@ The current schema has cell-level `sample_size_metros` and `sample_size_observat
 
 Phase 2 should compare this plan against external SEO benchmark structures and return with concrete updates for metric-level sufficiency, pooling policy, source lineage, and acquisition priority.
 
+## Benchmark Development Research: Phase 2 Comparables
+
+Phase 2 researched comparable SEO benchmark structures on 2026-05-24. The goal was to identify how established tools define benchmark grain, combine evidence, express confidence or limitations, and turn raw data into product guidance.
+
+### Comparable Benchmark Patterns
+
+| Source | Benchmark structure | Useful pattern for Whidby |
+| --- | --- | --- |
+| [Ahrefs Keyword Difficulty](https://ahrefs.com/keyword-difficulty) | Keyword-level 0-100 difficulty score based on referring domains across the top 10 organic ranking pages. The score maps to an estimated referring-domain need, excludes on-page factors, and is recommended as a first filter before detailed SERP analysis. | Keep organic difficulty evidence SERP-relative. Do not represent top-5 DA, backlinks, or Lighthouse telemetry as complete competition truth; expose them as one dimension that still needs SERP/context review. |
+| [Semrush Keyword Difficulty](https://www.semrush.com/kb/1158-what-is-kd) | Keyword-level 0-100 effort estimate using multiple top-10 SERP factors: median referring domains, dofollow/nofollow ratio, authority score, and SERP qualities. It converts score bands into guidance such as easy, possible, difficult, hard, and very hard. | Add metric-specific inputs before guidance. Whidby should separate raw evidence, normalized benchmark score, and user-facing effort label rather than letting one confidence label carry every dimension. |
+| [Moz Authority Scoring Guide](https://moz-static.s3.amazonaws.com/products/landing-pages/announcements/Authority_Scoring_Guide.pdf) | Domain Authority is a 0-100 comparative score built from link-index evidence and a model that changes as Moz updates its link data and scoring calculation. Moz frames authority as comparative, not absolute. | Version benchmark recomputes and formulas. Treat benchmark scores as relative to the peer universe, not objective market quality, and preserve enough lineage to compare current values only against compatible benchmark versions. |
+| [SISTRIX Visibility Index](https://www.sistrix.com/visibility-index/calculation) | Domain visibility benchmark built from a representative keyword set, organic rankings, search volume weighting, click-probability weighting, and summed visibility values. It emphasizes transparent, stable calculation and supports custom project indexes for narrow niches/local tracking. | Formalize Whidby's sample frame. Local service benchmarks need explicit service, metro, keyword, and population-class coverage rules so future recomputes compare like with like. Add weighting policy before any city-size pooling. |
+| [Google local ranking guidance](https://support.google.com/business/answer/7091?hl=en) and [Whitespark local factors](https://whitespark.ca/blog/7-local-search-ranking-factors-that-may-challenge-your-current-thinking/) | Local visibility depends on relevance, distance, and prominence; review count/rating, review recency, business information completeness, hours, citations, and local-pack behavior are important local evidence. | Local difficulty must stay independent from organic difficulty. Review count and velocity are not optional for local-pack benchmarking, and `cid`/`place_id` lineage should be first-class for repeatable review acquisition. |
+
+### Common Structure Across Benchmarks
+
+| Pattern | Observed in comparables | Gap in current Whidby plan |
+| --- | --- | --- |
+| Defined grain | Ahrefs/Semrush use keyword + SERP; SISTRIX uses domain + keyword set + ranking; Moz uses domain/page authority; local search uses business + geography. | Whidby has a clear cell grain, but it still needs metric-grain sufficiency inside each cell. |
+| Evidence-specific scoring | Semrush combines backlink, authority, and SERP qualities; SISTRIX weights rank by volume and click probability; local SEO separates reviews, prominence, and relevance. | `seo_benchmarks` has one cell confidence label even when local, organic, and demand evidence coverage differ sharply. |
+| Comparative interpretation | Moz explicitly frames authority as comparative; SISTRIX recommends competitor comparison; Ahrefs recommends SERP analysis after KD filtering. | Whidby explanations should say "relative to this service/population benchmark version" instead of implying absolute market truth. |
+| Transparent limitations | Ahrefs states KD excludes on-page factors; SISTRIX documents small-niche limitations and custom indexes; Google states local rank cannot be bought/requested. | Whidby needs product-visible warnings for sparse cells, missing metric evidence, pooled fallbacks, and unsupported local signals. |
+| Stable/versioned calculation | Moz discusses score changes when link index or scoring models change; SISTRIX emphasizes calculation stability for historical comparison. | Whidby recomputes should carry formula version, source window, acquisition flags, and sample-frame version. |
+
+### Phase 2 Findings
+
+| Finding | Impact on Whidby benchmark development |
+| --- | --- |
+| Established SEO difficulty tools are SERP-relative, not market-cell-relative. | Whidby's market-cell benchmark is differentiated, but it needs clearer SERP evidence lineage so users can understand what part of difficulty is organic SERP competition versus local-market structure. |
+| Multi-factor benchmarks still preserve dimension limits. | Whidby should not unlock a whole cell just because `sample_size_metros >= 8`; each score dimension needs its own sufficiency gate. |
+| Comparable scores are best used as filters or comparative guides. | Whidby should keep low-confidence scores available with warnings, but block recompute-backed expansion and hard product claims until metric-specific gates pass. |
+| Authority and visibility scores depend on data-version stability. | Benchmark recomputes need versioned lineage before they become durable customer-facing benchmarks. |
+| Local SEO benchmarks require local-specific evidence. | Review velocity, review count, stable place identifiers, GBP/business completeness signals, and local-pack presence should be first-class local inputs, not optional add-ons hidden under a generic confidence label. |
+| Narrow-niche/local indexes need custom sample frames. | Whidby should explicitly define a benchmark sample frame per service and population class, then document any pooled fallback as a separate benchmark type. |
+
+### Phase 2 Recommendations
+
+1. Add metric-specific sufficiency fields or a companion benchmark metric table before treating `seo_benchmarks` as production-complete.
+2. Split benchmark confidence into at least demand, organic, local, monetization, and AI-resilience confidence; keep the current cell confidence as a rollup only.
+3. Store benchmark lineage: formula version, source window, acquisition flags, sample-frame version, data source mix, and recompute timestamp.
+4. Define pooling as an explicit benchmark mode with its own key and warnings, not an implicit fallback inside `niche_normalized + population_class`.
+5. Add local-place lineage for review acquisition: preserve `cid`, `place_id`, source query, rank, and collected review window for top local-pack businesses.
+6. Preserve raw SERP/local/review evidence separately from normalized benchmark scores so future formulas can be recalibrated without rerunning all paid collection.
+7. Update product copy and scoring explanations to frame benchmarks as relative to a peer set and evidence window.
+
+Phase 3 should catalog active SEO data APIs against these required evidence fields, with special attention to DataForSEO endpoint coverage, identifier stability, costs, and which fields can populate metric-level sample counts.
+
 ## App Surface Visibility
 
 | Measure | Result |

@@ -28,7 +28,7 @@ Current contract:
 - PR #81 reviewer follow-up fixed acquisition edge cases: review velocity now propagates to every keyword fact row, malformed local-pack rows without title/CID/place ID are skipped, Backlinks Summary requests the `one_hundred` rank scale before persisting DA telemetry, and DA parsing prefers explicit domain-rank keys before any generic nested `rank`.
 - WHI-103 records the durable analysis in `docs/scoring-coverage-analysis.md`, using the ignored `reports/scoring_audit/coverage_*.jsonl` and `scoring_audit_20260523T154926Z.*` artifacts. The conclusion is that the 96/96 pilot validates the guarded scoring and persistence path, but benchmark usability remains 0/48 at `sample_size_metros >= 8`, DA/Lighthouse telemetry is absent, local difficulty inputs are missing, and only 10/96 pilot rows are visible through V2-backed Explore rows.
 - WHI-104 read live production `seo_benchmarks` after checking the Supabase schema in `supabase/migrations/010_v2_benchmarks.sql` and `012_recompute_seo_benchmarks.sql` because `.Codex/databricks-context/` is not present. The benchmark appendix in `docs/scoring-coverage-analysis.md` records 55 benchmark rows, 28/48 core-service cells present, 0/48 core-service cells usable at `sample_size_metros >= 8`, 20/48 core cells missing, all present core cells capped at sample size 4, and null local review-count/velocity medians across all present core cells.
-- The benchmark-development research plan is logged in Linear at `https://linear.app/covariancestudio/document/benchmark-development-research-plan-32e613154242` and linked from `WHI-104`. Phase 1 has started in `docs/scoring-coverage-analysis.md` with a current-plan map covering `seo_facts -> seo_benchmarks`, benchmark cell grain, gate sequence, confidence thresholds, data/API blockers, and the Phase 2 comparison questions.
+- The benchmark-development research plan is logged in Linear at `https://linear.app/covariancestudio/document/benchmark-development-research-plan-32e613154242` and linked from `WHI-104`. Phase 1 mapped the current plan in `docs/scoring-coverage-analysis.md`. Phase 2 added comparable benchmark research across Ahrefs, Semrush, Moz, SISTRIX, Google local ranking guidance, and Whitespark local factors. The central finding is that Whidby needs metric-level sufficiency, explicit benchmark versioning/lineage, clear comparative semantics, local-place review lineage, and a formal pooling mode before benchmark-backed scale-out.
 
 Verified:
 
@@ -50,7 +50,7 @@ Verified:
 
 Next:
 
-- Continue research Phase 2 by comparing the current Whidby benchmark plan against external SEO benchmark structures, then feed the gaps back into the benchmark/data-collection approach.
+- Continue research Phase 3 by cataloging active SEO data APIs against required benchmark evidence fields, especially DataForSEO endpoint coverage, identifier stability, costs, and metric-level sample-count support.
 - Open and merge the WHI-104 benchmark-sufficiency PR after WHI-103 PR #82 lands. Then move to `WHI-105` for Explore/report visibility. Keep paid work bounded to the smallest reviewed acquisition/backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
 
 ## Billing Hardening And Admin Issue Visibility
