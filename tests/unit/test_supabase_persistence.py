@@ -1,7 +1,10 @@
 """Unit tests for the Supabase report persistence adapter."""
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,7 +19,10 @@ from src.clients.supabase_persistence import (
     build_metro_score_rows,
     build_metro_score_v2_rows,
     build_seo_fact_rows,
+    build_seo_evidence_artifact_rows,
 )
+
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
 
 
 def _sample_report() -> dict[str, Any]:
@@ -120,6 +126,25 @@ def _sample_v2_report() -> dict[str, Any]:
 
 def _sample_competitor_report() -> dict[str, Any]:
     report = _sample_v2_report()
+    report["raw_evidence_artifacts"] = [
+        {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "provider": "dataforseo",
+            "endpoint_path": "/v3/serp/google/maps/live/advanced",
+            "evidence_family": "maps",
+            "normalized_request_params": {
+                "keyword": "roof repair phoenix",
+                "location_code": 1000013,
+            },
+            "response_payload": {"tasks": [{"id": "task-1", "result_count": 2}]},
+            "response_storage_uri": "s3://whidby-seo-evidence/maps/task-1.json",
+            "cache_status": "miss",
+            "cost_usd": 0.002,
+            "collected_at": "2026-04-20T00:03:00+00:00",
+            "source_window_start": "2026-04-01T00:00:00+00:00",
+            "source_window_end": "2026-04-20T00:00:00+00:00",
+        }
+    ]
     report["metros"][0]["signals"]["organic_competition"]["top_organic_results"] = [
         {
             "keyword": "roof repair phoenix",
@@ -150,6 +175,17 @@ def _sample_competitor_report() -> dict[str, Any]:
             "keyword": "roof repair phoenix",
             "listing_rank": 1,
             "business_name": "Phoenix Roof Repair Pros",
+            "cid": "1234567890123456789",
+            "place_id": "ChIJroofrepairphoenix",
+            "source_query": "roof repair phoenix",
+            "location_code": 1000013,
+            "result_type": "maps_search",
+            "url": "https://www.google.com/maps?cid=1234567890123456789",
+            "review_retrieval_mode": "cid",
+            "review_window_start": "2026-04-01T00:00:00+00:00",
+            "review_window_end": "2026-04-20T00:00:00+00:00",
+            "upstream_result_at": "2026-04-20T00:03:00+00:00",
+            "evidence_artifact_id": "33333333-3333-3333-3333-333333333333",
             "exact_match_name": True,
             "review_count": 88,
             "review_velocity_monthly": 4.25,
@@ -413,6 +449,18 @@ def test_build_local_pack_listing_fact_rows_maps_existing_fact_shape() -> None:
         "keyword": "roof repair phoenix",
         "listing_rank": 1,
         "business_name": "Phoenix Roof Repair Pros",
+        "cid": "1234567890123456789",
+        "place_id": "ChIJroofrepairphoenix",
+        "source_query": "roof repair phoenix",
+        "dataforseo_location_code": 1000013,
+        "result_type": "maps_search",
+        "listing_url": "https://www.google.com/maps?cid=1234567890123456789",
+        "domain": "google.com",
+        "review_retrieval_mode": "cid",
+        "review_window_start": "2026-04-01T00:00:00+00:00",
+        "review_window_end": "2026-04-20T00:00:00+00:00",
+        "upstream_result_at": "2026-04-20T00:03:00+00:00",
+        "evidence_artifact_id": "33333333-3333-3333-3333-333333333333",
         "exact_match_name": True,
         "review_count": 88,
         "review_velocity_monthly": 4.25,
@@ -426,9 +474,114 @@ def test_build_local_pack_listing_fact_rows_maps_existing_fact_shape() -> None:
         "report_id": "11111111-1111-1111-1111-111111111111",
     }
     assert rows[1]["business_name"] == "Desert Roofing"
+    assert rows[1]["cid"] is None
+    assert rows[1]["place_id"] is None
+    assert rows[1]["review_retrieval_mode"] is None
     assert rows[1]["review_count"] == 51
     assert rows[1]["rating"] == 4.4
     assert rows[1]["categories"] == ["Roofing contractor"]
+    assert rows[0]["cid"] or rows[0]["place_id"]
+    assert rows[0]["listing_url"] == "https://www.google.com/maps?cid=1234567890123456789"
+    assert rows[0]["domain"] == "google.com"
+
+
+def test_build_seo_evidence_artifact_rows_maps_and_hashes_provenance() -> None:
+    report = _sample_competitor_report()
+
+    rows = build_seo_evidence_artifact_rows(report)
+
+    assert len(rows) == 1
+    row = rows[0]
+    normalized_params = {
+        "keyword": "roof repair phoenix",
+        "location_code": 1000013,
+    }
+    expected_request_hash = hashlib.sha256(
+        json.dumps(
+            {
+                "provider": "dataforseo",
+                "endpoint_path": "/v3/serp/google/maps/live/advanced",
+                "normalized_request_params": normalized_params,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    expected_response_hash = hashlib.sha256(
+        json.dumps(
+            {"tasks": [{"id": "task-1", "result_count": 2}]},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    assert row["id"] == "33333333-3333-3333-3333-333333333333"
+    assert row["provider"] == "dataforseo"
+    assert row["endpoint_path"] == "/v3/serp/google/maps/live/advanced"
+    assert row["evidence_family"] == "maps"
+    assert row["normalized_request_params"] == normalized_params
+    assert row["request_hash"] == expected_request_hash
+    assert row["response_hash"] == expected_response_hash
+    assert row["response_storage_uri"] == "s3://whidby-seo-evidence/maps/task-1.json"
+    assert row["cache_status"] == "miss"
+    assert row["cost_usd"] == 0.002
+    assert row["collected_at"] == "2026-04-20T00:03:00+00:00"
+    assert row["source_window_start"] == "2026-04-01T00:00:00+00:00"
+    assert row["source_window_end"] == "2026-04-20T00:00:00+00:00"
+
+
+def test_build_seo_evidence_artifact_rows_skips_incomplete_artifacts() -> None:
+    report = {
+        **_sample_v2_report(),
+        "seo_evidence_artifacts": [
+            {"endpoint_path": "/v3/serp/google/organic/live/advanced"},
+            {"evidence_family": "serp"},
+        ],
+    }
+
+    assert build_seo_evidence_artifact_rows(report) == []
+
+
+def test_whi127_migration_adds_local_identifiers_and_evidence_artifacts() -> None:
+    migration = (
+        MIGRATIONS_DIR / "20260524135200_whi127_evidence_lineage.sql"
+    ).read_text()
+
+    assert "CREATE TABLE IF NOT EXISTS public.seo_evidence_artifacts" in migration
+    assert "ALTER TABLE public.local_pack_listing_facts" in migration
+    for column in (
+        "cid TEXT",
+        "place_id TEXT",
+        "source_query TEXT",
+        "dataforseo_location_code INTEGER",
+        "result_type TEXT",
+        "listing_url TEXT",
+        "domain TEXT",
+        "review_retrieval_mode TEXT",
+        "review_window_start TIMESTAMPTZ",
+        "review_window_end TIMESTAMPTZ",
+        "upstream_result_at TIMESTAMPTZ",
+        "evidence_artifact_id UUID",
+    ):
+        assert column in migration
+    assert "idx_local_pack_listing_facts_cid" in migration
+    assert "idx_local_pack_listing_facts_place_id" in migration
+    assert "REFERENCES public.seo_evidence_artifacts(id) ON DELETE SET NULL" in migration
+    assert "UNIQUE (provider, endpoint_path, request_hash)" in migration
+    assert "jsonb_typeof(normalized_request_params) = 'object'" in migration
+    assert "ALTER TABLE public.seo_evidence_artifacts ENABLE ROW LEVEL SECURITY" in migration
+    assert "FOR ALL TO service_role USING (true) WITH CHECK (true)" in migration
+    for evidence_family in (
+        "serp",
+        "maps",
+        "reviews",
+        "backlinks",
+        "lighthouse",
+        "keyword_volume",
+        "keyword_overview",
+    ):
+        assert evidence_family in migration
+    for cache_status in ("hit", "miss", "bypass", "replay", "unknown"):
+        assert cache_status in migration
 
 
 def test_competitor_fact_builders_require_snapshot_date_only_when_rows_exist() -> None:
@@ -543,8 +696,17 @@ def test_persist_report_upserts_competitor_read_model_facts() -> None:
 
     adapter.persist_report(_sample_competitor_report())
 
+    assert len(fake.tables["seo_evidence_artifacts"]) == 1
     assert len(fake.tables["organic_competitor_facts"]) == 2
     assert len(fake.tables["local_pack_listing_facts"]) == 2
+    evidence_call = next(
+        call
+        for call in fake.calls
+        if call["table"] == "seo_evidence_artifacts" and call["method"] == "upsert"
+    )
+    assert evidence_call["kwargs"] == {
+        "on_conflict": "provider,endpoint_path,request_hash"
+    }
     organic_call = next(
         call
         for call in fake.calls
