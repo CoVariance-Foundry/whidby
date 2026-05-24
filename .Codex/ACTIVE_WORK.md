@@ -48,7 +48,7 @@ Verified:
 - `ruff check scripts/benchmarks/run_pilot.py src/clients/dataforseo/client.py tests/scripts/test_benchmark_serp_parsing.py tests/unit/test_dataforseo_client.py` passed.
 - `git diff --check` passed.
 - `npx docguard-cli guard` ran with network escalation and exited warn-only with the existing repository warnings around docs-sync, traceability, TODO tracking, Spec-Kit, and unrelated doc quality.
-- `/Users/antwoineflowers/.codex/worktrees/6aa7/whidby/.venv/bin/python audit_scoring_strategy.py --read-only --expected-project-ref eoajvifhbmqmoluiokcj ... --output-dir /private/tmp/whidby-whi103-coverage-analysis/reports/scoring_audit` wrote `scoring_audit_20260524T040729Z.*` and exited fail because the expected app-surface/benchmark gates remain below threshold.
+- `/Users/antwoineflowers/.codex/worktrees/6aa7/whidby/.venv/bin/python audit_scoring_strategy.py --read-only --expected-project-ref eoajvifhbmqmoluiokcj ... --output-dir reports/scoring_audit` wrote ignored `reports/scoring_audit/scoring_audit_20260524T040729Z.*` artifacts in the active WHI-105 worktree and exited fail because the expected app-surface/benchmark gates remain below threshold.
 - A read-only Supabase plus Render API smoke verified the 110 report-backed Explore IDs: zero missing `reports` rows and five sampled `GET /api/niches/{report_id}` calls returned HTTP 200.
 
 Next:
