@@ -138,6 +138,11 @@ def test_invalid_benchmark_mode_raises_value_error() -> None:
         SeoBenchmarkCell.from_mapping(_row(benchmark_mode="nearest_neighbor"))
 
 
+def test_empty_benchmark_mode_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="Unsupported benchmark mode"):
+        SeoBenchmarkCell.from_mapping(_row(benchmark_mode=" "))
+
+
 def test_non_mapping_metric_confidence_rollup_raises_value_error() -> None:
     with pytest.raises(ValueError, match="metric_confidence_rollup must be a mapping"):
         SeoBenchmarkCell.from_mapping(_row(metric_confidence_rollup=["demand"]))

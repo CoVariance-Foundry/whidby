@@ -65,7 +65,9 @@ def _confidence(value: Any) -> BenchmarkConfidence:
 
 
 def _benchmark_mode(value: Any) -> BenchmarkMode:
-    mode = str(value or "exact").strip()
+    if value is None:
+        return "exact"
+    mode = str(value).strip()
     if mode not in _BENCHMARK_MODE_VALUES:
         raise ValueError(f"Unsupported benchmark mode: {mode!r}")
     return mode  # type: ignore[return-value]

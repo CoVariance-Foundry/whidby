@@ -36,53 +36,6 @@ CREATE TABLE IF NOT EXISTS public.seo_benchmark_runs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'seo_benchmark_runs_source_mix_object_check'
-          AND conrelid = 'public.seo_benchmark_runs'::regclass
-    ) THEN
-        ALTER TABLE public.seo_benchmark_runs
-            ADD CONSTRAINT seo_benchmark_runs_source_mix_object_check
-            CHECK (jsonb_typeof(source_mix) = 'object');
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'seo_benchmark_runs_acquisition_flags_object_check'
-          AND conrelid = 'public.seo_benchmark_runs'::regclass
-    ) THEN
-        ALTER TABLE public.seo_benchmark_runs
-            ADD CONSTRAINT seo_benchmark_runs_acquisition_flags_object_check
-            CHECK (jsonb_typeof(acquisition_flags) = 'object');
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'seo_benchmark_runs_pool_definition_object_check'
-          AND conrelid = 'public.seo_benchmark_runs'::regclass
-    ) THEN
-        ALTER TABLE public.seo_benchmark_runs
-            ADD CONSTRAINT seo_benchmark_runs_pool_definition_object_check
-            CHECK (jsonb_typeof(pool_definition) = 'object');
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'seo_benchmark_runs_cost_summary_object_check'
-          AND conrelid = 'public.seo_benchmark_runs'::regclass
-    ) THEN
-        ALTER TABLE public.seo_benchmark_runs
-            ADD CONSTRAINT seo_benchmark_runs_cost_summary_object_check
-            CHECK (jsonb_typeof(cost_summary) = 'object');
-    END IF;
-END $$;
-
 ALTER TABLE public.seo_benchmarks
     ADD COLUMN IF NOT EXISTS benchmark_run_id UUID
         REFERENCES public.seo_benchmark_runs(id),
