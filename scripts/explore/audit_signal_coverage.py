@@ -25,6 +25,7 @@ from scripts.explore.audit_scoring_strategy import (  # noqa: E402
     METRIC_MISSING_STATUS,
     METRIC_UNDERSAMPLED_STATUS,
     build_canary_guidance,
+    normalize_service_key,
     summarize_metric_sufficiency,
     summarize_strategy_readiness,
 )
@@ -45,6 +46,8 @@ REQUIRED_COLUMNS = {
         "benchmark_run_id",
         "niche_normalized",
         "population_class",
+        "last_recomputed_at",
+        "fact_window_end",
         "sample_size_metros",
     ),
     "seo_benchmark_metric_sufficiency": (
@@ -250,7 +253,10 @@ def build_report(
     for row in benchmarks:
         if not row.get("niche_normalized") or not row.get("population_class"):
             continue
-        key = (str(row.get("niche_normalized")), str(row.get("population_class")))
+        key = (
+            normalize_service_key(str(row.get("niche_normalized") or "")),
+            str(row.get("population_class")),
+        )
         sample_size = int(numeric_value(row.get("sample_size_metros")))
         benchmark_sample_sizes[key] = max(benchmark_sample_sizes.get(key, 0), sample_size)
     benchmark_keys = set(benchmark_sample_sizes)
@@ -283,7 +289,7 @@ def build_report(
         enriched_facts.append(enriched)
 
         if niche and population_class != "unknown":
-            benchmark_key = (niche, population_class)
+            benchmark_key = (normalize_service_key(niche), population_class)
             fact_benchmark_keys.add(benchmark_key)
             if benchmark_key not in benchmark_keys:
                 missing_benchmark_keys.add(benchmark_key)

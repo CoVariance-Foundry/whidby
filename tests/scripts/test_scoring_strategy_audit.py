@@ -119,6 +119,8 @@ def full_data(*, sample_size: int = 8, include_second_class_gap: bool = False):
                 "benchmark_run_id": "run-1",
                 "niche_normalized": "roofing",
                 "population_class": "metro_1m_5m",
+                "last_recomputed_at": "2026-05-24T00:00:00+00:00",
+                "fact_window_end": "2026-05-24",
                 "sample_size_metros": sample_size,
                 "confidence_label": "medium",
                 "median_total_volume_per_capita": 0.001,
@@ -308,9 +310,59 @@ def test_strategy_readiness_blocks_required_families_and_warns_on_optional_famil
         {
             "niche_normalized": "roofing",
             "population_class": "metro_1m_5m",
-            "blocked_metric_families": ["organic_authority", "local_pack"],
+            "needs_collection_metric_families": ["organic_authority", "local_pack"],
         }
     ]
+
+
+def test_metric_sufficiency_selects_latest_benchmark_run_per_cell():
+    data = full_data()
+    current_benchmark = {
+        **data["seo_benchmarks"][0],
+        "benchmark_run_id": "run-2",
+        "last_recomputed_at": "2026-05-25T00:00:00+00:00",
+    }
+    stale_benchmark = {
+        **data["seo_benchmarks"][0],
+        "benchmark_run_id": "run-1",
+        "last_recomputed_at": "2026-05-24T00:00:00+00:00",
+    }
+    data["seo_benchmarks"] = [current_benchmark, stale_benchmark]
+    for row in data["seo_benchmark_metric_sufficiency"]:
+        row["benchmark_run_id"] = "run-2"
+
+    report = build_report(data)
+    demand = report["metric_sufficiency"]["cells"][0]["families"]["demand"]
+
+    assert demand["status"] == "metric_ready"
+    assert demand["benchmark_run_id"] == "run-2"
+
+
+def test_metric_sufficiency_row_selection_uses_stable_tiebreaker():
+    data = full_data()
+    data["seo_benchmarks"][0]["benchmark_run_id"] = None
+    demand_run_1 = next(
+        row
+        for row in data["seo_benchmark_metric_sufficiency"]
+        if row["metric_family"] == "demand"
+    )
+    demand_run_1["non_null_metros"] = 0
+    demand_run_1["non_null_observations"] = 0
+    demand_run_1["confidence_label"] = "insufficient"
+    demand_run_2 = {
+        **demand_run_1,
+        "benchmark_run_id": "run-2",
+        "non_null_metros": 8,
+        "non_null_observations": 16,
+        "confidence_label": "medium",
+    }
+    data["seo_benchmark_metric_sufficiency"].insert(0, demand_run_2)
+
+    report = build_report(data)
+    demand = report["metric_sufficiency"]["cells"][0]["families"]["demand"]
+
+    assert demand["status"] == "metric_ready"
+    assert demand["benchmark_run_id"] == "run-2"
 
 
 def test_metric_sufficiency_ignores_stale_rows_from_wrong_benchmark_run():

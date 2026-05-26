@@ -80,6 +80,8 @@ REQUIRED_COLUMNS = {
         "benchmark_run_id",
         "niche_normalized",
         "population_class",
+        "last_recomputed_at",
+        "fact_window_end",
         "sample_size_metros",
         "confidence_label",
         "median_total_volume_per_capita",
@@ -704,15 +706,32 @@ def classify_metric(
 def benchmark_run_id_by_cell(
     benchmarks: list[dict[str, Any]],
 ) -> dict[tuple[str, str], str | None]:
-    return {
-        (
+    selected: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in benchmarks:
+        if not row.get("niche_normalized") or not row.get("population_class"):
+            continue
+        key = (
             normalize_service_key(str(row.get("niche_normalized") or "")),
             str(row.get("population_class") or ""),
-        ): str(row.get("benchmark_run_id")) if row.get("benchmark_run_id") else None
-        for row in benchmarks
-        if row.get("niche_normalized")
-        and row.get("population_class")
+        )
+        current = selected.get(key)
+        if current is None or benchmark_row_selection_key(row) > benchmark_row_selection_key(
+            current
+        ):
+            selected[key] = row
+    return {
+        key: str(row.get("benchmark_run_id")) if row.get("benchmark_run_id") else None
+        for key, row in selected.items()
     }
+
+
+def benchmark_row_selection_key(row: dict[str, Any]) -> tuple[str, str, int, str]:
+    return (
+        str(row.get("last_recomputed_at") or ""),
+        str(row.get("fact_window_end") or ""),
+        int(numeric_value(row.get("sample_size_metros"))),
+        str(row.get("benchmark_run_id") or ""),
+    )
 
 
 def metric_sufficiency_reason(
@@ -789,11 +808,21 @@ def select_metric_sufficiency_rows(
         if target_run_id and row_run_id != target_run_id:
             continue
         current = selected.get(key)
-        if current is None or str(row.get("created_at") or "") >= str(
-            current.get("created_at") or ""
-        ):
+        if current is None or metric_sufficiency_row_selection_key(
+            row
+        ) > metric_sufficiency_row_selection_key(current):
             selected[key] = row
     return selected
+
+
+def metric_sufficiency_row_selection_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    return (
+        str(row.get("created_at") or ""),
+        str(row.get("benchmark_run_id") or ""),
+        str(row.get("source_window_end") or ""),
+        str(row.get("source_window_start") or ""),
+        str(row.get("source_endpoint") or ""),
+    )
 
 
 def metric_sufficiency_detail(
@@ -982,7 +1011,7 @@ def build_canary_guidance(
                 {
                     "niche_normalized": cell["niche_normalized"],
                     "population_class": cell["population_class"],
-                    "blocked_metric_families": blocked_families,
+                    "needs_collection_metric_families": blocked_families,
                 }
             )
         for family in blocked_families:
