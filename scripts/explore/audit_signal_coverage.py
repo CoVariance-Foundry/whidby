@@ -266,6 +266,7 @@ def build_report(
     }
 
     enriched_facts = []
+    fact_benchmark_keys: set[tuple[str, str]] = set()
     missing_benchmark_keys: set[tuple[str, str]] = set()
     undersampled_benchmark_keys: set[tuple[str, str]] = set()
     missing_explore_keys: set[tuple[str, str]] = set()
@@ -281,14 +282,13 @@ def build_report(
         enriched["explore_visible"] = (cbsa_code, niche) in explore_keys
         enriched_facts.append(enriched)
 
-        if niche and population_class != "unknown" and (niche, population_class) not in benchmark_keys:
-            missing_benchmark_keys.add((niche, population_class))
-        elif (
-            niche
-            and population_class != "unknown"
-            and benchmark_sample_sizes.get((niche, population_class), 0) < min_benchmark_sample_size
-        ):
-            undersampled_benchmark_keys.add((niche, population_class))
+        if niche and population_class != "unknown":
+            benchmark_key = (niche, population_class)
+            fact_benchmark_keys.add(benchmark_key)
+            if benchmark_key not in benchmark_keys:
+                missing_benchmark_keys.add(benchmark_key)
+            elif benchmark_sample_sizes.get(benchmark_key, 0) < min_benchmark_sample_size:
+                undersampled_benchmark_keys.add(benchmark_key)
         if niche and cbsa_code and (cbsa_code, niche) not in explore_keys:
             missing_explore_keys.add((cbsa_code, niche))
 
@@ -354,9 +354,8 @@ def build_report(
     strategy_readiness = None
     canary_guidance = None
     if metric_sufficiency_rows is not None:
-        metric_cells = set(benchmark_keys) | missing_benchmark_keys | undersampled_benchmark_keys
         metric_sufficiency = summarize_metric_sufficiency(
-            benchmark_cells=metric_cells,
+            benchmark_cells=fact_benchmark_keys,
             benchmarks=benchmarks,
             metric_sufficiency_rows=metric_sufficiency_rows,
             min_benchmark_sample_size=min_benchmark_sample_size,
