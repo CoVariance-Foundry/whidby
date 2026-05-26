@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from src.clients.seo_benchmark_repository import SupabaseSeoBenchmarkRepository
+from src.clients.seo_benchmark_repository import (
+    _BENCHMARK_COLUMNS,
+    SupabaseSeoBenchmarkRepository,
+)
 
 
 def _benchmark_row() -> dict[str, object]:
@@ -31,6 +34,11 @@ def _benchmark_row() -> dict[str, object]:
         "confidence_label": "medium",
         "fact_window_start": "2026-01-01",
         "fact_window_end": "2026-05-01",
+        "benchmark_run_id": "11111111-1111-4111-8111-111111111111",
+        "benchmark_mode": "manual",
+        "formula_version": "2.1",
+        "sample_frame_version": "coverage-hardening-v2",
+        "metric_confidence_rollup": {"monetization": {"confidence_label": "medium"}},
     }
 
 
@@ -52,6 +60,13 @@ def test_get_queries_seo_benchmarks_by_niche_and_population_class() -> None:
     assert cell.niche_normalized == "plumber"
     assert cell.population_class == "metro_1m_5m"
     assert cell.median_avg_cpc == 12.5
+    assert cell.benchmark_run_id == "11111111-1111-4111-8111-111111111111"
+    assert cell.benchmark_mode == "manual"
+    assert cell.formula_version == "2.1"
+    assert cell.sample_frame_version == "coverage-hardening-v2"
+    assert dict(cell.metric_confidence_rollup) == {
+        "monetization": {"confidence_label": "medium"}
+    }
     client.table.assert_called_once_with("seo_benchmarks")
     select_arg = client.table.return_value.select.call_args.args[0]
     assert "median_total_volume_per_capita" in select_arg
@@ -67,3 +82,14 @@ def test_get_returns_none_when_no_benchmark_cell_exists() -> None:
     repo = SupabaseSeoBenchmarkRepository(client=client)
 
     assert repo.get(niche_normalized="roofing", population_class="large_300k_1m") is None
+
+
+def test_benchmark_columns_select_lineage_fields() -> None:
+    for column in (
+        "benchmark_run_id",
+        "benchmark_mode",
+        "formula_version",
+        "sample_frame_version",
+        "metric_confidence_rollup",
+    ):
+        assert column in _BENCHMARK_COLUMNS

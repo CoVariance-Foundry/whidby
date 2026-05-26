@@ -1,12 +1,27 @@
 """Pure repository contract for V2 seo_benchmarks cells."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Any, Literal, Mapping, Protocol
 
 BenchmarkConfidence = Literal["high", "medium", "low", "insufficient"]
+BenchmarkMode = Literal[
+    "exact",
+    "pooled_population",
+    "pooled_service_group",
+    "global_service",
+    "manual",
+]
 _CONFIDENCE_VALUES: set[str] = {"high", "medium", "low", "insufficient"}
+_BENCHMARK_MODE_VALUES: set[str] = {
+    "exact",
+    "pooled_population",
+    "pooled_service_group",
+    "global_service",
+    "manual",
+}
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -49,6 +64,23 @@ def _confidence(value: Any) -> BenchmarkConfidence:
     return label  # type: ignore[return-value]
 
 
+def _benchmark_mode(value: Any) -> BenchmarkMode:
+    if value is None:
+        return "exact"
+    mode = str(value).strip()
+    if mode not in _BENCHMARK_MODE_VALUES:
+        raise ValueError(f"Unsupported benchmark mode: {mode!r}")
+    return mode  # type: ignore[return-value]
+
+
+def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+    if value is None:
+        return MappingProxyType({})
+    if isinstance(value, Mapping):
+        return MappingProxyType(dict(value))
+    raise ValueError("metric_confidence_rollup must be a mapping")
+
+
 @dataclass(frozen=True)
 class SeoBenchmarkCell:
     """One `seo_benchmarks` cell keyed by niche and population class."""
@@ -76,6 +108,13 @@ class SeoBenchmarkCell:
     confidence_label: BenchmarkConfidence
     fact_window_start: str | None = None
     fact_window_end: str | None = None
+    benchmark_run_id: str | None = None
+    benchmark_mode: BenchmarkMode = "exact"
+    formula_version: str | None = None
+    sample_frame_version: str | None = None
+    metric_confidence_rollup: Mapping[str, Any] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, Any]) -> "SeoBenchmarkCell":
@@ -115,6 +154,25 @@ class SeoBenchmarkCell:
             ),
             fact_window_end=(
                 str(row["fact_window_end"]) if row.get("fact_window_end") is not None else None
+            ),
+            benchmark_run_id=(
+                str(row["benchmark_run_id"])
+                if row.get("benchmark_run_id") is not None
+                else None
+            ),
+            benchmark_mode=_benchmark_mode(row.get("benchmark_mode")),
+            formula_version=(
+                str(row["formula_version"])
+                if row.get("formula_version") is not None
+                else None
+            ),
+            sample_frame_version=(
+                str(row["sample_frame_version"])
+                if row.get("sample_frame_version") is not None
+                else None
+            ),
+            metric_confidence_rollup=_mapping_or_empty(
+                row.get("metric_confidence_rollup")
             ),
         )
 
