@@ -138,7 +138,7 @@ Linear: `WHI-99`. This is the required source-of-truth experiment contract befor
 | Population classes | `micro_under_50k`, `small_50_100k`, `medium_100_300k`, `large_300k_1m`, `metro_1m_5m`, `mega_5m_plus` |
 | Core services | `roofing`, `plumbing`, `hvac`, `tree service`, `auto repair`, `water damage restoration`, `electrician`, `locksmith` |
 | Minimum pilot size | 12 metros x 8 services: 1 micro, 3 small, 3 medium, 3 large, 1 metro, 1 mega |
-| Benchmark usability | `seo_benchmarks.sample_size_metros >= 8` is the minimum usable cell threshold |
+| Benchmark usability | `seo_benchmarks.sample_size_metros >= 8` remains the aggregate sample-size threshold, but metric-family readiness is gated by `seo_benchmark_metric_sufficiency` non-null counts and confidence |
 
 ### Required Metrics
 
@@ -237,7 +237,7 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 
 | Classification | Threshold | Scoring Policy |
 | --- | --- | --- |
-| Reliable | Overall coverage `>= 0.80`, every required population slice `>= 0.60`, and benchmark cells meet `sample_size_metros >= 8` | Keep scored |
+| Reliable | Overall coverage `>= 0.80`, every required population slice `>= 0.60`, aggregate benchmark cells meet `sample_size_metros >= 8`, and required metric families are `metric_ready` | Keep scored |
 | Score-with-warning | Overall coverage `>= 0.40` but below reliable, or a required slice below `0.60` with nonzero evidence | Use in V2 scoring with warning/confidence penalty |
 | Telemetry-only | Optional signal is present but below `0.40`, or top-5 DA/Lighthouse is sparse/missing | Record and display as evidence only; do not let missingness block scoring |
 | Remove | Non-critical signal remains below `0.05` across all successful API rows and does not affect an accepted product requirement | Propose removal from formula in `WHI-106`; do not change formula inside the experiment |
@@ -248,7 +248,9 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 | Coverage | Expected | Tests |
 |----------|----------|-------|
 | Component coverage | Demand, organic, local, monetization, AI resilience, and app-surface metrics summarize by service, population class, and benchmark cell | `tests/scripts/test_scoring_strategy_audit.py` |
-| Benchmark usability | Benchmark metrics classify cells below `sample_size_metros >= 8` as undersampled | `tests/scripts/test_scoring_strategy_audit.py` |
+| Metric sufficiency | Benchmark cells classify each metric family as `metric_missing`, `metric_undersampled`, or `metric_ready` using `seo_benchmark_metric_sufficiency` non-null evidence and confidence | `tests/scripts/test_scoring_strategy_audit.py`, `tests/scripts/test_signal_coverage_audit.py` |
+| Strategy readiness | Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, and `/agency` target review roll up required/warning metric families and emit paid canary guidance | `tests/scripts/test_scoring_strategy_audit.py`, `tests/scripts/test_signal_coverage_audit.py` |
+| Benchmark usability | Legacy benchmark metrics still classify cells below `sample_size_metros >= 8` as undersampled for backward-compatible audit fields | `tests/scripts/test_scoring_strategy_audit.py` |
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
 | Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
 | Production target identity | Bulk scoring requests preserve Supabase metro identity through `/api/niches/score` so `metro_scores`, `metro_score_v2`, `seo_facts`, and Explore rows share the same CBSA | `tests/scripts/test_bulk_score.py`, `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py` |
