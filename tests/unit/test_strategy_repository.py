@@ -287,6 +287,38 @@ def test_query_markets_maps_ai_exposure_to_aio_trigger_rate() -> None:
     assert markets[0].signals["strategy_row"]["aio_trigger_rate"] == 0.2
 
 
+def test_query_markets_derives_canonical_warning_codes_from_cached_row() -> None:
+    client = FakeClient(
+        rows_by_table={
+            "metro_score_v2": [
+                {
+                    "cbsa_code": "13820",
+                    "niche_normalized": "roofing",
+                    "benchmark_confidence": "low",
+                    "benchmark_sample_size": 4,
+                    "benchmark_undersampled": True,
+                    "warning_codes": [
+                        "metric_undersampled",
+                        "pooled_benchmark",
+                        "benchmark_lineage_missing",
+                    ],
+                }
+            ]
+        }
+    )
+    repo = StrategyRepository(client)
+
+    markets = repo.query_markets(MarketQuery(lens=EASY_WIN))
+
+    row = markets[0].signals["strategy_row"]
+    assert row["benchmark_undersampled"] is True
+    assert row["warning_codes"] == [
+        "metric_undersampled",
+        "pooled_benchmark",
+        "benchmark_lineage_missing",
+    ]
+
+
 def test_create_run_inserts_strategy_run_payload() -> None:
     payload = {
         "id": "run-1",

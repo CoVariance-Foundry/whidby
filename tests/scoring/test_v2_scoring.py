@@ -38,6 +38,10 @@ def benchmark_cell(**overrides: object) -> SeoBenchmarkCell:
         "sample_size_metros": 12,
         "sample_size_observations": 120,
         "confidence_label": "medium",
+        "benchmark_run_id": "run-1",
+        "benchmark_mode": "exact",
+        "formula_version": "2.0",
+        "sample_frame_version": "core-services-v1",
     }
     row.update(overrides)
     return SeoBenchmarkCell.from_mapping(row)
@@ -86,6 +90,11 @@ def test_compute_v2_scores_with_repository_uses_niche_and_population_key() -> No
         "population_class": "metro_1m_5m",
         "sample_size": 12,
         "confidence_label": "medium",
+        "benchmark_run_id": "run-1",
+        "benchmark_mode": "exact",
+        "formula_version": "2.0",
+        "sample_frame_version": "core-services-v1",
+        "warning_codes": [],
     }
     assert result["flags"]["benchmark_undersampled"] is False
     assert result["scores"]["demand_strength"]["higher_is_better"] is True
@@ -110,8 +119,14 @@ def test_missing_benchmark_sets_undersampled_flag_and_still_scores() -> None:
         "population_class": "metro_1m_5m",
         "sample_size": 0,
         "confidence_label": "insufficient",
+        "benchmark_run_id": None,
+        "benchmark_mode": None,
+        "formula_version": None,
+        "sample_frame_version": None,
+        "warning_codes": ["benchmark_lineage_missing", "metric_missing"],
     }
     assert result["flags"]["benchmark_undersampled"] is True
+    assert result["warning_codes"] == ["benchmark_lineage_missing", "metric_missing"]
     assert isinstance(result["scores"]["demand_strength"]["value"], int)
     assert isinstance(result["scores"]["monetization_signal"]["value"], int)
 
@@ -261,6 +276,19 @@ def test_low_confidence_benchmark_sets_undersampled_flag() -> None:
 
     assert result["benchmark"]["confidence_label"] == "low"
     assert result["flags"]["benchmark_undersampled"] is True
+    assert result["warning_codes"] == ["metric_undersampled"]
+
+
+def test_pooled_benchmark_exposes_canonical_warning_code() -> None:
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(),
+        benchmark=benchmark_cell(benchmark_mode="pooled_population"),
+    )
+
+    assert result["benchmark"]["warning_codes"] == ["pooled_benchmark"]
+    assert result["warning_codes"] == ["pooled_benchmark"]
 
 
 def test_demand_ignores_v1_total_and_effective_volume() -> None:

@@ -7,6 +7,16 @@ from pathlib import Path
 import pytest
 
 from src.scoring.benchmark_repository import SeoBenchmarkCell
+from src.scoring.benchmark_warnings import (
+    BENCHMARK_LINEAGE_MISSING,
+    METRIC_MISSING,
+    METRIC_UNDERSAMPLED,
+    POOLED_BENCHMARK,
+    STALE_EVIDENCE,
+    warning_code_from_metric_status,
+    warning_codes_from_benchmark,
+    warning_codes_from_mapping,
+)
 
 
 def _row(**overrides: object) -> dict[str, object]:
@@ -120,6 +130,60 @@ def test_low_and_insufficient_cells_are_undersampled() -> None:
 
     assert low.is_undersampled is True
     assert insufficient.is_undersampled is True
+
+
+def test_benchmark_warning_codes_cover_lineage_sampling_and_pooling() -> None:
+    cell = SeoBenchmarkCell.from_mapping(
+        _row(
+            sample_size_metros=7,
+            confidence_label="low",
+            benchmark_mode="global_service",
+            benchmark_run_id=None,
+            metric_confidence_rollup={"demand": {"status": "metric_missing"}},
+        )
+    )
+
+    assert warning_codes_from_benchmark(cell) == [
+        METRIC_UNDERSAMPLED,
+        POOLED_BENCHMARK,
+        BENCHMARK_LINEAGE_MISSING,
+        METRIC_MISSING,
+    ]
+
+
+def test_missing_benchmark_maps_to_lineage_and_metric_missing() -> None:
+    assert warning_codes_from_benchmark(None) == [
+        BENCHMARK_LINEAGE_MISSING,
+        METRIC_MISSING,
+    ]
+
+
+def test_mapping_warning_codes_preserve_existing_codes_and_metric_states() -> None:
+    warnings = warning_codes_from_mapping(
+        {
+            "warning_codes": [{"code": "demand_source_candidate"}],
+            "benchmark_undersampled": True,
+            "benchmark_mode": "pooled_population",
+            "metric_confidence_rollup": {
+                "demand": {"status": "metric_ready", "confidence_label": "high"},
+                "local_pack": {"status": "wrong-run"},
+            },
+        }
+    )
+
+    assert warnings == [
+        "demand_source_candidate",
+        METRIC_UNDERSAMPLED,
+        POOLED_BENCHMARK,
+        STALE_EVIDENCE,
+    ]
+
+
+def test_metric_sufficiency_status_mapping_is_product_facing() -> None:
+    assert warning_code_from_metric_status("metric_missing") == METRIC_MISSING
+    assert warning_code_from_metric_status("undersampled") == METRIC_UNDERSAMPLED
+    assert warning_code_from_metric_status("wrong_run") == STALE_EVIDENCE
+    assert warning_code_from_metric_status("metric_ready") is None
 
 
 def test_cells_with_small_metro_sample_are_undersampled() -> None:

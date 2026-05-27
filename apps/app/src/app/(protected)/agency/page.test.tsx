@@ -48,6 +48,8 @@ describe("AgencyPage", () => {
                   population: 974000,
                 },
                 service: { service_id: "roofing", name: "Roofing" },
+                warnings: [{ code: "metric_undersampled" }],
+                warning_codes: ["pooled_benchmark"],
               },
             ],
           }),
@@ -83,6 +85,8 @@ describe("AgencyPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Austin, TX")).toBeInTheDocument();
     expect(screen.getAllByText("Roofing").length).toBeGreaterThan(0);
+    expect(screen.getByText("pooled_benchmark")).toBeInTheDocument();
+    expect(screen.getByText("metric_undersampled")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Queue batch/i }));
 
@@ -111,6 +115,7 @@ describe("AgencyPage", () => {
         },
       ],
     });
+    expect(runPayload.targets[0].warning_codes).toBeUndefined();
   });
 
   it("queues custom targets without selecting cached services", async () => {

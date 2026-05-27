@@ -34,6 +34,25 @@ def test_v2_top5_fact_fields_migration_extends_seo_facts() -> None:
     assert "top5_organic_data_confidence IN ('high', 'medium', 'low', 'missing')" in sql
 
 
+def test_whi130_warning_codes_read_model_contract() -> None:
+    """V2 score and Explore read models persist canonical warning codes."""
+    migration_sql = (
+        MIGRATIONS_DIR / "20260524153000_whi130_warning_codes_read_models.sql"
+    ).read_text()
+    v2_sql = (MIGRATIONS_DIR / "010_v2_benchmarks.sql").read_text()
+    explore_sql = (MIGRATIONS_DIR / "020_explore_market_cells.sql").read_text()
+
+    assert "ADD COLUMN IF NOT EXISTS warning_codes TEXT[]" in migration_sql
+    assert "COMMENT ON COLUMN public.metro_score_v2.warning_codes" in migration_sql
+    assert "metric_undersampled" in migration_sql
+    assert "coalesce(v2.warning_codes, ARRAY[]::text[]) AS warning_codes" in migration_sql
+    assert "cell.warning_codes" in migration_sql
+
+    assert "warning_codes                TEXT[] NOT NULL DEFAULT '{}'::text[]" in v2_sql
+    assert "coalesce(v2.warning_codes, ARRAY[]::text[]) AS warning_codes" in explore_sql
+    assert "ARRAY[]::text[] AS warning_codes" in explore_sql
+
+
 def test_billing_operations_hardening_migration_contract() -> None:
     """Billing hardening persists checkout, webhook, and admin issue state."""
     sql = (MIGRATIONS_DIR / "023_billing_operations_hardening.sql").read_text()

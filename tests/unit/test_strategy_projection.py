@@ -5,6 +5,11 @@ from src.domain.strategy_projection import (
     project_gbp_blitz,
     project_keyword_hijack,
 )
+from src.scoring.benchmark_warnings import (
+    BENCHMARK_LINEAGE_MISSING,
+    METRIC_UNDERSAMPLED,
+    POOLED_BENCHMARK,
+)
 
 
 def test_easy_win_rewards_demand_and_low_difficulty() -> None:
@@ -31,6 +36,28 @@ def test_easy_win_treats_zero_organic_difficulty_as_strong() -> None:
     )
     assert result.score >= 90
     assert result.evidence["organic_difficulty"] == 0
+
+
+def test_easy_win_uses_canonical_benchmark_warning_codes() -> None:
+    result = project_easy_win(
+        {
+            "demand_strength": 140,
+            "organic_difficulty": 22,
+            "local_difficulty": 35,
+            "ai_resilience": 88,
+            "benchmark_confidence": "low",
+            "benchmark_mode": "pooled_population",
+            "benchmark_run_id": None,
+            "formula_version": "2.0",
+            "sample_frame_version": "core-services-v1",
+        }
+    )
+
+    assert result.warnings == [
+        METRIC_UNDERSAMPLED,
+        POOLED_BENCHMARK,
+        BENCHMARK_LINEAGE_MISSING,
+    ]
 
 
 def test_gbp_blitz_rewards_low_review_barrier() -> None:

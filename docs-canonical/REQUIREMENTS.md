@@ -50,6 +50,7 @@
 | FR-032 | P1 | System MUST compute composite opportunity score with strategy-profile-weighted components | Pending |
 | FR-033 | P1 | System MUST classify SERP archetype, AI exposure level, and difficulty tier per metro | Pending |
 | FR-034 | P2 | System MUST generate actionable guidance text per metro | Pending |
+| FR-035 | P1 | System MUST expose canonical product-facing warning codes for benchmark/readiness caveats in scoring results, persisted score/read-model payloads for Explore, Strategies, and Multi-market target previews, and report payloads where available | Implemented (WHI-130 payload contract; report UI rendering not included) |
 
 ### Phase 6: Report + Feedback (Module M9)
 
@@ -135,3 +136,4 @@
 |---------|------|--------|---------|
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md`, `docs/product_breakdown.md` |
+| 1.0.1 | 2026-05-24 | WHI-130 warning semantics | Added canonical product-facing warning-code requirement for benchmark/readiness caveats |

@@ -245,6 +245,7 @@ CREATE TABLE IF NOT EXISTS public.metro_score_v2 (
     benchmark_population_class   TEXT,
     benchmark_confidence         TEXT,
     benchmark_sample_size        INTEGER,
+    warning_codes                TEXT[] NOT NULL DEFAULT '{}'::text[],
 
     -- Diagnostic flags (UI hints)
     no_local_pack_detected       BOOLEAN NOT NULL DEFAULT FALSE,
