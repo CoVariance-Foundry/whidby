@@ -495,11 +495,16 @@ def _cost_capture_context(dataforseo_client: Any, run_id: str) -> Any:
 
 
 def _cost_records_for_context(records: list[Any], context_id: str) -> list[Any]:
-    return [
+    filtered = [
         record
         for record in records
         if _record_context_id(record) == context_id
     ]
+    if filtered or not records:
+        return filtered
+    if all(_record_context_id(record) is None for record in records):
+        return records
+    return filtered
 
 
 def _record_context_id(record: Any) -> str | None:
@@ -586,6 +591,9 @@ def _maps_evidence_artifact_ids(
     artifact_ids: dict[tuple[str, int], str] = {}
     for artifact in evidence_artifacts:
         if artifact.get("evidence_family") != "maps":
+            continue
+        endpoint = _text(artifact.get("endpoint_path", ""))
+        if not endpoint or "serp/google/maps" not in endpoint.lower():
             continue
         artifact_id = _text(artifact.get("id"))
         params = artifact.get("normalized_request_params")

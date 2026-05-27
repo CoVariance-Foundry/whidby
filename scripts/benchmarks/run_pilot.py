@@ -985,11 +985,9 @@ async def score_one(
     log.info(f"[start] {niche!r} × {name} ({cbsa})")
     stats.reports_attempted += 1
     pair_context_id = f"benchmark:{niche.lower()}:{cbsa}:{uuid4()}"
-    capture_context = _dfs_capture_context(dfs, pair_context_id)
-    capture_context.__enter__()
 
-    try:
-        expansion = await expansion_cache.get(niche)
+    with _dfs_capture_context(dfs, pair_context_id):
+        try:
         actionable = [
             kw for kw in expansion["expanded_keywords"]
             if kw["intent"] in ("transactional", "commercial") and kw.get("actionable")
@@ -1138,19 +1136,17 @@ async def score_one(
                     evidence_artifact_rows
                 )
                 if evidence_status >= 300:
-                    log.error(
-                        "  evidence artifact upsert failed: %s %s",
+                    log.warning(
+                        "  evidence artifact upsert failed (non-fatal): %s %s",
                         evidence_status,
                         evidence_body[:200],
                     )
-                    stats.reports_failed += 1
                     stats.record_failure(
                         niche,
                         cbsa,
-                        "evidence_upsert_failed",
+                        "evidence_upsert_failed_non_fatal",
                         f"status={evidence_status}",
                     )
-                    return 0
 
             status, body = upsert_facts(rows)
             if status >= 300:
@@ -1167,15 +1163,11 @@ async def score_one(
         stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
         return 0
 
-    except Exception as e:
-        log.exception(f"failure on {niche} × {cbsa}")
-        stats.reports_failed += 1
-        stats.record_failure(niche, cbsa, type(e).__name__, str(e))
-        return 0
-    finally:
-        capture_context.__exit__(None, None, None)
-
-
+        except Exception as e:
+            log.exception(f"failure on {niche} × {cbsa}")
+            stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, type(e).__name__, str(e))
+            return 0
 # -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
