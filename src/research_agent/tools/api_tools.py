@@ -83,7 +83,6 @@ def _dfs_tool_result(
         "cached": resp.cached,
         "source": source,
         "metadata": {
-            **source,
             "task_id": resp.task_id,
             "cost_usd": resp.cost,
             "latency_ms": resp.latency_ms,
