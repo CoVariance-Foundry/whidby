@@ -1,17 +1,38 @@
 """Persist M9 reports to the Supabase schema defined in 001_core_schema.sql."""
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import time
 from collections.abc import Sequence
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Protocol
+from uuid import NAMESPACE_URL, uuid5
 
 from src.domain.services.explore_refresh_service import RefreshTarget
 from src.pipeline.domain_classifier import is_aggregator, normalize_domain
 
 logger = logging.getLogger(__name__)
+
+_EVIDENCE_ARTIFACT_COLLECTION_KEYS = (
+    "seo_evidence_artifacts",
+    "raw_evidence_artifacts",
+)
+_EVIDENCE_ARTIFACT_KEYS = set(_EVIDENCE_ARTIFACT_COLLECTION_KEYS)
+_PRIVATE_PERSISTENCE_KEYS = _EVIDENCE_ARTIFACT_KEYS | {"local_pack_listing_facts"}
+_ALLOWED_EVIDENCE_FAMILIES = {
+    "serp",
+    "maps",
+    "reviews",
+    "backlinks",
+    "lighthouse",
+    "keyword_volume",
+    "keyword_overview",
+}
+_ALLOWED_CACHE_STATUSES = {"hit", "miss", "bypass", "replay", "unknown"}
 
 
 class _SupabaseLike(Protocol):
@@ -172,6 +193,18 @@ def _str_or_none(value: Any) -> str | None:
     return text or None
 
 
+def _stable_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _sha256_json(value: Any) -> str:
+    return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()
+
+
+def _json_object_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _bool_or_false(value: Any) -> bool:
     return bool(value) if value is not None else False
 
@@ -249,6 +282,19 @@ def _review_count(item: dict[str, Any]) -> int | None:
     )
 
 
+def _domain_from_item(item: dict[str, Any]) -> str | None:
+    domain = normalize_domain(
+        str(
+            item.get("domain")
+            or item.get("listing_url")
+            or item.get("url")
+            or item.get("target")
+            or ""
+        )
+    )
+    return domain or None
+
+
 def _source_fact_items(
     sources: list[Any],
     *,
@@ -280,6 +326,119 @@ def _source_fact_items(
                 )
             )
     return items
+
+
+def _artifact_sources(report: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    for key in _EVIDENCE_ARTIFACT_COLLECTION_KEYS:
+        value = report.get(key)
+        if isinstance(value, list):
+            artifacts.extend(item for item in value if isinstance(item, dict))
+        elif isinstance(value, dict):
+            artifacts.append(value)
+
+    for metro in report.get("metros", []):
+        if not isinstance(metro, dict):
+            continue
+        for key in _EVIDENCE_ARTIFACT_COLLECTION_KEYS:
+            value = metro.get(key)
+            if isinstance(value, list):
+                artifacts.extend(item for item in value if isinstance(item, dict))
+            elif isinstance(value, dict):
+                artifacts.append(value)
+
+    return artifacts
+
+
+def _artifact_endpoint_path(artifact: dict[str, Any]) -> str | None:
+    return _str_or_none(
+        artifact.get(
+            "endpoint_path",
+            artifact.get("endpoint", artifact.get("path")),
+        )
+    )
+
+
+def _artifact_evidence_family(artifact: dict[str, Any]) -> str | None:
+    return _str_or_none(
+        artifact.get(
+            "evidence_family",
+            artifact.get("family", artifact.get("artifact_type")),
+        )
+    )
+
+
+def _artifact_request_params(artifact: dict[str, Any]) -> dict[str, Any]:
+    return _json_object_or_empty(
+        artifact.get(
+            "normalized_request_params",
+            artifact.get("request_params", artifact.get("params")),
+        )
+    )
+
+
+def _artifact_response_payload(artifact: dict[str, Any]) -> Any:
+    for key in ("response_payload", "payload", "response"):
+        if key in artifact:
+            return artifact[key]
+    return None
+
+
+def _normalize_evidence_family(
+    value: Any,
+    endpoint_path: str | None,
+) -> str | None:
+    text = _str_or_none(value)
+    if text:
+        normalized = text.strip().lower().replace("-", "_")
+        if normalized in _ALLOWED_EVIDENCE_FAMILIES:
+            return normalized
+    return evidence_family_from_endpoint(endpoint_path)
+
+
+def _normalize_cache_status(value: Any) -> str:
+    text = _str_or_none(value)
+    if not text:
+        return "unknown"
+    normalized = text.strip().lower().replace("-", "_")
+    return normalized if normalized in _ALLOWED_CACHE_STATUSES else "unknown"
+
+
+def _record_value(record: Any, key: str) -> Any:
+    if isinstance(record, dict):
+        return record.get(key)
+    return getattr(record, key, None)
+
+
+def evidence_family_from_endpoint(endpoint_path: str | None) -> str | None:
+    """Map known DataForSEO endpoint paths to benchmark evidence families."""
+    endpoint = (endpoint_path or "").strip().lower().lstrip("/")
+    if not endpoint:
+        return None
+    if "keywords_data/google/search_volume" in endpoint:
+        return "keyword_volume"
+    if (
+        "dataforseo_labs/google/keyword" in endpoint
+        or "keyword_overview" in endpoint
+        or "keywords_data/google_trends" in endpoint
+    ):
+        return "keyword_overview"
+    if "serp/google/maps" in endpoint:
+        return "maps"
+    if "serp/google/organic" in endpoint:
+        return "serp"
+    if "business_data/google/reviews" in endpoint:
+        return "reviews"
+    if endpoint.startswith("backlinks/") or "/backlinks/" in endpoint:
+        return "backlinks"
+    if "on_page/lighthouse" in endpoint:
+        return "lighthouse"
+    if (
+        "business_data/google/my_business_info" in endpoint
+        or "business_data/business_listings" in endpoint
+    ):
+        return "maps"
+    return None
 
 
 def _primary_keyword(report: dict[str, Any]) -> str | None:
@@ -321,6 +480,18 @@ def _score_value(v2_scores: dict[str, Any], dimension: str) -> Any:
     return None
 
 
+def _without_artifact_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_artifact_keys(item)
+            for key, item in value.items()
+            if key not in _PRIVATE_PERSISTENCE_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_artifact_keys(item) for item in value]
+    return deepcopy(value)
+
+
 def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
     run_input = report["input"]
     return {
@@ -335,9 +506,9 @@ def build_report_row(report: dict[str, Any]) -> dict[str, Any]:
         "resolved_weights": (
             report["metros"][0]["scores"].get("resolved_weights") if report["metros"] else None
         ),
-        "keyword_expansion": report["keyword_expansion"],
-        "metros": report["metros"],
-        "meta": report["meta"],
+        "keyword_expansion": _without_artifact_keys(report["keyword_expansion"]),
+        "metros": _without_artifact_keys(report["metros"]),
+        "meta": _without_artifact_keys(report["meta"]),
         "feedback_log_id": report["meta"].get("feedback_log_id"),
         "owner_account_id": report.get("owner_account_id"),
         "created_by_user_id": report.get("created_by_user_id"),
@@ -553,6 +724,161 @@ def build_seo_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build raw benchmark evidence artifacts from optional provenance payloads."""
+    rows: list[dict[str, Any]] = []
+    for artifact in _artifact_sources(report):
+        endpoint_path = _artifact_endpoint_path(artifact)
+        evidence_family = _normalize_evidence_family(
+            _artifact_evidence_family(artifact),
+            endpoint_path,
+        )
+        if not endpoint_path or not evidence_family:
+            continue
+
+        provider = _str_or_none(artifact.get("provider")) or "dataforseo"
+        normalized_request_params = _artifact_request_params(artifact)
+        request_hash = _str_or_none(artifact.get("request_hash"))
+        if request_hash is None:
+            request_hash = _sha256_json(
+                {
+                    "provider": provider,
+                    "endpoint_path": endpoint_path,
+                    "normalized_request_params": normalized_request_params,
+                }
+            )
+
+        response_payload = _artifact_response_payload(artifact)
+        response_hash = _str_or_none(artifact.get("response_hash"))
+        if response_hash is None and response_payload is not None:
+            response_hash = _sha256_json(response_payload)
+
+        row: dict[str, Any] = {
+            "provider": provider,
+            "endpoint_path": endpoint_path,
+            "evidence_family": evidence_family,
+            "normalized_request_params": normalized_request_params,
+            "request_hash": request_hash,
+            "response_hash": response_hash,
+            "response_storage_uri": _str_or_none(
+                artifact.get(
+                    "response_storage_uri",
+                    artifact.get("storage_uri", artifact.get("response_uri")),
+                )
+            ),
+            "response_payload": response_payload,
+            "cache_status": _normalize_cache_status(artifact.get("cache_status")),
+        }
+
+        artifact_id = _str_or_none(artifact.get("id", artifact.get("artifact_id")))
+        if artifact_id:
+            row["id"] = artifact_id
+        else:
+            row["id"] = _deterministic_evidence_artifact_id(
+                provider,
+                endpoint_path,
+                request_hash,
+            )
+
+        cost_usd = artifact.get("cost_usd", artifact.get("cost"))
+        if cost_usd is not None:
+            row["cost_usd"] = _float_or_none(cost_usd)
+
+        for source_key, destination_key in (
+            ("collection_timestamp", "collected_at"),
+            ("collected_at", "collected_at"),
+            ("source_window_start", "source_window_start"),
+            ("source_window_end", "source_window_end"),
+        ):
+            if source_key in artifact and artifact[source_key] is not None:
+                row[destination_key] = artifact[source_key]
+
+        rows.append(row)
+
+    return rows
+
+
+def build_seo_evidence_artifact_rows_from_cost_records(
+    cost_records: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """Build raw evidence metadata rows from DataForSEO cost records."""
+    artifacts: list[dict[str, Any]] = []
+    for record in cost_records:
+        endpoint_path = _str_or_none(_record_value(record, "endpoint"))
+        evidence_family = evidence_family_from_endpoint(endpoint_path)
+        if endpoint_path is None or evidence_family is None:
+            continue
+
+        cached = _record_value(record, "cached")
+        if cached is True:
+            cache_status = "hit"
+        elif cached is False:
+            cache_status = "miss"
+        else:
+            cache_status = "unknown"
+
+        artifact: dict[str, Any] = {
+            "provider": "dataforseo",
+            "endpoint_path": endpoint_path,
+            "evidence_family": evidence_family,
+            "normalized_request_params": _json_object_or_empty(
+                _record_value(record, "parameters")
+            ),
+            "cache_status": cache_status,
+        }
+
+        cost = _record_value(record, "cost")
+        if cost is not None:
+            artifact["cost_usd"] = cost
+
+        collected_at = _record_value(record, "collected_at")
+        if collected_at is not None:
+            artifact["collected_at"] = collected_at
+
+        collection_context_id = _record_value(record, "collection_context_id")
+        if collection_context_id is not None:
+            artifact["collection_context_id"] = collection_context_id
+
+        response_hash = _record_value(record, "response_hash")
+        if response_hash is not None:
+            artifact["response_hash"] = response_hash
+
+        response_storage_uri = _record_value(record, "response_storage_uri")
+        if response_storage_uri is not None:
+            artifact["response_storage_uri"] = response_storage_uri
+
+        response_payload = _record_value(record, "response_payload")
+        if response_payload is not None:
+            artifact["response_payload"] = response_payload
+
+        artifacts.append(artifact)
+
+    rows = build_seo_evidence_artifact_rows({"seo_evidence_artifacts": artifacts})
+    deduped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (row["provider"], row["endpoint_path"], row["request_hash"])
+        existing = deduped.get(key)
+        if existing is None:
+            deduped[key] = row
+            continue
+        existing_cost = _float_or_none(existing.get("cost_usd")) or 0.0
+        row_cost = _float_or_none(row.get("cost_usd")) or 0.0
+        if existing.get("cache_status") == "hit" and row.get("cache_status") == "miss":
+            deduped[key] = row
+        elif existing_cost == 0.0 and row_cost > 0.0:
+            deduped[key] = row
+
+    return list(deduped.values())
+
+
+def _deterministic_evidence_artifact_id(
+    provider: str,
+    endpoint_path: str,
+    request_hash: str,
+) -> str:
+    return str(uuid5(NAMESPACE_URL, f"seo-evidence:{provider}:{endpoint_path}:{request_hash}"))
+
+
 def build_organic_competitor_fact_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
     """Build top organic competitor read-model facts from compact report payloads."""
     report_id = report["report_id"]
@@ -588,9 +914,7 @@ def build_organic_competitor_fact_rows(report: dict[str, Any]) -> list[dict[str,
             if not keyword:
                 continue
 
-            domain = normalize_domain(
-                str(item.get("domain") or item.get("url") or item.get("target") or "")
-            )
+            domain = _domain_from_item(item)
             result_type = _str_or_none(item.get("type")) or "organic"
             evidence = {
                 key: item[key]
@@ -612,7 +936,7 @@ def build_organic_competitor_fact_rows(report: dict[str, Any]) -> list[dict[str,
                         "rank",
                     ),
                     "title": _str_or_none(item.get("title")),
-                    "domain": domain or None,
+                    "domain": domain,
                     "url": _str_or_none(item.get("url")),
                     "result_type": result_type,
                     "domain_authority": _float_or_none(
@@ -670,9 +994,16 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
     rows: list[dict[str, Any]] = []
 
     for metro in report.get("metros", []):
+        cbsa_code = metro.get("cbsa_code")
+        top_level_listing_facts = [
+            item
+            for item in report.get("local_pack_listing_facts", [])
+            if isinstance(item, dict) and item.get("cbsa_code") == cbsa_code
+        ]
         signals = metro.get("signals") or {}
         local_signals = signals.get("local_competition") or {}
         sources = [
+            top_level_listing_facts,
             metro.get("local_pack_listing_facts"),
             metro.get("local_pack_listings"),
             metro.get("serp_maps"),
@@ -701,9 +1032,10 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
                 continue
 
             photos = item.get("photos")
+            listing_url = _str_or_none(item.get("listing_url", item.get("url")))
             rows.append(
                 {
-                    "cbsa_code": metro.get("cbsa_code"),
+                    "cbsa_code": cbsa_code,
                     "niche_normalized": niche_normalized,
                     "keyword": keyword,
                     "listing_rank": _rank_or_index(
@@ -716,6 +1048,35 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
                         "rank",
                     ),
                     "business_name": business_name,
+                    "cid": _str_or_none(item.get("cid")),
+                    "place_id": _str_or_none(item.get("place_id")),
+                    "source_query": _str_or_none(item.get("source_query")),
+                    "dataforseo_location_code": _int_or_none(
+                        item.get(
+                            "dataforseo_location_code",
+                            item.get("location_code"),
+                        )
+                    ),
+                    "result_type": _str_or_none(
+                        item.get("result_type", item.get("type"))
+                    ),
+                    "listing_url": listing_url,
+                    "domain": _domain_from_item(item),
+                    "review_retrieval_mode": _str_or_none(
+                        item.get(
+                            "review_retrieval_mode",
+                            item.get("review_collection_mode"),
+                        )
+                    ),
+                    "review_window_start": item.get("review_window_start"),
+                    "review_window_end": item.get("review_window_end"),
+                    "upstream_result_at": item.get("upstream_result_at"),
+                    "evidence_artifact_id": _str_or_none(
+                        item.get(
+                            "evidence_artifact_id",
+                            item.get("seo_evidence_artifact_id"),
+                        )
+                    ),
                     "exact_match_name": _bool_or_false(item.get("exact_match_name")),
                     "review_count": _review_count(item),
                     "review_velocity_monthly": _float_or_none(
@@ -1127,13 +1488,20 @@ class SupabasePersistence:
         score_rows = build_metro_score_rows(report)
         score_v2_rows = build_metro_score_v2_rows(report)
         fact_rows = build_seo_fact_rows(report)
+        evidence_artifact_rows = build_seo_evidence_artifact_rows(report)
         organic_competitor_rows = build_organic_competitor_fact_rows(report)
         local_pack_rows = build_local_pack_listing_fact_rows(report)
         facts_table = None
+        evidence_artifact_table = None
         organic_competitor_table = None
         local_pack_table = None
         if fact_rows:
             facts_table = _require_upsert(self._client.table("seo_facts"), "seo_facts")
+        if evidence_artifact_rows:
+            evidence_artifact_table = _require_upsert(
+                self._client.table("seo_evidence_artifacts"),
+                "seo_evidence_artifacts",
+            )
         if organic_competitor_rows:
             organic_competitor_table = _require_upsert(
                 self._client.table("organic_competitor_facts"),
@@ -1201,6 +1569,26 @@ class SupabasePersistence:
                 "persist_report upserted %d seo_facts rows duration_ms=%d",
                 len(fact_rows),
                 facts_ms,
+            )
+
+        if evidence_artifact_rows:
+            t0 = time.monotonic()
+            if evidence_artifact_table is None:
+                raise RuntimeError(
+                    "Cannot persist seo_evidence_artifacts: table client was not "
+                    "initialized. This is a bug; please report it."
+                )
+            evidence_artifact_table.upsert(
+                evidence_artifact_rows,
+                on_conflict="provider,endpoint_path,request_hash",
+                ignore_duplicates=True,
+            ).execute()
+            evidence_ms = int((time.monotonic() - t0) * 1000)
+            logger.info(
+                "persist_report upserted %d seo_evidence_artifacts rows "
+                "duration_ms=%d",
+                len(evidence_artifact_rows),
+                evidence_ms,
             )
 
         if organic_competitor_rows:

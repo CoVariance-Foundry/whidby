@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from typing import Any
 from uuid import uuid4
@@ -11,12 +12,16 @@ from src.classification.ai_exposure import classify_ai_exposure
 from src.classification.difficulty_tier import compute_difficulty_tier
 from src.classification.guidance_generator import classify_and_generate_guidance
 from src.classification.serp_archetype import classify_serp_archetype
+from src.clients.supabase_persistence import (
+    build_seo_evidence_artifact_rows_from_cost_records,
+)
 from src.data.metro_db import MetroDB
 from src.data.metro_db_adapter import MetroDBGeoLookup
 from src.domain.entities import City
 from src.domain.ports import CityDataProvider
 from src.domain.services.geo_resolver import GeoResolver, ResolvedTarget
 from src.pipeline.data_collection import collect_data
+from src.pipeline.domain_classifier import normalize_domain
 from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
 from src.pipeline.signal_extraction import extract_signals
@@ -34,6 +39,8 @@ class ScoreNicheResult:
     report: dict[str, Any]
     opportunity_score: int
     evidence: list[dict[str, Any]]
+    seo_evidence_artifacts: list[dict[str, Any]]
+    local_pack_listing_facts: list[dict[str, Any]]
 
 
 async def score_niche_for_metro(
@@ -117,35 +124,36 @@ async def score_niche_for_metro(
     run_id = f"score-{uuid4()}"
     rid = request_id or run_id
 
-    # --- M4 keyword expansion ---
-    m4_start = time.monotonic()
-    logger.info("[%s] M4 keyword expansion START request_id=%s", run_id, rid)
-    expansion = await expand_keywords(
-        niche,
-        llm_client=llm_client,
-        dataforseo_client=dataforseo_client,
-    )
-    m4_ms = int((time.monotonic() - m4_start) * 1000)
-    logger.info(
-        "[%s] M4 keyword expansion DONE — %d keywords, confidence=%s, duration_ms=%d",
-        run_id, len(expansion.get("expanded_keywords", [])),
-        expansion.get("expansion_confidence"), m4_ms,
-    )
+    with _cost_capture_context(dataforseo_client, run_id):
+        # --- M4 keyword expansion ---
+        m4_start = time.monotonic()
+        logger.info("[%s] M4 keyword expansion START request_id=%s", run_id, rid)
+        expansion = await expand_keywords(
+            niche,
+            llm_client=llm_client,
+            dataforseo_client=dataforseo_client,
+        )
+        m4_ms = int((time.monotonic() - m4_start) * 1000)
+        logger.info(
+            "[%s] M4 keyword expansion DONE — %d keywords, confidence=%s, duration_ms=%d",
+            run_id, len(expansion.get("expanded_keywords", [])),
+            expansion.get("expansion_confidence"), m4_ms,
+        )
 
-    # --- M5 data collection ---
-    m5_start = time.monotonic()
-    logger.info("[%s] M5 data collection START", run_id)
-    raw = await collect_data(
-        keywords=expansion["expanded_keywords"],
-        metros=[m5_metro_input],
-        strategy_profile=strategy_profile,
-        client=dataforseo_client,
-    )
-    m5_ms = int((time.monotonic() - m5_start) * 1000)
-    logger.info(
-        "[%s] M5 data collection DONE — api_calls=%d cost=$%.4f duration_ms=%d",
-        run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd, m5_ms,
-    )
+        # --- M5 data collection ---
+        m5_start = time.monotonic()
+        logger.info("[%s] M5 data collection START", run_id)
+        raw = await collect_data(
+            keywords=expansion["expanded_keywords"],
+            metros=[m5_metro_input],
+            strategy_profile=strategy_profile,
+            client=dataforseo_client,
+        )
+        m5_ms = int((time.monotonic() - m5_start) * 1000)
+        logger.info(
+            "[%s] M5 data collection DONE — api_calls=%d cost=$%.4f duration_ms=%d",
+            run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd, m5_ms,
+        )
 
     # --- M6 signal extraction ---
     m6_start = time.monotonic()
@@ -264,6 +272,15 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
+    current_cost_records = _cost_records_for_context(dfs_cost_log, run_id)
+    evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(current_cost_records)
+    local_pack_listing_facts = _build_local_pack_listing_facts(
+        report=report,
+        raw_metro=metro_result,
+        cbsa_code=resolved.cbsa_code,
+        location_code=resolved.location_code,
+        maps_evidence_artifact_ids=_maps_evidence_artifact_ids(evidence_artifacts),
+    )
     m9_ms = int((time.monotonic() - m9_start) * 1000)
     logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
                 run_id, report.get("report_id"), m9_ms)
@@ -282,6 +299,8 @@ async def score_niche_for_metro(
         report=report,
         opportunity_score=int(round(scores["opportunity"])),
         evidence=evidence,
+        seo_evidence_artifacts=evidence_artifacts,
+        local_pack_listing_facts=local_pack_listing_facts,
     )
 
 
@@ -442,6 +461,8 @@ async def _dry_run_result(
         report=report,
         opportunity_score=int(round(scores["opportunity"])),
         evidence=_build_evidence_from_signals(signals),
+        seo_evidence_artifacts=[],
+        local_pack_listing_facts=[],
     )
 
 
@@ -463,6 +484,290 @@ def _log_dfs_cost_summary(
             ep_parts.append(f"{short}={info['calls']}/${info['cost']:.4f}")
         parts.append("breakdown: " + ", ".join(ep_parts))
     logger.info(" — ".join(parts))
+
+
+def _cost_capture_context(dataforseo_client: Any, run_id: str) -> Any:
+    tracker = getattr(dataforseo_client, "cost_tracker", None)
+    capture_context = getattr(tracker, "capture_context", None)
+    if callable(capture_context):
+        return capture_context(run_id)
+    return nullcontext()
+
+
+def _cost_records_for_context(records: list[Any], context_id: str) -> list[Any]:
+    filtered = [
+        record
+        for record in records
+        if _record_context_id(record) == context_id
+    ]
+    if filtered or not records:
+        return filtered
+    if all(_record_context_id(record) is None for record in records):
+        return records
+    return filtered
+
+
+def _record_context_id(record: Any) -> str | None:
+    if isinstance(record, dict):
+        value = record.get("collection_context_id")
+    else:
+        value = getattr(record, "collection_context_id", None)
+    return str(value) if value is not None else None
+
+
+def _build_local_pack_listing_facts(
+    *,
+    report: dict[str, Any],
+    raw_metro: Any,
+    cbsa_code: str,
+    location_code: int,
+    maps_evidence_artifact_ids: dict[tuple[str, int], str] | None = None,
+) -> list[dict[str, Any]]:
+    keyword = _primary_report_keyword(report)
+    generated_at = report.get("generated_at")
+    local_enrichment = _local_review_enrichment_lookup(raw_metro)
+    rows: list[dict[str, Any]] = []
+    for maps_result in getattr(raw_metro, "serp_maps", []) or []:
+        source_query = _text(maps_result.get("keyword")) or keyword
+        evidence_artifact_id = (maps_evidence_artifact_ids or {}).get(
+            (source_query or "", location_code)
+        )
+        items = maps_result.get("items") if isinstance(maps_result.get("items"), list) else []
+        for index, item in enumerate(_top_ranked_items(items, limit=3), start=1):
+            business_name = _text(
+                item.get("business_name") or item.get("title") or item.get("name")
+            )
+            if not business_name:
+                continue
+            listing_url = _text(item.get("listing_url") or item.get("url"))
+            enrichment = _local_review_enrichment_for_item(
+                item,
+                business_name=business_name,
+                lookup=local_enrichment,
+            )
+            rows.append(
+                {
+                    "cbsa_code": cbsa_code,
+                    "keyword": source_query or keyword,
+                    "listing_rank": _rank_value(item) or index,
+                    "business_name": business_name,
+                    "cid": _text(item.get("cid")),
+                    "place_id": _text(item.get("place_id")),
+                    "source_query": source_query,
+                    "dataforseo_location_code": location_code,
+                    "result_type": _text(item.get("result_type") or item.get("type")),
+                    "listing_url": listing_url,
+                    "domain": normalize_domain(_text(item.get("domain")) or listing_url or ""),
+                    "review_retrieval_mode": _text(
+                        item.get("review_retrieval_mode")
+                        or item.get("review_collection_mode")
+                        or enrichment.get("review_retrieval_mode")
+                    ),
+                    "review_window_start": item.get("review_window_start")
+                    or enrichment.get("review_window_start"),
+                    "review_window_end": item.get("review_window_end")
+                    or enrichment.get("review_window_end"),
+                    "upstream_result_at": _first_present(
+                        item,
+                        maps_result,
+                        keys=("upstream_result_at", "datetime", "timestamp"),
+                    ),
+                    "evidence_artifact_id": evidence_artifact_id,
+                    "rating": item.get("rating"),
+                    "review_count": _review_count_from_maps_item(item),
+                    "photo_count": item.get("photo_count") or item.get("total_photos"),
+                    "categories": item.get("categories") or item.get("category"),
+                    "source": "dataforseo",
+                    "snapshot_date": generated_at,
+                    "report_id": report.get("report_id"),
+                }
+            )
+    return rows
+
+
+def _maps_evidence_artifact_ids(
+    evidence_artifacts: list[dict[str, Any]],
+) -> dict[tuple[str, int], str]:
+    artifact_ids: dict[tuple[str, int], str] = {}
+    for artifact in evidence_artifacts:
+        if artifact.get("evidence_family") != "maps":
+            continue
+        endpoint = _text(artifact.get("endpoint_path", ""))
+        if not endpoint or "serp/google/maps" not in endpoint.lower():
+            continue
+        artifact_id = _text(artifact.get("id"))
+        params = artifact.get("normalized_request_params")
+        if not artifact_id or not isinstance(params, dict):
+            continue
+        keyword = _text(params.get("keyword"))
+        location_code = _int_or_none(params.get("location_code"))
+        if keyword and location_code is not None:
+            artifact_ids[(keyword, location_code)] = artifact_id
+    return artifact_ids
+
+
+def _local_review_enrichment_lookup(raw_metro: Any) -> dict[str, dict[str, Any]]:
+    lookup: dict[str, dict[str, Any]] = {}
+    for row in getattr(raw_metro, "gbp_info", []) or []:
+        if isinstance(row, dict):
+            _add_local_enrichment(lookup, row, _local_enrichment_from_row(row))
+    for row in getattr(raw_metro, "google_reviews", []) or []:
+        if isinstance(row, dict):
+            _add_local_enrichment(lookup, row, _local_enrichment_from_row(row))
+    return lookup
+
+
+def _local_enrichment_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    window_start, window_end = _review_window_from_row(row)
+    return {
+        "review_retrieval_mode": _text(
+            row.get("review_retrieval_mode")
+            or row.get("review_collection_mode")
+            or row.get("preferred_identifier_mode")
+        ),
+        "review_window_start": window_start,
+        "review_window_end": window_end,
+    }
+
+
+def _add_local_enrichment(
+    lookup: dict[str, dict[str, Any]],
+    row: dict[str, Any],
+    enrichment: dict[str, Any],
+) -> None:
+    if not any(value is not None for value in enrichment.values()):
+        return
+    for key in _local_lookup_keys(row):
+        existing = lookup.setdefault(key, {})
+        for field, value in enrichment.items():
+            if value is not None:
+                existing[field] = value
+
+
+def _local_review_enrichment_for_item(
+    item: dict[str, Any],
+    *,
+    business_name: str,
+    lookup: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    candidate = {
+        **item,
+        "business_name": business_name,
+    }
+    for key in _local_lookup_keys(candidate):
+        if key in lookup:
+            return lookup[key]
+    return {}
+
+
+def _local_lookup_keys(row: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for field in ("cid", "place_id"):
+        value = _norm_text(row.get(field))
+        if value:
+            keys.append(f"{field}:{value}")
+    name = _norm_text(row.get("business_name") or row.get("title") or row.get("name"))
+    if name:
+        keys.append(f"name:{name}")
+    return keys
+
+
+def _review_window_from_row(row: dict[str, Any]) -> tuple[Any, Any]:
+    start = row.get("review_window_start") or row.get("source_window_start")
+    end = row.get("review_window_end") or row.get("source_window_end")
+    if start or end:
+        return start, end
+
+    timestamps = _review_timestamps_from_row(row)
+    if not timestamps:
+        return None, None
+    ordered = sorted(timestamps)
+    return ordered[0], ordered[-1]
+
+
+def _review_timestamps_from_row(row: dict[str, Any]) -> list[str]:
+    timestamps: list[str] = []
+    raw = row.get("review_timestamps")
+    if isinstance(raw, list):
+        timestamps.extend(str(value) for value in raw if value)
+    items = row.get("items")
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict) and item.get("timestamp"):
+                timestamps.append(str(item["timestamp"]))
+    return timestamps
+
+
+def _primary_report_keyword(report: dict[str, Any]) -> str | None:
+    for item in (report.get("keyword_expansion") or {}).get("expanded_keywords", []) or []:
+        if isinstance(item, dict) and item.get("keyword"):
+            return str(item["keyword"])
+    return _text((report.get("input") or {}).get("niche_keyword"))
+
+
+def _top_ranked_items(items: list[Any], *, limit: int) -> list[dict[str, Any]]:
+    rows = [item for item in items if isinstance(item, dict)]
+    if any(_rank_value(row) is not None for row in rows):
+        rows = [
+            row
+            for _, row in sorted(
+                enumerate(rows),
+                key=lambda pair: (
+                    _rank_value(pair[1]) is None,
+                    _rank_value(pair[1]) if _rank_value(pair[1]) is not None else 0,
+                    pair[0],
+                ),
+            )
+        ]
+    return rows[:limit]
+
+
+def _rank_value(row: dict[str, Any]) -> int | None:
+    for field in ("listing_rank", "rank_group", "rank", "position", "rank_absolute"):
+        try:
+            rank = int(row.get(field))
+        except (TypeError, ValueError):
+            continue
+        if rank > 0:
+            return rank
+    return None
+
+
+def _review_count_from_maps_item(item: dict[str, Any]) -> Any:
+    rating = item.get("rating")
+    if isinstance(rating, dict) and rating.get("votes_count") is not None:
+        return rating.get("votes_count")
+    return item.get("review_count") or item.get("reviews_count") or item.get("votes_count")
+
+
+def _first_present(
+    *sources: dict[str, Any],
+    keys: tuple[str, ...],
+) -> Any:
+    for source in sources:
+        for key in keys:
+            if source.get(key) is not None:
+                return source[key]
+    return None
+
+
+def _norm_text(value: Any) -> str:
+    text = _text(value)
+    return text.lower() if text else ""
+
+
+def _text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _population_class_for_benchmarks(population: int | None) -> str | None:

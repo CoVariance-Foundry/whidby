@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import json
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -272,9 +275,10 @@ class DataForSEOClient:
         for idx, params in enumerate(params_list):
             cached = self._cache.get(endpoint.post_path, params)
             if cached is not None:
-                self._tracker.record(
+                self._record_cost(
                     endpoint=endpoint.post_path, task_id="cached",
                     cost=0, cached=True, latency_ms=0, parameters=params,
+                    response_data=cached,
                 )
                 results.append(APIResponse(status="ok", data=cached, cost=0, cached=True))
             else:
@@ -308,7 +312,7 @@ class DataForSEOClient:
                 data = task.get("result")
                 ms = self._elapsed_ms(start)
                 self._cache.put(endpoint.post_path, params, data)
-                self._tracker.record(endpoint.post_path, task_id, cost, False, ms, params)
+                self._record_cost(endpoint.post_path, task_id, cost, False, ms, params, response_data=data)
                 results[idx] = APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
             else:
                 task_map.append((idx, task_id, params, cost))
@@ -344,7 +348,7 @@ class DataForSEOClient:
                 ms = self._elapsed_ms(start)
                 result_cost = result_task.get("cost", cost)
                 self._cache.put(endpoint.post_path, params, data)
-                self._tracker.record(endpoint.post_path, task_id, result_cost, False, ms, params)
+                self._record_cost(endpoint.post_path, task_id, result_cost, False, ms, params, response_data=data)
                 results[idx] = APIResponse(status="ok", data=data, cost=result_cost, latency_ms=ms, task_id=task_id)
                 pending.discard(pos)
 
@@ -368,13 +372,14 @@ class DataForSEOClient:
         """Standard-queue flow: POST task → poll GET until ready."""
         cached = self._cache.get(endpoint.post_path, params)
         if cached is not None:
-            self._tracker.record(
+            self._record_cost(
                 endpoint=endpoint.post_path,
                 task_id="cached",
                 cost=0,
                 cached=True,
                 latency_ms=0,
                 parameters=params,
+                response_data=cached,
             )
             return APIResponse(status="ok", data=cached, cost=0, cached=True)
 
@@ -398,7 +403,7 @@ class DataForSEOClient:
             data = task.get("result")
             ms = self._elapsed_ms(start)
             self._cache.put(endpoint.post_path, params, data)
-            self._tracker.record(endpoint.post_path, task_id, cost, False, ms, params)
+            self._record_cost(endpoint.post_path, task_id, cost, False, ms, params, response_data=data)
             return APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
 
         # Poll for results
@@ -425,7 +430,7 @@ class DataForSEOClient:
             ms = self._elapsed_ms(start)
             result_cost = result_task.get("cost", cost)
             self._cache.put(endpoint.post_path, params, data)
-            self._tracker.record(endpoint.post_path, task_id, result_cost, False, ms, params)
+            self._record_cost(endpoint.post_path, task_id, result_cost, False, ms, params, response_data=data)
             if ms > 10_000:
                 logger.info(
                     "DFS slow queued call endpoint=%s latency_ms=%d polls=%d",
@@ -453,7 +458,7 @@ class DataForSEOClient:
         cp = cache_params or (payload[0] if payload else {})
         cached = self._cache.get(endpoint.post_path, cp)
         if cached is not None:
-            self._tracker.record(endpoint.post_path, "cached", 0, True, 0, cp)
+            self._record_cost(endpoint.post_path, "cached", 0, True, 0, cp, response_data=cached)
             return APIResponse(status="ok", data=cached, cost=0, cached=True)
 
         start = time.monotonic()
@@ -469,7 +474,7 @@ class DataForSEOClient:
             data = first.get("result", body)
             ms = self._elapsed_ms(start)
             self._cache.put(endpoint.post_path, cp, data)
-            self._tracker.record(endpoint.post_path, "direct", 0, False, ms, cp)
+            self._record_cost(endpoint.post_path, "direct", 0, False, ms, cp, response_data=data)
             return APIResponse(status="ok", data=data, cost=0, latency_ms=ms)
 
         if task.get("status_code", 0) >= 40000:
@@ -480,13 +485,37 @@ class DataForSEOClient:
         task_id = task.get("id", "unknown")
         ms = self._elapsed_ms(start)
         self._cache.put(endpoint.post_path, cp, data)
-        self._tracker.record(endpoint.post_path, task_id, cost, False, ms, cp)
+        self._record_cost(endpoint.post_path, task_id, cost, False, ms, cp, response_data=data)
         if ms > 5_000:
             logger.info(
                 "DFS slow live call endpoint=%s latency_ms=%d",
                 endpoint.post_path, ms,
             )
         return APIResponse(status="ok", data=data, cost=cost, latency_ms=ms, task_id=task_id)
+
+    def _record_cost(
+        self,
+        endpoint: str,
+        task_id: str,
+        cost: float,
+        cached: bool,
+        latency_ms: int,
+        parameters: dict[str, Any] | None,
+        *,
+        response_data: Any | None,
+    ) -> None:
+        response_hash = _response_hash(response_data)
+        self._tracker.record(
+            endpoint,
+            task_id,
+            cost,
+            cached,
+            latency_ms,
+            parameters,
+            collected_at=datetime.now(UTC).isoformat(),
+            response_hash=response_hash,
+            response_payload=_response_payload_summary(response_data, response_hash),
+        )
 
     # -- Internal: HTTP layer ------------------------------------------------
 
@@ -558,3 +587,36 @@ class DataForSEOClient:
             task_id=task.get("id"),
             latency_ms=int((time.monotonic() - start) * 1000),
         )
+
+
+def _json_bytes(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
+
+
+def _response_hash(value: Any) -> str | None:
+    if value is None:
+        return None
+    return hashlib.sha256(_json_bytes(value)).hexdigest()
+
+
+def _response_payload_summary(value: Any, response_hash: str | None) -> dict[str, Any] | None:
+    if response_hash is None:
+        return None
+    summary: dict[str, Any] = {"sha256": response_hash}
+    if isinstance(value, list):
+        summary["type"] = "list"
+        summary["count"] = len(value)
+        first = value[0] if value else None
+        if isinstance(first, dict):
+            items = first.get("items")
+            if isinstance(items, list):
+                summary["first_items_count"] = len(items)
+    elif isinstance(value, dict):
+        summary["type"] = "object"
+        summary["keys"] = sorted(str(key) for key in value.keys())[:20]
+        items = value.get("items")
+        if isinstance(items, list):
+            summary["items_count"] = len(items)
+    else:
+        summary["type"] = type(value).__name__
+    return summary

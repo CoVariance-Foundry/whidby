@@ -3,12 +3,14 @@ import pytest
 from scripts.benchmarks.run_pilot import (
     collect_organic_telemetry,
     collect_top3_review_velocity,
+    evidence_artifacts_from_dfs_cost_log,
     parse_backlinks_domain_authority,
     parse_lighthouse_performance_score,
     parse_serp_items,
     propagate_head_feature,
+    upsert_evidence_artifacts,
 )
-from src.clients.dataforseo.types import APIResponse
+from src.clients.dataforseo.types import APIResponse, CostRecord
 
 
 def test_parse_serp_items_extracts_top3_review_floor_and_rating():
@@ -114,6 +116,7 @@ class _FakeDFS:
     def __init__(self) -> None:
         self.backlink_calls = []
         self.review_calls = []
+        self.cost_log = []
 
     async def backlinks_summary(self, target, *, rank_scale=None):
         self.backlink_calls.append({"target": target, "rank_scale": rank_scale})
@@ -243,3 +246,153 @@ async def test_collect_top3_review_velocity_skips_missing_review_identifiers():
             "sort_by": "newest",
         }
     ]
+
+
+def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
+    dfs = _FakeDFS()
+    dfs.cost_log = [
+        CostRecord(
+            endpoint="serp/google/maps/live/advanced",
+            task_id="maps-other",
+            cost=0.002,
+            cached=False,
+            latency_ms=120,
+            parameters={"keyword": "hvac repair", "location_code": 2000020},
+            collected_at="2026-05-24T14:00:00+00:00",
+            collection_context_id="pair-other",
+            response_hash="other-maps-hash",
+        ),
+        CostRecord(
+            endpoint="serp/google/maps/live/advanced",
+            task_id="maps-1",
+            cost=0.002,
+            cached=False,
+            latency_ms=120,
+            parameters={"keyword": "roof repair", "location_code": 1000013},
+            collected_at="2026-05-24T14:00:01+00:00",
+            collection_context_id="pair-current",
+            response_hash="maps-hash",
+        ),
+        CostRecord(
+            endpoint="business_data/google/reviews/task_post",
+            task_id="reviews-1",
+            cost=0.005,
+            cached=False,
+            latency_ms=400,
+            parameters={"cid": "123", "location_code": 1000013, "depth": 10},
+            collected_at="2026-05-24T14:00:02+00:00",
+            collection_context_id="pair-current",
+            response_hash="reviews-hash",
+        ),
+        CostRecord(
+            endpoint="backlinks/summary/live",
+            task_id="backlinks-other",
+            cost=0.002,
+            cached=False,
+            latency_ms=80,
+            parameters={"target": "other.example", "rank_scale": "one_hundred"},
+            collected_at="2026-05-24T14:00:03+00:00",
+            collection_context_id="pair-other",
+            response_hash="other-backlinks-hash",
+        ),
+        CostRecord(
+            endpoint="backlinks/summary/live",
+            task_id="backlinks-1",
+            cost=0.002,
+            cached=False,
+            latency_ms=80,
+            parameters={"target": "example.com", "rank_scale": "one_hundred"},
+            collected_at="2026-05-24T14:00:04+00:00",
+            collection_context_id="pair-current",
+            response_hash="backlinks-hash",
+        ),
+        CostRecord(
+            endpoint="on_page/lighthouse/live",
+            task_id="lighthouse-1",
+            cost=0.006,
+            cached=True,
+            latency_ms=0,
+            parameters={"url": "https://example.com/"},
+            collected_at="2026-05-24T14:00:05+00:00",
+            collection_context_id="pair-current",
+            response_hash="lighthouse-hash",
+        ),
+        CostRecord(
+            endpoint="on_page/lighthouse/live",
+            task_id="lighthouse-overlap",
+            cost=0.006,
+            cached=True,
+            latency_ms=0,
+            parameters={"url": "https://example.com/"},
+            collected_at="2026-05-24T14:00:06+00:00",
+            collection_context_id="pair-other",
+            response_hash="lighthouse-other-hash",
+        ),
+    ]
+
+    rows = evidence_artifacts_from_dfs_cost_log(
+        dfs,
+        collection_context_id="pair-current",
+        niche="roof repair",
+        location_codes=[1000013],
+        keywords=["roof repair"],
+        serp_keywords=["roof repair"],
+        local_pack_items=[{"title": "A", "cid": "123"}],
+        organic_targets=[
+            {"domain": "example.com", "url": "https://example.com/"},
+        ],
+    )
+
+    assert [row["evidence_family"] for row in rows] == [
+        "maps",
+        "reviews",
+        "backlinks",
+        "lighthouse",
+    ]
+    assert rows[0]["cache_status"] == "miss"
+    assert rows[0]["request_hash"]
+    assert rows[0]["response_hash"] == "maps-hash"
+    assert rows[0]["collected_at"] == "2026-05-24T14:00:01+00:00"
+    assert rows[1]["normalized_request_params"]["cid"] == "123"
+    assert rows[2]["cost_usd"] == 0.002
+    assert rows[3]["cache_status"] == "hit"
+    assert {row["response_hash"] for row in rows}.isdisjoint(
+        {"other-maps-hash", "other-backlinks-hash", "lighthouse-other-hash"}
+    )
+
+
+def test_benchmark_evidence_upsert_ignores_duplicate_artifacts(monkeypatch):
+    captured = {}
+
+    class _Response:
+        status = 201
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return b""
+
+    def fake_urlopen(req, timeout):  # noqa: ANN001
+        captured["headers"] = dict(req.header_items())
+        captured["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr("scripts.benchmarks.run_pilot.urlreq.urlopen", fake_urlopen)
+
+    status, _body = upsert_evidence_artifacts(
+        [
+            {
+                "provider": "dataforseo",
+                "endpoint_path": "serp/google/maps/live/advanced",
+                "request_hash": "hash",
+                "evidence_family": "maps",
+            }
+        ]
+    )
+
+    assert status == 201
+    assert captured["headers"]["Prefer"] == "resolution=ignore-duplicates,return=minimal"

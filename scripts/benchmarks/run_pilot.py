@@ -30,12 +30,14 @@ import logging
 import os
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib import error as urlerror
 from urllib import request as urlreq
+from uuid import uuid4
 
 # Repo root + path injection so we can import src.* modules
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +45,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.clients.dataforseo import DataForSEOClient  # noqa: E402
 from src.clients.llm.client import LLMClient  # noqa: E402
+from src.clients.supabase_persistence import (  # noqa: E402
+    build_seo_evidence_artifact_rows_from_cost_records,
+    evidence_family_from_endpoint,
+)
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
 from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
 
@@ -740,6 +746,179 @@ def upsert_facts(rows: list[dict]) -> tuple[int, str]:
         return e.code, e.read().decode()[:500]
 
 
+def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
+    if not rows:
+        return 200, ""
+    url = (
+        f"{SUPABASE_URL}/rest/v1/seo_evidence_artifacts"
+        f"?on_conflict=provider,endpoint_path,request_hash"
+    )
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=ignore-duplicates,return=minimal",
+    }
+    body = json.dumps(rows).encode("utf-8")
+    req = urlreq.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urlreq.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read().decode()
+    except urlerror.HTTPError as e:
+        return e.code, e.read().decode()[:500]
+
+
+def evidence_artifacts_from_dfs_cost_log(
+    dfs: DataForSEOClient,
+    *,
+    start_index: int = 0,
+    collection_context_id: str | None = None,
+    niche: str | None = None,
+    location_codes: list[int] | None = None,
+    keywords: list[str] | None = None,
+    serp_keywords: list[str] | None = None,
+    local_pack_items: list[dict[str, Any]] | None = None,
+    organic_targets: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    cost_records = (getattr(dfs, "cost_log", []) or [])[start_index:]
+    if collection_context_id is not None:
+        filtered_records = [
+            record
+            for record in cost_records
+            if _record_field(record, "collection_context_id") == collection_context_id
+        ]
+        return build_seo_evidence_artifact_rows_from_cost_records(filtered_records)
+
+    filtered_records = [
+        record
+        for record in cost_records
+        if _cost_record_matches_pair(
+            record,
+            niche=niche,
+            location_codes=location_codes,
+            keywords=keywords,
+            serp_keywords=serp_keywords,
+            local_pack_items=local_pack_items,
+            organic_targets=organic_targets,
+        )
+    ]
+    return build_seo_evidence_artifact_rows_from_cost_records(filtered_records)
+
+
+def _cost_record_matches_pair(
+    record: Any,
+    *,
+    niche: str | None,
+    location_codes: list[int] | None,
+    keywords: list[str] | None,
+    serp_keywords: list[str] | None,
+    local_pack_items: list[dict[str, Any]] | None,
+    organic_targets: list[dict[str, Any]] | None,
+) -> bool:
+    endpoint = _record_field(record, "endpoint")
+    family = evidence_family_from_endpoint(str(endpoint or ""))
+    if family is None:
+        return False
+
+    params = _record_field(record, "parameters")
+    params = params if isinstance(params, dict) else {}
+    location_set = {
+        parsed
+        for code in location_codes or []
+        if (parsed := _int_param(code)) is not None
+    }
+    keyword_set = {_norm_text(keyword) for keyword in keywords or [] if _norm_text(keyword)}
+    serp_keyword_set = {
+        _norm_text(keyword) for keyword in serp_keywords or [] if _norm_text(keyword)
+    }
+    local_identifiers = _local_identifier_set(local_pack_items or [])
+    organic_domains = {
+        _norm_text(target.get("domain"))
+        for target in organic_targets or []
+        if _norm_text(target.get("domain"))
+    }
+    organic_urls = {
+        _norm_text(target.get("url"))
+        for target in organic_targets or []
+        if _norm_text(target.get("url"))
+    }
+
+    location = _int_param(params.get("location_code"))
+    if family == "keyword_volume":
+        return (
+            location in location_set
+            and bool(keyword_set)
+            and bool(keyword_set.intersection(_param_keywords(params)))
+        )
+    if family in {"serp", "maps"}:
+        return (
+            location in location_set
+            and (
+                not serp_keyword_set
+                or _norm_text(params.get("keyword")) in serp_keyword_set
+            )
+        )
+    if family == "reviews":
+        if location not in location_set:
+            return False
+        candidates = {
+            _norm_text(params.get("cid")),
+            _norm_text(params.get("place_id")),
+            _norm_text(params.get("keyword")),
+        }
+        return bool(local_identifiers.intersection(candidates))
+    if family == "backlinks":
+        return _norm_text(params.get("target")) in organic_domains
+    if family == "lighthouse":
+        return _norm_text(params.get("url")) in organic_urls
+    if family == "keyword_overview":
+        return _norm_text(params.get("keyword")) == _norm_text(niche)
+    return False
+
+
+def _record_field(record: Any, key: str) -> Any:
+    if isinstance(record, dict):
+        return record.get(key)
+    return getattr(record, key, None)
+
+
+def _dfs_capture_context(dfs: DataForSEOClient, context_id: str) -> Any:
+    tracker = getattr(dfs, "cost_tracker", None)
+    capture_context = getattr(tracker, "capture_context", None)
+    if callable(capture_context):
+        return capture_context(context_id)
+    return nullcontext()
+
+
+def _norm_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _int_param(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _param_keywords(params: dict[str, Any]) -> set[str]:
+    raw_keywords = params.get("keywords")
+    if isinstance(raw_keywords, list):
+        return {_norm_text(keyword) for keyword in raw_keywords if _norm_text(keyword)}
+    keyword = _norm_text(params.get("keyword"))
+    return {keyword} if keyword else set()
+
+
+def _local_identifier_set(items: list[dict[str, Any]]) -> set[str]:
+    identifiers: set[str] = set()
+    for item in items[:3]:
+        for key in ("cid", "place_id", "title"):
+            value = _norm_text(item.get(key))
+            if value:
+                identifiers.add(value)
+    return identifiers
+
+
 # -------------------------------------------------------------------
 # Per-niche keyword expansion (cached)
 # -------------------------------------------------------------------
@@ -805,9 +984,10 @@ async def score_one(
     name = metro["cbsa_name"]
     log.info(f"[start] {niche!r} × {name} ({cbsa})")
     stats.reports_attempted += 1
+    pair_context_id = f"benchmark:{niche.lower()}:{cbsa}:{uuid4()}"
 
-    try:
-        expansion = await expansion_cache.get(niche)
+    with _dfs_capture_context(dfs, pair_context_id):
+        try:
         actionable = [
             kw for kw in expansion["expanded_keywords"]
             if kw["intent"] in ("transactional", "commercial") and kw.get("actionable")
@@ -947,6 +1127,27 @@ async def score_one(
 
         # 4) Persist
         if rows:
+            evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
+                dfs,
+                collection_context_id=pair_context_id,
+            )
+            if evidence_artifact_rows:
+                evidence_status, evidence_body = upsert_evidence_artifacts(
+                    evidence_artifact_rows
+                )
+                if evidence_status >= 300:
+                    log.warning(
+                        "  evidence artifact upsert failed (non-fatal): %s %s",
+                        evidence_status,
+                        evidence_body[:200],
+                    )
+                    stats.record_failure(
+                        niche,
+                        cbsa,
+                        "evidence_upsert_failed_non_fatal",
+                        f"status={evidence_status}",
+                    )
+
             status, body = upsert_facts(rows)
             if status >= 300:
                 log.error(f"  upsert failed: {status} {body[:200]}")
@@ -962,13 +1163,11 @@ async def score_one(
         stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
         return 0
 
-    except Exception as e:
-        log.exception(f"failure on {niche} × {cbsa}")
-        stats.reports_failed += 1
-        stats.record_failure(niche, cbsa, type(e).__name__, str(e))
-        return 0
-
-
+        except Exception as e:
+            log.exception(f"failure on {niche} × {cbsa}")
+            stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, type(e).__name__, str(e))
+            return 0
 # -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
