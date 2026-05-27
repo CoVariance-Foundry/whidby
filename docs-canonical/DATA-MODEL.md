@@ -7,7 +7,7 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.7.5`     |
+| **Version**      | `1.7.6`     |
 | **Last Updated** | 2026-05-24  |
 | **Owner**        | @widby-team |
 
@@ -79,7 +79,7 @@ V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.
 - `seo_benchmark_metric_sufficiency` stores per-run, per-cell metric-family evidence for `demand`, `organic_serp`, `organic_authority`, `lighthouse_site_quality`, `local_pack`, `review_velocity`, `gbp_profile`, `monetization`, and `ai_serp_displacement`. Each row records attempted/non-null metros, attempted/non-null observations, confidence label, source endpoint, and source window; check constraints keep non-null counts within attempted counts.
 - `seo_evidence_artifacts` stores service-role-only raw SEO evidence for `serp`, `maps`, `reviews`, `backlinks`, `lighthouse`, `keyword_volume`, and `keyword_overview` families. Rows preserve provider, endpoint path, normalized request params, request/response hashes or storage pointer, cache status, cost, collection time, and source windows so benchmark inputs can be audited without rerunning paid collection.
 - `local_pack_listing_facts` stores stable `cid` and `place_id` identifiers, source query, DataForSEO location code, result type, listing URL/domain, explicit review retrieval mode, review source window, upstream result timestamp, and optional raw evidence artifact link. Unknown provenance remains nullable; review velocity enrichment should target `cid` or `place_id` before any title fallback.
-- `metro_score_v2` stores persisted V2 score vectors, report lineage, benchmark confidence, and explanation facts for a city-service run. Explore and strategy read models prefer this table over legacy `metro_scores`.
+- `metro_score_v2` stores persisted V2 score vectors, report lineage, benchmark confidence, canonical `warning_codes`, and explanation facts for a city-service run. Explore and strategy read models prefer this table over legacy `metro_scores`. `warning_codes` is a text array containing product-facing benchmark/readiness codes such as `metric_missing`, `metric_undersampled`, `pooled_benchmark`, `stale_evidence`, `local_identifier_missing`, `demand_source_candidate`, and `benchmark_lineage_missing`.
 - `top3_review_count_min` is the minimum review count across ranked local top-3 listings with review data; missing review data persists as `null` and lowers confidence rather than becoming zero.
 - `top3_review_velocity_avg` is the average monthly review velocity across ranked local top-3 listings with velocity data; missing velocity data persists as `null`.
 - `avg_top5_da` is the nullable average domain authority across usable top-5 organic competitors after existing aggregator/missing-URL exclusions.
@@ -159,6 +159,7 @@ Source: `apps/app/src/lib/niche-finder/history-storage.ts`. Dedupe key prefers `
 | `latest_scored_at` | timestamptz | No | Latest cached score time |
 | `refresh_target_id` | uuid | No | Refresh target for cached rows |
 | `stale` | boolean | Yes | Freshness relative to active cadence |
+| `warning_codes` | text[] | Yes | Canonical warning codes projected from `metro_score_v2.warning_codes`; legacy-only rows use an empty array |
 
 This is a derived read model for Explore latency. Canonical source tables remain `metros`, `census_cbp_establishments`, `niche_naics_mapping`, `reports`, `metro_scores`, `metro_score_v2`, and Explore refresh tables.
 
@@ -201,6 +202,7 @@ Source: `src/domain/services/explore_city_service.py`. The frontend must treat t
 | `business_density_per_1k` | float | No | Weighted CBP establishments per 1,000 residents for this service |
 | `establishment_growth_yoy` | float | No | Annualized establishment growth for this service |
 | `benchmark_confidence` | string | No | V2 benchmark confidence label |
+| `warning_codes` | string[] | Yes | Canonical benchmark/readiness warning codes safe for product surfaces |
 | `latest_scored_at` | timestamptz | No | Latest score timestamp |
 | `refresh_target_id` | UUID | No | Existing refresh target when configured |
 | `next_refresh_at` | timestamptz | No | Next scheduled refresh time |
@@ -700,3 +702,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.7.3   | 2026-05-23 | WHI-102 acquisition backfill contract | Documented opt-in DataForSEO acquisition fields for organic telemetry and local review velocity |
 | 1.7.4   | 2026-05-24 | WHI-126 benchmark lineage schema | Added benchmark run lineage and metric-family sufficiency entities |
 | 1.7.5   | 2026-05-24 | WHI-127 evidence lineage schema | Added raw SEO evidence artifacts and local-pack stable identifier lineage |
+| 1.7.6   | 2026-05-24 | WHI-130 warning-code read models | Added persisted `metro_score_v2.warning_codes` and Explore warning-code projection contract |

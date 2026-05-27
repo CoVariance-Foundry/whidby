@@ -5,6 +5,7 @@ from typing import Any
 
 from src.domain.entities import City, Market, Service
 from src.domain.queries import MarketQuery
+from src.scoring.benchmark_warnings import warning_codes_from_mapping
 
 
 def _raise_on_error(result: Any) -> None:
@@ -227,6 +228,9 @@ def _strategy_row_from_cached_row(row: dict[str, Any], query: MarketQuery) -> di
         "local_pack_present": local_pack_present,
         "local_difficulty": row.get("local_difficulty"),
         "benchmark_confidence": row.get("benchmark_confidence"),
+        "benchmark_sample_size": row.get("benchmark_sample_size"),
+        "benchmark_undersampled": row.get("benchmark_undersampled"),
+        "warning_codes": warning_codes_from_mapping(row),
         "search_volume_monthly": row.get("search_volume_monthly"),
         "exact_match_name_taken": row.get("exact_match_name_taken"),
         "aio_trigger_rate": row.get("aio_trigger_rate")

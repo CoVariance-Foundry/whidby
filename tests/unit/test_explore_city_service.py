@@ -208,6 +208,29 @@ def test_city_service_prefers_v2_over_legacy_for_same_service() -> None:
     assert city["cached_scores"][0]["score_system"] == "v2"
 
 
+def test_city_service_preserves_cached_score_warning_codes() -> None:
+    class Repository(FakeExploreRepository):
+        def load_scores(self, cbsa_codes: list[str]) -> list[dict]:
+            return [
+                {
+                    "cbsa_code": "38060",
+                    "niche_normalized": "roofing",
+                    "niche_keyword": "roofing",
+                    "presentation_score": 88,
+                    "score_system": "v2",
+                    "last_scored_at": "2026-05-03T12:00:00Z",
+                    "warning_codes": ["metric_missing", "pooled_benchmark"],
+                },
+            ]
+
+    city = ExploreCityService(Repository()).list_cities(service_filter="roofing")[0]
+
+    assert city["cached_scores"][0]["warning_codes"] == [
+        "metric_missing",
+        "pooled_benchmark",
+    ]
+
+
 def test_city_service_preserves_city_freshness_fields() -> None:
     class Repository(FakeExploreRepository):
         def load_metros(self) -> list[dict]:
@@ -325,6 +348,29 @@ def test_city_service_returns_paged_result_for_new_repository() -> None:
     assert city["cached_scores"][0]["last_refreshed_at"] == "2026-05-01T12:00:00Z"
     assert city["cached_scores"][0]["next_refresh_at"] == "2026-06-01T12:00:00Z"
     assert city["cached_scores"][0]["growth_available"] is True
+
+
+def test_city_service_derives_warning_codes_for_paged_read_model_rows() -> None:
+    class Repository(FakePagedExploreRepository):
+        def list_city_rows(self, **kwargs) -> list[dict]:
+            rows = super().list_city_rows(**kwargs)
+            rows[0].update(
+                {
+                    "warning_codes": [
+                        "metric_undersampled",
+                        "benchmark_lineage_missing",
+                    ],
+                }
+            )
+            return rows
+
+    result = ExploreCityService(Repository()).list_cities(service_filter="roofing")
+
+    assert not isinstance(result, list)
+    assert result["cities"][0]["cached_scores"][0]["warning_codes"] == [
+        "metric_undersampled",
+        "benchmark_lineage_missing",
+    ]
 
 
 def test_city_service_trims_extra_cursor_row() -> None:

@@ -25,6 +25,8 @@ interface ServiceOption {
 interface DiscoveryMarket {
   rank?: number;
   opportunity_score?: number;
+  warnings?: unknown;
+  warning_codes?: unknown;
   city?: {
     city_id?: string;
     name?: string;
@@ -55,6 +57,7 @@ interface QueuedTarget {
   opportunity_score: number | null;
   rank: number | null;
   source: TargetSource;
+  warning_codes: string[];
 }
 
 interface CustomTargetRow {
@@ -148,6 +151,44 @@ function requestMessage(body: DiscoveryResponse | RunResponse, fallback: string)
   return body.message ?? body.detail ?? body.code ?? fallback;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function readWarningCodes(value: unknown): string[] {
+  const rawItems = Array.isArray(value) ? value : value == null ? [] : [value];
+  const codes: string[] = [];
+  const seen = new Set<string>();
+  for (const item of rawItems) {
+    const code =
+      typeof item === "string"
+        ? item
+        : (() => {
+            const record = asRecord(item);
+            const candidate = record.code ?? record.message ?? record.label;
+            return typeof candidate === "string" ? candidate : "";
+          })();
+    const normalized = code.trim();
+    if (normalized && !seen.has(normalized)) {
+      codes.push(normalized);
+      seen.add(normalized);
+    }
+  }
+  return codes;
+}
+
+function marketWarningCodes(market: DiscoveryMarket) {
+  const explicitCodes = readWarningCodes(market.warning_codes);
+  const seen = new Set(explicitCodes);
+  return explicitCodes.concat(
+    readWarningCodes(market.warnings).filter((code) => {
+      if (seen.has(code)) return false;
+      seen.add(code);
+      return true;
+    }),
+  );
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   try {
     return (await response.json()) as T;
@@ -198,6 +239,7 @@ function customRowToTarget(row: CustomTargetRow, fallbackPrimaryKeyword: string)
     opportunity_score: null,
     rank: null,
     source: "custom",
+    warning_codes: [],
   };
 }
 
@@ -537,6 +579,7 @@ export default function AgencyPage() {
                         : null,
                     rank: typeof market.rank === "number" ? market.rank : null,
                     source: "cached",
+                    warning_codes: marketWarningCodes(market),
                   };
                 });
               }),
@@ -1186,6 +1229,29 @@ export default function AgencyPage() {
                       {target.city_name}{target.state ? `, ${target.state}` : ""}
                     </strong>
                     <span style={{ color: "var(--ink-2)" }}>{target.niche_keyword}</span>
+                    {target.warning_codes.length > 0 ? (
+                      <div
+                        aria-label={`Warnings for ${target.city_name} ${target.niche_keyword}`}
+                        style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}
+                      >
+                        {target.warning_codes.map((warning) => (
+                          <span
+                            key={warning}
+                            style={{
+                              border: "1px solid var(--warn)",
+                              borderRadius: 999,
+                              color: "var(--warn)",
+                              background: "var(--warn-soft)",
+                              padding: "2px 6px",
+                              fontSize: 11,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {warning}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span

@@ -93,15 +93,42 @@ class DataForSEOPlugin(ToolPlugin):
             },
             {
                 "name": "fetch_google_reviews",
-                "description": "Fetch Google review data for a keyword/location.",
+                "description": "Fetch Google review data by keyword, cid, or place_id.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "keyword": {"type": "string"},
-                        "location_code": {"type": "integer"},
-                        "depth": {"type": "integer"},
+                        "keyword": {
+                            "type": "string",
+                            "description": "Business search term when cid/place_id is unavailable.",
+                        },
+                        "cid": {
+                            "type": ["string", "integer"],
+                            "description": "Google Maps CID for identifier-based reviews.",
+                        },
+                        "place_id": {
+                            "type": "string",
+                            "description": "Google place_id for identifier-based reviews.",
+                        },
+                        "location_code": {
+                            "type": "integer",
+                            "description": "DataForSEO location code.",
+                        },
+                        "depth": {
+                            "type": "integer",
+                            "description": "Number of reviews to request.",
+                        },
+                        "sort_by": {
+                            "type": "string",
+                            "default": "newest",
+                            "description": "Review sort mode; use newest for benchmark parity.",
+                        },
                     },
-                    "required": ["keyword", "location_code"],
+                    "required": ["location_code"],
+                    "anyOf": [
+                        {"required": ["keyword"]},
+                        {"required": ["cid"]},
+                        {"required": ["place_id"]},
+                    ],
                 },
             },
             {
@@ -111,6 +138,14 @@ class DataForSEOPlugin(ToolPlugin):
                     "type": "object",
                     "properties": {
                         "target": {"type": "string", "description": "Domain or URL"},
+                        "rank_scale": {
+                            "type": "string",
+                            "default": "one_hundred",
+                            "description": (
+                                "DataForSEO rank scale; default one_hundred matches "
+                                "benchmark acquisition."
+                            ),
+                        },
                     },
                     "required": ["target"],
                 },
@@ -161,9 +196,16 @@ class DataForSEOPlugin(ToolPlugin):
                 a["category"], a["location_code"], a.get("limit", 100)
             ),
             "fetch_google_reviews": lambda a: fetch_google_reviews(
-                a["keyword"], a["location_code"], a.get("depth", 20)
+                keyword=a.get("keyword"),
+                location_code=a["location_code"],
+                depth=a.get("depth", 20),
+                cid=a.get("cid"),
+                place_id=a.get("place_id"),
+                sort_by=a.get("sort_by", "newest"),
             ),
-            "fetch_backlinks_summary": lambda a: fetch_backlinks_summary(a["target"]),
+            "fetch_backlinks_summary": lambda a: fetch_backlinks_summary(
+                a["target"], rank_scale=a.get("rank_scale", "one_hundred")
+            ),
             "fetch_lighthouse": lambda a: fetch_lighthouse(a["url"]),
             "explore_serp_snapshot": lambda a: fetch_serp_organic(
                 a["keyword"], a["location_code"], a.get("depth", 5)
@@ -175,7 +217,8 @@ class DataForSEOPlugin(ToolPlugin):
         raw_json = dispatch[tool_name](arguments)
         parsed = json.loads(raw_json)
         return {
+            **parsed,
             "data": parsed.get("data"),
-            "cost_usd": parsed.get("cost", 0.0),
+            "cost_usd": parsed.get("cost_usd", parsed.get("cost", 0.0)),
             "status": parsed.get("status", "ok"),
         }

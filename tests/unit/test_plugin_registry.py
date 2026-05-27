@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from src.research_agent.plugins.base import PluginRegistry, ToolPlugin
@@ -134,6 +136,107 @@ class TestDataForSEOPlugin:
         for d in defs:
             assert "input_schema" in d
             assert d["input_schema"]["type"] == "object"
+
+        reviews_schema = next(
+            d["input_schema"] for d in defs if d["name"] == "fetch_google_reviews"
+        )
+        assert reviews_schema["required"] == ["location_code"]
+        assert {"cid", "place_id", "sort_by"} <= set(reviews_schema["properties"])
+        assert reviews_schema["properties"]["sort_by"]["default"] == "newest"
+
+        backlinks_schema = next(
+            d["input_schema"] for d in defs if d["name"] == "fetch_backlinks_summary"
+        )
+        assert backlinks_schema["properties"]["rank_scale"]["default"] == "one_hundred"
+
+    def test_execute_passes_review_identifiers_and_returns_lineage(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from src.research_agent.plugins import dataforseo_plugin
+        from src.research_agent.plugins.dataforseo_plugin import DataForSEOPlugin
+
+        calls = []
+
+        def fake_fetch_google_reviews(**kwargs):
+            calls.append(kwargs)
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "data": [{"rating": 5}],
+                    "cost": 0.005,
+                    "cost_usd": 0.005,
+                    "source": {
+                        "endpoint_path": "business_data/google/reviews/task_post",
+                        "mode": "queued",
+                        "cache_status": "miss",
+                    },
+                }
+            )
+
+        monkeypatch.setattr(
+            dataforseo_plugin,
+            "fetch_google_reviews",
+            fake_fetch_google_reviews,
+        )
+
+        result = DataForSEOPlugin().execute(
+            "fetch_google_reviews",
+            {"cid": "cid-123", "location_code": 1012873, "depth": 10},
+        )
+
+        assert calls == [
+            {
+                "keyword": None,
+                "location_code": 1012873,
+                "depth": 10,
+                "cid": "cid-123",
+                "place_id": None,
+                "sort_by": "newest",
+            }
+        ]
+        assert result["status"] == "ok"
+        assert result["cost_usd"] == 0.005
+        assert result["source"]["endpoint_path"] == "business_data/google/reviews/task_post"
+
+    def test_execute_passes_backlinks_rank_scale_default(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from src.research_agent.plugins import dataforseo_plugin
+        from src.research_agent.plugins.dataforseo_plugin import DataForSEOPlugin
+
+        calls = []
+
+        def fake_fetch_backlinks_summary(target, rank_scale=None):
+            calls.append({"target": target, "rank_scale": rank_scale})
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "data": [{"rank": 99}],
+                    "cost": 0.002,
+                    "source": {
+                        "endpoint_path": "backlinks/summary/live",
+                        "mode": "live",
+                        "cache_status": "hit",
+                    },
+                }
+            )
+
+        monkeypatch.setattr(
+            dataforseo_plugin,
+            "fetch_backlinks_summary",
+            fake_fetch_backlinks_summary,
+        )
+
+        result = DataForSEOPlugin().execute(
+            "fetch_backlinks_summary",
+            {"target": "example.com"},
+        )
+
+        assert calls == [{"target": "example.com", "rank_scale": "one_hundred"}]
+        assert result["cost_usd"] == 0.002
+        assert result["source"]["endpoint_path"] == "backlinks/summary/live"
 
     def test_name(self) -> None:
         from src.research_agent.plugins.dataforseo_plugin import DataForSEOPlugin

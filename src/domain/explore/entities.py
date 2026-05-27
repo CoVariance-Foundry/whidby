@@ -18,6 +18,7 @@ class ExploreServiceMetric(TypedDict):
     business_density_per_1k: NotRequired[float | None]
     establishment_growth_yoy: NotRequired[float | None]
     growth_available: NotRequired[bool | None]
+    warning_codes: NotRequired[list[str]]
 
 
 class ExploreCitySummary(TypedDict):

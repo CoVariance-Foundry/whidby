@@ -8,6 +8,7 @@ from src.config.constants import MEDIAN_LOCAL_SERVICE_CPC
 
 from .ai_resilience_score import compute_ai_resilience_score
 from .benchmark_repository import SeoBenchmarkCell, SeoBenchmarkRepository
+from .benchmark_warnings import warning_codes_from_benchmark
 from .normalization import clamp
 
 DEFAULT_VOLUME_PER_CAPITA = 0.0025
@@ -58,6 +59,7 @@ def compute_v2_scores(
     cbp_missing = signals.get("cbp_establishments") is None and signals.get("establishments") is None
     benchmark_confidence = benchmark.confidence_label if benchmark else "insufficient"
     benchmark_sample_size = benchmark.sample_size_metros if benchmark else 0
+    benchmark_warning_codes = warning_codes_from_benchmark(benchmark)
     top3_review_data_low_coverage = (
         not no_local_pack
         and (
@@ -101,6 +103,11 @@ def compute_v2_scores(
             "population_class": population_class or None,
             "sample_size": benchmark_sample_size,
             "confidence_label": benchmark_confidence,
+            "benchmark_run_id": benchmark.benchmark_run_id if benchmark else None,
+            "benchmark_mode": benchmark.benchmark_mode if benchmark else None,
+            "formula_version": benchmark.formula_version if benchmark else None,
+            "sample_frame_version": benchmark.sample_frame_version if benchmark else None,
+            "warning_codes": benchmark_warning_codes,
         },
         "flags": {
             "no_local_pack_detected": no_local_pack,
@@ -109,6 +116,7 @@ def compute_v2_scores(
             "top3_review_data_low_coverage": top3_review_data_low_coverage,
             "top5_organic_data_low_coverage": top5_organic_data_low_coverage,
         },
+        "warning_codes": benchmark_warning_codes,
         "spec_version": "2.0",
     }
 

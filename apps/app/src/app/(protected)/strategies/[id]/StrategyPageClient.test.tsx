@@ -279,7 +279,7 @@ describe("StrategyPageClient", () => {
                 search_volume_monthly: 720,
                 local_pack_present: true,
               },
-              warnings: ["AI overview present"],
+              warnings: [{ code: "metric_undersampled" }],
             },
           ],
         }),
@@ -312,6 +312,7 @@ describe("StrategyPageClient", () => {
     expect(await screen.findByText("Plumbing in Boise")).toBeInTheDocument();
     expect(screen.getByText("search_volume_monthly: 720")).toBeInTheDocument();
     expect(screen.getByText("local_pack_present: yes")).toBeInTheDocument();
+    expect(screen.getByText("metric_undersampled")).toBeInTheDocument();
     const score = screen.getByRole("img", { name: "Strategy score: 86 out of 100, high" });
     expect(score).toHaveAttribute("data-score-tone", "high");
     expect(score).toHaveTextContent("86");

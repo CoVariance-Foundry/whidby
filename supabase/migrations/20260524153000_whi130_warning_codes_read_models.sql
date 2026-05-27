@@ -1,4 +1,24 @@
--- Derived Explore read model. Source tables remain canonical.
+-- WHI-130: Persist canonical product-facing warning codes on V2 scores and Explore.
+
+ALTER TABLE public.metro_score_v2
+    ADD COLUMN IF NOT EXISTS warning_codes TEXT[];
+
+UPDATE public.metro_score_v2
+SET warning_codes = CASE
+    WHEN coalesce(benchmark_undersampled, false)
+      OR lower(coalesce(benchmark_confidence, '')) IN ('low', 'insufficient')
+      OR (benchmark_sample_size IS NOT NULL AND benchmark_sample_size < 8)
+    THEN ARRAY['metric_undersampled']::text[]
+    ELSE ARRAY[]::text[]
+END
+WHERE warning_codes IS NULL OR warning_codes = ARRAY[]::text[];
+
+ALTER TABLE public.metro_score_v2
+    ALTER COLUMN warning_codes SET DEFAULT ARRAY[]::text[],
+    ALTER COLUMN warning_codes SET NOT NULL;
+
+COMMENT ON COLUMN public.metro_score_v2.warning_codes IS
+    'Canonical product-facing warning codes derived during V2 scoring.';
 
 DROP MATERIALIZED VIEW IF EXISTS public.explore_market_cells;
 

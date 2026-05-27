@@ -4,6 +4,7 @@ import math
 from typing import Any
 
 from src.domain.strategy_entities import StrategyProjection
+from src.scoring.benchmark_warnings import warning_codes_from_mapping
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
@@ -24,6 +25,16 @@ def _finite_number(row: dict[str, Any], key: str) -> float:
     return value
 
 
+def _warnings(row: dict[str, Any], *codes: str) -> list[str]:
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for code in (*codes, *warning_codes_from_mapping(row)):
+        if code and code not in seen:
+            warnings.append(code)
+            seen.add(code)
+    return warnings
+
+
 def project_easy_win(row: dict[str, Any]) -> StrategyProjection:
     demand = min(_number_or_default(row, "demand_strength", 0.0) / 140.0, 1.0) * 100.0
     organic_ease = 100.0 - _number_or_default(row, "organic_difficulty", 100.0)
@@ -36,9 +47,6 @@ def project_easy_win(row: dict[str, Any]) -> StrategyProjection:
         + (local_ease * 0.20)
         + (ai * 0.10)
     )
-    warnings: list[str] = []
-    if row.get("benchmark_confidence") in {"low", "insufficient"}:
-        warnings.append("benchmark_confidence_low")
     return StrategyProjection(
         strategy_id="easy_win",
         score=round(score, 2),
@@ -48,7 +56,7 @@ def project_easy_win(row: dict[str, Any]) -> StrategyProjection:
             "local_difficulty": row.get("local_difficulty"),
             "ai_resilience": row.get("ai_resilience"),
         },
-        warnings=warnings,
+        warnings=_warnings(row),
     )
 
 
@@ -58,7 +66,7 @@ def project_gbp_blitz(row: dict[str, Any]) -> StrategyProjection:
             strategy_id="gbp_blitz",
             score=0.0,
             evidence={"local_pack_present": False},
-            warnings=["no_local_pack_detected"],
+            warnings=_warnings(row, "no_local_pack_detected"),
         )
     demand = min(_number_or_default(row, "demand_strength", 0.0) / 120.0, 1.0) * 100.0
     review_floor = _number_or_default(row, "top3_review_count_min", 100.0)
@@ -81,6 +89,7 @@ def project_gbp_blitz(row: dict[str, Any]) -> StrategyProjection:
             "top3_review_velocity_avg": row.get("top3_review_velocity_avg"),
             "gbp_completeness_avg": row.get("gbp_completeness_avg"),
         },
+        warnings=_warnings(row),
     )
 
 
@@ -90,21 +99,21 @@ def project_keyword_hijack(row: dict[str, Any]) -> StrategyProjection:
             strategy_id="keyword_hijack",
             score=0.0,
             evidence={"search_volume_monthly": None},
-            warnings=["primary_keyword_volume_missing"],
+            warnings=_warnings(row, "primary_keyword_volume_missing"),
         )
     if row.get("local_pack_present") is None:
         return StrategyProjection(
             strategy_id="keyword_hijack",
             score=0.0,
             evidence={"local_pack_present": None},
-            warnings=["local_pack_presence_missing"],
+            warnings=_warnings(row, "local_pack_presence_missing"),
         )
     if row.get("exact_match_name_taken") is None:
         return StrategyProjection(
             strategy_id="keyword_hijack",
             score=0.0,
             evidence={"exact_match_name_available": None},
-            warnings=["exact_match_gbp_name_availability_missing"],
+            warnings=_warnings(row, "exact_match_gbp_name_availability_missing"),
         )
 
     volume = _number_or_default(row, "search_volume_monthly", 0.0)
@@ -113,21 +122,21 @@ def project_keyword_hijack(row: dict[str, Any]) -> StrategyProjection:
             strategy_id="keyword_hijack",
             score=0.0,
             evidence={"search_volume_monthly": volume},
-            warnings=["primary_keyword_volume_below_200"],
+            warnings=_warnings(row, "primary_keyword_volume_below_200"),
         )
     if not row.get("local_pack_present", False):
         return StrategyProjection(
             strategy_id="keyword_hijack",
             score=0.0,
             evidence={"local_pack_present": False},
-            warnings=["no_local_pack_detected"],
+            warnings=_warnings(row, "no_local_pack_detected"),
         )
     if row.get("exact_match_name_taken", False):
         return StrategyProjection(
             strategy_id="keyword_hijack",
             score=0.0,
             evidence={"exact_match_name_available": False},
-            warnings=["exact_match_gbp_name_taken"],
+            warnings=_warnings(row, "exact_match_gbp_name_taken"),
         )
     volume_score = min(volume / 300.0, 1.0) * 45.0
     cpc_score = min(_number_or_default(row, "cpc_usd", 0.0) / 50.0, 1.0) * 30.0
@@ -141,6 +150,7 @@ def project_keyword_hijack(row: dict[str, Any]) -> StrategyProjection:
             "local_pack_present": True,
             "exact_match_name_available": True,
         },
+        warnings=_warnings(row),
     )
 
 
@@ -157,7 +167,7 @@ def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
                 "cbsa_code": row.get("cbsa_code"),
                 "reference_city_id": row.get("reference_city_id"),
             },
-            warnings=["reference_city_not_candidate"],
+            warnings=_warnings(row, "reference_city_not_candidate"),
         )
 
     similarity_raw = row.get("similarity_score")
@@ -166,7 +176,7 @@ def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
             strategy_id="expand_conquer",
             score=0.0,
             evidence={"similarity_score": None},
-            warnings=["feature_vector_similarity_missing"],
+            warnings=_warnings(row, "feature_vector_similarity_missing"),
         )
 
     competition_keys = (
@@ -180,7 +190,7 @@ def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
             strategy_id="expand_conquer",
             score=0.0,
             evidence={key: row.get(key) for key in competition_keys},
-            warnings=["competition_baseline_missing"],
+            warnings=_warnings(row, "competition_baseline_missing"),
         )
 
     similarity = _finite_number(row, "similarity_score")
@@ -200,7 +210,7 @@ def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
                 "local_difficulty": local,
                 "reference_local_difficulty": reference_local,
             },
-            warnings=["competition_higher_than_reference"],
+            warnings=_warnings(row, "competition_higher_than_reference"),
         )
 
     competition_margin = _clamp(
@@ -217,6 +227,7 @@ def project_expand_conquer(row: dict[str, Any]) -> StrategyProjection:
             "local_difficulty": local,
             "reference_local_difficulty": reference_local,
         },
+        warnings=_warnings(row),
     )
 
 

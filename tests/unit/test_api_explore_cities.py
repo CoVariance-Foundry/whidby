@@ -26,6 +26,7 @@ class FakeExploreCityService:
                     "niche_normalized": "roofing",
                     "niche_keyword": "Roofing",
                     "presentation_score": 88,
+                    "warning_codes": ["metric_undersampled"],
                 }
             ],
         }
@@ -162,6 +163,7 @@ def test_get_explore_city_detail_returns_detail(
     assert response.status_code == 200
     assert response.json()["cbsa_code"] == "38060"
     assert response.json()["cached_scores"][0]["niche_keyword"] == "Roofing"
+    assert response.json()["cached_scores"][0]["warning_codes"] == ["metric_undersampled"]
     assert service.detail_calls == ["38060"]
 
 
