@@ -204,7 +204,7 @@ python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajv
 Run bounded benchmark acquisition only after the read-only audits identify the smallest missing cells:
 
 ```bash
-python -m scripts.benchmarks.run_pilot --sample-mode pilot --limit-metros 8 --niche "roofing" --collect-organic-telemetry --collect-review-velocity --organic-telemetry-limit 5 --review-depth 10
+BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m scripts.benchmarks.run_pilot --sample-mode pilot --population-class medium_100_300k --limit-pairs 8 --niche "roofing" --collect-organic-telemetry --collect-review-velocity --organic-telemetry-limit 5 --review-depth 10 --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
 ```
 
 ### Cost And Stop Rules

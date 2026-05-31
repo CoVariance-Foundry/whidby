@@ -411,6 +411,65 @@ def test_benchmark_evidence_upsert_ignores_duplicate_artifacts(monkeypatch):
     assert captured["headers"]["Prefer"] == "resolution=ignore-duplicates,return=minimal"
 
 
+def test_expected_project_ref_guard_blocks_wrong_benchmark_url(monkeypatch):
+    monkeypatch.setattr(run_pilot, "SUPABASE_URL", "https://wuybidpvqhhgkukpyyhq.supabase.co")
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_expected_project_ref("eoajvifhbmqmoluiokcj")
+
+    assert excinfo.value.code == 2
+
+
+def test_require_dfs_rejects_low_signal_targets():
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_paid_targets(
+            [
+                {
+                    "cbsa_code": "12345",
+                    "cbsa_name": "Tiny Metro",
+                    "paid_eligible": False,
+                    "benchmark_exclusion_reason": "population_too_small",
+                }
+            ],
+            require_dfs=True,
+        )
+
+    assert excinfo.value.code == 2
+
+
+def test_require_v2_persistence_checks_score_and_fact_rows(monkeypatch):
+    calls = []
+
+    def fake_has_row(table, filters):
+        calls.append((table, filters))
+        return table == "metro_score_v2"
+
+    monkeypatch.setattr(run_pilot, "postgrest_has_row", fake_has_row)
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_v2_persistence(
+            [
+                (
+                    "auto repair",
+                    {"cbsa_code": "12345", "cbsa_name": "Test Metro"},
+                )
+            ],
+            require_v2_persistence=True,
+        )
+
+    assert excinfo.value.code == 2
+    assert calls == [
+        (
+            "metro_score_v2",
+            {"cbsa_code": "12345", "niche_normalized": "auto repair"},
+        ),
+        (
+            "seo_facts",
+            {"cbsa_code": "12345", "niche_normalized": "auto repair"},
+        ),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_score_one_persists_facts_when_evidence_upsert_raises(monkeypatch):
     class _ExpansionCache:
