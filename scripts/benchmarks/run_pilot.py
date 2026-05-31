@@ -30,12 +30,14 @@ import logging
 import os
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib import error as urlerror
 from urllib import request as urlreq
+from uuid import uuid4
 
 # Repo root + path injection so we can import src.* modules
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +45,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.clients.dataforseo import DataForSEOClient  # noqa: E402
 from src.clients.llm.client import LLMClient  # noqa: E402
+from src.clients.supabase_persistence import (  # noqa: E402
+    build_seo_evidence_artifact_rows_from_cost_records,
+    evidence_family_from_endpoint,
+)
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
 from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
 
@@ -740,6 +746,179 @@ def upsert_facts(rows: list[dict]) -> tuple[int, str]:
         return e.code, e.read().decode()[:500]
 
 
+def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
+    if not rows:
+        return 200, ""
+    url = (
+        f"{SUPABASE_URL}/rest/v1/seo_evidence_artifacts"
+        f"?on_conflict=provider,endpoint_path,request_hash"
+    )
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=ignore-duplicates,return=minimal",
+    }
+    body = json.dumps(rows).encode("utf-8")
+    req = urlreq.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urlreq.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read().decode()
+    except urlerror.HTTPError as e:
+        return e.code, e.read().decode()[:500]
+
+
+def evidence_artifacts_from_dfs_cost_log(
+    dfs: DataForSEOClient,
+    *,
+    start_index: int = 0,
+    collection_context_id: str | None = None,
+    niche: str | None = None,
+    location_codes: list[int] | None = None,
+    keywords: list[str] | None = None,
+    serp_keywords: list[str] | None = None,
+    local_pack_items: list[dict[str, Any]] | None = None,
+    organic_targets: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    cost_records = (getattr(dfs, "cost_log", []) or [])[start_index:]
+    if collection_context_id is not None:
+        filtered_records = [
+            record
+            for record in cost_records
+            if _record_field(record, "collection_context_id") == collection_context_id
+        ]
+        return build_seo_evidence_artifact_rows_from_cost_records(filtered_records)
+
+    filtered_records = [
+        record
+        for record in cost_records
+        if _cost_record_matches_pair(
+            record,
+            niche=niche,
+            location_codes=location_codes,
+            keywords=keywords,
+            serp_keywords=serp_keywords,
+            local_pack_items=local_pack_items,
+            organic_targets=organic_targets,
+        )
+    ]
+    return build_seo_evidence_artifact_rows_from_cost_records(filtered_records)
+
+
+def _cost_record_matches_pair(
+    record: Any,
+    *,
+    niche: str | None,
+    location_codes: list[int] | None,
+    keywords: list[str] | None,
+    serp_keywords: list[str] | None,
+    local_pack_items: list[dict[str, Any]] | None,
+    organic_targets: list[dict[str, Any]] | None,
+) -> bool:
+    endpoint = _record_field(record, "endpoint")
+    family = evidence_family_from_endpoint(str(endpoint or ""))
+    if family is None:
+        return False
+
+    params = _record_field(record, "parameters")
+    params = params if isinstance(params, dict) else {}
+    location_set = {
+        parsed
+        for code in location_codes or []
+        if (parsed := _int_param(code)) is not None
+    }
+    keyword_set = {_norm_text(keyword) for keyword in keywords or [] if _norm_text(keyword)}
+    serp_keyword_set = {
+        _norm_text(keyword) for keyword in serp_keywords or [] if _norm_text(keyword)
+    }
+    local_identifiers = _local_identifier_set(local_pack_items or [])
+    organic_domains = {
+        _norm_text(target.get("domain"))
+        for target in organic_targets or []
+        if _norm_text(target.get("domain"))
+    }
+    organic_urls = {
+        _norm_text(target.get("url"))
+        for target in organic_targets or []
+        if _norm_text(target.get("url"))
+    }
+
+    location = _int_param(params.get("location_code"))
+    if family == "keyword_volume":
+        return (
+            location in location_set
+            and bool(keyword_set)
+            and bool(keyword_set.intersection(_param_keywords(params)))
+        )
+    if family in {"serp", "maps"}:
+        return (
+            location in location_set
+            and (
+                not serp_keyword_set
+                or _norm_text(params.get("keyword")) in serp_keyword_set
+            )
+        )
+    if family == "reviews":
+        if location not in location_set:
+            return False
+        candidates = {
+            _norm_text(params.get("cid")),
+            _norm_text(params.get("place_id")),
+            _norm_text(params.get("keyword")),
+        }
+        return bool(local_identifiers.intersection(candidates))
+    if family == "backlinks":
+        return _norm_text(params.get("target")) in organic_domains
+    if family == "lighthouse":
+        return _norm_text(params.get("url")) in organic_urls
+    if family == "keyword_overview":
+        return _norm_text(params.get("keyword")) == _norm_text(niche)
+    return False
+
+
+def _record_field(record: Any, key: str) -> Any:
+    if isinstance(record, dict):
+        return record.get(key)
+    return getattr(record, key, None)
+
+
+def _dfs_capture_context(dfs: DataForSEOClient, context_id: str) -> Any:
+    tracker = getattr(dfs, "cost_tracker", None)
+    capture_context = getattr(tracker, "capture_context", None)
+    if callable(capture_context):
+        return capture_context(context_id)
+    return nullcontext()
+
+
+def _norm_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _int_param(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _param_keywords(params: dict[str, Any]) -> set[str]:
+    raw_keywords = params.get("keywords")
+    if isinstance(raw_keywords, list):
+        return {_norm_text(keyword) for keyword in raw_keywords if _norm_text(keyword)}
+    keyword = _norm_text(params.get("keyword"))
+    return {keyword} if keyword else set()
+
+
+def _local_identifier_set(items: list[dict[str, Any]]) -> set[str]:
+    identifiers: set[str] = set()
+    for item in items[:3]:
+        for key in ("cid", "place_id", "title"):
+            value = _norm_text(item.get(key))
+            if value:
+                identifiers.add(value)
+    return identifiers
+
+
 # -------------------------------------------------------------------
 # Per-niche keyword expansion (cached)
 # -------------------------------------------------------------------
@@ -805,170 +984,202 @@ async def score_one(
     name = metro["cbsa_name"]
     log.info(f"[start] {niche!r} × {name} ({cbsa})")
     stats.reports_attempted += 1
+    pair_context_id = f"benchmark:{niche.lower()}:{cbsa}:{uuid4()}"
 
-    try:
-        expansion = await expansion_cache.get(niche)
-        actionable = [
-            kw for kw in expansion["expanded_keywords"]
-            if kw["intent"] in ("transactional", "commercial") and kw.get("actionable")
-        ]
-        if not actionable:
-            log.warning(f"  no actionable keywords for {niche!r}")
-            stats.reports_failed += 1
-            stats.record_failure(niche, cbsa, "no_actionable_keywords")
-            return 0
-
-        # Resolve all DFS location codes for this metro (city + fallback)
-        loc_codes = (
-            metro.get("keyword_volume_location_codes")
-            or metro.get("dataforseo_location_codes")
-            or []
-        )
-        if not loc_codes:
-            log.info(f"  no DFS codes for {cbsa} (no state fallback); skipping")
-            stats.reports_failed += 1
-            stats.record_failure(niche, cbsa, "no_native_dfs_code")
-            return 0
-
-        # 1) Keyword volume — try each loc_code, take max volume per keyword
-        # (multi-code metros: LA has [1013962, 1013849, 1013549] = LA, Long Beach,
-        # Anaheim. Many keywords have data in only one of these. Max captures
-        # the principal-city signal.)
-        kw_strs = [k["keyword"] for k in actionable[:50]]
-        volume_result = await collect_keyword_volume(dfs, kw_strs, loc_codes)
-        for failure in volume_result.failures:
-            stats.record_failure(
-                niche,
-                cbsa,
-                failure.reason,
-                f"location_code={failure.location_code}; {failure.detail}",
-            )
-        volume_by_kw = volume_result.volume_by_kw
-        if volume_result.valid_location_codes:
-            metro["keyword_volume_location_codes"] = volume_result.valid_location_codes
-
-        if preflight_only:
-            if volume_by_kw:
-                stats.reports_succeeded += 1
-                log.info(
-                    "[preflight] %r × %s: %s keywords, valid volume codes=%s",
-                    niche,
-                    name,
-                    len(volume_by_kw),
-                    volume_result.valid_location_codes,
-                )
-                return 0
-            stats.reports_failed += 1
-            if not volume_result.failures:
-                stats.record_failure(niche, cbsa, "keyword_volume_empty", "no usable rows")
-            return 0
-
-        # 2) SERP — query the highest-population code (loc_codes[0] is the
-        # principal city per seed ordering; it gives the cleanest SERP shape).
-        loc_code_for_serp = (metro.get("dataforseo_location_codes") or loc_codes)[0]
-        head_kws = [k for k in actionable if k["tier"] == 1][:2] or actionable[:2]
-        serp_features_by_kw: dict[str, dict] = {}
-        for k in head_kws:
-            serp_resp = await dfs.serp_organic(
-                keyword=k["keyword"], location_code=loc_code_for_serp, depth=20,
-            )
-            if serp_resp.status == "ok" and serp_resp.data:
-                serp_features_by_kw[k["keyword"]] = parse_serp_items(serp_resp.data)
-
-        # Use head SERP features as the "metro-level" SERP signal for all keywords
-        # (actual SERP per long-tail keyword would 50x cost; head signal is the
-        # competitive landscape proxy for benchmarking)
-        head_features = dict(next(iter(serp_features_by_kw.values()), {})) if serp_features_by_kw else {}
-        if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
-            velocity = await collect_top3_review_velocity(
-                dfs,
-                list(head_features.get("top_local_pack_items") or []),
-                location_code=loc_code_for_serp,
-                depth=review_depth,
-            )
-            if velocity is not None:
-                propagate_head_feature(
-                    serp_features_by_kw,
-                    head_features,
-                    "top3_review_velocity_avg",
-                    velocity,
-                )
-
-        organic_telemetry: dict[str, Any] = {}
-        if collect_organic:
-            telemetry = await collect_organic_telemetry(
-                dfs,
-                list(head_features.get("organic_targets") or []),
-                limit=organic_telemetry_limit,
-            )
-            organic_telemetry = telemetry.fields
-            for failure in telemetry.failures:
-                stats.record_failure(niche, cbsa, "organic_telemetry_partial", failure)
-
-        # 3) Build seo_facts rows
-        rows = []
-        snapshot = date.today().isoformat()
-        for kw in actionable:
-            v = volume_by_kw.get(kw["keyword"].lower(), {})
-            sv = v.get("search_volume")
-            cpc = v.get("cpc")
-            if sv is None and cpc is None:
-                # No volume data — skip (DFS returned nothing for this kw)
-                continue
-            row_features = serp_features_by_kw.get(kw["keyword"], head_features)
-            row = {
-                "niche_keyword": niche,
-                "niche_normalized": niche.lower(),
-                "cbsa_code": cbsa,
-                "keyword": kw["keyword"],
-                "keyword_tier": kw["tier"],
-                "intent": kw["intent"],
-                "search_volume_monthly": sv,
-                "cpc_usd": float(cpc) if cpc is not None else None,
-                "aio_present": row_features.get("aio_present"),
-                "local_pack_present": row_features.get("local_pack_present"),
-                "local_pack_position": row_features.get("local_pack_position"),
-                "top3_review_count_min": row_features.get("top3_review_count_min"),
-                "top3_review_count_avg": row_features.get("top3_review_count_avg"),
-                "top3_review_velocity_avg": row_features.get("top3_review_velocity_avg"),
-                "top3_rating_avg": row_features.get("top3_rating_avg"),
-                "aggregator_count_top10": row_features.get("aggregator_count_top10"),
-                "local_biz_count_top10": row_features.get("local_biz_count_top10"),
-                "featured_snippet_present": row_features.get("featured_snippet_present"),
-                "paa_count": row_features.get("paa_count"),
-                "ads_present": row_features.get("ads_present"),
-                "lsa_present": row_features.get("lsa_present"),
-                "snapshot_date": snapshot,
-                "source": "orchestrator",
-            }
-            if organic_telemetry:
-                row.update(organic_telemetry)
-            rows.append(row)
-
-        # 4) Persist
-        if rows:
-            status, body = upsert_facts(rows)
-            if status >= 300:
-                log.error(f"  upsert failed: {status} {body[:200]}")
+    with _dfs_capture_context(dfs, pair_context_id):
+        try:
+            expansion = await expansion_cache.get(niche)
+            actionable = [
+                kw for kw in expansion["expanded_keywords"]
+                if kw["intent"] in ("transactional", "commercial") and kw.get("actionable")
+            ]
+            if not actionable:
+                log.warning(f"  no actionable keywords for {niche!r}")
                 stats.reports_failed += 1
-                stats.record_failure(niche, cbsa, "upsert_failed", f"status={status}")
+                stats.record_failure(niche, cbsa, "no_actionable_keywords")
                 return 0
-            stats.facts_inserted += len(rows)
-            stats.reports_succeeded += 1
-            log.info(f"[done] {niche!r} × {name}: {len(rows)} facts")
-            return len(rows)
 
-        stats.reports_failed += 1
-        stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
-        return 0
+            # Resolve all DFS location codes for this metro (city + fallback)
+            loc_codes = (
+                metro.get("keyword_volume_location_codes")
+                or metro.get("dataforseo_location_codes")
+                or []
+            )
+            if not loc_codes:
+                log.info(f"  no DFS codes for {cbsa} (no state fallback); skipping")
+                stats.reports_failed += 1
+                stats.record_failure(niche, cbsa, "no_native_dfs_code")
+                return 0
 
-    except Exception as e:
-        log.exception(f"failure on {niche} × {cbsa}")
-        stats.reports_failed += 1
-        stats.record_failure(niche, cbsa, type(e).__name__, str(e))
-        return 0
+            # 1) Keyword volume — try each loc_code, take max volume per keyword
+            # (multi-code metros: LA has [1013962, 1013849, 1013549] = LA, Long Beach,
+            # Anaheim. Many keywords have data in only one of these. Max captures
+            # the principal-city signal.)
+            kw_strs = [k["keyword"] for k in actionable[:50]]
+            volume_result = await collect_keyword_volume(dfs, kw_strs, loc_codes)
+            for failure in volume_result.failures:
+                stats.record_failure(
+                    niche,
+                    cbsa,
+                    failure.reason,
+                    f"location_code={failure.location_code}; {failure.detail}",
+                )
+            volume_by_kw = volume_result.volume_by_kw
+            if volume_result.valid_location_codes:
+                metro["keyword_volume_location_codes"] = volume_result.valid_location_codes
 
+            if preflight_only:
+                if volume_by_kw:
+                    stats.reports_succeeded += 1
+                    log.info(
+                        "[preflight] %r × %s: %s keywords, valid volume codes=%s",
+                        niche,
+                        name,
+                        len(volume_by_kw),
+                        volume_result.valid_location_codes,
+                    )
+                    return 0
+                stats.reports_failed += 1
+                if not volume_result.failures:
+                    stats.record_failure(niche, cbsa, "keyword_volume_empty", "no usable rows")
+                return 0
 
+            # 2) SERP — query the highest-population code (loc_codes[0] is the
+            # principal city per seed ordering; it gives the cleanest SERP shape).
+            loc_code_for_serp = (metro.get("dataforseo_location_codes") or loc_codes)[0]
+            head_kws = [k for k in actionable if k["tier"] == 1][:2] or actionable[:2]
+            serp_features_by_kw: dict[str, dict] = {}
+            for k in head_kws:
+                serp_resp = await dfs.serp_organic(
+                    keyword=k["keyword"], location_code=loc_code_for_serp, depth=20,
+                )
+                if serp_resp.status == "ok" and serp_resp.data:
+                    serp_features_by_kw[k["keyword"]] = parse_serp_items(serp_resp.data)
+
+            # Use head SERP features as the "metro-level" SERP signal for all keywords
+            # (actual SERP per long-tail keyword would 50x cost; head signal is the
+            # competitive landscape proxy for benchmarking)
+            head_features = dict(next(iter(serp_features_by_kw.values()), {})) if serp_features_by_kw else {}
+            if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
+                velocity = await collect_top3_review_velocity(
+                    dfs,
+                    list(head_features.get("top_local_pack_items") or []),
+                    location_code=loc_code_for_serp,
+                    depth=review_depth,
+                )
+                if velocity is not None:
+                    propagate_head_feature(
+                        serp_features_by_kw,
+                        head_features,
+                        "top3_review_velocity_avg",
+                        velocity,
+                    )
+
+            organic_telemetry: dict[str, Any] = {}
+            if collect_organic:
+                telemetry = await collect_organic_telemetry(
+                    dfs,
+                    list(head_features.get("organic_targets") or []),
+                    limit=organic_telemetry_limit,
+                )
+                organic_telemetry = telemetry.fields
+                for failure in telemetry.failures:
+                    stats.record_failure(niche, cbsa, "organic_telemetry_partial", failure)
+
+            # 3) Build seo_facts rows
+            rows = []
+            snapshot = date.today().isoformat()
+            for kw in actionable:
+                v = volume_by_kw.get(kw["keyword"].lower(), {})
+                sv = v.get("search_volume")
+                cpc = v.get("cpc")
+                if sv is None and cpc is None:
+                    # No volume data — skip (DFS returned nothing for this kw)
+                    continue
+                row_features = serp_features_by_kw.get(kw["keyword"], head_features)
+                row = {
+                    "niche_keyword": niche,
+                    "niche_normalized": niche.lower(),
+                    "cbsa_code": cbsa,
+                    "keyword": kw["keyword"],
+                    "keyword_tier": kw["tier"],
+                    "intent": kw["intent"],
+                    "search_volume_monthly": sv,
+                    "cpc_usd": float(cpc) if cpc is not None else None,
+                    "aio_present": row_features.get("aio_present"),
+                    "local_pack_present": row_features.get("local_pack_present"),
+                    "local_pack_position": row_features.get("local_pack_position"),
+                    "top3_review_count_min": row_features.get("top3_review_count_min"),
+                    "top3_review_count_avg": row_features.get("top3_review_count_avg"),
+                    "top3_review_velocity_avg": row_features.get("top3_review_velocity_avg"),
+                    "top3_rating_avg": row_features.get("top3_rating_avg"),
+                    "aggregator_count_top10": row_features.get("aggregator_count_top10"),
+                    "local_biz_count_top10": row_features.get("local_biz_count_top10"),
+                    "featured_snippet_present": row_features.get("featured_snippet_present"),
+                    "paa_count": row_features.get("paa_count"),
+                    "ads_present": row_features.get("ads_present"),
+                    "lsa_present": row_features.get("lsa_present"),
+                    "snapshot_date": snapshot,
+                    "source": "orchestrator",
+                }
+                if organic_telemetry:
+                    row.update(organic_telemetry)
+                rows.append(row)
+
+            # 4) Persist
+            if rows:
+                status, body = upsert_facts(rows)
+                if status >= 300:
+                    log.error(f"  upsert failed: {status} {body[:200]}")
+                    stats.reports_failed += 1
+                    stats.record_failure(niche, cbsa, "upsert_failed", f"status={status}")
+                    return 0
+                stats.facts_inserted += len(rows)
+                stats.reports_succeeded += 1
+                try:
+                    evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
+                        dfs,
+                        collection_context_id=pair_context_id,
+                    )
+                    if evidence_artifact_rows:
+                        evidence_status, evidence_body = upsert_evidence_artifacts(
+                            evidence_artifact_rows
+                        )
+                        if evidence_status >= 300:
+                            log.warning(
+                                "  evidence artifact upsert failed (non-fatal): %s %s",
+                                evidence_status,
+                                evidence_body[:200],
+                            )
+                            stats.record_failure(
+                                niche,
+                                cbsa,
+                                "evidence_upsert_failed_non_fatal",
+                                f"status={evidence_status}",
+                            )
+                except Exception as exc:
+                    log.warning(
+                        "  evidence artifact upsert failed (non-fatal): %s",
+                        exc,
+                    )
+                    stats.record_failure(
+                        niche,
+                        cbsa,
+                        "evidence_upsert_failed_non_fatal",
+                        type(exc).__name__,
+                    )
+                log.info(f"[done] {niche!r} × {name}: {len(rows)} facts")
+                return len(rows)
+
+            stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
+            return 0
+
+        except Exception as e:
+            log.exception(f"failure on {niche} × {cbsa}")
+            stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, type(e).__name__, str(e))
+            return 0
 # -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------

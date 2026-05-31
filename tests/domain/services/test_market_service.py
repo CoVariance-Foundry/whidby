@@ -139,6 +139,54 @@ def test_score_marks_report_with_account_ownership(
     assert stored["access_scope"] == "account"
 
 
+def test_score_keeps_seo_evidence_artifacts_private(store: FakeMarketStore) -> None:
+    async def artifact_pipeline(**kwargs: Any) -> FakePipelineResult:
+        report = make_fake_report()
+        report["seo_evidence_artifacts"] = [{"should": "not leak"}]
+        report["metros"][0]["seo_evidence_artifacts"] = [{"should": "not persist"}]
+        report["local_pack_listing_facts"] = [{"should": "not leak"}]
+        report["metros"][0]["local_pack_listing_facts"] = [{"should": "not persist"}]
+        return FakePipelineResult(
+            report=report,
+            opportunity_score=72,
+            evidence=[],
+            seo_evidence_artifacts=[
+                {
+                    "provider": "dataforseo",
+                    "endpoint_path": "serp/google/organic/live/advanced",
+                    "evidence_family": "serp",
+                    "normalized_request_params": {"keyword": "plumbing"},
+                    "request_hash": "hash-1",
+                    "cache_status": "miss",
+                }
+            ],
+            local_pack_listing_facts=[
+                {
+                    "cbsa_code": "14260",
+                    "keyword": "plumbing",
+                    "business_name": "Boise Plumber",
+                    "cid": "cid-1",
+                }
+            ],
+        )
+
+    svc = MarketService(
+        pipeline_fn=artifact_pipeline,
+        market_store=store,
+        knowledge_store=FakeKnowledgeStore(),
+    )
+
+    result = asyncio.run(svc.score(ScoreRequest(niche="plumbing", city="Boise")))
+
+    assert "seo_evidence_artifacts" not in result.report
+    assert "local_pack_listing_facts" not in result.report
+    stored = store.reports[result.report_id or ""]
+    assert stored["seo_evidence_artifacts"][0]["request_hash"] == "hash-1"
+    assert stored["local_pack_listing_facts"][0]["cid"] == "cid-1"
+    assert "seo_evidence_artifacts" not in stored["metros"][0]
+    assert "local_pack_listing_facts" not in stored["metros"][0]
+
+
 def test_score_updates_kb(
     service: MarketService, kb: FakeKnowledgeStore
 ) -> None:

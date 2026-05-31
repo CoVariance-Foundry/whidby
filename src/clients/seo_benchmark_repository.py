@@ -21,7 +21,9 @@ _BENCHMARK_COLUMNS = (
     "median_aggregator_count,median_local_biz_count,"
     "median_establishments_per_100k,median_lsa_present_rate,median_ads_present_rate,"
     "median_aio_trigger_rate,sample_size_metros,sample_size_observations,"
-    "confidence_label,fact_window_start,fact_window_end"
+    "confidence_label,fact_window_start,fact_window_end,"
+    "benchmark_run_id,benchmark_mode,formula_version,sample_frame_version,"
+    "metric_confidence_rollup"
 )
 
 

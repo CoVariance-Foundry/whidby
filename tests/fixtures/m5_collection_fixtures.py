@@ -91,8 +91,25 @@ class FakeDataForSEOClient:
             cost=0.01,
         )
 
-    async def google_reviews(self, keyword: str, location_code: int) -> APIResponse:
-        self.calls.append(("google_reviews", {"keyword": keyword, "location_code": location_code}))
+    async def google_reviews(
+        self,
+        keyword: str | None = None,
+        location_code: int | None = None,
+        *,
+        cid: str | int | None = None,
+        place_id: str | None = None,
+    ) -> APIResponse:
+        self.calls.append(
+            (
+                "google_reviews",
+                {
+                    "keyword": keyword,
+                    "location_code": location_code,
+                    "cid": cid,
+                    "place_id": place_id,
+                },
+            )
+        )
         if self.fail_task_type == "google_reviews":
             return APIResponse(status="error", error="google_reviews failed")
         return APIResponse(
@@ -142,4 +159,3 @@ class FakeDataForSEOClient:
         if self.fail_task_type == "lighthouse":
             return APIResponse(status="error", error="lighthouse failed")
         return APIResponse(status="ok", data=[{"performance": 52}], cost=0.002)
-
