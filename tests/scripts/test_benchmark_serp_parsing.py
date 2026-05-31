@@ -859,9 +859,9 @@ async def test_score_one_persists_gbp_profile_rows_when_flagged(monkeypatch):
     )
 
     assert inserted == 1
-    assert [call[0] for call in calls] == ["facts", "local_pack"]
-    assert calls[1][1][0]["gbp_completeness"] == 1.0
-    assert calls[1][1][0]["niche_normalized"] == "auto repair"
+    assert [call[0] for call in calls] == ["local_pack", "facts"]
+    assert calls[0][1][0]["gbp_completeness"] == 1.0
+    assert calls[0][1][0]["niche_normalized"] == "auto repair"
     assert stats.reports_succeeded == 1
 
 
@@ -935,10 +935,86 @@ async def test_score_one_collects_gbp_profile_from_alternate_head_serp(monkeypat
 
     assert inserted == 2
     assert dfs.gbp_calls == [{"keyword": "Second Auto", "location_code": 12345}]
-    assert [call[0] for call in calls] == ["facts", "local_pack"]
-    assert calls[1][1][0]["keyword"] == "auto shop"
-    assert calls[1][1][0]["source_query"] == "auto shop"
+    assert [call[0] for call in calls] == ["local_pack", "facts"]
+    assert calls[0][1][0]["keyword"] == "auto shop"
+    assert calls[0][1][0]["source_query"] == "auto shop"
     assert stats.reports_succeeded == 1
+
+
+@pytest.mark.asyncio
+async def test_score_one_persists_gbp_profile_when_no_seo_facts_qualify(monkeypatch):
+    class _ExpansionCache:
+        async def get(self, niche):
+            return {
+                "expanded_keywords": [
+                    {
+                        "keyword": niche,
+                        "tier": 1,
+                        "intent": "commercial",
+                        "actionable": True,
+                    }
+                ]
+            }
+
+    class _LocalPackNoVolumeDFS(_FakeDFS):
+        async def keyword_volume(self, keywords, location_code):
+            return APIResponse(
+                status="ok",
+                data=[
+                    {"keyword": keyword, "search_volume": None, "cpc": None}
+                    for keyword in keywords
+                ],
+            )
+
+        async def serp_organic(self, keyword, location_code, depth=20):
+            return APIResponse(
+                status="ok",
+                data=[{
+                    "items": [{
+                        "type": "local_pack",
+                        "rank_absolute": 1,
+                        "items": [{
+                            "title": "A Auto",
+                            "rating": {"value": 4.8, "votes_count": 12},
+                            "cid": "cid-1",
+                        }],
+                    }]
+                }],
+            )
+
+    calls = []
+
+    def fake_upsert_facts(rows):
+        calls.append(("facts", rows))
+        return 201, ""
+
+    def fake_upsert_local(rows):
+        calls.append(("local_pack", rows))
+        return 201, ""
+
+    monkeypatch.setattr(run_pilot, "upsert_facts", fake_upsert_facts)
+    monkeypatch.setattr(run_pilot, "upsert_local_pack_listing_facts", fake_upsert_local)
+
+    stats = run_pilot.RunStats()
+    inserted = await run_pilot.score_one(
+        "auto repair",
+        {
+            "cbsa_code": "12345",
+            "cbsa_name": "Test Metro",
+            "dataforseo_location_codes": [12345],
+        },
+        _ExpansionCache(),
+        _LocalPackNoVolumeDFS(),
+        stats,
+        collect_gbp_profile_flag=True,
+    )
+
+    assert inserted == 0
+    assert [call[0] for call in calls] == ["local_pack"]
+    assert calls[0][1][0]["gbp_completeness"] == 1.0
+    assert stats.reports_succeeded == 0
+    assert stats.reports_failed == 1
+    assert stats.failure_reasons == {"keyword_volume_empty": 2}
 
 
 @pytest.mark.asyncio
@@ -1022,7 +1098,7 @@ async def test_score_one_records_gbp_upsert_failure_after_evidence(monkeypatch):
     )
 
     assert inserted == 1
-    assert [call[0] for call in calls] == ["facts", "local_pack", "evidence"]
+    assert [call[0] for call in calls] == ["local_pack", "facts", "evidence"]
     assert stats.reports_succeeded == 1
     assert stats.reports_failed == 0
     assert stats.failure_reasons == {"gbp_profile_upsert_failed_non_fatal": 1}
@@ -1106,7 +1182,7 @@ async def test_score_one_treats_gbp_upsert_transport_error_as_nonfatal(monkeypat
     )
 
     assert inserted == 1
-    assert [call[0] for call in calls] == ["facts", "local_pack", "evidence"]
+    assert [call[0] for call in calls] == ["local_pack", "facts", "evidence"]
     assert stats.reports_succeeded == 1
     assert stats.reports_failed == 0
     assert stats.failure_reasons == {"gbp_profile_upsert_failed_non_fatal": 1}

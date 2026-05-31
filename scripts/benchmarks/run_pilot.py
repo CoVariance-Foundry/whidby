@@ -1178,6 +1178,44 @@ def upsert_local_pack_listing_facts(rows: list[dict]) -> tuple[int, str]:
         return 599, str(e)[:500]
 
 
+def persist_gbp_profile_rows(
+    rows: list[dict[str, Any]],
+    *,
+    stats: RunStats,
+    niche: str,
+    cbsa: str,
+) -> None:
+    """Persist paid GBP evidence independently of seo_facts qualification."""
+    if not rows:
+        return
+    try:
+        local_status, local_body = upsert_local_pack_listing_facts(rows)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "  local_pack_listing_facts upsert failed (non-fatal): %s",
+            exc,
+        )
+        stats.record_failure(
+            niche,
+            cbsa,
+            "gbp_profile_upsert_failed_non_fatal",
+            type(exc).__name__,
+        )
+        return
+    if local_status >= 300:
+        log.warning(
+            "  local_pack_listing_facts upsert failed (non-fatal): %s %s",
+            local_status,
+            local_body[:200],
+        )
+        stats.record_failure(
+            niche,
+            cbsa,
+            "gbp_profile_upsert_failed_non_fatal",
+            f"status={local_status}",
+        )
+
+
 def evidence_artifacts_from_dfs_cost_log(
     dfs: DataForSEOClient,
     *,
@@ -1583,6 +1621,12 @@ async def score_one(
                 rows.append(row)
 
             # 4) Persist
+            persist_gbp_profile_rows(
+                gbp_profile_rows,
+                stats=stats,
+                niche=niche,
+                cbsa=cbsa,
+            )
             if rows:
                 status, body = upsert_facts(rows)
                 if status >= 300:
@@ -1591,35 +1635,6 @@ async def score_one(
                     stats.record_failure(niche, cbsa, "upsert_failed", f"status={status}")
                     return 0
                 stats.facts_inserted += len(rows)
-                if gbp_profile_rows:
-                    try:
-                        local_status, local_body = upsert_local_pack_listing_facts(
-                            gbp_profile_rows
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        log.warning(
-                            "  local_pack_listing_facts upsert failed (non-fatal): %s",
-                            exc,
-                        )
-                        stats.record_failure(
-                            niche,
-                            cbsa,
-                            "gbp_profile_upsert_failed_non_fatal",
-                            type(exc).__name__,
-                        )
-                    else:
-                        if local_status >= 300:
-                            log.warning(
-                                "  local_pack_listing_facts upsert failed (non-fatal): %s %s",
-                                local_status,
-                                local_body[:200],
-                            )
-                            stats.record_failure(
-                                niche,
-                                cbsa,
-                                "gbp_profile_upsert_failed_non_fatal",
-                                f"status={local_status}",
-                            )
                 stats.reports_succeeded += 1
                 try:
                     evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
