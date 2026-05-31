@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.seo_evidence_artifacts (
     response_hash TEXT,
     response_storage_uri TEXT,
     response_payload JSONB,
+    collection_context_id TEXT,
     cache_status TEXT NOT NULL DEFAULT 'unknown'
         CONSTRAINT seo_evidence_artifacts_cache_status_check
         CHECK (cache_status IN ('hit', 'miss', 'bypass', 'replay', 'unknown')),
@@ -95,6 +96,9 @@ BEGIN
     END IF;
 END $$;
 
+ALTER TABLE public.seo_evidence_artifacts
+    ADD COLUMN IF NOT EXISTS collection_context_id TEXT;
+
 ALTER TABLE public.local_pack_listing_facts
     ADD COLUMN IF NOT EXISTS cid TEXT,
     ADD COLUMN IF NOT EXISTS place_id TEXT,
@@ -159,6 +163,10 @@ CREATE INDEX IF NOT EXISTS idx_seo_evidence_artifacts_family_collected
 CREATE INDEX IF NOT EXISTS idx_seo_evidence_artifacts_endpoint_request
     ON public.seo_evidence_artifacts(provider, endpoint_path, request_hash);
 
+CREATE INDEX IF NOT EXISTS idx_seo_evidence_artifacts_collection_context
+    ON public.seo_evidence_artifacts(collection_context_id)
+    WHERE collection_context_id IS NOT NULL;
+
 ALTER TABLE public.seo_evidence_artifacts ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Service role manages SEO evidence artifacts"
@@ -178,6 +186,8 @@ COMMENT ON COLUMN public.seo_evidence_artifacts.response_hash IS
     'Hash of the raw response payload when payload or external storage is available.';
 COMMENT ON COLUMN public.seo_evidence_artifacts.response_storage_uri IS
     'External storage pointer for raw responses that are too large or sensitive to inline.';
+COMMENT ON COLUMN public.seo_evidence_artifacts.collection_context_id IS
+    'Nullable run, pair, or score context used to correlate captured provider evidence with the collection that produced it.';
 COMMENT ON COLUMN public.local_pack_listing_facts.cid IS
     'Stable Google local result CID for refreshes that should not depend on business-name matching.';
 COMMENT ON COLUMN public.local_pack_listing_facts.place_id IS

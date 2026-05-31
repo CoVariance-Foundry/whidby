@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.7.8 -->
+<!-- docguard:version 1.7.9 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-05-24 -->
+<!-- docguard:last-reviewed 2026-05-31 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
@@ -108,7 +108,7 @@ tests/
 | V2 persistence | `seo_facts` and `metro_score_v2` upserts preserve report lineage and do not create duplicate side tables | `tests/unit/test_supabase_persistence.py` |
 | Read-model APIs | Explore/report/strategy reads prefer `metro_score_v2`, expose benchmark confidence, and retain legacy fallback | `tests/unit/test_explore_city_service.py`, `tests/unit/test_api_explore_cities.py`, app route tests |
 | Benchmark lineage | `seo_benchmarks` reads tolerate nullable lineage fields, benchmark modes are validated, and migration tests assert run plus metric-family sufficiency schema | `tests/scoring/test_benchmark_repository_contract.py`, `tests/clients/test_seo_benchmark_repository.py` |
-| SEO evidence lineage | Local-pack rows preserve `cid`/`place_id` plus explicit provenance fields; raw SEO evidence artifact builders/upserts cover request/response hashes, cache status, cost, collection timestamp, RLS, and schema constraints | `tests/unit/test_supabase_persistence.py` |
+| SEO evidence lineage | Local-pack rows preserve `cid`/`place_id` plus explicit provenance fields; raw SEO evidence artifact builders/upserts cover request/response hashes, cache status, cost, collection timestamp, collection context id, non-fatal side-channel write failures, RLS, and schema constraints | `tests/unit/test_supabase_persistence.py` |
 | Competitor Intel persistence | Organic/local competitor facts are persisted as durable read-model rows without reading `api_response_cache`; run lineage records account/user/quota/status | `tests/unit/test_supabase_persistence.py`, `tests/unit/test_supabase_schema.py` |
 | Competitor Intel APIs | Free users receive upgrade state; Plus/Pro users can read/run; run creation consumes/refunds two `fresh_report` units atomically; service-role reads enforce account visibility | `apps/app/src/app/api/competitor-intel/route.test.ts`, `apps/app/src/app/api/competitor-intel/runs/route.test.ts`, `tests/unit/test_api_competitor_intel.py`, `tests/unit/test_competitor_intel_service.py` |
 | Competitor Intel UI | Locked, ready, running, aggregate-only, dossier, and error states render without leaking paid details or null-heavy cards | `apps/app/src/components/competitor-intel/CompetitorIntelClient.test.tsx` |
@@ -438,3 +438,4 @@ npm run lint
 | 1.7.6 | 2026-05-23 | WHI-102 acquisition backfill gate | Added explicit opt-in benchmark acquisition flags and tests for top-5 organic telemetry plus top-3 review velocity |
 | 1.7.7 | 2026-05-24 | WHI-126 benchmark lineage schema | Added benchmark mode parsing and metric-family sufficiency migration test obligations |
 | 1.7.8 | 2026-05-24 | WHI-127 evidence lineage schema | Added local-place identifier and raw SEO evidence artifact persistence test obligations |
+| 1.7.9 | 2026-05-31 | WHI-127 review fix | Added collection context id and non-fatal evidence side-channel failure test obligations |

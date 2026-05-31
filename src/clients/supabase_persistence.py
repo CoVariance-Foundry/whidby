@@ -769,6 +769,9 @@ def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, A
             "response_payload": response_payload,
             "cache_status": _normalize_cache_status(artifact.get("cache_status")),
         }
+        collection_context_id = _str_or_none(artifact.get("collection_context_id"))
+        if collection_context_id is not None:
+            row["collection_context_id"] = collection_context_id
 
         artifact_id = _str_or_none(artifact.get("id", artifact.get("artifact_id")))
         if artifact_id:
@@ -1578,18 +1581,31 @@ class SupabasePersistence:
                     "Cannot persist seo_evidence_artifacts: table client was not "
                     "initialized. This is a bug; please report it."
                 )
-            evidence_artifact_table.upsert(
-                evidence_artifact_rows,
-                on_conflict="provider,endpoint_path,request_hash",
-                ignore_duplicates=True,
-            ).execute()
-            evidence_ms = int((time.monotonic() - t0) * 1000)
-            logger.info(
-                "persist_report upserted %d seo_evidence_artifacts rows "
-                "duration_ms=%d",
-                len(evidence_artifact_rows),
-                evidence_ms,
-            )
+            try:
+                evidence_artifact_table.upsert(
+                    evidence_artifact_rows,
+                    on_conflict="provider,endpoint_path,request_hash",
+                    ignore_duplicates=True,
+                ).execute()
+            except Exception as exc:
+                evidence_ms = int((time.monotonic() - t0) * 1000)
+                logger.warning(
+                    "persist_report seo_evidence_artifacts upsert failed; "
+                    "continuing with downstream fact persistence report_id=%s "
+                    "rows=%d duration_ms=%d error=%s",
+                    report_id,
+                    len(evidence_artifact_rows),
+                    evidence_ms,
+                    exc,
+                )
+            else:
+                evidence_ms = int((time.monotonic() - t0) * 1000)
+                logger.info(
+                    "persist_report upserted %d seo_evidence_artifacts rows "
+                    "duration_ms=%d",
+                    len(evidence_artifact_rows),
+                    evidence_ms,
+                )
 
         if organic_competitor_rows:
             t0 = time.monotonic()

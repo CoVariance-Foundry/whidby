@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -540,6 +541,7 @@ def test_build_local_pack_listing_fact_rows_reads_private_top_level_side_channel
 
 def test_build_seo_evidence_artifact_rows_maps_and_hashes_provenance() -> None:
     report = _sample_competitor_report()
+    report["raw_evidence_artifacts"][0]["collection_context_id"] = "score-run-1"
 
     rows = build_seo_evidence_artifact_rows(report)
 
@@ -576,6 +578,7 @@ def test_build_seo_evidence_artifact_rows_maps_and_hashes_provenance() -> None:
     assert row["response_hash"] == expected_response_hash
     assert row["response_storage_uri"] == "s3://whidby-seo-evidence/maps/task-1.json"
     assert row["cache_status"] == "miss"
+    assert row["collection_context_id"] == "score-run-1"
     assert row["cost_usd"] == 0.002
     assert row["collected_at"] == "2026-04-20T00:03:00+00:00"
     assert row["source_window_start"] == "2026-04-01T00:00:00+00:00"
@@ -651,6 +654,7 @@ def test_build_seo_evidence_artifact_rows_from_cost_records() -> None:
                 collected_at="2026-05-24T14:00:00+00:00",
                 response_hash="volume-response-hash",
                 response_payload={"sha256": "volume-response-hash", "type": "list"},
+                collection_context_id="benchmark:roofing:38060:run-1",
             ),
             CostRecord(
                 endpoint="serp/google/organic/live/advanced",
@@ -689,6 +693,7 @@ def test_build_seo_evidence_artifact_rows_from_cost_records() -> None:
         "type": "list",
     }
     assert rows[0]["response_storage_uri"] is None
+    assert rows[0]["collection_context_id"] == "benchmark:roofing:38060:run-1"
     assert rows[0]["collected_at"] == "2026-05-24T14:00:00+00:00"
     assert rows[1]["cache_status"] == "hit"
     assert rows[1]["cost_usd"] == 0.0
@@ -715,6 +720,7 @@ def test_whi127_migration_adds_local_identifiers_and_evidence_artifacts() -> Non
         "review_window_end TIMESTAMPTZ",
         "upstream_result_at TIMESTAMPTZ",
         "evidence_artifact_id UUID",
+        "collection_context_id TEXT",
     ):
         assert column in migration
     assert "idx_local_pack_listing_facts_cid" in migration
@@ -789,6 +795,19 @@ class _FakeSupabase:
 
     def table(self, name: str) -> _FakeTable:
         self.tables.setdefault(name, [])
+        return _FakeTable(self.tables[name], self.calls, name)
+
+
+class _FakeTableFailsOnExecute(_FakeTable):
+    def execute(self) -> Any:
+        raise RuntimeError(f"{self.name} unavailable")
+
+
+class _FakeSupabaseWithEvidenceArtifactFailure(_FakeSupabase):
+    def table(self, name: str) -> _FakeTable:
+        self.tables.setdefault(name, [])
+        if name == "seo_evidence_artifacts":
+            return _FakeTableFailsOnExecute(self.tables[name], self.calls, name)
         return _FakeTable(self.tables[name], self.calls, name)
 
 
@@ -895,6 +914,33 @@ def test_persist_report_preserves_original_evidence_on_duplicate_requests() -> N
         if call["table"] == "seo_evidence_artifacts" and call["method"] == "upsert"
     )
     assert evidence_call["kwargs"]["ignore_duplicates"] is True
+
+
+def test_persist_report_continues_when_evidence_artifact_upsert_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake = _FakeSupabaseWithEvidenceArtifactFailure()
+    adapter = SupabasePersistence(client=fake)
+
+    with caplog.at_level(logging.WARNING, logger="src.clients.supabase_persistence"):
+        report_id = adapter.persist_report(_sample_competitor_report())
+
+    assert report_id == "11111111-1111-1111-1111-111111111111"
+    assert len(fake.tables["organic_competitor_facts"]) == 2
+    assert len(fake.tables["local_pack_listing_facts"]) == 2
+    assert any(
+        call["table"] == "seo_evidence_artifacts" and call["method"] == "upsert"
+        for call in fake.calls
+    )
+    assert any(
+        call["table"] == "organic_competitor_facts" and call["method"] == "upsert"
+        for call in fake.calls
+    )
+    assert any(
+        call["table"] == "local_pack_listing_facts" and call["method"] == "upsert"
+        for call in fake.calls
+    )
+    assert "seo_evidence_artifacts upsert failed" in caplog.text
 
 
 def test_persist_report_still_works_for_legacy_report_without_v2_scores() -> None:
