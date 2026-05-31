@@ -73,12 +73,12 @@ def _benchmark_mode(value: Any) -> BenchmarkMode:
     return mode  # type: ignore[return-value]
 
 
-def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+def _mapping_or_empty(value: Any, *, field_name: str) -> Mapping[str, Any]:
     if value is None:
         return MappingProxyType({})
     if isinstance(value, Mapping):
         return MappingProxyType(dict(value))
-    raise ValueError("metric_confidence_rollup must be a mapping")
+    raise ValueError(f"{field_name} must be a mapping")
 
 
 @dataclass(frozen=True)
@@ -172,7 +172,8 @@ class SeoBenchmarkCell:
                 else None
             ),
             metric_confidence_rollup=_mapping_or_empty(
-                row.get("metric_confidence_rollup")
+                row.get("metric_confidence_rollup"),
+                field_name="metric_confidence_rollup",
             ),
         )
 

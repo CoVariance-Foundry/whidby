@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS public.seo_benchmark_runs (
         CONSTRAINT seo_benchmark_runs_acquisition_flags_object_check
         CHECK (jsonb_typeof(acquisition_flags) = 'object'),
     benchmark_mode TEXT NOT NULL DEFAULT 'exact'
+        CONSTRAINT seo_benchmark_runs_benchmark_mode_check
         CHECK (
             benchmark_mode IN (
                 'exact',

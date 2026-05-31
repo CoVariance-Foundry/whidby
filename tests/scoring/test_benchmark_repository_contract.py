@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.scoring.benchmark_repository import SeoBenchmarkCell
+from src.scoring.benchmark_repository import SeoBenchmarkCell, _mapping_or_empty
 
 
 def _row(**overrides: object) -> dict[str, object]:
@@ -148,6 +148,11 @@ def test_non_mapping_metric_confidence_rollup_raises_value_error() -> None:
         SeoBenchmarkCell.from_mapping(_row(metric_confidence_rollup=["demand"]))
 
 
+def test_mapping_or_empty_uses_supplied_field_name_for_errors() -> None:
+    with pytest.raises(ValueError, match="source_mix must be a mapping"):
+        _mapping_or_empty(["demand"], field_name="source_mix")
+
+
 def test_whi126_migration_adds_lineage_and_metric_sufficiency_schema() -> None:
     migration = (
         Path(__file__).parents[2]
@@ -159,6 +164,7 @@ def test_whi126_migration_adds_lineage_and_metric_sufficiency_schema() -> None:
     assert "benchmark_run_id UUID" in migration
     assert "seo_benchmark_runs(id)" in migration
     assert "ON DELETE SET NULL" in migration
+    assert "CONSTRAINT seo_benchmark_runs_benchmark_mode_check" in migration
     assert "metric_confidence_rollup JSONB NOT NULL DEFAULT '{}'::jsonb" in migration
     assert "FROM pg_constraint" in migration
     assert "conname = 'seo_benchmarks_benchmark_mode_check'" in migration
