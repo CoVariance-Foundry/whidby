@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 from urllib import error as urlerror
 from urllib import request as urlreq
 from uuid import uuid4
@@ -51,6 +52,7 @@ from src.clients.supabase_persistence import (  # noqa: E402
 )
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
 from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
+from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("benchmark_runner")
@@ -234,12 +236,162 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Google Reviews depth per top-3 local pack item (default: 10).",
     )
+    parser.add_argument(
+        "--require-dfs",
+        action="store_true",
+        help="Fail if selected metros are not paid-eligible native DataForSEO targets.",
+    )
+    parser.add_argument(
+        "--require-v2-persistence",
+        action="store_true",
+        help=(
+            "Require selected pairs to already have metro_score_v2 and seo_facts rows "
+            "before running paid benchmark enrichment."
+        ),
+    )
+    parser.add_argument(
+        "--expected-project-ref",
+        default=None,
+        help=(
+            "Optional Supabase project ref guard. When set, BENCHMARK_SUPABASE_URL "
+            "must point at this project before any writes or paid collection run."
+        ),
+    )
     return parser.parse_args()
 
 
 def fail_cli(message: str) -> None:
     print(f"run_pilot.py: error: {message}", file=sys.stderr)
     sys.exit(2)
+
+
+def persistence_niche_key(niche: str) -> str:
+    """Normalize pilot labels to the persisted scoring service key."""
+    text = " ".join(niche.strip().lower().split())
+    for suffix in (" services", " service", " contractors", " contractor", " companies", " company"):
+        if text.endswith(suffix):
+            return text[: -len(suffix)].strip()
+    return text
+
+
+def validate_expected_project_ref(expected_project_ref: str | None) -> None:
+    """Fail fast when a caller pins an expected Supabase project ref."""
+    if not expected_project_ref:
+        return
+
+    actual_project_ref = supabase_project_ref(SUPABASE_URL)
+    if actual_project_ref != expected_project_ref:
+        actual = actual_project_ref or "<unknown>"
+        fail_cli(
+            "Supabase project ref mismatch: "
+            f"expected {expected_project_ref}, got {actual} from BENCHMARK_SUPABASE_URL"
+        )
+
+
+def validate_paid_targets(metros: list[dict[str, Any]], *, require_dfs: bool) -> None:
+    """Reject paid canaries that would target borrowed-code or low-signal metros."""
+    if not require_dfs:
+        return
+
+    ineligible = [
+        (
+            metro.get("cbsa_code") or "<unknown>",
+            metro.get("cbsa_name") or "<unknown>",
+            native_dfs_exclusion_reason(metro),
+        )
+        for metro in metros
+        if native_dfs_exclusion_reason(metro) is not None
+    ]
+    if not ineligible:
+        return
+
+    examples = ", ".join(
+        f"{name} ({cbsa_code}: {reason})"
+        for cbsa_code, name, reason in ineligible[:5]
+    )
+    suffix = f"; {len(ineligible) - 5} more" if len(ineligible) > 5 else ""
+    fail_cli(f"--require-dfs selected ineligible benchmark metros: {examples}{suffix}")
+
+
+def native_dfs_exclusion_reason(metro: dict[str, Any]) -> str | None:
+    """Return why a metro is not a native paid DataForSEO benchmark target."""
+    population_class = metro.get("population_class")
+    source = metro.get("_dfs_source") or "native"
+    loc_codes = list(
+        metro.get("keyword_volume_location_codes")
+        or metro.get("dataforseo_location_codes")
+        or []
+    )
+    if population_class in LOW_SIGNAL_POPULATION_CLASSES:
+        return "population_too_small"
+    if population_class not in BENCHMARK_PAID_POPULATION_CLASSES:
+        return "population_too_small"
+    if source != "native":
+        return "no_native_dfs_code"
+    if not loc_codes:
+        return "no_native_dfs_code"
+    if not metro.get("paid_eligible"):
+        return metro.get("benchmark_exclusion_reason") or "not_paid_eligible"
+    return None
+
+
+def postgrest_has_row(table: str, filters: dict[str, str]) -> bool:
+    """Return true if a PostgREST table has at least one row for exact filters."""
+    if not SUPABASE_KEY:
+        raise RuntimeError("BENCHMARK_SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY is required")
+
+    query = {"select": "cbsa_code", "limit": "1"}
+    query.update({key: f"eq.{value}" for key, value in filters.items()})
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{urlencode(query)}"
+    req = urlreq.Request(
+        url,
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+        },
+        method="GET",
+    )
+    try:
+        with urlreq.urlopen(req, timeout=30) as response:
+            return bool(json.loads(response.read().decode() or "[]"))
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode()[:200]
+        raise RuntimeError(f"{table} lookup failed: status={exc.code} {detail}") from exc
+    except (urlerror.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", None)
+        detail = str(reason) if reason is not None else str(exc)
+        raise RuntimeError(f"{table} lookup failed: {exc.__class__.__name__}: {detail}") from exc
+
+
+def validate_v2_persistence(
+    pairs: list[tuple[str, dict[str, Any]]],
+    *,
+    require_v2_persistence: bool,
+) -> None:
+    """Require canary targets to already be V2-scored and fact-backed."""
+    if not require_v2_persistence:
+        return
+
+    missing: list[str] = []
+    for niche, metro in pairs:
+        cbsa_code = str(metro.get("cbsa_code") or "")
+        service_key = persistence_niche_key(niche)
+        filters = {"cbsa_code": cbsa_code, "niche_normalized": service_key}
+        pair_label = f"{niche}@{cbsa_code}"
+        try:
+            if not postgrest_has_row("metro_score_v2", filters):
+                missing.append(f"{pair_label}: metro_score_v2")
+            if not postgrest_has_row("seo_facts", filters):
+                missing.append(f"{pair_label}: seo_facts")
+        except RuntimeError as exc:
+            fail_cli(str(exc))
+
+    if not missing:
+        return
+
+    examples = ", ".join(missing[:6])
+    suffix = f"; {len(missing) - 6} more" if len(missing) > 6 else ""
+    fail_cli(f"--require-v2-persistence missing prerequisite rows: {examples}{suffix}")
 
 
 def select_niches(requested: list[str] | None) -> list[str]:
@@ -1185,6 +1337,7 @@ async def score_one(
 # -------------------------------------------------------------------
 async def main():
     args = parse_args()
+    validate_expected_project_ref(args.expected_project_ref)
 
     # Sampling plan lives next to this script
     metros_path = Path(__file__).parent / "metros_sampled.json"
@@ -1207,7 +1360,6 @@ async def main():
             for metro in selected_metros
             if metro.get("population_class") in allowed_classes
         ]
-
     niches = select_niches(args.niche)
     pairs = build_pairs(niches, selected_metros)
     if args.limit_pairs is not None:
@@ -1215,10 +1367,16 @@ async def main():
 
     if not pairs:
         fail_cli("filters produced zero (niche, metro) pairs")
+    validate_paid_targets([metro for _niche, metro in pairs], require_dfs=args.require_dfs)
 
     if not ((SUPABASE_KEY or args.preflight_only) and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
         log.error("missing env vars — check .env")
         sys.exit(1)
+    if not args.preflight_only:
+        validate_v2_persistence(
+            pairs,
+            require_v2_persistence=args.require_v2_persistence,
+        )
     if args.preflight_only and (args.collect_organic_telemetry or args.collect_review_velocity):
         log.info("preflight-only skips organic telemetry and review velocity collection")
 
