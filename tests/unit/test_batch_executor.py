@@ -61,6 +61,25 @@ class MapsIdentifierClient(FakeDataForSEOClient):
         )
 
 
+class EmptyMapsProfileClient(FakeDataForSEOClient):
+    async def serp_maps(self, keyword: str, location_code: int) -> APIResponse:
+        self.calls.append(("serp_maps", {"keyword": keyword, "location_code": location_code}))
+        return APIResponse(
+            status="ok",
+            data=[
+                {
+                    "items": [
+                        {
+                            "type": "maps_search",
+                            "rank_group": 1,
+                        },
+                    ],
+                }
+            ],
+            cost=0.0006,
+        )
+
+
 @pytest.mark.asyncio
 async def test_executor_runs_base_and_dependent_categories() -> None:
     request = build_collection_request(SAMPLE_KEYWORDS, [SAMPLE_METROS[0]], "balanced")
@@ -105,6 +124,18 @@ async def test_executor_prefers_maps_identifiers_for_reviews_and_preserves_gbp_p
     assert [payload["keyword"] for payload in gbp_payloads] == ["CID Biz"]
     assert [payload["preferred_identifier_mode"] for payload in gbp_payloads] == ["cid"]
     assert [payload["gbp_retrieval_mode"] for payload in gbp_payloads] == ["keyword"]
+
+
+@pytest.mark.asyncio
+async def test_executor_skips_reviews_when_maps_profile_has_no_query_or_identifier() -> None:
+    request = build_collection_request(SAMPLE_KEYWORDS, [SAMPLE_METROS[0]], "balanced")
+    plan = build_collection_plan(request)
+    client = EmptyMapsProfileClient()
+
+    state = await execute_collection_plan(plan, request, client)
+
+    assert [call for call in client.calls if call[0] == "google_reviews"] == []
+    assert "google_reviews" not in state.task_categories.values()
 
 
 @pytest.mark.asyncio

@@ -422,10 +422,12 @@ def _top_maps_profiles_for_metro(
                     identifier_mode = "title"
                     query = business_name
                     dedup_key = f"title:{business_name.lower()}"
-                else:
+                elif source_query:
                     identifier_mode = "keyword"
-                    query = source_query or ""
+                    query = source_query
                     dedup_key = f"keyword:{query.lower()}"
+                else:
+                    continue
                 if dedup_key in seen:
                     continue
                 seen.add(dedup_key)

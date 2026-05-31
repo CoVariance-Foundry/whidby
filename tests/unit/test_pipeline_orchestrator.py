@@ -10,7 +10,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.clients.dataforseo.cost_tracker import CostTracker
-from src.pipeline.orchestrator import ScoreNicheResult, score_niche_for_metro
+from src.pipeline.orchestrator import (
+    ScoreNicheResult,
+    _review_window_from_row,
+    score_niche_for_metro,
+)
 from src.pipeline.types import MetroCollectionResult, RawCollectionResult, RunMetadata
 from src.scoring.benchmark_repository import SeoBenchmarkCell
 
@@ -439,6 +443,21 @@ def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> N
     maps_artifact = result.seo_evidence_artifacts[0]
     assert maps_artifact["evidence_family"] == "maps"
     assert first["evidence_artifact_id"] == maps_artifact["id"]
+
+
+def test_review_window_from_row_orders_mixed_offset_timestamps_by_instant() -> None:
+    start, end = _review_window_from_row(
+        {
+            "review_timestamps": [
+                "2026-05-01T02:30:00+02:00",
+                "2026-05-01T00:15:00Z",
+                "2026-04-30T20:45:00-04:00",
+            ],
+        }
+    )
+
+    assert start == "2026-05-01T00:15:00Z"
+    assert end == "2026-04-30T20:45:00-04:00"
 
 
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:

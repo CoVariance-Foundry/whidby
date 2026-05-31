@@ -5,6 +5,7 @@ import logging
 import time
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -681,6 +682,14 @@ def _review_window_from_row(row: dict[str, Any]) -> tuple[Any, Any]:
     timestamps = _review_timestamps_from_row(row)
     if not timestamps:
         return None, None
+    parsed = [
+        (parsed_at, timestamp)
+        for timestamp in timestamps
+        if (parsed_at := _parse_review_timestamp(timestamp)) is not None
+    ]
+    if parsed:
+        return min(parsed, key=lambda item: item[0])[1], max(parsed, key=lambda item: item[0])[1]
+
     ordered = sorted(timestamps)
     return ordered[0], ordered[-1]
 
@@ -696,6 +705,19 @@ def _review_timestamps_from_row(row: dict[str, Any]) -> list[str]:
             if isinstance(item, dict) and item.get("timestamp"):
                 timestamps.append(str(item["timestamp"]))
     return timestamps
+
+
+def _parse_review_timestamp(value: str) -> datetime | None:
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _primary_report_keyword(report: dict[str, Any]) -> str | None:
