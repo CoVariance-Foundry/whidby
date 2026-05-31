@@ -7,6 +7,10 @@ MIGRATION = (
     "supabase/migrations/"
     "20260531191233_whi134_metric_sufficiency_recompute.sql"
 )
+GBP_PROFILE_MIGRATION = (
+    "supabase/migrations/"
+    "20260531212243_whi138_gbp_profile_sufficiency.sql"
+)
 
 
 def test_parse_args_accepts_expected_project_ref() -> None:
@@ -105,3 +109,29 @@ def test_metric_sufficiency_recompute_uses_family_specific_evidence() -> None:
     assert "OR aio_present IS NOT NULL\n                   OR featured_snippet_present IS NOT NULL\n                   OR paa_count IS NOT NULL\n            )::integer,\n            'serp/google/organic/live/advanced'\n        FROM fact_base\n        GROUP BY niche_normalized, population_class\n\n        UNION ALL\n\n        SELECT\n            niche_normalized,\n            population_class,\n            'organic_authority'" not in migration
     assert "OR lsa_present IS NOT NULL" in migration
     assert "OR ads_present IS NOT NULL" in migration
+
+
+def test_gbp_profile_sufficiency_recompute_uses_local_pack_evidence() -> None:
+    migration = recompute_benchmarks.REPO_ROOT.joinpath(GBP_PROFILE_MIGRATION).read_text()
+
+    assert "CREATE OR REPLACE FUNCTION public.recompute_seo_benchmarks" in migration
+    for family in (
+        "demand",
+        "organic_serp",
+        "organic_authority",
+        "lighthouse_site_quality",
+        "local_pack",
+        "review_velocity",
+        "gbp_profile",
+        "monetization",
+        "ai_serp_displacement",
+    ):
+        assert f"'{family}'" in migration
+    assert "local_pack_listing_facts" in migration
+    assert "gbp_completeness" in migration
+    assert "'business_data/google/my_business_info/live'" in migration
+    assert "FROM recomputed_cells rc\n        LEFT JOIN local_pack_base lp" in migration
+    assert "count(DISTINCT lp.cbsa_code)::integer" in migration
+    assert "count(lp.cbsa_code)::integer" in migration
+    assert "count(lp.gbp_completeness)::integer" in migration
+    assert "metric_confidence_rollup" in migration
