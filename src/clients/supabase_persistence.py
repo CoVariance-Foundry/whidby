@@ -1494,6 +1494,7 @@ class SupabasePersistence:
         evidence_artifact_rows = build_seo_evidence_artifact_rows(report)
         organic_competitor_rows = build_organic_competitor_fact_rows(report)
         local_pack_rows = build_local_pack_listing_fact_rows(report)
+        evidence_artifact_upsert_failed = False
         facts_table = None
         evidence_artifact_table = None
         organic_competitor_table = None
@@ -1588,6 +1589,7 @@ class SupabasePersistence:
                     ignore_duplicates=True,
                 ).execute()
             except Exception as exc:
+                evidence_artifact_upsert_failed = True
                 evidence_ms = int((time.monotonic() - t0) * 1000)
                 logger.warning(
                     "persist_report seo_evidence_artifacts upsert failed; "
@@ -1635,6 +1637,10 @@ class SupabasePersistence:
                     "Cannot persist local_pack_listing_facts: table client was not "
                     "initialized. This is a bug; please report it."
                 )
+            if evidence_artifact_upsert_failed:
+                for row in local_pack_rows:
+                    if "evidence_artifact_id" in row:
+                        row["evidence_artifact_id"] = None
             local_pack_table.upsert(
                 local_pack_rows,
                 on_conflict=(

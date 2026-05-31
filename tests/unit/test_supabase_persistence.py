@@ -928,6 +928,12 @@ def test_persist_report_continues_when_evidence_artifact_upsert_fails(
     assert report_id == "11111111-1111-1111-1111-111111111111"
     assert len(fake.tables["organic_competitor_facts"]) == 2
     assert len(fake.tables["local_pack_listing_facts"]) == 2
+    assert all(
+        row["evidence_artifact_id"] is None
+        for row in fake.tables["local_pack_listing_facts"]
+    )
+    assert fake.tables["organic_competitor_facts"][0]["domain"] == "example-roofing.com"
+    assert fake.tables["organic_competitor_facts"][1]["domain"] == "yelp.com"
     assert any(
         call["table"] == "seo_evidence_artifacts" and call["method"] == "upsert"
         for call in fake.calls
