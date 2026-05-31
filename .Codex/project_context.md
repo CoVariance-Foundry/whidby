@@ -30,6 +30,8 @@ Milestone sequencing changed after the Stage 5 benchmark recommendations. Milest
 
 `WHI-138` closes the structural recompute gap for the canonical `gbp_profile` metric family. The benchmark recompute function now emits `gbp_profile` sufficiency rows from real `local_pack_listing_facts.gbp_completeness` evidence, windowed with the benchmark run and rolled into `metric_confidence_rollup`. Missing GBP completeness remains missing or undersampled; it is not inferred from local-pack presence or strategy projection defaults. Production data still needs a bounded GBP evidence collection pass before GBP Blitz can honestly become ready.
 
+`WHI-139` adds that bounded GBP evidence collection path to `scripts/benchmarks/run_pilot.py`. The new opt-in `--collect-gbp-profile` flag calls DataForSEO Google My Business Info for local top-3 listings and upserts `local_pack_listing_facts.gbp_completeness` rows at the existing local-pack grain. Preflight skips this paid add-on, and benchmark readiness still requires recompute plus non-null GBP completeness evidence.
+
 ## Consumer Visual System
 
 The consumer app now has shared WHI-10 score primitives in `apps/app/src/lib/design-tokens.ts` and `apps/app/src/components/ScoreVisuals.tsx`. Use `scoreToneForValue` for 80/60/40 score tone decisions and `ScoreCircle` / `ScoreBar` for visible score displays before adding route-local threshold helpers. Numeric score displays should stay on `var(--mono)` with no negative letter spacing.

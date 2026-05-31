@@ -53,6 +53,8 @@ from src.clients.supabase_persistence import (  # noqa: E402
 )
 from src.config.constants import DFS_DEFAULT_LANGUAGE_CODE  # noqa: E402
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
+from src.pipeline.dfs_normalizers import normalize_gbp_info_rows  # noqa: E402
+from src.pipeline.gbp_completeness import compute_gbp_completeness  # noqa: E402
 from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
 from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
 
@@ -170,6 +172,12 @@ class OrganicTelemetryResult:
     failures: list[str]
 
 
+@dataclass(frozen=True)
+class GbpProfileCollectionResult:
+    rows: list[dict[str, Any]]
+    failures: list[str]
+
+
 BENCHMARK_PAID_POPULATION_CLASSES = {
     "mega_5m_plus",
     "metro_1m_5m",
@@ -259,6 +267,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Opt in to paid Google Reviews calls for top-3 local pack review "
             "velocity."
+        ),
+    )
+    parser.add_argument(
+        "--collect-gbp-profile",
+        action="store_true",
+        help=(
+            "Opt in to paid Google My Business Info calls for top-3 local pack "
+            "profile completeness."
         ),
     )
     parser.add_argument(
@@ -838,6 +854,19 @@ def propagate_head_feature(
         features[key] = value
 
 
+def first_local_pack_features(
+    serp_features_by_kw: dict[str, dict[str, Any]],
+    *,
+    fallback_keyword: str,
+    fallback_features: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    """Return the first queried head SERP with usable local-pack listings."""
+    for keyword, features in serp_features_by_kw.items():
+        if features.get("top_local_pack_items"):
+            return keyword, features
+    return fallback_keyword, fallback_features
+
+
 async def collect_organic_telemetry(
     dfs: DataForSEOClient,
     organic_targets: list[dict[str, Any]],
@@ -939,6 +968,73 @@ async def collect_top3_review_velocity(
     return round(sum(velocities) / len(velocities), 4) if velocities else None
 
 
+async def collect_top3_gbp_profile_facts(
+    dfs: DataForSEOClient,
+    local_pack_items: list[dict[str, Any]],
+    *,
+    cbsa_code: str,
+    niche_normalized: str,
+    keyword: str,
+    location_code: int,
+    snapshot_date: str,
+) -> GbpProfileCollectionResult:
+    """Collect GBP completeness facts for local top-3 listings."""
+    rows: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for rank, item in enumerate(local_pack_items[:3], start=1):
+        title = str(item.get("title") or "").strip()
+        if not title:
+            failures.append(f"rank_{rank}:missing_title")
+            continue
+        response = await dfs.google_my_business_info(
+            keyword=title,
+            location_code=location_code,
+        )
+        if response.status != "ok" or not response.data:
+            failures.append(f"{title}:response_{response.status}")
+            continue
+        raw_rows = response.data if isinstance(response.data, list) else [response.data]
+        profiles = normalize_gbp_info_rows([row for row in raw_rows if isinstance(row, dict)])
+        if not profiles:
+            failures.append(f"{title}:empty_profile")
+            continue
+        profile = next(
+            (candidate for candidate in profiles if _profile_matches_local_listing(candidate, title)),
+            None,
+        )
+        if profile is None:
+            failures.append(f"{title}:profile_title_mismatch")
+            continue
+        categories = [
+            str(category)
+            for category in profile.get("services", [])
+            if category
+        ]
+        rows.append({
+            "cbsa_code": cbsa_code,
+            "niche_normalized": niche_normalized,
+            "keyword": keyword,
+            "listing_rank": rank,
+            "business_name": title,
+            "cid": item.get("cid"),
+            "place_id": item.get("place_id"),
+            "review_retrieval_mode": "title",
+            "source_query": keyword,
+            "dataforseo_location_code": location_code,
+            "result_type": "local_pack",
+            "exact_match_name": False,
+            "review_count": item.get("rating_count"),
+            "rating": item.get("rating"),
+            "gbp_completeness": compute_gbp_completeness(profile),
+            "photo_count": profile.get("photo_count"),
+            "has_recent_post": profile.get("has_recent_post"),
+            "categories": categories,
+            "source": "dataforseo",
+            "snapshot_date": snapshot_date,
+        })
+    return GbpProfileCollectionResult(rows=rows, failures=failures)
+
+
 def classify_keyword_volume_failure(response: Any) -> str:
     """Map a DataForSEO keyword-volume response error to a benchmark failure bucket."""
     error_text = str(getattr(response, "error", "") or "").lower()
@@ -1032,6 +1128,8 @@ def upsert_facts(rows: list[dict]) -> tuple[int, str]:
             return resp.status, resp.read().decode()
     except urlerror.HTTPError as e:
         return e.code, e.read().decode()[:500]
+    except (urlerror.URLError, TimeoutError, OSError) as e:
+        return 599, str(e)[:500]
 
 
 def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
@@ -1054,6 +1152,68 @@ def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
             return resp.status, resp.read().decode()
     except urlerror.HTTPError as e:
         return e.code, e.read().decode()[:500]
+
+
+def upsert_local_pack_listing_facts(rows: list[dict]) -> tuple[int, str]:
+    if not rows:
+        return 200, ""
+    url = (
+        f"{SUPABASE_URL}/rest/v1/local_pack_listing_facts"
+        f"?on_conflict=cbsa_code,niche_normalized,keyword,listing_rank,snapshot_date"
+    )
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    body = json.dumps(rows).encode("utf-8")
+    req = urlreq.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urlreq.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.read().decode()
+    except urlerror.HTTPError as e:
+        return e.code, e.read().decode()[:500]
+    except (urlerror.URLError, TimeoutError, OSError) as e:
+        return 599, str(e)[:500]
+
+
+def persist_gbp_profile_rows(
+    rows: list[dict[str, Any]],
+    *,
+    stats: RunStats,
+    niche: str,
+    cbsa: str,
+) -> None:
+    """Persist paid GBP evidence independently of seo_facts qualification."""
+    if not rows:
+        return
+    try:
+        local_status, local_body = upsert_local_pack_listing_facts(rows)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "  local_pack_listing_facts upsert failed (non-fatal): %s",
+            exc,
+        )
+        stats.record_failure(
+            niche,
+            cbsa,
+            "gbp_profile_upsert_failed_non_fatal",
+            type(exc).__name__,
+        )
+        return
+    if local_status >= 300:
+        log.warning(
+            "  local_pack_listing_facts upsert failed (non-fatal): %s %s",
+            local_status,
+            local_body[:200],
+        )
+        stats.record_failure(
+            niche,
+            cbsa,
+            "gbp_profile_upsert_failed_non_fatal",
+            f"status={local_status}",
+        )
 
 
 def evidence_artifacts_from_dfs_cost_log(
@@ -1207,6 +1367,24 @@ def _local_identifier_set(items: list[dict[str, Any]]) -> set[str]:
     return identifiers
 
 
+def _business_name_token_set(value: Any) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", str(value or "").lower())
+        if len(token) > 1 and token not in {"the", "and", "llc", "inc", "co", "company"}
+    }
+
+
+def _profile_matches_local_listing(profile: dict[str, Any], title: str) -> bool:
+    profile_title = profile.get("title") or profile.get("business_name") or profile.get("name")
+    listing_tokens = _business_name_token_set(title)
+    profile_tokens = _business_name_token_set(profile_title)
+    if not listing_tokens or not profile_tokens:
+        return False
+    overlap = listing_tokens & profile_tokens
+    return len(overlap) >= min(2, len(listing_tokens), len(profile_tokens))
+
+
 # -------------------------------------------------------------------
 # Per-niche keyword expansion (cached)
 # -------------------------------------------------------------------
@@ -1264,6 +1442,7 @@ async def score_one(
     preflight_only: bool = False,
     collect_organic: bool = False,
     collect_review_velocity_flag: bool = False,
+    collect_gbp_profile_flag: bool = False,
     organic_telemetry_limit: int = 5,
     review_depth: int = 10,
 ) -> int:
@@ -1347,11 +1526,22 @@ async def score_one(
             # Use head SERP features as the "metro-level" SERP signal for all keywords
             # (actual SERP per long-tail keyword would 50x cost; head signal is the
             # competitive landscape proxy for benchmarking)
-            head_features = dict(next(iter(serp_features_by_kw.values()), {})) if serp_features_by_kw else {}
-            if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
+            head_feature_keyword = next(
+                iter(serp_features_by_kw.keys()),
+                head_kws[0]["keyword"] if head_kws else niche,
+            )
+            head_features = dict(
+                serp_features_by_kw.get(head_feature_keyword, {})
+            )
+            local_pack_keyword, local_pack_features = first_local_pack_features(
+                serp_features_by_kw,
+                fallback_keyword=head_feature_keyword,
+                fallback_features=head_features,
+            )
+            if collect_review_velocity_flag and local_pack_features.get("top_local_pack_items"):
                 velocity = await collect_top3_review_velocity(
                     dfs,
-                    list(head_features.get("top_local_pack_items") or []),
+                    list(local_pack_features.get("top_local_pack_items") or []),
                     location_code=loc_code_for_serp,
                     depth=review_depth,
                 )
@@ -1362,6 +1552,23 @@ async def score_one(
                         "top3_review_velocity_avg",
                         velocity,
                     )
+
+            gbp_profile_rows: list[dict[str, Any]] = []
+            snapshot = date.today().isoformat()
+            service_key = persistence_niche_key(niche)
+            if collect_gbp_profile_flag and local_pack_features.get("top_local_pack_items"):
+                gbp_result = await collect_top3_gbp_profile_facts(
+                    dfs,
+                    list(local_pack_features.get("top_local_pack_items") or []),
+                    cbsa_code=cbsa,
+                    niche_normalized=service_key,
+                    keyword=local_pack_keyword,
+                    location_code=loc_code_for_serp,
+                    snapshot_date=snapshot,
+                )
+                gbp_profile_rows = gbp_result.rows
+                for failure in gbp_result.failures:
+                    stats.record_failure(niche, cbsa, "gbp_profile_partial", failure)
 
             organic_telemetry: dict[str, Any] = {}
             if collect_organic:
@@ -1376,8 +1583,6 @@ async def score_one(
 
             # 3) Build seo_facts rows
             rows = []
-            snapshot = date.today().isoformat()
-            service_key = persistence_niche_key(niche)
             for kw in actionable:
                 v = volume_by_kw.get(kw["keyword"].lower(), {})
                 sv = v.get("search_volume")
@@ -1416,6 +1621,12 @@ async def score_one(
                 rows.append(row)
 
             # 4) Persist
+            persist_gbp_profile_rows(
+                gbp_profile_rows,
+                stats=stats,
+                niche=niche,
+                cbsa=cbsa,
+            )
             if rows:
                 status, body = upsert_facts(rows)
                 if status >= 300:
@@ -1520,11 +1731,17 @@ async def main():
             pairs,
             require_v2_persistence=args.require_v2_persistence,
         )
-    if args.preflight_only and (args.collect_organic_telemetry or args.collect_review_velocity):
-        log.info("preflight-only skips organic telemetry and review velocity collection")
+    if args.preflight_only and (
+        args.collect_organic_telemetry
+        or args.collect_review_velocity
+        or args.collect_gbp_profile
+    ):
+        log.info(
+            "preflight-only skips organic telemetry, review velocity, and GBP profile collection"
+        )
 
     log.info(
-        "%s sample: %s niches × %s paid-eligible metros = %s reports%s%s%s",
+        "%s sample: %s niches × %s paid-eligible metros = %s reports%s%s%s%s",
         args.sample_mode,
         len(niches),
         len(selected_metros),
@@ -1532,6 +1749,7 @@ async def main():
         " (preflight only)" if args.preflight_only else "",
         " + organic telemetry" if args.collect_organic_telemetry and not args.preflight_only else "",
         " + review velocity" if args.collect_review_velocity and not args.preflight_only else "",
+        " + GBP profile" if args.collect_gbp_profile and not args.preflight_only else "",
     )
 
     # Disable persistent cache: it reads NEXT_PUBLIC_SUPABASE_URL (prod) but the
@@ -1557,6 +1775,9 @@ async def main():
                 collect_organic=args.collect_organic_telemetry and not args.preflight_only,
                 collect_review_velocity_flag=(
                     args.collect_review_velocity and not args.preflight_only
+                ),
+                collect_gbp_profile_flag=(
+                    args.collect_gbp_profile and not args.preflight_only
                 ),
                 organic_telemetry_limit=args.organic_telemetry_limit,
                 review_depth=args.review_depth,
