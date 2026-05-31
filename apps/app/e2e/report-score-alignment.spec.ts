@@ -6,6 +6,7 @@ type ReportListRow = {
   niche: string;
   city: string;
   opportunity_score: number | null;
+  spec_version: string;
 };
 
 type ScoreMap = Record<string, number | undefined>;
@@ -13,6 +14,7 @@ type ScoreMap = Record<string, number | undefined>;
 type ReportDetailResponse = {
   status?: string;
   report?: {
+    spec_version?: string;
     metros?: Array<{
       scores?: ScoreMap;
     }>;
@@ -45,9 +47,9 @@ test.describe("Report score alignment", () => {
     expect(listBody.status).toBe("success");
     const report = listBody.reports?.find(
       (row): row is ReportListRow & { opportunity_score: number } =>
-        typeof row.opportunity_score === "number",
+        typeof row.opportunity_score === "number" && row.spec_version === "2.0",
     );
-    if (!report) throw new Error("expected at least one scored report row");
+    if (!report) throw new Error("expected at least one V2 scored report row");
 
     const rowLink = page.getByRole("link", {
       name: `Open report for ${report.niche} in ${report.city}`,
@@ -66,12 +68,14 @@ test.describe("Report score alignment", () => {
     expect(detailBody.status).toBe("success");
     expect(scores, "expected report detail scores").toBeTruthy();
     expect(report.opportunity_score).toBe(Math.round(scores?.opportunity as number));
+    expect(detailBody.report?.spec_version).toBe(report.spec_version);
 
     await page.goto(`/reports/${report.id}`);
     await page.waitForLoadState("networkidle");
 
     const headline = page.getByRole("region", { name: "Headline scores" });
     await expect(headline).toBeVisible();
+    await expect(page.getByText(`v${report.spec_version}`, { exact: true })).toBeVisible();
     const headlineText = await headline.textContent();
 
     for (const [label, key] of SCORE_LABELS) {
