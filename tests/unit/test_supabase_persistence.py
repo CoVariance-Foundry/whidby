@@ -699,7 +699,7 @@ def test_evidence_family_from_endpoint_maps_dataforseo_families() -> None:
     assert evidence_family_from_endpoint("serp/google/maps/live/advanced") == "maps"
     assert evidence_family_from_endpoint("business_data/google/reviews/task_post") == "reviews"
     assert evidence_family_from_endpoint("backlinks/summary/live") == "backlinks"
-    assert evidence_family_from_endpoint("on_page/lighthouse/live") == "lighthouse"
+    assert evidence_family_from_endpoint("on_page/lighthouse/live/json") == "lighthouse"
     assert evidence_family_from_endpoint("serp/google/locations") is None
 
 
