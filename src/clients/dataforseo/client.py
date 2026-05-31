@@ -210,6 +210,7 @@ class DataForSEOClient:
         keyword: str | None = None,
         location_code: int | None = None,
         depth: int = 20,
+        language_code: str | None = None,
         *,
         cid: str | int | None = None,
         place_id: str | None = None,
@@ -220,7 +221,12 @@ class DataForSEOClient:
         if not any((keyword, cid, place_id)):
             raise ValueError("keyword, cid, or place_id is required for Google reviews")
 
-        params: dict[str, Any] = {"location_code": location_code, "depth": depth}
+        params: dict[str, Any] = {
+            "location_code": location_code,
+            "depth": depth,
+        }
+        if language_code:
+            params["language_code"] = language_code
         if place_id:
             params["place_id"] = place_id
         elif cid:

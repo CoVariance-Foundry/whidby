@@ -50,6 +50,7 @@ from src.clients.supabase_persistence import (  # noqa: E402
     build_seo_evidence_artifact_rows_from_cost_records,
     evidence_family_from_endpoint,
 )
+from src.config.constants import DFS_DEFAULT_LANGUAGE_CODE  # noqa: E402
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
 from src.pipeline.review_velocity import compute_reviews_per_month  # noqa: E402
 from scripts.utils.supabase_guard import supabase_project_ref  # noqa: E402
@@ -577,15 +578,24 @@ def parse_serp_items(serp_data: Any) -> dict[str, Any]:
             flags["aio_present"] = True
         elif t == "local_pack":
             flags["local_pack_present"] = True
-            flags["local_pack_position"] = item.get("rank_absolute") or flags["local_pack_position"]
-            for sub in (item.get("items") or [])[:3]:
-                flags["top_local_pack_items"].append({
+            if flags["local_pack_position"] is None:
+                flags["local_pack_position"] = item.get("rank_absolute")
+            local_pack_items = (
+                item.get("items") if item.get("items") is not None else [item]
+            )
+            for sub in local_pack_items:
+                if len(flags["top_local_pack_items"]) >= 3:
+                    break
+                rating = sub.get("rating") or {}
+                listing = {
                     "title": sub.get("title"),
-                    "rating": (sub.get("rating") or {}).get("value"),
-                    "rating_count": (sub.get("rating") or {}).get("votes_count"),
+                    "rating": rating.get("value"),
+                    "rating_count": rating.get("votes_count"),
                     "place_id": sub.get("place_id"),
-                    "cid": sub.get("cid"),
-                })
+                    "cid": sub.get("cid") or sub.get("data_cid"),
+                }
+                if any(value is not None for value in listing.values()):
+                    flags["top_local_pack_items"].append(listing)
         elif t == "featured_snippet":
             flags["featured_snippet_present"] = True
         elif t == "people_also_ask":
@@ -791,6 +801,7 @@ async def collect_top3_review_velocity(
             keyword=keyword,
             location_code=location_code,
             depth=depth,
+            language_code=DFS_DEFAULT_LANGUAGE_CODE,
             cid=cid,
             place_id=place_id,
             sort_by="newest",
