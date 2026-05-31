@@ -40,3 +40,44 @@ def test_assembler_preserves_multi_metro_partitioning() -> None:
     assert result.meta.total_cost_usd == 0.1
     assert result.meta.total_api_calls == 2
 
+
+def test_assembler_carries_dependent_task_provenance_on_review_rows() -> None:
+    request = build_collection_request(SAMPLE_KEYWORDS, [SAMPLE_METROS[0]], "balanced")
+    state = ExecutionState(
+        task_results={
+            "dep-review": [
+                {
+                    "rating": {"value": 4.7, "votes_count": 88},
+                    "items": [
+                        {"timestamp": "2026-05-01T00:00:00+00:00"},
+                        {"timestamp": "2026-05-20T00:00:00+00:00"},
+                    ],
+                }
+            ]
+        },
+        task_categories={"dep-review": "google_reviews"},
+        task_metros={"dep-review": "38060"},
+        task_payloads={
+            "dep-review": {
+                "cid": "cid-1",
+                "place_id": "place-1",
+                "business_name": "Phoenix Roof Pros",
+                "source_query": "roof repair phoenix",
+                "preferred_identifier_mode": "cid",
+                "review_retrieval_mode": "cid",
+                "location_code": 1000013,
+            }
+        },
+        task_costs={"dep-review": 0.005},
+        total_api_calls=1,
+    )
+
+    result = assemble_raw_collection_result(request, state, duration_seconds=0.2)
+    row = result.metros["38060"].google_reviews[0]
+
+    assert row["cid"] == "cid-1"
+    assert row["place_id"] == "place-1"
+    assert row["business_name"] == "Phoenix Roof Pros"
+    assert row["source_query"] == "roof repair phoenix"
+    assert row["review_retrieval_mode"] == "cid"
+    assert row["location_code"] == 1000013
