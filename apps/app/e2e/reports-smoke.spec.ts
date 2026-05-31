@@ -48,6 +48,13 @@ test.describe("Reports page smoke test", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.locator(".sidebar, [data-testid='sidebar']").first()).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: /^dashboard$/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page
+        .locator('[aria-label="Authenticated product navigation"]')
+        .getByRole("link", { name: /^reports$/i }),
+    ).toBeVisible({ timeout: 10_000 });
   });
 });
