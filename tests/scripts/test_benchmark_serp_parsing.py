@@ -1,3 +1,5 @@
+from urllib import error as urlerror
+
 import pytest
 
 from scripts.benchmarks import run_pilot
@@ -437,6 +439,28 @@ def test_require_dfs_rejects_low_signal_targets():
     assert excinfo.value.code == 2
 
 
+def test_limit_pairs_applies_before_paid_target_validation():
+    selected_metros = [
+        {
+            "cbsa_code": "11111",
+            "cbsa_name": "Eligible Metro",
+            "paid_eligible": True,
+        },
+        {
+            "cbsa_code": "22222",
+            "cbsa_name": "Low Signal Metro",
+            "paid_eligible": False,
+            "benchmark_exclusion_reason": "population_too_small",
+        },
+    ]
+    pairs = run_pilot.build_pairs(["auto repair"], selected_metros)[:1]
+
+    run_pilot.validate_paid_targets(
+        [metro for _niche, metro in pairs],
+        require_dfs=True,
+    )
+
+
 def test_require_v2_persistence_checks_score_and_fact_rows(monkeypatch):
     calls = []
 
@@ -468,6 +492,36 @@ def test_require_v2_persistence_checks_score_and_fact_rows(monkeypatch):
             {"cbsa_code": "12345", "niche_normalized": "auto repair"},
         ),
     ]
+
+
+def test_require_v2_persistence_network_error_exits_cleanly(monkeypatch):
+    def fake_has_row(table, filters):  # noqa: ANN001
+        raise RuntimeError(f"{table} lookup failed: URLError: timeout")
+
+    monkeypatch.setattr(run_pilot, "postgrest_has_row", fake_has_row)
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_v2_persistence(
+            [("auto repair", {"cbsa_code": "12345"})],
+            require_v2_persistence=True,
+        )
+
+    assert excinfo.value.code == 2
+
+
+def test_postgrest_has_row_wraps_network_errors(monkeypatch):
+    monkeypatch.setattr(run_pilot, "SUPABASE_KEY", "service-key")
+
+    def fake_urlopen(req, timeout):  # noqa: ANN001
+        raise urlerror.URLError("dns failure")
+
+    monkeypatch.setattr("scripts.benchmarks.run_pilot.urlreq.urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="seo_facts lookup failed"):
+        run_pilot.postgrest_has_row(
+            "seo_facts",
+            {"cbsa_code": "12345", "niche_normalized": "auto repair"},
+        )
 
 
 @pytest.mark.asyncio

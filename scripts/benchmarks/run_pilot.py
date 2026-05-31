@@ -326,6 +326,10 @@ def postgrest_has_row(table: str, filters: dict[str, str]) -> bool:
     except urlerror.HTTPError as exc:
         detail = exc.read().decode()[:200]
         raise RuntimeError(f"{table} lookup failed: status={exc.code} {detail}") from exc
+    except (urlerror.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", None)
+        detail = str(reason) if reason is not None else str(exc)
+        raise RuntimeError(f"{table} lookup failed: {exc.__class__.__name__}: {detail}") from exc
 
 
 def validate_v2_persistence(
@@ -342,10 +346,13 @@ def validate_v2_persistence(
         cbsa_code = str(metro.get("cbsa_code") or "")
         filters = {"cbsa_code": cbsa_code, "niche_normalized": niche}
         pair_label = f"{niche}@{cbsa_code}"
-        if not postgrest_has_row("metro_score_v2", filters):
-            missing.append(f"{pair_label}: metro_score_v2")
-        if not postgrest_has_row("seo_facts", filters):
-            missing.append(f"{pair_label}: seo_facts")
+        try:
+            if not postgrest_has_row("metro_score_v2", filters):
+                missing.append(f"{pair_label}: metro_score_v2")
+            if not postgrest_has_row("seo_facts", filters):
+                missing.append(f"{pair_label}: seo_facts")
+        except RuntimeError as exc:
+            fail_cli(str(exc))
 
     if not missing:
         return
@@ -1321,8 +1328,6 @@ async def main():
             for metro in selected_metros
             if metro.get("population_class") in allowed_classes
         ]
-    validate_paid_targets(selected_metros, require_dfs=args.require_dfs)
-
     niches = select_niches(args.niche)
     pairs = build_pairs(niches, selected_metros)
     if args.limit_pairs is not None:
@@ -1330,6 +1335,7 @@ async def main():
 
     if not pairs:
         fail_cli("filters produced zero (niche, metro) pairs")
+    validate_paid_targets([metro for _niche, metro in pairs], require_dfs=args.require_dfs)
 
     if not ((SUPABASE_KEY or args.preflight_only) and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
         log.error("missing env vars — check .env")
