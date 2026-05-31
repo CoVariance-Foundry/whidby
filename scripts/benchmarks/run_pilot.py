@@ -854,6 +854,19 @@ def propagate_head_feature(
         features[key] = value
 
 
+def first_local_pack_features(
+    serp_features_by_kw: dict[str, dict[str, Any]],
+    *,
+    fallback_keyword: str,
+    fallback_features: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    """Return the first queried head SERP with usable local-pack listings."""
+    for keyword, features in serp_features_by_kw.items():
+        if features.get("top_local_pack_items"):
+            return keyword, features
+    return fallback_keyword, fallback_features
+
+
 async def collect_organic_telemetry(
     dfs: DataForSEOClient,
     organic_targets: list[dict[str, Any]],
@@ -1005,7 +1018,7 @@ async def collect_top3_gbp_profile_facts(
             "business_name": title,
             "cid": item.get("cid"),
             "place_id": item.get("place_id"),
-            "review_retrieval_mode": "title_verified",
+            "review_retrieval_mode": "title",
             "source_query": keyword,
             "dataforseo_location_code": location_code,
             "result_type": "local_pack",
@@ -1115,6 +1128,8 @@ def upsert_facts(rows: list[dict]) -> tuple[int, str]:
             return resp.status, resp.read().decode()
     except urlerror.HTTPError as e:
         return e.code, e.read().decode()[:500]
+    except (urlerror.URLError, TimeoutError, OSError) as e:
+        return 599, str(e)[:500]
 
 
 def upsert_evidence_artifacts(rows: list[dict]) -> tuple[int, str]:
@@ -1159,6 +1174,8 @@ def upsert_local_pack_listing_facts(rows: list[dict]) -> tuple[int, str]:
             return resp.status, resp.read().decode()
     except urlerror.HTTPError as e:
         return e.code, e.read().decode()[:500]
+    except (urlerror.URLError, TimeoutError, OSError) as e:
+        return 599, str(e)[:500]
 
 
 def evidence_artifacts_from_dfs_cost_log(
@@ -1316,7 +1333,7 @@ def _business_name_token_set(value: Any) -> set[str]:
     return {
         token
         for token in re.findall(r"[a-z0-9]+", str(value or "").lower())
-        if token not in {"the", "and", "llc", "inc", "co", "company"}
+        if len(token) > 1 and token not in {"the", "and", "llc", "inc", "co", "company"}
     }
 
 
@@ -1478,10 +1495,15 @@ async def score_one(
             head_features = dict(
                 serp_features_by_kw.get(head_feature_keyword, {})
             )
-            if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
+            local_pack_keyword, local_pack_features = first_local_pack_features(
+                serp_features_by_kw,
+                fallback_keyword=head_feature_keyword,
+                fallback_features=head_features,
+            )
+            if collect_review_velocity_flag and local_pack_features.get("top_local_pack_items"):
                 velocity = await collect_top3_review_velocity(
                     dfs,
-                    list(head_features.get("top_local_pack_items") or []),
+                    list(local_pack_features.get("top_local_pack_items") or []),
                     location_code=loc_code_for_serp,
                     depth=review_depth,
                 )
@@ -1496,13 +1518,13 @@ async def score_one(
             gbp_profile_rows: list[dict[str, Any]] = []
             snapshot = date.today().isoformat()
             service_key = persistence_niche_key(niche)
-            if collect_gbp_profile_flag and head_features.get("top_local_pack_items"):
+            if collect_gbp_profile_flag and local_pack_features.get("top_local_pack_items"):
                 gbp_result = await collect_top3_gbp_profile_facts(
                     dfs,
-                    list(head_features.get("top_local_pack_items") or []),
+                    list(local_pack_features.get("top_local_pack_items") or []),
                     cbsa_code=cbsa,
                     niche_normalized=service_key,
-                    keyword=head_feature_keyword,
+                    keyword=local_pack_keyword,
                     location_code=loc_code_for_serp,
                     snapshot_date=snapshot,
                 )
@@ -1570,21 +1592,34 @@ async def score_one(
                     return 0
                 stats.facts_inserted += len(rows)
                 if gbp_profile_rows:
-                    local_status, local_body = upsert_local_pack_listing_facts(
-                        gbp_profile_rows
-                    )
-                    if local_status >= 300:
+                    try:
+                        local_status, local_body = upsert_local_pack_listing_facts(
+                            gbp_profile_rows
+                        )
+                    except Exception as exc:  # noqa: BLE001
                         log.warning(
-                            "  local_pack_listing_facts upsert failed (non-fatal): %s %s",
-                            local_status,
-                            local_body[:200],
+                            "  local_pack_listing_facts upsert failed (non-fatal): %s",
+                            exc,
                         )
                         stats.record_failure(
                             niche,
                             cbsa,
                             "gbp_profile_upsert_failed_non_fatal",
-                            f"status={local_status}",
+                            type(exc).__name__,
                         )
+                    else:
+                        if local_status >= 300:
+                            log.warning(
+                                "  local_pack_listing_facts upsert failed (non-fatal): %s %s",
+                                local_status,
+                                local_body[:200],
+                            )
+                            stats.record_failure(
+                                niche,
+                                cbsa,
+                                "gbp_profile_upsert_failed_non_fatal",
+                                f"status={local_status}",
+                            )
                 stats.reports_succeeded += 1
                 try:
                     evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(

@@ -368,7 +368,7 @@ async def test_collect_top3_gbp_profile_facts_computes_completeness_rows():
             "business_name": "A Auto",
             "cid": "cid-1",
             "place_id": "place-1",
-            "review_retrieval_mode": "title_verified",
+            "review_retrieval_mode": "title",
             "source_query": "auto repair",
             "dataforseo_location_code": 12345,
             "result_type": "local_pack",
@@ -406,6 +406,10 @@ async def test_collect_top3_gbp_profile_facts_skips_title_mismatches():
 
     assert result.rows == []
     assert result.failures == ["A Auto:profile_title_mismatch"]
+
+
+def test_profile_match_ignores_single_character_name_tokens():
+    assert run_pilot._profile_matches_local_listing({"title": "A Roadside"}, "A") is False
 
 
 @pytest.mark.asyncio
@@ -862,6 +866,82 @@ async def test_score_one_persists_gbp_profile_rows_when_flagged(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_score_one_collects_gbp_profile_from_alternate_head_serp(monkeypatch):
+    class _ExpansionCache:
+        async def get(self, niche):
+            return {
+                "expanded_keywords": [
+                    {
+                        "keyword": niche,
+                        "tier": 1,
+                        "intent": "commercial",
+                        "actionable": True,
+                    },
+                    {
+                        "keyword": "auto shop",
+                        "tier": 1,
+                        "intent": "commercial",
+                        "actionable": True,
+                    },
+                ]
+            }
+
+    class _AlternateLocalPackDFS(_FakeDFS):
+        async def serp_organic(self, keyword, location_code, depth=20):
+            if keyword == "auto shop":
+                return APIResponse(
+                    status="ok",
+                    data=[{
+                        "items": [{
+                            "type": "local_pack",
+                            "rank_absolute": 1,
+                            "items": [{
+                                "title": "Second Auto",
+                                "rating": {"value": 4.8, "votes_count": 12},
+                                "cid": "cid-2",
+                            }],
+                        }]
+                    }],
+                )
+            return APIResponse(status="ok", data=[{"items": []}])
+
+    calls = []
+
+    def fake_upsert_facts(rows):
+        calls.append(("facts", rows))
+        return 201, ""
+
+    def fake_upsert_local(rows):
+        calls.append(("local_pack", rows))
+        return 201, ""
+
+    monkeypatch.setattr(run_pilot, "upsert_facts", fake_upsert_facts)
+    monkeypatch.setattr(run_pilot, "upsert_local_pack_listing_facts", fake_upsert_local)
+
+    dfs = _AlternateLocalPackDFS()
+    stats = run_pilot.RunStats()
+    inserted = await run_pilot.score_one(
+        "auto repair",
+        {
+            "cbsa_code": "12345",
+            "cbsa_name": "Test Metro",
+            "dataforseo_location_codes": [12345],
+        },
+        _ExpansionCache(),
+        dfs,
+        stats,
+        collect_gbp_profile_flag=True,
+    )
+
+    assert inserted == 2
+    assert dfs.gbp_calls == [{"keyword": "Second Auto", "location_code": 12345}]
+    assert [call[0] for call in calls] == ["facts", "local_pack"]
+    assert calls[1][1][0]["keyword"] == "auto shop"
+    assert calls[1][1][0]["source_query"] == "auto shop"
+    assert stats.reports_succeeded == 1
+
+
+@pytest.mark.asyncio
 async def test_score_one_records_gbp_upsert_failure_after_evidence(monkeypatch):
     class _ExpansionCache:
         async def get(self, niche):
@@ -917,6 +997,90 @@ async def test_score_one_records_gbp_upsert_failure_after_evidence(monkeypatch):
     def fake_upsert_local(rows):
         calls.append(("local_pack", rows))
         return 500, "nope"
+
+    def fake_upsert_evidence_artifacts(rows):
+        calls.append(("evidence", rows))
+        return 201, ""
+
+    monkeypatch.setattr(run_pilot, "uuid4", lambda: "fixed")
+    monkeypatch.setattr(run_pilot, "upsert_facts", fake_upsert_facts)
+    monkeypatch.setattr(run_pilot, "upsert_local_pack_listing_facts", fake_upsert_local)
+    monkeypatch.setattr(run_pilot, "upsert_evidence_artifacts", fake_upsert_evidence_artifacts)
+
+    stats = run_pilot.RunStats()
+    inserted = await run_pilot.score_one(
+        "auto repair",
+        {
+            "cbsa_code": "12345",
+            "cbsa_name": "Test Metro",
+            "dataforseo_location_codes": [12345],
+        },
+        _ExpansionCache(),
+        _LocalPackDFS(),
+        stats,
+        collect_gbp_profile_flag=True,
+    )
+
+    assert inserted == 1
+    assert [call[0] for call in calls] == ["facts", "local_pack", "evidence"]
+    assert stats.reports_succeeded == 1
+    assert stats.reports_failed == 0
+    assert stats.failure_reasons == {"gbp_profile_upsert_failed_non_fatal": 1}
+
+
+@pytest.mark.asyncio
+async def test_score_one_treats_gbp_upsert_transport_error_as_nonfatal(monkeypatch):
+    class _ExpansionCache:
+        async def get(self, niche):
+            return {
+                "expanded_keywords": [
+                    {
+                        "keyword": niche,
+                        "tier": 1,
+                        "intent": "commercial",
+                        "actionable": True,
+                    }
+                ]
+            }
+
+    class _LocalPackDFS(_FakeDFS):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cost_log = [
+                CostRecord(
+                    endpoint="business_data/google/my_business_info/live",
+                    task_id="gbp-current",
+                    cost=0.004,
+                    cached=False,
+                    latency_ms=120,
+                    parameters={"keyword": "A Auto", "location_code": 12345},
+                    collected_at="2026-05-31T14:00:01+00:00",
+                    collection_context_id="benchmark:auto repair:12345:fixed",
+                    response_hash="gbp-hash",
+                )
+            ]
+
+        async def serp_organic(self, keyword, location_code, depth=20):
+            return APIResponse(
+                status="ok",
+                data=[{
+                    "items": [{
+                        "type": "local_pack",
+                        "rank_absolute": 1,
+                        "items": [{"title": "A Auto"}],
+                    }]
+                }],
+            )
+
+    calls = []
+
+    def fake_upsert_facts(rows):
+        calls.append(("facts", rows))
+        return 201, ""
+
+    def fake_upsert_local(rows):
+        calls.append(("local_pack", rows))
+        raise urlerror.URLError("connection reset")
 
     def fake_upsert_evidence_artifacts(rows):
         calls.append(("evidence", rows))
