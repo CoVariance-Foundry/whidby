@@ -265,6 +265,15 @@ def fail_cli(message: str) -> None:
     sys.exit(2)
 
 
+def persistence_niche_key(niche: str) -> str:
+    """Normalize pilot labels to the persisted scoring service key."""
+    text = " ".join(niche.strip().lower().split())
+    for suffix in (" services", " service", " contractors", " contractor", " companies", " company"):
+        if text.endswith(suffix):
+            return text[: -len(suffix)].strip()
+    return text
+
+
 def validate_expected_project_ref(expected_project_ref: str | None) -> None:
     """Fail fast when a caller pins an expected Supabase project ref."""
     if not expected_project_ref:
@@ -288,10 +297,10 @@ def validate_paid_targets(metros: list[dict[str, Any]], *, require_dfs: bool) ->
         (
             metro.get("cbsa_code") or "<unknown>",
             metro.get("cbsa_name") or "<unknown>",
-            metro.get("benchmark_exclusion_reason") or "not_paid_eligible",
+            native_dfs_exclusion_reason(metro),
         )
         for metro in metros
-        if not metro.get("paid_eligible")
+        if native_dfs_exclusion_reason(metro) is not None
     ]
     if not ineligible:
         return
@@ -302,6 +311,28 @@ def validate_paid_targets(metros: list[dict[str, Any]], *, require_dfs: bool) ->
     )
     suffix = f"; {len(ineligible) - 5} more" if len(ineligible) > 5 else ""
     fail_cli(f"--require-dfs selected ineligible benchmark metros: {examples}{suffix}")
+
+
+def native_dfs_exclusion_reason(metro: dict[str, Any]) -> str | None:
+    """Return why a metro is not a native paid DataForSEO benchmark target."""
+    population_class = metro.get("population_class")
+    source = metro.get("_dfs_source") or "native"
+    loc_codes = list(
+        metro.get("keyword_volume_location_codes")
+        or metro.get("dataforseo_location_codes")
+        or []
+    )
+    if population_class in LOW_SIGNAL_POPULATION_CLASSES:
+        return "population_too_small"
+    if population_class not in BENCHMARK_PAID_POPULATION_CLASSES:
+        return "population_too_small"
+    if source != "native":
+        return "no_native_dfs_code"
+    if not loc_codes:
+        return "no_native_dfs_code"
+    if not metro.get("paid_eligible"):
+        return metro.get("benchmark_exclusion_reason") or "not_paid_eligible"
+    return None
 
 
 def postgrest_has_row(table: str, filters: dict[str, str]) -> bool:
@@ -344,7 +375,8 @@ def validate_v2_persistence(
     missing: list[str] = []
     for niche, metro in pairs:
         cbsa_code = str(metro.get("cbsa_code") or "")
-        filters = {"cbsa_code": cbsa_code, "niche_normalized": niche}
+        service_key = persistence_niche_key(niche)
+        filters = {"cbsa_code": cbsa_code, "niche_normalized": service_key}
         pair_label = f"{niche}@{cbsa_code}"
         try:
             if not postgrest_has_row("metro_score_v2", filters):

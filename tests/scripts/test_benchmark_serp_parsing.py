@@ -439,13 +439,35 @@ def test_require_dfs_rejects_low_signal_targets():
     assert excinfo.value.code == 2
 
 
+def test_require_dfs_rejects_state_fallback_even_when_escape_hatch_marks_paid():
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_paid_targets(
+            [
+                {
+                    "cbsa_code": "12345",
+                    "cbsa_name": "Borrowed Code Metro",
+                    "population_class": "medium_100_300k",
+                    "_dfs_source": "state_borrow",
+                    "dataforseo_location_codes": [101],
+                    "paid_eligible": True,
+                }
+            ],
+            require_dfs=True,
+        )
+
+    assert excinfo.value.code == 2
+
+
 def test_limit_pairs_applies_before_paid_target_validation():
     selected_metros = [
-        {
-            "cbsa_code": "11111",
-            "cbsa_name": "Eligible Metro",
-            "paid_eligible": True,
-        },
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Eligible Metro",
+                "population_class": "medium_100_300k",
+                "_dfs_source": "native",
+                "dataforseo_location_codes": [101],
+                "paid_eligible": True,
+            },
         {
             "cbsa_code": "22222",
             "cbsa_name": "Low Signal Metro",
@@ -474,7 +496,7 @@ def test_require_v2_persistence_checks_score_and_fact_rows(monkeypatch):
         run_pilot.validate_v2_persistence(
             [
                 (
-                    "auto repair",
+                    "roofing contractor",
                     {"cbsa_code": "12345", "cbsa_name": "Test Metro"},
                 )
             ],
@@ -485,11 +507,11 @@ def test_require_v2_persistence_checks_score_and_fact_rows(monkeypatch):
     assert calls == [
         (
             "metro_score_v2",
-            {"cbsa_code": "12345", "niche_normalized": "auto repair"},
+            {"cbsa_code": "12345", "niche_normalized": "roofing"},
         ),
         (
             "seo_facts",
-            {"cbsa_code": "12345", "niche_normalized": "auto repair"},
+            {"cbsa_code": "12345", "niche_normalized": "roofing"},
         ),
     ]
 
