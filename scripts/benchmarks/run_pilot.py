@@ -28,6 +28,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import time
 from contextlib import nullcontext
@@ -88,6 +89,26 @@ PILOT_NICHES = [
     "water damage restoration",
     "locksmith",
 ]
+
+CORE_SERVICE_NICHES = [
+    "roofing",
+    "plumbing",
+    "hvac",
+    "tree service",
+    "auto repair",
+    "water damage restoration",
+    "electrician",
+    "locksmith",
+]
+
+SERVICE_KEY_ALIASES = {
+    "plumber": "plumbing",
+    "plumbing services": "plumbing",
+    "roofing contractor": "roofing",
+    "roofing contractors": "roofing",
+    "roofing services": "roofing",
+    "tree services": "tree service",
+}
 
 # Pilot picks 20 metros across pop classes (representative spread)
 PILOT_METROS_PER_CLASS = {
@@ -156,6 +177,12 @@ BENCHMARK_PAID_POPULATION_CLASSES = {
     "medium_100_300k",
 }
 LOW_SIGNAL_POPULATION_CLASSES = {"small_50_100k", "micro_under_50k"}
+UNRESOLVED_DFS_MATCH_CONFIDENCE = {
+    "ambiguous",
+    "invalid_existing_code",
+    "no_match",
+}
+CBSA_CODE_RE = re.compile(r"^\d{5}$")
 
 
 def positive_int(value: str) -> int:
@@ -182,6 +209,15 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=None,
         help="Population class to include. Repeat to include multiple classes.",
+    )
+    parser.add_argument(
+        "--cbsa-code",
+        action="append",
+        default=None,
+        help=(
+            "Fetch and run exact production metro CBSA code(s) from Supabase. "
+            "Repeat to target a bounded telemetry batch."
+        ),
     )
     parser.add_argument(
         "--sample-mode",
@@ -269,9 +305,15 @@ def fail_cli(message: str) -> None:
 def persistence_niche_key(niche: str) -> str:
     """Normalize pilot labels to the persisted scoring service key."""
     text = " ".join(niche.strip().lower().split())
-    for suffix in (" services", " service", " contractors", " contractor", " companies", " company"):
+    if text in SERVICE_KEY_ALIASES:
+        return SERVICE_KEY_ALIASES[text]
+    if text in CORE_SERVICE_NICHES:
+        return text
+    for suffix in (" services", " contractors", " contractor", " companies", " company"):
         if text.endswith(suffix):
             return text[: -len(suffix)].strip()
+    if text.endswith(" service"):
+        return text[: -len(" service")].strip()
     return text
 
 
@@ -399,12 +441,21 @@ def select_niches(requested: list[str] | None) -> list[str]:
     if not requested:
         return PILOT_NICHES
 
+    allowed_labels = set(PILOT_NICHES) | set(CORE_SERVICE_NICHES)
+    allowed_keys = {persistence_niche_key(niche) for niche in allowed_labels}
+    selected: list[str] = []
+    seen_keys: set[str] = set()
     for niche in requested:
-        if niche not in PILOT_NICHES:
-            allowed = ", ".join(PILOT_NICHES)
+        normalized = " ".join(niche.strip().lower().split())
+        service_key = persistence_niche_key(niche)
+        if normalized not in allowed_labels and service_key not in allowed_keys:
+            allowed = ", ".join(dict.fromkeys([*PILOT_NICHES, *CORE_SERVICE_NICHES]))
             fail_cli(f"unknown niche {niche!r}; expected one of: {allowed}")
+        if service_key not in seen_keys:
+            selected.append(service_key)
+            seen_keys.add(service_key)
 
-    return requested
+    return selected
 
 
 # -------------------------------------------------------------------
@@ -445,6 +496,10 @@ def mark_benchmark_eligibility(metro: dict[str, Any], *, include_low_signal: boo
         reason = "population_too_small"
     elif population_class not in BENCHMARK_PAID_POPULATION_CLASSES and not include_low_signal:
         reason = "population_too_small"
+    elif str(metro.get("dataforseo_location_match_confidence") or "") in (
+        UNRESOLVED_DFS_MATCH_CONFIDENCE
+    ):
+        reason = "no_native_dfs_code"
     elif source != "native" and not include_low_signal:
         reason = "no_native_dfs_code"
     elif not loc_codes:
@@ -496,6 +551,76 @@ def select_metros(
 def load_full_sample(metros_path: Path) -> list[dict[str, Any]]:
     """Load the full sampled metro plan."""
     return json.loads(metros_path.read_text())
+
+
+def fetch_metros_by_cbsa(
+    cbsa_codes: list[str],
+    *,
+    include_low_signal: bool,
+) -> list[dict[str, Any]]:
+    """Fetch exact production metros for a bounded benchmark telemetry batch."""
+    if not SUPABASE_KEY:
+        fail_cli("BENCHMARK_SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY is required for --cbsa-code")
+
+    requested = list(dict.fromkeys(code.strip() for code in cbsa_codes if code.strip()))
+    if not requested:
+        fail_cli("--cbsa-code did not include any non-empty CBSA codes")
+    invalid_codes = [code for code in requested if not CBSA_CODE_RE.fullmatch(code)]
+    if invalid_codes:
+        fail_cli(
+            "--cbsa-code must be a 5-digit numeric CBSA code: "
+            + ", ".join(invalid_codes)
+        )
+
+    select_columns = (
+        "cbsa_code,cbsa_name,state,population,population_class,"
+        "dataforseo_location_codes,dataforseo_location_match_confidence"
+    )
+    query = urlencode({
+        "select": select_columns,
+        "cbsa_code": f"in.({','.join(requested)})",
+    })
+    req = urlreq.Request(
+        f"{SUPABASE_URL}/rest/v1/metros?{query}",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+        },
+        method="GET",
+    )
+    try:
+        with urlreq.urlopen(req, timeout=30) as response:
+            rows = json.loads(response.read().decode() or "[]")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode()[:200]
+        fail_cli(f"metros lookup failed: status={exc.code} {detail}")
+    except (urlerror.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", None)
+        detail = str(reason) if reason is not None else str(exc)
+        fail_cli(f"metros lookup failed: {exc.__class__.__name__}: {detail}")
+
+    by_code = {str(row.get("cbsa_code") or ""): dict(row) for row in rows}
+    missing = [code for code in requested if code not in by_code]
+    if missing:
+        fail_cli("--cbsa-code not found in production metros: " + ", ".join(missing))
+
+    selected = [by_code[code] for code in requested]
+    for metro in selected:
+        metro["_dfs_source"] = (
+            "native" if metro.get("dataforseo_location_codes") else "none"
+        )
+        mark_benchmark_eligibility(metro, include_low_signal=include_low_signal)
+    ineligible = [
+        (
+            f"{metro.get('cbsa_code')}:"
+            f"{metro.get('benchmark_exclusion_reason') or 'not_paid_eligible'}"
+        )
+        for metro in selected
+        if not metro.get("paid_eligible")
+    ]
+    if ineligible and not include_low_signal:
+        fail_cli("--cbsa-code selected ineligible benchmark metros: " + ", ".join(ineligible))
+    return selected
 
 
 def validate_population_classes(
@@ -1252,6 +1377,7 @@ async def score_one(
             # 3) Build seo_facts rows
             rows = []
             snapshot = date.today().isoformat()
+            service_key = persistence_niche_key(niche)
             for kw in actionable:
                 v = volume_by_kw.get(kw["keyword"].lower(), {})
                 sv = v.get("search_volume")
@@ -1262,7 +1388,7 @@ async def score_one(
                 row_features = serp_features_by_kw.get(kw["keyword"], head_features)
                 row = {
                     "niche_keyword": niche,
-                    "niche_normalized": niche.lower(),
+                    "niche_normalized": service_key,
                     "cbsa_code": cbsa,
                     "keyword": kw["keyword"],
                     "keyword_tier": kw["tier"],
@@ -1357,13 +1483,19 @@ async def main():
         sys.exit(1)
 
     full_sample = load_full_sample(metros_path)
-    validate_population_classes(args.population_class, full_sample)
-
-    selected_metros = select_metros(
-        full_sample,
-        args.sample_mode,
-        include_low_signal=args.include_low_signal,
-    )
+    if args.cbsa_code:
+        selected_metros = fetch_metros_by_cbsa(
+            args.cbsa_code,
+            include_low_signal=args.include_low_signal,
+        )
+        validate_population_classes(args.population_class, selected_metros)
+    else:
+        validate_population_classes(args.population_class, full_sample)
+        selected_metros = select_metros(
+            full_sample,
+            args.sample_mode,
+            include_low_signal=args.include_low_signal,
+        )
     if args.population_class:
         allowed_classes = set(args.population_class)
         selected_metros = [

@@ -677,6 +677,7 @@ async def test_score_one_persists_facts_when_evidence_upsert_raises(monkeypatch)
     assert inserted == 1
     assert [call[0] for call in calls] == ["facts", "evidence"]
     assert calls[0][1][0]["keyword"] == "plumber"
+    assert calls[0][1][0]["niche_normalized"] == "plumbing"
     assert stats.facts_inserted == 1
     assert stats.reports_succeeded == 1
     assert stats.reports_failed == 0
