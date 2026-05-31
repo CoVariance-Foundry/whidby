@@ -988,180 +988,192 @@ async def score_one(
 
     with _dfs_capture_context(dfs, pair_context_id):
         try:
-        actionable = [
-            kw for kw in expansion["expanded_keywords"]
-            if kw["intent"] in ("transactional", "commercial") and kw.get("actionable")
-        ]
-        if not actionable:
-            log.warning(f"  no actionable keywords for {niche!r}")
-            stats.reports_failed += 1
-            stats.record_failure(niche, cbsa, "no_actionable_keywords")
-            return 0
-
-        # Resolve all DFS location codes for this metro (city + fallback)
-        loc_codes = (
-            metro.get("keyword_volume_location_codes")
-            or metro.get("dataforseo_location_codes")
-            or []
-        )
-        if not loc_codes:
-            log.info(f"  no DFS codes for {cbsa} (no state fallback); skipping")
-            stats.reports_failed += 1
-            stats.record_failure(niche, cbsa, "no_native_dfs_code")
-            return 0
-
-        # 1) Keyword volume — try each loc_code, take max volume per keyword
-        # (multi-code metros: LA has [1013962, 1013849, 1013549] = LA, Long Beach,
-        # Anaheim. Many keywords have data in only one of these. Max captures
-        # the principal-city signal.)
-        kw_strs = [k["keyword"] for k in actionable[:50]]
-        volume_result = await collect_keyword_volume(dfs, kw_strs, loc_codes)
-        for failure in volume_result.failures:
-            stats.record_failure(
-                niche,
-                cbsa,
-                failure.reason,
-                f"location_code={failure.location_code}; {failure.detail}",
-            )
-        volume_by_kw = volume_result.volume_by_kw
-        if volume_result.valid_location_codes:
-            metro["keyword_volume_location_codes"] = volume_result.valid_location_codes
-
-        if preflight_only:
-            if volume_by_kw:
-                stats.reports_succeeded += 1
-                log.info(
-                    "[preflight] %r × %s: %s keywords, valid volume codes=%s",
-                    niche,
-                    name,
-                    len(volume_by_kw),
-                    volume_result.valid_location_codes,
-                )
+            expansion = await expansion_cache.get(niche)
+            actionable = [
+                kw for kw in expansion["expanded_keywords"]
+                if kw["intent"] in ("transactional", "commercial") and kw.get("actionable")
+            ]
+            if not actionable:
+                log.warning(f"  no actionable keywords for {niche!r}")
+                stats.reports_failed += 1
+                stats.record_failure(niche, cbsa, "no_actionable_keywords")
                 return 0
-            stats.reports_failed += 1
-            if not volume_result.failures:
-                stats.record_failure(niche, cbsa, "keyword_volume_empty", "no usable rows")
-            return 0
 
-        # 2) SERP — query the highest-population code (loc_codes[0] is the
-        # principal city per seed ordering; it gives the cleanest SERP shape).
-        loc_code_for_serp = (metro.get("dataforseo_location_codes") or loc_codes)[0]
-        head_kws = [k for k in actionable if k["tier"] == 1][:2] or actionable[:2]
-        serp_features_by_kw: dict[str, dict] = {}
-        for k in head_kws:
-            serp_resp = await dfs.serp_organic(
-                keyword=k["keyword"], location_code=loc_code_for_serp, depth=20,
+            # Resolve all DFS location codes for this metro (city + fallback)
+            loc_codes = (
+                metro.get("keyword_volume_location_codes")
+                or metro.get("dataforseo_location_codes")
+                or []
             )
-            if serp_resp.status == "ok" and serp_resp.data:
-                serp_features_by_kw[k["keyword"]] = parse_serp_items(serp_resp.data)
+            if not loc_codes:
+                log.info(f"  no DFS codes for {cbsa} (no state fallback); skipping")
+                stats.reports_failed += 1
+                stats.record_failure(niche, cbsa, "no_native_dfs_code")
+                return 0
 
-        # Use head SERP features as the "metro-level" SERP signal for all keywords
-        # (actual SERP per long-tail keyword would 50x cost; head signal is the
-        # competitive landscape proxy for benchmarking)
-        head_features = dict(next(iter(serp_features_by_kw.values()), {})) if serp_features_by_kw else {}
-        if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
-            velocity = await collect_top3_review_velocity(
-                dfs,
-                list(head_features.get("top_local_pack_items") or []),
-                location_code=loc_code_for_serp,
-                depth=review_depth,
-            )
-            if velocity is not None:
-                propagate_head_feature(
-                    serp_features_by_kw,
-                    head_features,
-                    "top3_review_velocity_avg",
-                    velocity,
+            # 1) Keyword volume — try each loc_code, take max volume per keyword
+            # (multi-code metros: LA has [1013962, 1013849, 1013549] = LA, Long Beach,
+            # Anaheim. Many keywords have data in only one of these. Max captures
+            # the principal-city signal.)
+            kw_strs = [k["keyword"] for k in actionable[:50]]
+            volume_result = await collect_keyword_volume(dfs, kw_strs, loc_codes)
+            for failure in volume_result.failures:
+                stats.record_failure(
+                    niche,
+                    cbsa,
+                    failure.reason,
+                    f"location_code={failure.location_code}; {failure.detail}",
                 )
+            volume_by_kw = volume_result.volume_by_kw
+            if volume_result.valid_location_codes:
+                metro["keyword_volume_location_codes"] = volume_result.valid_location_codes
 
-        organic_telemetry: dict[str, Any] = {}
-        if collect_organic:
-            telemetry = await collect_organic_telemetry(
-                dfs,
-                list(head_features.get("organic_targets") or []),
-                limit=organic_telemetry_limit,
-            )
-            organic_telemetry = telemetry.fields
-            for failure in telemetry.failures:
-                stats.record_failure(niche, cbsa, "organic_telemetry_partial", failure)
+            if preflight_only:
+                if volume_by_kw:
+                    stats.reports_succeeded += 1
+                    log.info(
+                        "[preflight] %r × %s: %s keywords, valid volume codes=%s",
+                        niche,
+                        name,
+                        len(volume_by_kw),
+                        volume_result.valid_location_codes,
+                    )
+                    return 0
+                stats.reports_failed += 1
+                if not volume_result.failures:
+                    stats.record_failure(niche, cbsa, "keyword_volume_empty", "no usable rows")
+                return 0
 
-        # 3) Build seo_facts rows
-        rows = []
-        snapshot = date.today().isoformat()
-        for kw in actionable:
-            v = volume_by_kw.get(kw["keyword"].lower(), {})
-            sv = v.get("search_volume")
-            cpc = v.get("cpc")
-            if sv is None and cpc is None:
-                # No volume data — skip (DFS returned nothing for this kw)
-                continue
-            row_features = serp_features_by_kw.get(kw["keyword"], head_features)
-            row = {
-                "niche_keyword": niche,
-                "niche_normalized": niche.lower(),
-                "cbsa_code": cbsa,
-                "keyword": kw["keyword"],
-                "keyword_tier": kw["tier"],
-                "intent": kw["intent"],
-                "search_volume_monthly": sv,
-                "cpc_usd": float(cpc) if cpc is not None else None,
-                "aio_present": row_features.get("aio_present"),
-                "local_pack_present": row_features.get("local_pack_present"),
-                "local_pack_position": row_features.get("local_pack_position"),
-                "top3_review_count_min": row_features.get("top3_review_count_min"),
-                "top3_review_count_avg": row_features.get("top3_review_count_avg"),
-                "top3_review_velocity_avg": row_features.get("top3_review_velocity_avg"),
-                "top3_rating_avg": row_features.get("top3_rating_avg"),
-                "aggregator_count_top10": row_features.get("aggregator_count_top10"),
-                "local_biz_count_top10": row_features.get("local_biz_count_top10"),
-                "featured_snippet_present": row_features.get("featured_snippet_present"),
-                "paa_count": row_features.get("paa_count"),
-                "ads_present": row_features.get("ads_present"),
-                "lsa_present": row_features.get("lsa_present"),
-                "snapshot_date": snapshot,
-                "source": "orchestrator",
-            }
-            if organic_telemetry:
-                row.update(organic_telemetry)
-            rows.append(row)
-
-        # 4) Persist
-        if rows:
-            evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
-                dfs,
-                collection_context_id=pair_context_id,
-            )
-            if evidence_artifact_rows:
-                evidence_status, evidence_body = upsert_evidence_artifacts(
-                    evidence_artifact_rows
+            # 2) SERP — query the highest-population code (loc_codes[0] is the
+            # principal city per seed ordering; it gives the cleanest SERP shape).
+            loc_code_for_serp = (metro.get("dataforseo_location_codes") or loc_codes)[0]
+            head_kws = [k for k in actionable if k["tier"] == 1][:2] or actionable[:2]
+            serp_features_by_kw: dict[str, dict] = {}
+            for k in head_kws:
+                serp_resp = await dfs.serp_organic(
+                    keyword=k["keyword"], location_code=loc_code_for_serp, depth=20,
                 )
-                if evidence_status >= 300:
+                if serp_resp.status == "ok" and serp_resp.data:
+                    serp_features_by_kw[k["keyword"]] = parse_serp_items(serp_resp.data)
+
+            # Use head SERP features as the "metro-level" SERP signal for all keywords
+            # (actual SERP per long-tail keyword would 50x cost; head signal is the
+            # competitive landscape proxy for benchmarking)
+            head_features = dict(next(iter(serp_features_by_kw.values()), {})) if serp_features_by_kw else {}
+            if collect_review_velocity_flag and head_features.get("top_local_pack_items"):
+                velocity = await collect_top3_review_velocity(
+                    dfs,
+                    list(head_features.get("top_local_pack_items") or []),
+                    location_code=loc_code_for_serp,
+                    depth=review_depth,
+                )
+                if velocity is not None:
+                    propagate_head_feature(
+                        serp_features_by_kw,
+                        head_features,
+                        "top3_review_velocity_avg",
+                        velocity,
+                    )
+
+            organic_telemetry: dict[str, Any] = {}
+            if collect_organic:
+                telemetry = await collect_organic_telemetry(
+                    dfs,
+                    list(head_features.get("organic_targets") or []),
+                    limit=organic_telemetry_limit,
+                )
+                organic_telemetry = telemetry.fields
+                for failure in telemetry.failures:
+                    stats.record_failure(niche, cbsa, "organic_telemetry_partial", failure)
+
+            # 3) Build seo_facts rows
+            rows = []
+            snapshot = date.today().isoformat()
+            for kw in actionable:
+                v = volume_by_kw.get(kw["keyword"].lower(), {})
+                sv = v.get("search_volume")
+                cpc = v.get("cpc")
+                if sv is None and cpc is None:
+                    # No volume data — skip (DFS returned nothing for this kw)
+                    continue
+                row_features = serp_features_by_kw.get(kw["keyword"], head_features)
+                row = {
+                    "niche_keyword": niche,
+                    "niche_normalized": niche.lower(),
+                    "cbsa_code": cbsa,
+                    "keyword": kw["keyword"],
+                    "keyword_tier": kw["tier"],
+                    "intent": kw["intent"],
+                    "search_volume_monthly": sv,
+                    "cpc_usd": float(cpc) if cpc is not None else None,
+                    "aio_present": row_features.get("aio_present"),
+                    "local_pack_present": row_features.get("local_pack_present"),
+                    "local_pack_position": row_features.get("local_pack_position"),
+                    "top3_review_count_min": row_features.get("top3_review_count_min"),
+                    "top3_review_count_avg": row_features.get("top3_review_count_avg"),
+                    "top3_review_velocity_avg": row_features.get("top3_review_velocity_avg"),
+                    "top3_rating_avg": row_features.get("top3_rating_avg"),
+                    "aggregator_count_top10": row_features.get("aggregator_count_top10"),
+                    "local_biz_count_top10": row_features.get("local_biz_count_top10"),
+                    "featured_snippet_present": row_features.get("featured_snippet_present"),
+                    "paa_count": row_features.get("paa_count"),
+                    "ads_present": row_features.get("ads_present"),
+                    "lsa_present": row_features.get("lsa_present"),
+                    "snapshot_date": snapshot,
+                    "source": "orchestrator",
+                }
+                if organic_telemetry:
+                    row.update(organic_telemetry)
+                rows.append(row)
+
+            # 4) Persist
+            if rows:
+                status, body = upsert_facts(rows)
+                if status >= 300:
+                    log.error(f"  upsert failed: {status} {body[:200]}")
+                    stats.reports_failed += 1
+                    stats.record_failure(niche, cbsa, "upsert_failed", f"status={status}")
+                    return 0
+                stats.facts_inserted += len(rows)
+                stats.reports_succeeded += 1
+                try:
+                    evidence_artifact_rows = evidence_artifacts_from_dfs_cost_log(
+                        dfs,
+                        collection_context_id=pair_context_id,
+                    )
+                    if evidence_artifact_rows:
+                        evidence_status, evidence_body = upsert_evidence_artifacts(
+                            evidence_artifact_rows
+                        )
+                        if evidence_status >= 300:
+                            log.warning(
+                                "  evidence artifact upsert failed (non-fatal): %s %s",
+                                evidence_status,
+                                evidence_body[:200],
+                            )
+                            stats.record_failure(
+                                niche,
+                                cbsa,
+                                "evidence_upsert_failed_non_fatal",
+                                f"status={evidence_status}",
+                            )
+                except Exception as exc:
                     log.warning(
-                        "  evidence artifact upsert failed (non-fatal): %s %s",
-                        evidence_status,
-                        evidence_body[:200],
+                        "  evidence artifact upsert failed (non-fatal): %s",
+                        exc,
                     )
                     stats.record_failure(
                         niche,
                         cbsa,
                         "evidence_upsert_failed_non_fatal",
-                        f"status={evidence_status}",
+                        type(exc).__name__,
                     )
+                log.info(f"[done] {niche!r} × {name}: {len(rows)} facts")
+                return len(rows)
 
-            status, body = upsert_facts(rows)
-            if status >= 300:
-                log.error(f"  upsert failed: {status} {body[:200]}")
-                stats.reports_failed += 1
-                stats.record_failure(niche, cbsa, "upsert_failed", f"status={status}")
-                return 0
-            stats.facts_inserted += len(rows)
-            stats.reports_succeeded += 1
-            log.info(f"[done] {niche!r} × {name}: {len(rows)} facts")
-            return len(rows)
-
-        stats.reports_failed += 1
-        stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
-        return 0
+            stats.reports_failed += 1
+            stats.record_failure(niche, cbsa, "keyword_volume_empty", "no rows to persist")
+            return 0
 
         except Exception as e:
             log.exception(f"failure on {niche} × {cbsa}")

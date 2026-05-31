@@ -1,5 +1,6 @@
 import pytest
 
+from scripts.benchmarks import run_pilot
 from scripts.benchmarks.run_pilot import (
     collect_organic_telemetry,
     collect_top3_review_velocity,
@@ -121,6 +122,18 @@ class _FakeDFS:
     async def backlinks_summary(self, target, *, rank_scale=None):
         self.backlink_calls.append({"target": target, "rank_scale": rank_scale})
         return APIResponse(status="ok", data=[{"rank": 40 if target == "a.example" else 50}])
+
+    async def keyword_volume(self, keywords, location_code):
+        return APIResponse(
+            status="ok",
+            data=[
+                {"keyword": keyword, "search_volume": 100, "cpc": 12.5}
+                for keyword in keywords
+            ],
+        )
+
+    async def serp_organic(self, keyword, location_code, depth=20):
+        return APIResponse(status="ok", data=[{"items": []}])
 
     async def lighthouse(self, url):
         score = 0.8 if "a.example" in url else 0.9
@@ -396,3 +409,72 @@ def test_benchmark_evidence_upsert_ignores_duplicate_artifacts(monkeypatch):
 
     assert status == 201
     assert captured["headers"]["Prefer"] == "resolution=ignore-duplicates,return=minimal"
+
+
+@pytest.mark.asyncio
+async def test_score_one_persists_facts_when_evidence_upsert_raises(monkeypatch):
+    class _ExpansionCache:
+        async def get(self, niche):
+            return {
+                "expanded_keywords": [
+                    {
+                        "keyword": niche,
+                        "tier": 1,
+                        "intent": "commercial",
+                        "actionable": True,
+                    }
+                ]
+            }
+
+    calls = []
+    dfs = _FakeDFS()
+    dfs.cost_log = [
+        CostRecord(
+            endpoint="serp/google/organic/live/advanced",
+            task_id="serp-current",
+            cost=0.002,
+            cached=False,
+            latency_ms=120,
+            parameters={"keyword": "plumber", "location_code": 12345},
+            collected_at="2026-05-24T14:00:01+00:00",
+            collection_context_id="benchmark:plumber:12345:fixed",
+            response_hash="serp-hash",
+        )
+    ]
+
+    def fake_upsert_facts(rows):
+        calls.append(("facts", rows))
+        return 201, ""
+
+    def fake_upsert_evidence_artifacts(rows):
+        calls.append(("evidence", rows))
+        raise RuntimeError("artifact store unavailable")
+
+    monkeypatch.setattr(run_pilot, "uuid4", lambda: "fixed")
+    monkeypatch.setattr(run_pilot, "upsert_facts", fake_upsert_facts)
+    monkeypatch.setattr(
+        run_pilot,
+        "upsert_evidence_artifacts",
+        fake_upsert_evidence_artifacts,
+    )
+
+    stats = run_pilot.RunStats()
+    inserted = await run_pilot.score_one(
+        "plumber",
+        {
+            "cbsa_code": "12345",
+            "cbsa_name": "Test Metro",
+            "dataforseo_location_codes": [12345],
+        },
+        _ExpansionCache(),
+        dfs,
+        stats,
+    )
+
+    assert inserted == 1
+    assert [call[0] for call in calls] == ["facts", "evidence"]
+    assert calls[0][1][0]["keyword"] == "plumber"
+    assert stats.facts_inserted == 1
+    assert stats.reports_succeeded == 1
+    assert stats.reports_failed == 0
+    assert stats.failure_reasons == {"evidence_upsert_failed_non_fatal": 1}
