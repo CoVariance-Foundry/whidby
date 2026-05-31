@@ -157,6 +157,7 @@ def test_whi126_migration_adds_lineage_and_metric_sufficiency_schema() -> None:
     assert "CREATE TABLE IF NOT EXISTS public.seo_benchmark_runs" in migration
     assert "CREATE TABLE IF NOT EXISTS public.seo_benchmark_metric_sufficiency" in migration
     assert "benchmark_run_id UUID" in migration
+    assert "REFERENCES public.seo_benchmark_runs(id) ON DELETE SET NULL" in migration
     assert "metric_confidence_rollup JSONB NOT NULL DEFAULT '{}'::jsonb" in migration
     assert "FROM pg_constraint" in migration
     assert "conname = 'seo_benchmarks_benchmark_mode_check'" in migration

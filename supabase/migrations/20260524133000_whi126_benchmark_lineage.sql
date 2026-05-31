@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.seo_benchmark_runs (
 
 ALTER TABLE public.seo_benchmarks
     ADD COLUMN IF NOT EXISTS benchmark_run_id UUID
-        REFERENCES public.seo_benchmark_runs(id),
+        REFERENCES public.seo_benchmark_runs(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS benchmark_mode TEXT NOT NULL DEFAULT 'exact',
     ADD COLUMN IF NOT EXISTS formula_version TEXT,
     ADD COLUMN IF NOT EXISTS sample_frame_version TEXT,
