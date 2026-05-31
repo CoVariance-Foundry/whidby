@@ -662,9 +662,9 @@ WHI-109 converts the coverage analysis into a production data-collection order. 
 | ---: | --- | --- | --- | --- |
 | 0 | Contract visibility preflight | Production `seo_benchmark_runs`, `seo_benchmarks.benchmark_run_id`, `seo_benchmark_metric_sufficiency`, `seo_evidence_artifacts`, and local identifier columns. | Paid work is unsafe if production cannot store or audit the metric-level contract. | `audit_scoring_strategy` and `audit_signal_coverage` reach metric analysis instead of failing on missing schema columns. |
 | 1 | No-paid baseline refresh | Existing 96 pilot reports and current production facts only. | Establish before counts for V2 rows, benchmark cells, metric-sufficiency rows, and Explore-visible rows without buying more data. | WHI-109 acceptance checks record before counts and identify selected canary cells. |
-| 2 | Metric canary | One or two paid-eligible pilot metros that already have V2 facts but lack DA/Lighthouse and review velocity, starting with `auto repair` and adding `locksmith` only after the first canary passes. | These cells have existing benchmark/fact presence, so the canary tests evidence enrichment rather than broad target discovery. | Metric sufficiency improves for organic authority, Lighthouse, local pack, and review velocity; failures stop expansion. |
-| 3 | Missing-service cell seed | `hvac`, `tree service`, and `electrician` across `small_50_100k`, `medium_100_300k`, and `large_300k_1m`. | They are core launch services with 0/6 benchmark cells in the WHI-104 matrix and are higher product value than micro/mega cleanup. | Each selected service/population cell reaches at least enough non-null evidence to explain whether it is ready, warning-only, or still blocked. |
-| 4 | Cell-depth backfill | Existing undersampled cells: `roofing`, `plumbing`, `auto repair`, `water damage restoration`, and `locksmith`, prioritizing small/medium/large before metro/mega. | These cells already have partial benchmark rows; adding metros should move them toward `sample_size_metros >= 8`. | Selected cells meet sample floor and required metric-family sufficiency before recompute. |
+| 2 | Metric canary | One or two paid-eligible pilot reports that already have V2 facts but lack DA/Lighthouse and review velocity, starting with `auto repair` in a single production-supported population class and adding `locksmith` only after the first canary passes. | These cells have existing benchmark/fact presence, so the canary tests evidence enrichment rather than broad target discovery. | Raw evidence, evidence artifacts, and local identifiers are visible for the selected rows; failures stop expansion. |
+| 3 | Missing-service cell seed | `hvac`, `tree service`, and `electrician` across `small_50_100k`, `medium_100_300k`, and `large_300k_1m`. | They are core launch services with 0/6 benchmark cells in the WHI-104 matrix and are higher product value than micro/mega cleanup. | Each selected service/population cell reaches enough non-null raw evidence to explain whether it is ready, warning-only, or still blocked. |
+| 4 | Cell-depth backfill | Existing undersampled cells: `roofing`, `plumbing`, `auto repair`, `water damage restoration`, and `locksmith`, prioritizing small/medium/large before metro/mega. | These cells already have partial benchmark rows; adding metros should move them toward `sample_size_metros >= 8`. | Selected cells meet the raw evidence floor needed for recompute. |
 | 5 | Benchmark recompute and Explore refresh | Only the cells proven by slices 1-4. | Recompute should promote measured cells, not hide missing metrics behind rollup confidence. | New benchmark run lineage, metric sufficiency, V2 score counts, and Explore/report visibility improve in read-only validation. |
 
 ### Blocked And Missing Cells
@@ -684,7 +684,8 @@ The first paid slice should be a metric canary, not a seed batch. It should enri
 ```bash
 uv run python -m scripts.benchmarks.run_pilot \
   --sample-mode pilot \
-  --limit-metros 2 \
+  --population-class medium_100_300k \
+  --limit-pairs 2 \
   --niche "auto repair" \
   --collect-organic-telemetry \
   --collect-review-velocity \
@@ -692,7 +693,7 @@ uv run python -m scripts.benchmarks.run_pilot \
   --review-depth 10
 ```
 
-Production execution is blocked until the runner or wrapper has an explicit project-ref guard equivalent to `--expected-project-ref eoajvifhbmqmoluiokcj` and paid-target checks equivalent to `--require-dfs` plus `--require-v2-persistence`. Run the same canary shape for `locksmith` only if the first canary persists evidence artifacts, local identifiers, DA/Lighthouse telemetry, and review velocity without schema or partial-persistence failures. Use a reviewed cost cap before execution; do not increase `--limit-metros`, add more services, or run a benchmark recompute inside the canary.
+Production execution is blocked until the runner or wrapper has an explicit project-ref guard equivalent to `--expected-project-ref eoajvifhbmqmoluiokcj` and paid-target checks equivalent to `--require-dfs` plus `--require-v2-persistence`, plus explicit production `BENCHMARK_SUPABASE_URL` and service-role key wiring. Run the same canary shape for `locksmith` only if the first canary persists evidence artifacts, local identifiers, DA/Lighthouse telemetry, and review velocity without schema or partial-persistence failures. Use a reviewed cost cap before execution; do not increase `--limit-pairs`, add more services, broaden population classes, or run a benchmark recompute inside the canary.
 
 ### Read-Only Gates
 
@@ -706,7 +707,7 @@ uv run python -m scripts.explore.audit_signal_coverage --coverage-threshold 0.6 
 After the canary, the same read-only commands must show:
 
 1. No schema-column failures for benchmark lineage or metric sufficiency.
-2. Nonzero metric-level evidence for selected organic authority, Lighthouse, local pack, and review velocity families.
+2. Nonzero raw evidence for selected organic authority, Lighthouse, local pack, and review velocity families.
 3. New or updated `seo_evidence_artifacts` and local identifier lineage for the canary rows.
 4. No decrease in V2 row counts, benchmark cell counts, metric-sufficiency rows, or report-backed Explore visibility.
 5. Clear remaining blocked cells before any broader paid backfill.
