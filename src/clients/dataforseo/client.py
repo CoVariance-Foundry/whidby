@@ -242,7 +242,13 @@ class DataForSEOClient:
         keyword: str,
         location_code: int,
     ) -> APIResponse:
-        payload = [{"keyword": keyword, "location_code": location_code}]
+        payload = [
+            {
+                "keyword": keyword,
+                "location_code": location_code,
+                "language_code": DFS_DEFAULT_LANGUAGE_CODE,
+            }
+        ]
         return await self._live_request(ep.GOOGLE_MY_BUSINESS_INFO, payload)
 
     async def backlinks_summary(

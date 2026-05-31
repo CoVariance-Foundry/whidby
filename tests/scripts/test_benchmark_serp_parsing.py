@@ -357,7 +357,9 @@ async def test_collect_top3_gbp_profile_facts_computes_completeness_rows():
         snapshot_date="2026-05-31",
     )
 
-    assert dfs.gbp_calls == [{"keyword": "A Auto", "location_code": 12345}]
+    assert dfs.gbp_calls == [
+        {"keyword": "place_id:place-1", "location_code": 12345}
+    ]
     assert result.failures == []
     assert result.rows == [
         {
@@ -368,7 +370,7 @@ async def test_collect_top3_gbp_profile_facts_computes_completeness_rows():
             "business_name": "A Auto",
             "cid": "cid-1",
             "place_id": "place-1",
-            "review_retrieval_mode": "title",
+            "review_retrieval_mode": "place_id",
             "source_query": "auto repair",
             "dataforseo_location_code": 12345,
             "result_type": "local_pack",
@@ -383,6 +385,28 @@ async def test_collect_top3_gbp_profile_facts_computes_completeness_rows():
             "snapshot_date": "2026-05-31",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_collect_top3_gbp_profile_facts_uses_cid_before_title():
+    dfs = _FakeDFS()
+
+    result = await collect_top3_gbp_profile_facts(
+        dfs,
+        [{"title": "A Auto", "cid": "cid-1", "rating": 4.8, "rating_count": 12}],
+        cbsa_code="12345",
+        niche_normalized="auto repair",
+        keyword="auto repair",
+        location_code=12345,
+        snapshot_date="2026-05-31",
+    )
+
+    assert dfs.gbp_calls == [
+        {"keyword": "cid:cid-1", "location_code": 12345}
+    ]
+    assert result.failures == []
+    assert result.rows[0]["review_retrieval_mode"] == "cid"
+    assert result.rows[0]["cid"] == "cid-1"
 
 
 @pytest.mark.asyncio
@@ -934,7 +958,9 @@ async def test_score_one_collects_gbp_profile_from_alternate_head_serp(monkeypat
     )
 
     assert inserted == 2
-    assert dfs.gbp_calls == [{"keyword": "Second Auto", "location_code": 12345}]
+    assert dfs.gbp_calls == [
+        {"keyword": "cid:cid-2", "location_code": 12345}
+    ]
     assert [call[0] for call in calls] == ["local_pack", "facts"]
     assert calls[0][1][0]["keyword"] == "auto shop"
     assert calls[0][1][0]["source_query"] == "auto shop"
