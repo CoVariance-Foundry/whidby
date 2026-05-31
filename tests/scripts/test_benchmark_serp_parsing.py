@@ -322,7 +322,7 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             response_hash="backlinks-hash",
         ),
         CostRecord(
-            endpoint="on_page/lighthouse/live",
+            endpoint="on_page/lighthouse/live/json",
             task_id="lighthouse-1",
             cost=0.006,
             cached=True,
@@ -333,7 +333,7 @@ def test_benchmark_pilot_builds_evidence_artifacts_from_dfs_cost_log():
             response_hash="lighthouse-hash",
         ),
         CostRecord(
-            endpoint="on_page/lighthouse/live",
+            endpoint="on_page/lighthouse/live/json",
             task_id="lighthouse-overlap",
             cost=0.006,
             cached=True,
