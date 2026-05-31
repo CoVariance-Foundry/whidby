@@ -166,18 +166,14 @@ export async function GET(
       .limit(1);
 
     if (v2Error) {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          message: "Unable to verify report score version.",
-          duration_ms: Date.now() - startedAt,
-        },
-        { status: 502 },
-      );
+      console.warn("[agent/reports] failed to resolve V2 score version", {
+        report_id: reportId,
+        message: v2Error.message,
+      });
     }
 
     const resolvedSpecVersion =
-      Array.isArray(v2Rows) && typeof v2Rows[0]?.spec_version === "string"
+      !v2Error && Array.isArray(v2Rows) && typeof v2Rows[0]?.spec_version === "string"
         ? v2Rows[0].spec_version
         : null;
 

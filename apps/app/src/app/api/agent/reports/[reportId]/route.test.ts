@@ -156,6 +156,49 @@ describe("GET /api/agent/reports/[reportId]", () => {
     expect(body.report.spec_version).toBe("2.0");
   });
 
+  it("keeps report details available when V2 version lookup fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      v2Limit.mockResolvedValueOnce({
+        data: null,
+        error: { message: "connection error" },
+      });
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            report_id: "r1",
+            generated_at: "2026-05-14T18:00:00Z",
+            spec_version: "1.1",
+            input: {
+              niche_keyword: "roofing",
+              geo_scope: "city",
+              geo_target: "Phoenix, AZ",
+              report_depth: "standard",
+              strategy_profile: "balanced",
+            },
+            keyword_expansion: { expanded_keywords: [] },
+            metros: [],
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const req = new NextRequest("http://localhost/api/agent/reports/r1");
+      const res = await GET(req, { params: Promise.resolve({ reportId: "r1" }) });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.report.spec_version).toBe("1.1");
+      expect(warn).toHaveBeenCalledWith(
+        "[agent/reports] failed to resolve V2 score version",
+        { report_id: "r1", message: "connection error" },
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("falls back to the Supabase report row when upstream returns non-ok", async () => {
     maybeSingle.mockResolvedValueOnce({
       data: {
