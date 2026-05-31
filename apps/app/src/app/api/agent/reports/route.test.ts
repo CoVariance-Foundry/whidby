@@ -159,7 +159,7 @@ describe("GET /api/agent/reports", () => {
     expect(query.inFilter).toHaveBeenCalledWith("report_id", ["r1", "r2"]);
   });
 
-  it("prefers metro_score_v2 and leaves opportunity null for V2 report rows", async () => {
+  it("preserves report opportunity scores for V2 report rows", async () => {
     const query = makeSupabaseMock([{ data: rows, error: null }], {
       data: [{ report_id: "r1", spec_version: "2.0" }],
       error: null,
@@ -174,14 +174,14 @@ describe("GET /api/agent/reports", () => {
     expect(body.reports[0]).toMatchObject({
       id: "r1",
       spec_version: "2.0",
-      opportunity_score: null,
-      archetype_id: "MIXED",
+      opportunity_score: 78,
+      archetype_id: "PACK_VULN",
     });
     expect(body.dashboard.recommended[0]).toMatchObject({
       id: "r1",
-      score: null,
+      score: 78,
     });
-    expect(body.dashboard.stats.avg_score).toBe(71);
+    expect(body.dashboard.stats.avg_score).toBe(75);
   });
 
   it("retries without archived_at when the migration is missing", async () => {

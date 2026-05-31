@@ -58,7 +58,7 @@ function toMappedRow(raw: ReportRow, v2ByReportId: Map<string, MetroScoreV2Row>)
   return {
     ...mapped,
     spec_version: "2.0",
-    opportunity_score: null,
+    opportunity_score: mapped.opportunity_score,
   };
 }
 
