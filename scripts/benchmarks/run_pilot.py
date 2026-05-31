@@ -968,6 +968,19 @@ async def collect_top3_review_velocity(
     return round(sum(velocities) / len(velocities), 4) if velocities else None
 
 
+def gbp_profile_lookup_keyword(item: dict[str, Any], title: str) -> tuple[str | None, str]:
+    """Prefer stable Google identifiers for GBP profile lookup."""
+    place_id = str(item.get("place_id") or "").strip()
+    if place_id:
+        return f"place_id:{place_id}", "place_id"
+    cid = str(item.get("cid") or "").strip()
+    if cid:
+        return f"cid:{cid}", "cid"
+    if title:
+        return title, "title"
+    return None, "unknown"
+
+
 async def collect_top3_gbp_profile_facts(
     dfs: DataForSEOClient,
     local_pack_items: list[dict[str, Any]],
@@ -983,28 +996,34 @@ async def collect_top3_gbp_profile_facts(
     failures: list[str] = []
     for rank, item in enumerate(local_pack_items[:3], start=1):
         title = str(item.get("title") or "").strip()
-        if not title:
-            failures.append(f"rank_{rank}:missing_title")
+        lookup_keyword, retrieval_mode = gbp_profile_lookup_keyword(item, title)
+        failure_label = title or lookup_keyword or f"rank_{rank}"
+        if not lookup_keyword:
+            failures.append(f"{failure_label}:missing_identifier")
             continue
         response = await dfs.google_my_business_info(
-            keyword=title,
+            keyword=lookup_keyword,
             location_code=location_code,
         )
         if response.status != "ok" or not response.data:
-            failures.append(f"{title}:response_{response.status}")
+            failures.append(f"{failure_label}:response_{response.status}")
             continue
         raw_rows = response.data if isinstance(response.data, list) else [response.data]
         profiles = normalize_gbp_info_rows([row for row in raw_rows if isinstance(row, dict)])
         if not profiles:
-            failures.append(f"{title}:empty_profile")
+            failures.append(f"{failure_label}:empty_profile")
             continue
-        profile = next(
-            (candidate for candidate in profiles if _profile_matches_local_listing(candidate, title)),
-            None,
-        )
+        if retrieval_mode in {"cid", "place_id"}:
+            profile = profiles[0]
+        else:
+            profile = next(
+                (candidate for candidate in profiles if _profile_matches_local_listing(candidate, title)),
+                None,
+            )
         if profile is None:
-            failures.append(f"{title}:profile_title_mismatch")
+            failures.append(f"{failure_label}:profile_title_mismatch")
             continue
+        profile_matches_title = _profile_matches_local_listing(profile, title)
         categories = [
             str(category)
             for category in profile.get("services", [])
@@ -1016,13 +1035,13 @@ async def collect_top3_gbp_profile_facts(
             "keyword": keyword,
             "listing_rank": rank,
             "business_name": title,
-            "cid": item.get("cid"),
-            "place_id": item.get("place_id"),
-            "review_retrieval_mode": "title",
+            "cid": item.get("cid") or profile.get("cid"),
+            "place_id": item.get("place_id") or profile.get("place_id"),
+            "review_retrieval_mode": retrieval_mode,
             "source_query": keyword,
             "dataforseo_location_code": location_code,
             "result_type": "local_pack",
-            "exact_match_name": False,
+            "exact_match_name": profile_matches_title,
             "review_count": item.get("rating_count"),
             "rating": item.get("rating"),
             "gbp_completeness": compute_gbp_completeness(profile),
