@@ -87,6 +87,14 @@ function normalizeSupabaseReportRow(row: SupabaseReportRow) {
   };
 }
 
+function withResolvedSpecVersion<T extends { spec_version: string }>(
+  report: T,
+  specVersion: string | null,
+): T {
+  if (!specVersion) return report;
+  return { ...report, spec_version: specVersion };
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: RouteContext,
@@ -151,6 +159,24 @@ export async function GET(
       );
     }
 
+    const { data: v2Rows, error: v2Error } = await supabase
+      .from("metro_score_v2")
+      .select("spec_version")
+      .eq("report_id", reportId)
+      .limit(1);
+
+    if (v2Error) {
+      console.warn("[agent/reports] failed to resolve V2 score version", {
+        report_id: reportId,
+        message: v2Error.message,
+      });
+    }
+
+    const resolvedSpecVersion =
+      !v2Error && Array.isArray(v2Rows) && typeof v2Rows[0]?.spec_version === "string"
+        ? v2Rows[0].spec_version
+        : null;
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
     let upstream: Response;
@@ -163,7 +189,10 @@ export async function GET(
     } catch {
       return NextResponse.json({
         status: "success",
-        report: normalizeSupabaseReportRow(reportAccess),
+        report: withResolvedSpecVersion(
+          normalizeSupabaseReportRow(reportAccess),
+          resolvedSpecVersion,
+        ),
         duration_ms: Date.now() - startedAt,
       });
     } finally {
@@ -173,7 +202,10 @@ export async function GET(
     if (!upstream.ok) {
       return NextResponse.json({
         status: "success",
-        report: normalizeSupabaseReportRow(reportAccess),
+        report: withResolvedSpecVersion(
+          normalizeSupabaseReportRow(reportAccess),
+          resolvedSpecVersion,
+        ),
         upstream_status: upstream.status,
         duration_ms: Date.now() - startedAt,
       });
@@ -184,13 +216,16 @@ export async function GET(
       const report = normalizeReportPayload(json);
       return NextResponse.json({
         status: "success",
-        report,
+        report: withResolvedSpecVersion(report, resolvedSpecVersion),
         duration_ms: Date.now() - startedAt,
       });
     } catch {
       return NextResponse.json({
         status: "success",
-        report: normalizeSupabaseReportRow(reportAccess),
+        report: withResolvedSpecVersion(
+          normalizeSupabaseReportRow(reportAccess),
+          resolvedSpecVersion,
+        ),
         duration_ms: Date.now() - startedAt,
       });
     }

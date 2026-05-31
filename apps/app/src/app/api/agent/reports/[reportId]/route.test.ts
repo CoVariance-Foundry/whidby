@@ -40,6 +40,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
   };
 
   let maybeSingle: ReturnType<typeof vi.fn>;
+  let v2Limit: ReturnType<typeof vi.fn>;
   const reportRow = {
     id: "r1",
     created_at: "2026-05-14T18:00:00Z",
@@ -63,11 +64,19 @@ describe("GET /api/agent/reports/[reportId]", () => {
       data: reportRow,
       error: null,
     });
+    v2Limit = vi.fn().mockResolvedValue({
+      data: [],
+      error: null,
+    });
+    const reportsSelect = vi.fn(() => ({
+      eq: vi.fn(() => ({ maybeSingle })),
+    }));
+    const v2Select = vi.fn(() => ({
+      eq: vi.fn(() => ({ limit: v2Limit })),
+    }));
     mocks.createClient.mockResolvedValue({
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({ maybeSingle })),
-        })),
+      from: vi.fn((table: string) => ({
+        select: table === "metro_score_v2" ? v2Select : reportsSelect,
       })),
     });
     mocks.resolveEntitlementContext.mockResolvedValue({
@@ -113,12 +122,93 @@ describe("GET /api/agent/reports/[reportId]", () => {
     });
   });
 
+  it("overlays V2 score version when report has metro_score_v2 rows", async () => {
+    v2Limit.mockResolvedValueOnce({
+      data: [{ spec_version: "2.0" }],
+      error: null,
+    });
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          report_id: "r1",
+          generated_at: "2026-05-14T18:00:00Z",
+          spec_version: "1.1",
+          input: {
+            niche_keyword: "roofing",
+            geo_scope: "city",
+            geo_target: "Phoenix, AZ",
+            report_depth: "standard",
+            strategy_profile: "balanced",
+          },
+          keyword_expansion: { expanded_keywords: [] },
+          metros: [],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const req = new NextRequest("http://localhost/api/agent/reports/r1");
+    const res = await GET(req, { params: Promise.resolve({ reportId: "r1" }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("success");
+    expect(body.report.spec_version).toBe("2.0");
+  });
+
+  it("keeps report details available when V2 version lookup fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      v2Limit.mockResolvedValueOnce({
+        data: null,
+        error: { message: "connection error" },
+      });
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            report_id: "r1",
+            generated_at: "2026-05-14T18:00:00Z",
+            spec_version: "1.1",
+            input: {
+              niche_keyword: "roofing",
+              geo_scope: "city",
+              geo_target: "Phoenix, AZ",
+              report_depth: "standard",
+              strategy_profile: "balanced",
+            },
+            keyword_expansion: { expanded_keywords: [] },
+            metros: [],
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const req = new NextRequest("http://localhost/api/agent/reports/r1");
+      const res = await GET(req, { params: Promise.resolve({ reportId: "r1" }) });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.status).toBe("success");
+      expect(body.report.spec_version).toBe("1.1");
+      expect(warn).toHaveBeenCalledWith(
+        "[agent/reports] failed to resolve V2 score version",
+        { report_id: "r1", message: "connection error" },
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("falls back to the Supabase report row when upstream returns non-ok", async () => {
     maybeSingle.mockResolvedValueOnce({
       data: {
         ...reportRow,
         id: "missing",
       },
+      error: null,
+    });
+    v2Limit.mockResolvedValueOnce({
+      data: [{ spec_version: "2.0" }],
       error: null,
     });
     global.fetch = vi.fn().mockResolvedValue(
@@ -138,6 +228,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       geo_target: "Phoenix, AZ",
       resolved_weights: { organic: 0.6, local: 0.4 },
       meta: null,
+      spec_version: "2.0",
       access_scope: "account",
       owner_account_id: entitlement.account_id,
     });
