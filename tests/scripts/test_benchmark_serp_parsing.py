@@ -37,6 +37,69 @@ def test_parse_serp_items_extracts_top3_review_floor_and_rating():
     assert parsed["top3_rating_avg"] == 4.47
 
 
+def test_parse_serp_items_extracts_flat_local_pack_listing():
+    serp = [{
+        "items": [
+            {
+                "type": "local_pack",
+                "rank_absolute": 1,
+                "title": "KC's Garage",
+                "rating": {"value": 5, "votes_count": 1},
+                "cid": "13475535139844344989",
+            },
+            {
+                "type": "local_pack",
+                "rank_absolute": 2,
+                "title": "East Side Auto",
+                "rating": {"value": 4.7, "votes_count": 42},
+                "cid": "222",
+            },
+        ],
+    }]
+
+    parsed = parse_serp_items(serp)
+
+    assert parsed["local_pack_present"] is True
+    assert parsed["local_pack_position"] == 1
+    assert parsed["top_local_pack_items"] == [
+        {
+            "title": "KC's Garage",
+            "rating": 5,
+            "rating_count": 1,
+            "place_id": None,
+            "cid": "13475535139844344989",
+        },
+        {
+            "title": "East Side Auto",
+            "rating": 4.7,
+            "rating_count": 42,
+            "place_id": None,
+            "cid": "222",
+        },
+    ]
+    assert parsed["top3_review_count_min"] == 1
+    assert parsed["top3_review_count_avg"] == 22
+    assert parsed["top3_rating_avg"] == 4.85
+
+
+def test_parse_serp_items_keeps_empty_local_pack_container_empty():
+    serp = [{
+        "items": [{
+            "type": "local_pack",
+            "rank_absolute": 2,
+            "title": "Container Title",
+            "items": [],
+        }]
+    }]
+
+    parsed = parse_serp_items(serp)
+
+    assert parsed["local_pack_present"] is True
+    assert parsed["local_pack_position"] == 2
+    assert parsed["top_local_pack_items"] == []
+    assert parsed["top3_review_count_min"] is None
+
+
 def test_parse_serp_items_extracts_non_aggregator_organic_targets():
     serp = [{
         "items": [
@@ -146,6 +209,7 @@ class _FakeDFS:
         keyword=None,
         location_code=None,
         depth=10,
+        language_code=None,
         *,
         cid=None,
         place_id=None,
@@ -155,6 +219,7 @@ class _FakeDFS:
             "keyword": keyword,
             "location_code": location_code,
             "depth": depth,
+            "language_code": language_code,
             "cid": cid,
             "place_id": place_id,
             "sort_by": sort_by,
@@ -220,6 +285,7 @@ async def test_collect_top3_review_velocity_uses_place_identifiers():
             "keyword": "A",
             "location_code": 1012873,
             "depth": 10,
+            "language_code": "en",
             "cid": "cid-a",
             "place_id": None,
             "sort_by": "newest",
@@ -228,6 +294,7 @@ async def test_collect_top3_review_velocity_uses_place_identifiers():
             "keyword": "B",
             "location_code": 1012873,
             "depth": 10,
+            "language_code": "en",
             "cid": None,
             "place_id": "place-b",
             "sort_by": "newest",
@@ -256,6 +323,7 @@ async def test_collect_top3_review_velocity_skips_missing_review_identifiers():
             "keyword": None,
             "location_code": 1012873,
             "depth": 10,
+            "language_code": "en",
             "cid": "cid-a",
             "place_id": None,
             "sort_by": "newest",
