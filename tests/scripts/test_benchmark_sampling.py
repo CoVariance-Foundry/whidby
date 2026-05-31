@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from scripts.benchmarks import run_pilot
 from scripts.benchmarks.run_pilot import (
     NicheExpansionCache,
     RunStats,
     build_pairs,
     collect_keyword_volume,
+    persistence_niche_key,
     select_metros,
+    select_niches,
 )
 from src.clients.dataforseo.types import APIResponse
 
@@ -37,6 +41,20 @@ class _FakeDFS:
     async def keyword_volume(self, keywords: list[str], location_code: int) -> APIResponse:
         self.calls.append(location_code)
         return self.responses[location_code]
+
+
+class _FakeHTTPResponse:
+    def __init__(self, body: str) -> None:
+        self._body = body.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc_info):
+        return False
+
+    def read(self) -> bytes:
+        return self._body
 
 
 def test_default_paid_sample_excludes_low_signal_empty_and_borrowed_metros() -> None:
@@ -103,6 +121,144 @@ def test_build_pairs_interleaves_niches_for_limited_preflights() -> None:
         ("plumber", "b"),
         ("concrete contractor", "b"),
     ]
+
+
+def test_core_project_services_are_selectable_for_benchmark_acquisition() -> None:
+    selected = select_niches([
+        "roofing",
+        "plumbing",
+        "hvac",
+        "tree service",
+        "auto repair",
+        "water damage restoration",
+        "electrician",
+        "locksmith",
+    ])
+
+    assert selected == [
+        "roofing",
+        "plumbing",
+        "hvac",
+        "tree service",
+        "auto repair",
+        "water damage restoration",
+        "electrician",
+        "locksmith",
+    ]
+
+
+def test_requested_niche_aliases_are_canonicalized_and_deduped() -> None:
+    selected = select_niches([
+        "plumber",
+        "plumbing",
+        "roofing contractor",
+        "roofing",
+    ])
+
+    assert selected == ["plumbing", "roofing"]
+
+
+def test_persistence_niche_key_uses_project_service_keys() -> None:
+    assert persistence_niche_key("plumber") == "plumbing"
+    assert persistence_niche_key("plumbing") == "plumbing"
+    assert persistence_niche_key("roofing contractor") == "roofing"
+    assert persistence_niche_key("roofing") == "roofing"
+    assert persistence_niche_key("tree service") == "tree service"
+    assert persistence_niche_key("tree services") == "tree service"
+
+
+def test_fetch_metros_by_cbsa_reads_live_metros_in_requested_order(monkeypatch) -> None:
+    requests = []
+
+    def fake_urlopen(req, timeout):  # noqa: ANN001
+        requests.append((req, timeout))
+        return _FakeHTTPResponse(
+            """
+            [
+              {
+                "cbsa_code": "43620",
+                "cbsa_name": "Sioux Falls, SD-MN",
+                "state": "SD",
+                "population": 285000,
+                "population_class": "medium_100_300k",
+                "dataforseo_location_codes": [21167]
+              },
+              {
+                "cbsa_code": "30980",
+                "cbsa_name": "Longview, TX",
+                "state": "TX",
+                "population": 286000,
+                "population_class": "medium_100_300k",
+                "dataforseo_location_codes": [1026201]
+              }
+            ]
+            """
+        )
+
+    monkeypatch.setattr(run_pilot, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(run_pilot, "SUPABASE_KEY", "service-key")
+    monkeypatch.setattr("scripts.benchmarks.run_pilot.urlreq.urlopen", fake_urlopen)
+
+    fetch_metros_by_cbsa = getattr(run_pilot, "fetch_metros_by_cbsa", None)
+    assert fetch_metros_by_cbsa is not None
+
+    rows = fetch_metros_by_cbsa(["30980", "43620"], include_low_signal=False)
+
+    assert [row["cbsa_code"] for row in rows] == ["30980", "43620"]
+    assert all(row["paid_eligible"] for row in rows)
+    assert all(row["_dfs_source"] == "native" for row in rows)
+    parsed = parse_qs(urlparse(requests[0][0].full_url).query)
+    assert "dataforseo_location_match_confidence" in parsed["select"][0]
+    assert parsed["cbsa_code"] == ["in.(30980,43620)"]
+
+
+def test_fetch_metros_by_cbsa_rejects_malformed_codes(monkeypatch) -> None:
+    monkeypatch.setattr(run_pilot, "SUPABASE_KEY", "service-key")
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.fetch_metros_by_cbsa(
+            ["30980),cbsa_code=gt.0"],
+            include_low_signal=False,
+        )
+
+    assert excinfo.value.code == 2
+
+
+def test_fetch_metros_by_cbsa_fails_on_ineligible_exact_targets(monkeypatch) -> None:
+    def fake_urlopen(req, timeout):  # noqa: ANN001
+        return _FakeHTTPResponse(
+            """
+            [
+              {
+                "cbsa_code": "12345",
+                "cbsa_name": "Small Metro",
+                "state": "TX",
+                "population": 45000,
+                "population_class": "micro_under_50k",
+                "dataforseo_location_codes": [123],
+                "dataforseo_location_match_confidence": "verified"
+              },
+              {
+                "cbsa_code": "23456",
+                "cbsa_name": "Ambiguous Metro",
+                "state": "TX",
+                "population": 250000,
+                "population_class": "medium_100_300k",
+                "dataforseo_location_codes": [234],
+                "dataforseo_location_match_confidence": "ambiguous"
+              }
+            ]
+            """
+        )
+
+    monkeypatch.setattr(run_pilot, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(run_pilot, "SUPABASE_KEY", "service-key")
+    monkeypatch.setattr("scripts.benchmarks.run_pilot.urlreq.urlopen", fake_urlopen)
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.fetch_metros_by_cbsa(["12345", "23456"], include_low_signal=False)
+
+    assert excinfo.value.code == 2
 
 
 @pytest.mark.asyncio
