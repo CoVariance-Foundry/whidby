@@ -783,9 +783,15 @@ def build_seo_evidence_artifact_rows(report: dict[str, Any]) -> list[dict[str, A
                 request_hash,
             )
 
+        cost_key_present = "cost_usd" in artifact or "cost" in artifact
         cost_usd = artifact.get("cost_usd", artifact.get("cost"))
         if cost_usd is not None:
-            row["cost_usd"] = _float_or_none(cost_usd)
+            try:
+                row["cost_usd"] = _float_or_none(cost_usd)
+            except (TypeError, ValueError):
+                row["cost_usd"] = 0.0
+        elif cost_key_present:
+            row["cost_usd"] = 0.0
 
         for source_key, destination_key in (
             ("collection_timestamp", "collected_at"),
@@ -1005,16 +1011,18 @@ def build_local_pack_listing_fact_rows(report: dict[str, Any]) -> list[dict[str,
         ]
         signals = metro.get("signals") or {}
         local_signals = signals.get("local_competition") or {}
-        sources = [
-            top_level_listing_facts,
-            metro.get("local_pack_listing_facts"),
-            metro.get("local_pack_listings"),
-            metro.get("serp_maps"),
-            local_signals.get("local_pack_listing_facts"),
-            local_signals.get("local_pack_listings"),
-            local_signals.get("top_local_pack_items"),
-            local_signals.get("serp_maps"),
-        ]
+        if top_level_listing_facts:
+            sources = [top_level_listing_facts]
+        else:
+            sources = [
+                metro.get("local_pack_listing_facts"),
+                metro.get("local_pack_listings"),
+                metro.get("serp_maps"),
+                local_signals.get("local_pack_listing_facts"),
+                local_signals.get("local_pack_listings"),
+                local_signals.get("top_local_pack_items"),
+                local_signals.get("serp_maps"),
+            ]
         items = _source_fact_items(
             sources,
             default_keyword=default_keyword,

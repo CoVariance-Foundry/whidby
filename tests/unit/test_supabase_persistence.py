@@ -539,6 +539,48 @@ def test_build_local_pack_listing_fact_rows_reads_private_top_level_side_channel
     assert side_channel_row["domain"] == "phoenixroof.example"
 
 
+def test_build_local_pack_listing_fact_rows_prefers_top_level_metro_facts() -> None:
+    report = _sample_competitor_report()
+    local_signals = report["metros"][0]["signals"]["local_competition"]
+    local_signals["top_local_pack_items"] = [
+        {
+            "keyword": "roof repair phoenix",
+            "listing_rank": 1,
+            "business_name": "Phoenix Roof Repair Pros",
+            "cid": "1234567890123456789",
+            "place_id": "ChIJroofrepairphoenix",
+        }
+    ]
+    report["local_pack_listing_facts"] = [
+        {
+            "cbsa_code": "38060",
+            "keyword": "roof repair phoenix",
+            "listing_rank": 1,
+            "business_name": "Phoenix Roof Repair Pros",
+            "cid": "1234567890123456789",
+            "place_id": "ChIJroofrepairphoenix",
+            "evidence_artifact_id": "33333333-3333-3333-3333-333333333333",
+        }
+    ]
+
+    rows = build_local_pack_listing_fact_rows(report)
+    conflict_keys = [
+        (
+            row["cbsa_code"],
+            row["niche_normalized"],
+            row["keyword"],
+            row["listing_rank"],
+            row["snapshot_date"],
+        )
+        for row in rows
+    ]
+
+    assert len(rows) == 1
+    assert len(conflict_keys) == len(set(conflict_keys))
+    assert rows[0]["business_name"] == "Phoenix Roof Repair Pros"
+    assert rows[0]["evidence_artifact_id"] == "33333333-3333-3333-3333-333333333333"
+
+
 def test_build_seo_evidence_artifact_rows_maps_and_hashes_provenance() -> None:
     report = _sample_competitor_report()
     report["raw_evidence_artifacts"][0]["collection_context_id"] = "score-run-1"
@@ -583,6 +625,26 @@ def test_build_seo_evidence_artifact_rows_maps_and_hashes_provenance() -> None:
     assert row["collected_at"] == "2026-04-20T00:03:00+00:00"
     assert row["source_window_start"] == "2026-04-01T00:00:00+00:00"
     assert row["source_window_end"] == "2026-04-20T00:00:00+00:00"
+
+
+def test_build_seo_evidence_artifact_rows_defaults_invalid_cost_values() -> None:
+    report = _sample_competitor_report()
+    report["raw_evidence_artifacts"] = [
+        {
+            **report["raw_evidence_artifacts"][0],
+            "id": "33333333-3333-3333-3333-333333333333",
+            "cost_usd": "n/a",
+        },
+        {
+            **report["raw_evidence_artifacts"][0],
+            "id": "44444444-4444-4444-4444-444444444444",
+            "cost_usd": "",
+        },
+    ]
+
+    rows = build_seo_evidence_artifact_rows(report)
+
+    assert [row["cost_usd"] for row in rows] == [0.0, 0.0]
 
 
 def test_build_seo_evidence_artifact_rows_skips_incomplete_artifacts() -> None:
