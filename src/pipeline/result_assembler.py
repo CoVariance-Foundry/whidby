@@ -12,6 +12,17 @@ from .types import (
     RunMetadata,
 )
 
+_DEPENDENT_PROVENANCE_FIELDS = (
+    "cid",
+    "place_id",
+    "business_name",
+    "source_query",
+    "preferred_identifier_mode",
+    "review_retrieval_mode",
+    "gbp_retrieval_mode",
+    "location_code",
+)
+
 
 def empty_metro_result(metro_id: str) -> MetroCollectionResult:
     """Create a metro result with explicit empty categories."""
@@ -41,6 +52,11 @@ def assemble_raw_collection_result(
         if not metro_id or not category:
             continue
         bucket = metro_results[metro_id]
+        results = _with_task_provenance(
+            category,
+            results,
+            state.task_payloads.get(task_id, {}),
+        )
         _append_category(bucket, category, results)
 
     metadata = RunMetadata(
@@ -75,3 +91,20 @@ def _append_category(
     elif category == "lighthouse":
         metro_result.lighthouse.extend(results)
 
+
+def _with_task_provenance(
+    category: str,
+    results: list[dict[str, Any]],
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if category not in {"google_reviews", "gbp_info"}:
+        return results
+    rows: list[dict[str, Any]] = []
+    for row in results:
+        enriched = dict(row)
+        for field in _DEPENDENT_PROVENANCE_FIELDS:
+            value = payload.get(field)
+            if value is not None and enriched.get(field) in (None, ""):
+                enriched[field] = value
+        rows.append(enriched)
+    return rows

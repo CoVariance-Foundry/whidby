@@ -10,7 +10,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.clients.dataforseo.cost_tracker import CostTracker
-from src.pipeline.orchestrator import ScoreNicheResult, score_niche_for_metro
+from src.pipeline.orchestrator import (
+    ScoreNicheResult,
+    _review_window_from_row,
+    score_niche_for_metro,
+)
 from src.pipeline.types import MetroCollectionResult, RawCollectionResult, RunMetadata
 from src.scoring.benchmark_repository import SeoBenchmarkCell
 
@@ -186,6 +190,274 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert "serp/google/organic/task_post" in breakdown
     assert breakdown["serp/google/organic/task_post"]["calls"] == 2
     assert breakdown["serp/google/organic/task_post"]["cached"] == 1
+    assert "seo_evidence_artifacts" not in result.report
+    assert result.seo_evidence_artifacts == []
+
+
+def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
+    fake_dfs = _make_fake_dfs_client()
+
+    async def collect_with_current_cost(*args, **kwargs):
+        fake_dfs.cost_tracker.record(
+            "serp/google/maps/live/advanced",
+            "maps-other-request",
+            0.002,
+            False,
+            90,
+            {"keyword": "roofing near me", "location_code": 1012873},
+            collected_at="2026-05-24T14:00:00+00:00",
+            collection_context_id="score-other",
+            response_hash="maps-other-hash",
+        )
+        fake_dfs.cost_tracker.record(
+            "serp/google/maps/live/advanced",
+            "maps-current",
+            0.002,
+            False,
+            110,
+            {"keyword": "roofing near me", "location_code": 1012873},
+            collected_at="2026-05-24T14:00:01+00:00",
+            response_hash="maps-current-hash",
+        )
+        fake_dfs.cost_tracker.record(
+            "backlinks/summary/live",
+            "backlinks-current",
+            0.002,
+            False,
+            80,
+            {"target": "example.com"},
+            collected_at="2026-05-24T14:00:02+00:00",
+            response_hash="backlinks-current-hash",
+        )
+        fake_dfs.cost_tracker.record(
+            "business_data/google/reviews/task_post",
+            "reviews-other",
+            0.005,
+            False,
+            300,
+            {"cid": "cid-current", "location_code": 1012873},
+            collected_at="2026-05-24T14:00:03+00:00",
+            collection_context_id="score-other",
+            response_hash="reviews-other-hash",
+        )
+        fake_dfs.cost_tracker.record(
+            "business_data/google/reviews/task_post",
+            "reviews-current",
+            0.005,
+            False,
+            320,
+            {"cid": "cid-current", "location_code": 1012873},
+            collected_at="2026-05-24T14:00:04+00:00",
+            response_hash="reviews-current-hash",
+        )
+        fake_dfs.cost_log = fake_dfs.cost_tracker.records
+        return RawCollectionResult(
+            metros={
+                "38060": MetroCollectionResult(
+                    metro_id="38060",
+                    serp_organic=[
+                        {
+                            "keyword": "roofing near me",
+                            "items": [
+                                {
+                                    "domain": "example.com",
+                                    "url": "https://example.com",
+                                }
+                            ],
+                        }
+                    ],
+                    serp_maps=[
+                        {
+                            "keyword": "roofing near me",
+                            "items": [
+                                {
+                                    "type": "maps_search",
+                                    "title": "Current Roof",
+                                    "cid": "cid-current",
+                                }
+                            ],
+                        }
+                    ],
+                    keyword_volume=[],
+                    backlinks=[],
+                    lighthouse=[],
+                    google_reviews=[],
+                    gbp_info=[],
+                    business_listings=[],
+                )
+            },
+            meta=RunMetadata(
+                total_api_calls=3,
+                total_cost_usd=0.006,
+                collection_time_seconds=0.2,
+            ),
+        )
+
+    with patch("src.pipeline.orchestrator.expand_keywords",
+               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
+         patch("src.pipeline.orchestrator.collect_data",
+               new=AsyncMock(side_effect=collect_with_current_cost)), \
+         patch("src.pipeline.orchestrator.extract_signals",
+               return_value=_FAKE_SIGNALS), \
+         patch("src.pipeline.orchestrator.compute_scores",
+               return_value=_FAKE_SCORES), \
+         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
+         patch("src.pipeline.orchestrator.classify_serp_archetype",
+               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
+         patch("src.pipeline.orchestrator.compute_difficulty_tier",
+               return_value=_FAKE_DIFFICULTY_RESULT), \
+         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
+               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+        result = asyncio.run(
+            score_niche_for_metro(
+                niche="roofing",
+                city="Phoenix",
+                state="AZ",
+                strategy_profile="balanced",
+                llm_client=object(),
+                dataforseo_client=fake_dfs,
+            )
+        )
+
+    assert "seo_evidence_artifacts" not in result.report
+    assert [artifact["evidence_family"] for artifact in result.seo_evidence_artifacts] == [
+        "maps",
+        "backlinks",
+        "reviews",
+    ]
+    assert result.seo_evidence_artifacts[0]["endpoint_path"] == (
+        "serp/google/maps/live/advanced"
+    )
+    assert result.seo_evidence_artifacts[0]["request_hash"]
+    assert result.seo_evidence_artifacts[0]["response_hash"] == "maps-current-hash"
+    assert all(
+        artifact["response_hash"] not in {"maps-other-hash", "reviews-other-hash"}
+        for artifact in result.seo_evidence_artifacts
+    )
+
+
+def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> None:
+    fake_dfs = _make_fake_dfs_client()
+    raw = RawCollectionResult(
+        metros={
+            "38060": MetroCollectionResult(
+                metro_id="38060",
+                serp_organic=[],
+                serp_maps=[
+                    {
+                        "keyword": "roofing near me",
+                        "datetime": "2026-05-24T13:59:00+00:00",
+                        "items": [
+                            {
+                                "type": "maps_search",
+                                "rank_group": 1,
+                                "title": "Phoenix Roof Pros",
+                                "cid": "cid-1",
+                                "place_id": "place-1",
+                                "url": "https://phoenixroof.example/maps",
+                                "rating": {"value": 4.7, "votes_count": 88},
+                            },
+                            {
+                                "type": "maps_search",
+                                "rank_group": 2,
+                                "title": "Second Roof",
+                                "place_id": "place-2",
+                            },
+                        ],
+                    }
+                ],
+                keyword_volume=[],
+                backlinks=[],
+                lighthouse=[],
+                google_reviews=[
+                    {
+                        "cid": "cid-1",
+                        "business_name": "Phoenix Roof Pros",
+                        "review_retrieval_mode": "cid",
+                        "review_timestamps": [
+                            "2026-05-01T00:00:00+00:00",
+                            "2026-05-20T00:00:00+00:00",
+                        ],
+                    }
+                ],
+                gbp_info=[],
+                business_listings=[],
+            )
+        },
+        meta=RunMetadata(total_api_calls=1, total_cost_usd=0.002, collection_time_seconds=0.2),
+    )
+
+    async def collect_with_maps_cost(*args, **kwargs):
+        fake_dfs.cost_tracker.record(
+            "serp/google/maps/live/advanced",
+            "maps-current",
+            0.002,
+            False,
+            110,
+            {"keyword": "roofing near me", "location_code": 1012873},
+            collected_at="2026-05-24T14:00:01+00:00",
+            response_hash="maps-current-hash",
+        )
+        fake_dfs.cost_log = fake_dfs.cost_tracker.records
+        return raw
+
+    with patch("src.pipeline.orchestrator.expand_keywords",
+               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
+         patch("src.pipeline.orchestrator.collect_data",
+               new=AsyncMock(side_effect=collect_with_maps_cost)), \
+         patch("src.pipeline.orchestrator.extract_signals",
+               return_value=_FAKE_SIGNALS), \
+         patch("src.pipeline.orchestrator.compute_scores",
+               return_value=_FAKE_SCORES), \
+         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
+         patch("src.pipeline.orchestrator.classify_serp_archetype",
+               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
+         patch("src.pipeline.orchestrator.compute_difficulty_tier",
+               return_value=_FAKE_DIFFICULTY_RESULT), \
+         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
+               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+        result = asyncio.run(
+            score_niche_for_metro(
+                niche="roofing",
+                city="Phoenix",
+                state="AZ",
+                strategy_profile="balanced",
+                llm_client=object(),
+                dataforseo_client=fake_dfs,
+            )
+        )
+
+    assert "local_pack_listing_facts" not in result.report
+    first = result.local_pack_listing_facts[0]
+    assert first["cbsa_code"] == "38060"
+    assert first["cid"] == "cid-1"
+    assert first["place_id"] == "place-1"
+    assert first["source_query"] == "roofing near me"
+    assert first["dataforseo_location_code"] == 1012873
+    assert first["listing_url"] == "https://phoenixroof.example/maps"
+    assert first["domain"] == "phoenixroof.example"
+    assert first["upstream_result_at"] == "2026-05-24T13:59:00+00:00"
+    assert first["review_retrieval_mode"] == "cid"
+    assert first["review_window_start"] == "2026-05-01T00:00:00+00:00"
+    assert first["review_window_end"] == "2026-05-20T00:00:00+00:00"
+    maps_artifact = result.seo_evidence_artifacts[0]
+    assert maps_artifact["evidence_family"] == "maps"
+    assert first["evidence_artifact_id"] == maps_artifact["id"]
+
+
+def test_review_window_from_row_orders_mixed_offset_timestamps_by_instant() -> None:
+    start, end = _review_window_from_row(
+        {
+            "review_timestamps": [
+                "2026-05-01T02:30:00+02:00",
+                "2026-05-01T00:15:00Z",
+                "2026-04-30T20:45:00-04:00",
+            ],
+        }
+    )
+
+    assert start == "2026-05-01T00:15:00Z"
+    assert end == "2026-04-30T20:45:00-04:00"
 
 
 def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() -> None:
@@ -442,6 +714,51 @@ def test_cost_tracker_aggregates_by_endpoint() -> None:
     assert tracker.total_calls == 3
     assert tracker.cached_calls == 1
     assert abs(tracker.total_cost - 0.0026) < 1e-9
+
+
+def test_cost_tracker_flush_keeps_api_usage_log_shape() -> None:
+    class _Table:
+        def __init__(self) -> None:
+            self.rows: list[dict[str, object]] = []
+
+        def insert(self, rows):
+            self.rows = rows
+            return self
+
+        def execute(self):
+            return None
+
+    class _Client:
+        def __init__(self) -> None:
+            self.table_obj = _Table()
+
+        def table(self, name: str) -> _Table:
+            assert name == "api_usage_log"
+            return self.table_obj
+
+    tracker = CostTracker()
+    tracker.record(
+        "serp/google/maps/live/advanced",
+        "maps-1",
+        0.002,
+        False,
+        100,
+        {"keyword": "roofing"},
+        collected_at="2026-05-24T14:00:00+00:00",
+        response_hash="private-hash",
+    )
+    client = _Client()
+
+    assert tracker.flush_to_supabase("11111111-1111-1111-1111-111111111111", client=client) == 1
+    assert set(client.table_obj.rows[0]) == {
+        "endpoint",
+        "task_id",
+        "cost",
+        "cached",
+        "latency_ms",
+        "parameters",
+        "report_id",
+    }
 
 
 def test_expansion_key_contract_matches_m4_output() -> None:

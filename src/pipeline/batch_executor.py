@@ -28,6 +28,7 @@ class ExecutionState:
     task_costs: dict[str, float] = field(default_factory=dict)
     task_categories: dict[str, str] = field(default_factory=dict)
     task_metros: dict[str, str] = field(default_factory=dict)
+    task_payloads: dict[str, dict[str, Any]] = field(default_factory=dict)
     total_api_calls: int = 0
     failures: list[FailureRecord] = field(default_factory=list)
     seen_dedup_keys: set[str] = field(default_factory=set)
@@ -80,7 +81,53 @@ def _materialize_dependent_tasks(
             continue
 
         metro = metros[template.metro_id]
-        if template.task_type in {"google_reviews", "gbp_info", "business_listings"}:
+        if template.task_type in {"google_reviews", "gbp_info"}:
+            profile = _best_maps_profile_for_metro(template.metro_id, state)
+            if profile is not None:
+                payload = dict(template.payload)
+                query = profile["query"]
+                if template.task_type == "gbp_info":
+                    query = (
+                        profile.get("business_name")
+                        or profile.get("source_query")
+                        or profile["query"]
+                    )
+                payload.update(
+                    {
+                        "keyword": query,
+                        "location_code": metro.location_code,
+                        "cid": profile.get("cid"),
+                        "place_id": profile.get("place_id"),
+                        "business_name": profile.get("business_name"),
+                        "source_query": profile.get("source_query"),
+                        "preferred_identifier_mode": profile["identifier_mode"],
+                        "review_retrieval_mode": (
+                            profile["identifier_mode"]
+                            if template.task_type == "google_reviews"
+                            else None
+                        ),
+                        "gbp_retrieval_mode": (
+                            "keyword" if template.task_type == "gbp_info" else None
+                        ),
+                    }
+                )
+                concrete_key = template.dedup_key
+                if concrete_key and concrete_key in state.seen_dedup_keys:
+                    continue
+                tasks.append(
+                    CollectionTask(
+                        task_id=f"dep-{next_id:05d}",
+                        metro_id=template.metro_id,
+                        task_type=template.task_type,
+                        payload=payload,
+                        depends_on=(),
+                        dedup_key=concrete_key,
+                    )
+                )
+                if concrete_key:
+                    state.seen_dedup_keys.add(concrete_key)
+                next_id += 1
+        elif template.task_type == "business_listings":
             payload = dict(template.payload)
             payload.update(
                 {
@@ -181,6 +228,7 @@ async def _run_task(task: CollectionTask, client: Any, state: ExecutionState) ->
     state.total_api_calls += 1
     state.task_categories[task.task_id] = task.task_type
     state.task_metros[task.task_id] = task.metro_id
+    state.task_payloads[task.task_id] = dict(task.payload)
 
     if response.status != "ok":
         state.failures.append(failure_from_response(task, response))
@@ -205,7 +253,13 @@ async def _dispatch_task(task: CollectionTask, client: Any) -> APIResponse:
         category = payload.get("keyword") or "local business"
         return await client.business_listings(category, payload["location_code"])
     if task.task_type == "google_reviews":
-        return await client.google_reviews(payload["keyword"], payload["location_code"])
+        mode = payload.get("review_retrieval_mode")
+        return await client.google_reviews(
+            payload.get("keyword"),
+            payload["location_code"],
+            cid=payload.get("cid") if mode == "cid" else None,
+            place_id=payload.get("place_id") if mode == "place_id" else None,
+        )
     if task.task_type == "gbp_info":
         return await client.google_my_business_info(payload["keyword"], payload["location_code"])
     if task.task_type == "backlinks":
@@ -309,6 +363,124 @@ def _first_maps_keyword_for_metro(metro_id: str, state: ExecutionState) -> str |
             if keyword:
                 return str(keyword)
     return None
+
+
+def _best_maps_profile_for_metro(
+    metro_id: str,
+    state: ExecutionState,
+) -> dict[str, str | None] | None:
+    profiles = _top_maps_profiles_for_metro(metro_id, state, limit=3)
+    return profiles[0] if profiles else None
+
+
+def _top_maps_profiles_for_metro(
+    metro_id: str,
+    state: ExecutionState,
+    *,
+    limit: int,
+) -> list[dict[str, str | None]]:
+    profiles: list[dict[str, str | None]] = []
+    seen: set[str] = set()
+    for task_id, category in state.task_categories.items():
+        if category != "serp_maps" or not _task_matches_metro(task_id, metro_id, state):
+            continue
+        for result in state.task_results.get(task_id, []):
+            source_query = _text(result.get("keyword"))
+            items = result.get("items") if isinstance(result.get("items"), list) else []
+            if not items and source_query:
+                dedup_key = f"keyword:{source_query.lower()}"
+                if dedup_key not in seen:
+                    seen.add(dedup_key)
+                    profiles.append(
+                        {
+                            "cid": None,
+                            "place_id": None,
+                            "business_name": None,
+                            "source_query": source_query,
+                            "identifier_mode": "keyword",
+                            "query": source_query,
+                            "dedup_key": dedup_key,
+                        }
+                    )
+                    if len(profiles) >= limit:
+                        return profiles
+            for item in _top_ranked_items(items, limit=limit):
+                cid = _text(item.get("cid"))
+                place_id = _text(item.get("place_id"))
+                business_name = _text(
+                    item.get("title") or item.get("name") or item.get("business_name")
+                )
+                if cid:
+                    identifier_mode = "cid"
+                    query = cid
+                    dedup_key = f"cid:{cid}"
+                elif place_id:
+                    identifier_mode = "place_id"
+                    query = place_id
+                    dedup_key = f"place_id:{place_id}"
+                elif business_name:
+                    identifier_mode = "title"
+                    query = business_name
+                    dedup_key = f"title:{business_name.lower()}"
+                elif source_query:
+                    identifier_mode = "keyword"
+                    query = source_query
+                    dedup_key = f"keyword:{query.lower()}"
+                else:
+                    continue
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
+                profiles.append(
+                    {
+                        "cid": cid,
+                        "place_id": place_id,
+                        "business_name": business_name,
+                        "source_query": source_query,
+                        "identifier_mode": identifier_mode,
+                        "query": query,
+                        "dedup_key": dedup_key,
+                    }
+                )
+                if len(profiles) >= limit:
+                    return profiles
+    return profiles
+
+
+def _top_ranked_items(items: list[Any], *, limit: int) -> list[dict[str, Any]]:
+    rows = [item for item in items if isinstance(item, dict)]
+    if any(_rank_value(row) is not None for row in rows):
+        rows = [
+            row
+            for _, row in sorted(
+                enumerate(rows),
+                key=lambda pair: (
+                    _rank_value(pair[1]) is None,
+                    _rank_value(pair[1]) if _rank_value(pair[1]) is not None else 0,
+                    pair[0],
+                ),
+            )
+        ]
+    return rows[:limit]
+
+
+def _rank_value(row: dict[str, Any]) -> int | None:
+    for rank_field in ("rank_group", "rank", "position", "rank_absolute"):
+        value = row.get(rank_field)
+        try:
+            rank = int(value)
+        except (TypeError, ValueError):
+            continue
+        if rank > 0:
+            return rank
+    return None
+
+
+def _text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _task_matches_metro(task_id: str, metro_id: str, state: ExecutionState) -> bool:
