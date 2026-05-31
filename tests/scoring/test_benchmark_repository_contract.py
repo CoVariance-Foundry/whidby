@@ -188,3 +188,20 @@ def test_whi126_migration_adds_lineage_and_metric_sufficiency_schema() -> None:
         assert metric_family in migration
     assert "CHECK (non_null_metros <= attempted_metros)" in migration
     assert "CHECK (non_null_observations <= attempted_observations)" in migration
+
+
+def test_whi126_recompute_wrapper_clears_stale_lineage() -> None:
+    migration = (
+        Path(__file__).parents[2]
+        / "supabase/migrations/20260524140100_whi126_clear_non_lineage_recompute.sql"
+    ).read_text()
+
+    assert "RENAME TO recompute_seo_benchmarks_without_lineage" in migration
+    assert "CREATE OR REPLACE FUNCTION public.recompute_seo_benchmarks" in migration
+    assert "FROM public.recompute_seo_benchmarks_without_lineage(p_window_days)" in migration
+    assert "benchmark_run_id = NULL" in migration
+    assert "benchmark_mode = 'exact'" in migration
+    assert "formula_version = NULL" in migration
+    assert "sample_frame_version = NULL" in migration
+    assert "metric_confidence_rollup = '{}'::jsonb" in migration
+    assert "WHERE last_recomputed_at >= v_started_at" in migration
