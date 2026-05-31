@@ -2,9 +2,9 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-Status: this worktree is implementing `WHI-128` on `codex/whi-128-metric-readiness-audits`, stacked after the WHI-127 evidence-lineage work. Earlier WHI-99 through WHI-106 notes below remain historical context for the Scoring Coverage & Benchmark Hardening project.
+Status: this worktree is implementing `WHI-109` on `codex/whi-109-seed-strategy`, stacked after the WHI-105 app-surface visibility branch while PR #91 waits for a fresh Greptile review. Earlier WHI-99 through WHI-106 and WHI-128 notes below remain historical context for the Scoring Coverage & Benchmark Hardening project.
 
-Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue for this worktree is `WHI-128`: report metric-level benchmark sufficiency and strategy readiness in audits.
+Linear: project `Scoring Coverage & Benchmark Hardening` is In Progress. Current issue for this worktree is `WHI-109`: optimize production data collection strategy for scoring and benchmarks.
 
 Goal: define the guarded production scoring coverage experiment before any paid sample run, so V2 scoring and benchmark seed decisions are based on measured signal availability by metro size and service.
 
@@ -32,6 +32,7 @@ Current contract:
 - WHI-105 reran the read-only app-surface audit against production project `eoajvifhbmqmoluiokcj` on 2026-05-24 using the existing 96 pilot JSONL artifacts. The audit still exits fail, but the cause is now pinned to surface coverage: 3,208 current strategy-audit pairs have materialized Explore rows, 81 have V2 score/benchmark-confidence metadata, 110 have report-backed Explore visibility, 64 are V2-preferred in Explore, 3,127 are missing V2 scores, and 3,144 are non-V2 fallback/catalog rows. Report-detail routing is not the blocker for rows with lineage: all 110 unique report-backed IDs exist in `reports`, and five sampled `GET https://whidby-1.onrender.com/api/niches/{report_id}` calls returned HTTP 200 with matching IDs and `metros` arrays.
 - WHI-106 adds the Milestone 3 coverage-weighted scoring recommendation to `docs/scoring-coverage-analysis.md`. The issue scope is `small_50_100k`, `medium_100_300k`, and `large_300k_1m`, but the recommendation keeps the same warning-only benchmark fallback policy for every scored population class until required benchmark and metric families meet sufficiency gates. Population stays scored; demand, organic SERP composition, monetization, and AI resilience stay scored with warnings; DA/Lighthouse stay telemetry-only; local review count/velocity and benchmark-relative claims require acquisition. No current signal should be removed based on this slice alone.
 - WHI-128 adds read-only metric-sufficiency audit output from `seo_benchmark_metric_sufficiency`. Audits now report `metric_missing`, `metric_undersampled`, and `metric_ready` by benchmark cell and metric family; roll those families into Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, and `/agency` target review readiness; and emit canary guidance for blocked cells/families. This slice does not run paid acquisition, live Supabase reads, or benchmark recompute.
+- WHI-109 began on 2026-05-31. Runtime env checks passed after `npm run env:sync:local`, but the fresh production read-only audits failed before metric analysis because production `seo_benchmarks` does not yet expose the Milestone 4 lineage/sufficiency columns expected by the current audit code. The WHI-109 strategy in `docs/scoring-coverage-analysis.md` therefore gates paid work behind PR #91 / WHI-105 stack merge plus production schema visibility, then orders work as: no-paid baseline refresh, a tiny metric canary for existing V2 fact cells, missing-service launch-band seed, cell-depth backfill, benchmark recompute, and Explore refresh validation.
 
 Verified:
 
@@ -55,8 +56,8 @@ Verified:
 
 Next:
 
-- Close `WHI-105` after the app-surface visibility PR lands, then finish `WHI-106` by validating the recommendation docs, updating Linear, and opening the stacked PR.
-- Keep paid work bounded to the smallest reviewed acquisition/backfill batch needed to populate DA/Lighthouse telemetry, top-3 review velocity, and benchmark cells with `sample_size_metros >= 8`; do not run benchmark recompute or broader paid expansion until the read-only audits pass.
+- Do not merge PR #91 until the fresh Greptile review for the latest head is confirmed 5/5.
+- Finish WHI-109 docs-only strategy, verify docs-sync/docguard, open the stacked PR only after PR #91's gate state is clear, and keep all paid work blocked until the read-only production schema gate passes.
 
 ## Billing Hardening And Admin Issue Visibility
 
