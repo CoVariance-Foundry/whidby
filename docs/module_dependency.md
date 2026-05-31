@@ -96,6 +96,8 @@ src/research_agent/api.py ──→ SupabasePersistence.client
 | Supabase benchmark repository (`src/clients/seo_benchmark_repository.py`) | Supabase `seo_benchmarks` | V2 scoring orchestration via `MarketService` |
 | Supabase city data provider (`src/clients/city_data_repository.py`) | Supabase `census_cbp_establishments` | V2 monetization/business-density enrichment via `MarketService` |
 | Explore repository (`src/clients/explore_repository.py`) | Supabase `explore_market_cells`, canonical niche normalization | FastAPI Explore city list/detail endpoints |
+| Benchmark lineage and sufficiency audits (`scripts/explore/audit_signal_coverage.py`, `scripts/explore/audit_scoring_strategy.py`) | Supabase `seo_benchmark_runs`, `seo_benchmarks`, `seo_benchmark_metric_sufficiency` | Seed/recompute readiness gates and strategy-specific warning/blocked status |
+| SEO evidence artifact persistence (`src/clients/supabase_persistence.py`, `scripts/benchmarks/run_pilot.py`) | DataForSEO cost records, Supabase `seo_evidence_artifacts`, `local_pack_listing_facts` | Benchmark acquisition reruns, local review velocity auditability, and partial-persistence warnings |
 
 The consumer helpers own request-origin resolution, bounded upstream response reads, optional JSON parsing, and unavailable/upstream-error responses. FastAPI adapters must use the public persistence client accessor instead of reaching into private adapter state when sharing the configured Supabase client.
 
