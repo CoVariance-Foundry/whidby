@@ -92,6 +92,12 @@ ACCEPTANCE_GATE_LABELS = {
     "metric_ready_cells": "metric-ready benchmark cell count",
     "explore_v2_rows": "Explore V2 row count",
 }
+METRIC_FAMILY_COLLECTION_FLAGS = {
+    "organic_authority": ("--collect-organic-telemetry",),
+    "lighthouse_site_quality": ("--collect-organic-telemetry",),
+    "review_velocity": ("--collect-review-velocity", "--review-depth"),
+    "gbp_profile": ("--collect-gbp-profile",),
+}
 
 
 def load_env(env_path: Path | None = None) -> None:
@@ -313,6 +319,117 @@ def build_required_benchmark_keys(
     }
 
 
+def collection_flags_for_metric_families(metric_families: list[str]) -> list[str]:
+    flags: list[str] = []
+    for family in metric_families:
+        for flag in METRIC_FAMILY_COLLECTION_FLAGS.get(family, ()):
+            if flag not in flags:
+                flags.append(flag)
+    return flags
+
+
+def metric_gap_details_by_required_key(
+    metric_sufficiency: dict[str, Any] | None,
+    *,
+    required_benchmark_keys: set[tuple[str, str]],
+    min_benchmark_sample_size: int,
+) -> dict[tuple[str, str], dict[str, int]]:
+    if metric_sufficiency is None:
+        return {}
+    gaps: dict[tuple[str, str], dict[str, int]] = {}
+    for cell in metric_sufficiency.get("cells", []):
+        key = (
+            str(cell.get("niche_normalized") or ""),
+            str(cell.get("population_class") or ""),
+        )
+        if key not in required_benchmark_keys:
+            continue
+        gap_families = (
+            set(cell.get("blocked_metric_families") or [])
+            | set(cell.get("undersampled_metric_families") or [])
+        )
+        if gap_families:
+            families = cell.get("families") or {}
+            gaps[key] = {
+                family: max(
+                    0,
+                    min_benchmark_sample_size
+                    - int(numeric_value((families.get(family) or {}).get("non_null_metros"))),
+                )
+                for family in sorted(gap_families)
+            }
+    return gaps
+
+
+def build_required_acquisition_plan(
+    *,
+    required_benchmark_keys: set[tuple[str, str]],
+    benchmark_sample_sizes: dict[tuple[str, str], int],
+    metric_sufficiency: dict[str, Any] | None,
+    min_benchmark_sample_size: int,
+) -> dict[str, Any]:
+    metric_gaps = metric_gap_details_by_required_key(
+        metric_sufficiency,
+        required_benchmark_keys=required_benchmark_keys,
+        min_benchmark_sample_size=min_benchmark_sample_size,
+    )
+    cells = []
+    ready_cell_count = 0
+    for niche, population_class in sorted(required_benchmark_keys):
+        sample_size = benchmark_sample_sizes.get((niche, population_class), 0)
+        needed_sample_metros = max(0, min_benchmark_sample_size - sample_size)
+        metric_family_shortfalls = metric_gaps.get((niche, population_class), {})
+        needs_metric_families = list(metric_family_shortfalls)
+        if needed_sample_metros == 0 and not needs_metric_families:
+            ready_cell_count += 1
+            continue
+        collection_flags = collection_flags_for_metric_families(needs_metric_families)
+        acquisition_target_pairs = max(
+            [needed_sample_metros, *metric_family_shortfalls.values(), 1]
+            if needs_metric_families
+            else [needed_sample_metros]
+        )
+        suggested_options: dict[str, Any] = {
+            "niche": niche,
+            "population_class": population_class,
+            "sample_mode": "pilot",
+            "limit_pairs": acquisition_target_pairs,
+            "required_flags": ["--require-dfs", "--require-v2-persistence"],
+            "paid_budget_required": True,
+        }
+        if "--collect-review-velocity" in collection_flags:
+            suggested_options["review_depth"] = 10
+        if "--collect-organic-telemetry" in collection_flags:
+            suggested_options["organic_telemetry_limit"] = 5
+        cells.append(
+            {
+                "niche_normalized": niche,
+                "population_class": population_class,
+                "current_sample_size": sample_size,
+                "needed_sample_metros": needed_sample_metros,
+                "needs_metric_families": needs_metric_families,
+                "metric_family_shortfalls": metric_family_shortfalls,
+                "collection_flags": collection_flags,
+                "suggested_options": suggested_options,
+            }
+        )
+    cells.sort(
+        key=lambda cell: (
+            -int(cell["needed_sample_metros"]),
+            -len(cell["needs_metric_families"]),
+            str(cell["niche_normalized"]),
+            str(cell["population_class"]),
+        )
+    )
+    return {
+        "required_cells_total": len(required_benchmark_keys),
+        "ready_cell_count": ready_cell_count,
+        "blocking_cell_count": len(cells),
+        "min_benchmark_sample_size": min_benchmark_sample_size,
+        "cells": cells,
+    }
+
+
 def low_coverage_failures(
     rows: list[dict[str, Any]],
     key_fields: tuple[str, ...],
@@ -483,6 +600,7 @@ def build_report(
         by_explore_visibility[str(bool(fact["explore_visible"])).lower()].append(fact)
 
     metric_sufficiency = None
+    required_metric_sufficiency = None
     strategy_readiness = None
     canary_guidance = None
     if metric_sufficiency_rows is not None:
@@ -504,12 +622,25 @@ def build_report(
             failures.append(
                 f"{metric_gap_count} benchmark metric family sufficiency gap(s) need collection"
             )
+        required_metric_sufficiency = summarize_metric_sufficiency(
+            benchmark_cells=required_benchmark_keys,
+            benchmarks=benchmarks,
+            metric_sufficiency_rows=metric_sufficiency_rows,
+            min_benchmark_sample_size=min_benchmark_sample_size,
+        )
+
+    required_acquisition_plan = build_required_acquisition_plan(
+        required_benchmark_keys=required_benchmark_keys,
+        benchmark_sample_sizes=benchmark_sample_sizes,
+        metric_sufficiency=required_metric_sufficiency,
+        min_benchmark_sample_size=min_benchmark_sample_size,
+    )
 
     readiness_gates = build_readiness_gates(
         usable_benchmark_cells=len(usable_required_benchmark_keys),
         min_benchmark_cells=min_benchmark_cells,
         metric_ready_cells=count_metric_ready_cells(
-            metric_sufficiency,
+            required_metric_sufficiency,
             required_benchmark_keys=required_benchmark_keys,
         ),
         min_metric_ready_cells=min_metric_ready_cells,
@@ -584,6 +715,7 @@ def build_report(
             ],
         },
         "readiness_gates": readiness_gates,
+        "required_acquisition_plan": required_acquisition_plan,
         "groups": (
             group_summary(enriched_facts, ("niche_normalized",), label="service")
             + group_summary(enriched_facts, ("population_class",), label="population_class")
@@ -597,6 +729,7 @@ def build_report(
     }
     if metric_sufficiency is not None:
         report["metric_sufficiency"] = metric_sufficiency
+        report["required_metric_sufficiency"] = required_metric_sufficiency
         report["strategy_readiness"] = strategy_readiness
         report["canary_guidance"] = canary_guidance
     return report
