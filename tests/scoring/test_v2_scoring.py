@@ -263,6 +263,97 @@ def test_low_confidence_benchmark_sets_undersampled_flag() -> None:
     assert result["flags"]["benchmark_undersampled"] is True
 
 
+def test_metric_confidence_rollup_downgrades_effective_benchmark_confidence() -> None:
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(),
+        benchmark=benchmark_cell(
+            sample_size_metros=12,
+            confidence_label="medium",
+            metric_confidence_rollup={
+                "demand": {
+                    "confidence_label": "low",
+                    "non_null_metros": 3,
+                    "attempted_metros": 12,
+                },
+                "local_pack": {
+                    "confidence_label": "medium",
+                    "non_null_metros": 12,
+                    "attempted_metros": 12,
+                },
+                "review_velocity": {
+                    "confidence_label": "insufficient",
+                    "non_null_metros": 0,
+                    "attempted_metros": 12,
+                },
+            },
+        ),
+    )
+
+    assert result["benchmark"]["confidence_label"] == "insufficient"
+    assert result["flags"]["benchmark_undersampled"] is True
+
+
+def test_metric_confidence_rollup_ignores_warning_only_organic_telemetry() -> None:
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(),
+        benchmark=benchmark_cell(
+            sample_size_metros=12,
+            confidence_label="medium",
+            metric_confidence_rollup={
+                "demand": {"confidence_label": "medium"},
+                "organic_serp": {"confidence_label": "medium"},
+                "organic_authority": {"confidence_label": "insufficient"},
+                "lighthouse_site_quality": {"confidence_label": "insufficient"},
+            },
+        ),
+    )
+
+    assert result["benchmark"]["confidence_label"] == "medium"
+    assert result["flags"]["benchmark_undersampled"] is False
+
+
+def test_metric_confidence_rollup_preserves_aggregate_when_families_are_ready() -> None:
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(),
+        benchmark=benchmark_cell(
+            sample_size_metros=12,
+            confidence_label="medium",
+            metric_confidence_rollup={
+                "demand": {"confidence_label": "medium"},
+                "local_pack": {"confidence_label": "high"},
+            },
+        ),
+    )
+
+    assert result["benchmark"]["confidence_label"] == "medium"
+    assert result["flags"]["benchmark_undersampled"] is False
+
+
+def test_metric_confidence_rollup_ignores_unrecognized_family_shapes() -> None:
+    result = compute_v2_scores(
+        niche_normalized="plumber",
+        cbsa_code="31080",
+        metro_signals=signal_fixture(),
+        benchmark=benchmark_cell(
+            sample_size_metros=12,
+            confidence_label="high",
+            metric_confidence_rollup={
+                "demand": ["high"],
+                "local_pack": {"confidence_label": "experimental"},
+            },
+        ),
+    )
+
+    assert result["benchmark"]["confidence_label"] == "high"
+    assert result["flags"]["benchmark_undersampled"] is False
+
+
 def test_demand_ignores_v1_total_and_effective_volume() -> None:
     result = compute_v2_scores(
         niche_normalized="plumber",
