@@ -196,7 +196,7 @@ Analyze pilot output and benchmark readiness:
 
 ```bash
 python -m scripts.explore.audit_scoring_strategy --read-only --expected-project-ref eoajvifhbmqmoluiokcj --service-name roofing --service-name plumbing --service-name hvac --service-name "tree service" --service-name "auto repair" --service-name "water damage restoration" --service-name electrician --service-name locksmith --population-class micro_under_50k --population-class small_50_100k --population-class medium_100_300k --population-class large_300k_1m --population-class metro_1m_5m --population-class mega_5m_plus --pilot-results reports/scoring_audit/coverage_micro.jsonl --pilot-results reports/scoring_audit/coverage_small.jsonl --pilot-results reports/scoring_audit/coverage_medium.jsonl --pilot-results reports/scoring_audit/coverage_large.jsonl --pilot-results reports/scoring_audit/coverage_metro.jsonl --pilot-results reports/scoring_audit/coverage_mega.jsonl
-python -m scripts.explore.audit_signal_coverage --coverage-threshold 0.6 --min-benchmark-cells 48 --min-benchmark-sample-size 8 --expected-project-ref eoajvifhbmqmoluiokcj
+python -m scripts.explore.audit_signal_coverage --coverage-threshold 0.6 --min-benchmark-cells 48 --min-benchmark-sample-size 8 --min-metric-ready-cells 48 --min-explore-v2-rows 48 --expected-project-ref eoajvifhbmqmoluiokcj
 BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m scripts.benchmarks.recompute_benchmarks 120 --expected-project-ref eoajvifhbmqmoluiokcj
 python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajvifhbmqmoluiokcj
 ```
@@ -238,7 +238,7 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 
 | Classification | Threshold | Scoring Policy |
 | --- | --- | --- |
-| Reliable | Overall coverage `>= 0.80`, every required population slice `>= 0.60`, aggregate benchmark cells meet `sample_size_metros >= 8`, and required metric families are `metric_ready` | Keep scored |
+| Reliable | Overall coverage `>= 0.80`, every required population slice `>= 0.60`, canonical required benchmark cells meet `sample_size_metros >= 8`, required metric families are `metric_ready`, and Explore rows are backed by V2 scores | Keep scored |
 | Score-with-warning | Overall coverage `>= 0.40` but below reliable, or a required slice below `0.60` with nonzero evidence | Use in V2 scoring with warning/confidence penalty |
 | Telemetry-only | Optional signal is present but below `0.40`, or top-5 DA/Lighthouse is sparse/missing | Record and display as evidence only; do not let missingness block scoring |
 | Remove | Non-critical signal remains below `0.05` across all successful API rows and does not affect an accepted product requirement | Propose removal from formula in `WHI-106`; do not change formula inside the experiment |
@@ -252,6 +252,7 @@ Linear: `WHI-101`. The latest post-enrichment baseline is `already_ready=718`, `
 | Metric sufficiency | Benchmark cells classify each metric family as `metric_missing`, `metric_undersampled`, or `metric_ready` using `seo_benchmark_metric_sufficiency` non-null evidence and confidence | `tests/scripts/test_scoring_strategy_audit.py`, `tests/scripts/test_signal_coverage_audit.py` |
 | Strategy readiness | Easy Win, GBP Blitz, Keyword Hijack, Expand & Conquer, and `/agency` target review roll up required/warning metric families and emit paid canary guidance | `tests/scripts/test_scoring_strategy_audit.py`, `tests/scripts/test_signal_coverage_audit.py` |
 | Benchmark usability | Legacy benchmark metrics still classify cells below `sample_size_metros >= 8` as undersampled for backward-compatible audit fields | `tests/scripts/test_scoring_strategy_audit.py` |
+| Readiness gates | Signal coverage emits `readiness_gates` with canonical required-cell counts, all-family metric-ready counts, and V2 Explore row counts; out-of-scope benchmark cells cannot satisfy the required 48-cell gate | `tests/scripts/test_signal_coverage_audit.py` |
 | Pilot analysis | Bulk-score JSONL rows classify success, API failure, persistence partial failure, and schema failure | `tests/scripts/test_scoring_strategy_audit.py` |
 | Project guard | Expected-project validation rejects mismatched and suffixed Supabase hosts | `tests/scripts/test_scoring_strategy_audit.py` |
 | Production target identity | Bulk scoring requests preserve Supabase metro identity through `/api/niches/score` so `metro_scores`, `metro_score_v2`, `seo_facts`, and Explore rows share the same CBSA | `tests/scripts/test_bulk_score.py`, `tests/unit/test_api_niches.py`, `tests/unit/test_pipeline_orchestrator.py` |
