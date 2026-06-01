@@ -192,8 +192,8 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
         }}
       >
         <ScoreCell label="Demand" value={metro.scores.demand} scoreKey="demand" />
-        <ScoreCell label="Organic comp." value={metro.scores.organic_competition} scoreKey="organic_competition" />
-        <ScoreCell label="Local comp." value={metro.scores.local_competition} scoreKey="local_competition" />
+        <ScoreCell label="Organic ease" value={metro.scores.organic_competition} scoreKey="organic_competition" />
+        <ScoreCell label="Local ease" value={metro.scores.local_competition} scoreKey="local_competition" />
         <ScoreCell label="Monetization" value={metro.scores.monetization} scoreKey="monetization" />
         <ScoreCell label="AI resilience" value={metro.scores.ai_resilience} scoreKey="ai_resilience" />
         <ScoreCell label="Opportunity" value={metro.scores.opportunity} scoreKey="opportunity" />

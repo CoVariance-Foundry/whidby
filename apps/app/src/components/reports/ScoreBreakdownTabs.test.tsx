@@ -77,8 +77,8 @@ describe("ScoreBreakdownTabs", () => {
   it("shows competition, demand, monetization, and ai resilience on initial render", () => {
     render(<ScoreBreakdownTabs signals={signals} scores={scores} />);
 
-    expect(screen.getByText("Organic Competition")).toBeInTheDocument();
-    expect(screen.getByText("Local Competition")).toBeInTheDocument();
+    expect(screen.getByText("Organic ease")).toBeInTheDocument();
+    expect(screen.getByText("Local ease")).toBeInTheDocument();
     expect(screen.getByText("Demand")).toBeInTheDocument();
     expect(screen.getByText("Monetization")).toBeInTheDocument();
     expect(screen.getByText("AI Resilience")).toBeInTheDocument();

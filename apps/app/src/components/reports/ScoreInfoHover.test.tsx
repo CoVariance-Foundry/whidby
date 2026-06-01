@@ -22,7 +22,7 @@ describe("ScoreInfoHover", () => {
     render(<ScoreInfoHover scoreKey="organic_competition" />);
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByRole("tooltip")).toBeInTheDocument();
-    expect(screen.getByText("Organic Competition")).toBeInTheDocument();
+    expect(screen.getByText("Organic ease")).toBeInTheDocument();
   });
 
   it("shows correct content for each score key", () => {
@@ -104,13 +104,17 @@ describe("ScoreInfoHover", () => {
 
   it("competition scores show inverse-direction language", () => {
     render(<ScoreInfoHover scoreKey="organic_competition" />);
+    expect(screen.getByRole("button", { name: /what is organic ease/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Organic ease")).toBeInTheDocument();
     expect(screen.getByText(/higher score = easier organic ranking/i)).toBeInTheDocument();
   });
 
   it("local score copy frames high values as ranking ease", () => {
     render(<ScoreInfoHover scoreKey="local_competition" />);
+    expect(screen.getByRole("button", { name: /what is local ease/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Local ease")).toBeInTheDocument();
     expect(screen.getByText(/higher score = easier local pack ranking/i)).toBeInTheDocument();
   });
 
