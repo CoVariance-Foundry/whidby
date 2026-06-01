@@ -859,6 +859,330 @@ def test_explore_v2_gate_does_not_count_out_of_scope_rows():
     assert any("Explore V2 row count 0 below minimum 1" in failure for failure in report["failures"])
 
 
+def test_metric_ready_gate_uses_required_cells_without_fact_rows():
+    plumbing_metric_rows = metric_rows(niche="plumbing")
+    for row in plumbing_metric_rows:
+        row["benchmark_run_id"] = "run-2"
+
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+            {
+                "benchmark_run_id": "run-2",
+                "niche_normalized": "plumbing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=[
+            *metric_rows(),
+            *plumbing_metric_rows,
+        ],
+        threshold=0.8,
+        min_benchmark_cells=2,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=2,
+        required_services=("roofing", "plumbing"),
+        required_population_classes=("metro_1m_5m",),
+    )
+
+    assert report["status"] == "pass"
+    assert report["readiness_gates"]["counts"]["metric_ready_cells"] == 2
+
+
+def test_required_acquisition_plan_reports_sample_and_metric_gaps():
+    rows = metric_rows()
+    for row in rows:
+        if row["metric_family"] == "review_velocity":
+            row["non_null_metros"] = 3
+            row["confidence_label"] = "low"
+    plumbing_metric_rows = metric_rows(niche="plumbing")
+    for row in plumbing_metric_rows:
+        row["benchmark_run_id"] = "run-2"
+    carpet_metric_rows = metric_rows(niche="carpet cleaning")
+    for row in carpet_metric_rows:
+        row["benchmark_run_id"] = "run-3"
+
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 5,
+            },
+            {
+                "benchmark_run_id": "run-2",
+                "niche_normalized": "plumbing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+            {
+                "benchmark_run_id": "run-3",
+                "niche_normalized": "carpet cleaning",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=[
+            *rows,
+            *plumbing_metric_rows,
+            *carpet_metric_rows,
+        ],
+        threshold=0.8,
+        min_benchmark_cells=2,
+        min_benchmark_sample_size=8,
+        required_services=("roofing", "plumbing"),
+        required_population_classes=("metro_1m_5m",),
+    )
+
+    plan = report["required_acquisition_plan"]
+    assert plan["required_cells_total"] == 2
+    assert plan["blocking_cell_count"] == 1
+    assert plan["ready_cell_count"] == 1
+    assert plan["cells"][0]["niche_normalized"] == "roofing"
+    assert plan["cells"][0]["current_sample_size"] == 5
+    assert plan["cells"][0]["needed_sample_metros"] == 3
+    assert plan["cells"][0]["needs_metric_families"] == ["review_velocity"]
+    assert plan["cells"][0]["metric_family_shortfalls"] == {"review_velocity": 5}
+    assert plan["cells"][0]["collection_flags"] == [
+        "--collect-review-velocity",
+        "--review-depth",
+    ]
+    assert plan["cells"][0]["suggested_options"]["limit_pairs"] == 5
+    assert plan["cells"][0]["suggested_options"]["review_depth"] == 10
+    assert plan["cells"][0]["suggested_options"]["paid_budget_required"] is True
+
+
+def test_required_acquisition_plan_sizes_metric_only_shortfalls():
+    rows = metric_rows()
+    for row in rows:
+        if row["metric_family"] == "review_velocity":
+            row["non_null_metros"] = 3
+            row["confidence_label"] = "low"
+
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=rows,
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        required_services=("roofing",),
+        required_population_classes=("metro_1m_5m",),
+    )
+
+    cell = report["required_acquisition_plan"]["cells"][0]
+    assert cell["needed_sample_metros"] == 0
+    assert cell["metric_family_shortfalls"] == {"review_velocity": 5}
+    assert cell["suggested_options"]["limit_pairs"] == 5
+
+
+def test_required_acquisition_plan_maps_organic_and_gbp_flags():
+    rows = metric_rows()
+    for row in rows:
+        if row["metric_family"] in {"organic_authority", "gbp_profile"}:
+            row["non_null_metros"] = 0
+            row["non_null_observations"] = 0
+            row["confidence_label"] = "insufficient"
+
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=rows,
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        required_services=("roofing",),
+        required_population_classes=("metro_1m_5m",),
+    )
+
+    cell = report["required_acquisition_plan"]["cells"][0]
+    assert cell["needs_metric_families"] == ["gbp_profile", "organic_authority"]
+    assert cell["metric_family_shortfalls"] == {
+        "gbp_profile": 8,
+        "organic_authority": 8,
+    }
+    assert cell["collection_flags"] == [
+        "--collect-gbp-profile",
+        "--collect-organic-telemetry",
+    ]
+    assert cell["suggested_options"]["organic_telemetry_limit"] == 5
+    assert cell["suggested_options"]["limit_pairs"] == 8
+
+
+def test_required_acquisition_plan_excludes_out_of_scope_gaps():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+            {
+                "benchmark_run_id": "run-2",
+                "niche_normalized": "carpet cleaning",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 1,
+            },
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=[
+            *metric_rows(),
+            *metric_rows(niche="carpet cleaning", non_null_metros=0),
+        ],
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        required_services=("roofing",),
+        required_population_classes=("metro_1m_5m",),
+    )
+
+    assert report["required_acquisition_plan"]["cells"] == []
+
+
 def test_metric_sufficiency_normalizes_benchmark_cell_keys():
     report = audit_signal_coverage.build_report(
         facts=[
