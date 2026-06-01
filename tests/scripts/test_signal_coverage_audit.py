@@ -566,6 +566,299 @@ def test_metric_sufficiency_scopes_gaps_to_audited_fact_cells():
     )
 
 
+def test_readiness_gates_pass_when_benchmark_metrics_and_explore_v2_are_ready():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=1,
+        min_explore_v2_rows=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["readiness_gates"]["ready"] is True
+    assert report["readiness_gates"]["blocking_checks"] == []
+    assert report["readiness_gates"]["counts"] == {
+        "usable_benchmark_cells": 1,
+        "metric_ready_cells": 1,
+        "explore_v2_rows": 1,
+    }
+
+
+def test_readiness_gates_block_low_metric_and_explore_v2_counts():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "legacy",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=2,
+        min_explore_v2_rows=1,
+    )
+
+    assert report["status"] == "fail"
+    assert report["readiness_gates"]["ready"] is False
+    assert report["readiness_gates"]["blocking_checks"] == [
+        "metric_ready_cells",
+        "explore_v2_rows",
+    ]
+    assert any("metric-ready benchmark cell count" in failure for failure in report["failures"])
+    assert any("Explore V2 row count" in failure for failure in report["failures"])
+
+
+def test_required_benchmark_scope_does_not_count_out_of_scope_cells():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+            {
+                "benchmark_run_id": "run-2",
+                "niche_normalized": "carpet cleaning",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=2,
+        min_benchmark_sample_size=8,
+    )
+
+    assert report["status"] == "fail"
+    assert report["benchmark_cells"]["count"] == 2
+    assert report["benchmark_cells"]["usable_count"] == 2
+    assert report["benchmark_cells"]["required_cells_total"] == 48
+    assert report["benchmark_cells"]["usable_required_count"] == 1
+    assert report["benchmark_cells"]["out_of_scope_usable_count"] == 1
+    assert any(
+        "usable benchmark cell count within required scope 1 below minimum 2" in failure
+        for failure in report["failures"]
+    )
+
+
+def test_metric_ready_gate_does_not_count_out_of_scope_cells():
+    carpet_metric_rows = metric_rows(niche="carpet cleaning")
+    for row in carpet_metric_rows:
+        row["benchmark_run_id"] = "run-2"
+
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            },
+            {
+                "cbsa_code": "22222",
+                "niche_normalized": "carpet cleaning",
+                "avg_top5_da": 42,
+                "avg_top5_lighthouse": 82,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            },
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            },
+            {
+                "cbsa_code": "22222",
+                "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+                "population_class": "metro_1m_5m",
+            },
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+            {
+                "benchmark_run_id": "run-2",
+                "niche_normalized": "carpet cleaning",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            },
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            },
+            {
+                "cbsa_code": "22222",
+                "niche_normalized": "carpet cleaning",
+                "report_id": "report-2",
+                "score_system": "v2",
+            },
+        ],
+        metric_sufficiency_rows=[
+            *metric_rows(),
+            *carpet_metric_rows,
+        ],
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=2,
+    )
+
+    assert report["status"] == "fail"
+    assert report["readiness_gates"]["counts"]["metric_ready_cells"] == 1
+    assert report["readiness_gates"]["blocking_checks"] == ["metric_ready_cells"]
+
+
+def test_explore_v2_gate_does_not_count_out_of_scope_rows():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "carpet cleaning",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=1,
+        min_explore_v2_rows=1,
+    )
+
+    assert report["status"] == "fail"
+    assert report["readiness_gates"]["counts"]["explore_v2_rows"] == 0
+    assert report["readiness_gates"]["blocking_checks"] == ["explore_v2_rows"]
+    assert any("Explore V2 row count 0 below minimum 1" in failure for failure in report["failures"])
+
+
 def test_metric_sufficiency_normalizes_benchmark_cell_keys():
     report = audit_signal_coverage.build_report(
         facts=[

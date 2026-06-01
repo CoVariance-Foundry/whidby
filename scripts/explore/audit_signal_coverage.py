@@ -23,6 +23,7 @@ from scripts.utils.supabase_guard import (  # noqa: E402
 )
 from scripts.explore.audit_scoring_strategy import (  # noqa: E402
     METRIC_MISSING_STATUS,
+    METRIC_READY_STATUS,
     METRIC_UNDERSAMPLED_STATUS,
     build_canary_guidance,
     normalize_service_key,
@@ -31,6 +32,24 @@ from scripts.explore.audit_scoring_strategy import (  # noqa: E402
 )
 
 PAGE_SIZE = 1000
+DEFAULT_REQUIRED_SERVICES = (
+    "roofing",
+    "plumbing",
+    "hvac",
+    "tree service",
+    "auto repair",
+    "water damage restoration",
+    "electrician",
+    "locksmith",
+)
+DEFAULT_REQUIRED_POPULATION_CLASSES = (
+    "micro_under_50k",
+    "small_50_100k",
+    "medium_100_300k",
+    "large_300k_1m",
+    "metro_1m_5m",
+    "mega_5m_plus",
+)
 
 REQUIRED_COLUMNS = {
     "seo_facts": (
@@ -65,7 +84,13 @@ REQUIRED_COLUMNS = {
         "source_window_end",
         "created_at",
     ),
-    "explore_market_cells": ("cbsa_code", "niche_normalized", "report_id"),
+    "explore_market_cells": ("cbsa_code", "niche_normalized", "report_id", "score_system"),
+}
+
+ACCEPTANCE_GATE_LABELS = {
+    "usable_benchmark_cells": "usable benchmark cell count",
+    "metric_ready_cells": "metric-ready benchmark cell count",
+    "explore_v2_rows": "Explore V2 row count",
 }
 
 
@@ -203,6 +228,91 @@ def group_summary(
     return [{"group": label, "rows": summaries}]
 
 
+def count_explore_v2_rows(
+    explore_cells: list[dict[str, Any]],
+    *,
+    metro_by_cbsa: Mapping[str, Mapping[str, Any]],
+    required_benchmark_keys: set[tuple[str, str]],
+) -> int:
+    return sum(
+        1
+        for row in explore_cells
+        if row.get("report_id")
+        and str(row.get("score_system") or "").strip().lower() == "v2"
+        and (
+            normalize_service_key(str(row.get("niche_normalized") or "")),
+            str(metro_by_cbsa.get(str(row.get("cbsa_code") or ""), {}).get("population_class") or ""),
+        )
+        in required_benchmark_keys
+    )
+
+
+def count_metric_ready_cells(
+    metric_sufficiency: dict[str, Any] | None,
+    *,
+    required_benchmark_keys: set[tuple[str, str]],
+) -> int:
+    if metric_sufficiency is None:
+        return 0
+    metric_families = metric_sufficiency.get("metric_families") or ()
+    return sum(
+        1
+        for cell in metric_sufficiency.get("cells", [])
+        if (
+            str(cell.get("niche_normalized") or ""),
+            str(cell.get("population_class") or ""),
+        )
+        in required_benchmark_keys
+        if len(cell.get("ready_metric_families") or []) == len(metric_families)
+        and all(
+            family.get("status") == METRIC_READY_STATUS
+            for family in (cell.get("families") or {}).values()
+        )
+    )
+
+
+def build_readiness_gates(
+    *,
+    usable_benchmark_cells: int,
+    min_benchmark_cells: int,
+    metric_ready_cells: int,
+    min_metric_ready_cells: int,
+    explore_v2_rows: int,
+    min_explore_v2_rows: int,
+) -> dict[str, Any]:
+    counts = {
+        "usable_benchmark_cells": usable_benchmark_cells,
+        "metric_ready_cells": metric_ready_cells,
+        "explore_v2_rows": explore_v2_rows,
+    }
+    minimums = {
+        "usable_benchmark_cells": min_benchmark_cells,
+        "metric_ready_cells": min_metric_ready_cells,
+        "explore_v2_rows": min_explore_v2_rows,
+    }
+    blocking_checks = [
+        name for name, minimum in minimums.items() if minimum > 0 and counts[name] < minimum
+    ]
+    return {
+        "ready": not blocking_checks,
+        "blocking_checks": blocking_checks,
+        "counts": counts,
+        "minimums": minimums,
+    }
+
+
+def build_required_benchmark_keys(
+    *,
+    services: tuple[str, ...] = DEFAULT_REQUIRED_SERVICES,
+    population_classes: tuple[str, ...] = DEFAULT_REQUIRED_POPULATION_CLASSES,
+) -> set[tuple[str, str]]:
+    return {
+        (normalize_service_key(service), population_class)
+        for service in services
+        for population_class in population_classes
+    }
+
+
 def low_coverage_failures(
     rows: list[dict[str, Any]],
     key_fields: tuple[str, ...],
@@ -246,6 +356,10 @@ def build_report(
     threshold: float,
     min_benchmark_cells: int,
     min_benchmark_sample_size: int,
+    min_metric_ready_cells: int = 0,
+    min_explore_v2_rows: int = 0,
+    required_services: tuple[str, ...] = DEFAULT_REQUIRED_SERVICES,
+    required_population_classes: tuple[str, ...] = DEFAULT_REQUIRED_POPULATION_CLASSES,
     metric_sufficiency_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     metro_by_cbsa = {str(row.get("cbsa_code")): row for row in metros}
@@ -265,6 +379,18 @@ def build_report(
         for key, sample_size in benchmark_sample_sizes.items()
         if sample_size >= min_benchmark_sample_size
     }
+    required_benchmark_keys = build_required_benchmark_keys(
+        services=required_services,
+        population_classes=required_population_classes,
+    )
+    missing_required_benchmark_keys = required_benchmark_keys - benchmark_keys
+    undersampled_required_benchmark_keys = {
+        key
+        for key in required_benchmark_keys & benchmark_keys
+        if benchmark_sample_sizes.get(key, 0) < min_benchmark_sample_size
+    }
+    usable_required_benchmark_keys = usable_benchmark_keys & required_benchmark_keys
+    out_of_scope_usable_benchmark_keys = usable_benchmark_keys - required_benchmark_keys
     explore_keys = {
         (str(row.get("cbsa_code")), str(row.get("niche_normalized")))
         for row in explore_cells
@@ -319,10 +445,10 @@ def build_report(
             "Lighthouse measurement coverage "
             f"{overall['avg_top5_lighthouse_coverage']:.4f} below threshold {threshold:.4f}"
         )
-    if len(usable_benchmark_keys) < min_benchmark_cells:
+    if len(usable_required_benchmark_keys) < min_benchmark_cells:
         failures.append(
-            f"usable benchmark cell count {len(usable_benchmark_keys)} below minimum "
-            f"{min_benchmark_cells}"
+            "usable benchmark cell count within required scope "
+            f"{len(usable_required_benchmark_keys)} below minimum {min_benchmark_cells}"
         )
     if missing_benchmark_keys:
         failures.append(
@@ -379,6 +505,27 @@ def build_report(
                 f"{metric_gap_count} benchmark metric family sufficiency gap(s) need collection"
             )
 
+    readiness_gates = build_readiness_gates(
+        usable_benchmark_cells=len(usable_required_benchmark_keys),
+        min_benchmark_cells=min_benchmark_cells,
+        metric_ready_cells=count_metric_ready_cells(
+            metric_sufficiency,
+            required_benchmark_keys=required_benchmark_keys,
+        ),
+        min_metric_ready_cells=min_metric_ready_cells,
+        explore_v2_rows=count_explore_v2_rows(
+            explore_cells,
+            metro_by_cbsa=metro_by_cbsa,
+            required_benchmark_keys=required_benchmark_keys,
+        ),
+        min_explore_v2_rows=min_explore_v2_rows,
+    )
+    for check in readiness_gates["blocking_checks"]:
+        failures.append(
+            f"{ACCEPTANCE_GATE_LABELS[check]} {readiness_gates['counts'][check]} "
+            f"below minimum {readiness_gates['minimums'][check]}"
+        )
+
     report = {
         "status": "fail" if failures else "pass",
         "failures": failures,
@@ -388,6 +535,24 @@ def build_report(
         "benchmark_cells": {
             "count": len(benchmark_keys),
             "usable_count": len(usable_benchmark_keys),
+            "required_cells_total": len(required_benchmark_keys),
+            "usable_required_count": len(usable_required_benchmark_keys),
+            "out_of_scope_usable_count": len(out_of_scope_usable_benchmark_keys),
+            "missing_required_cells": [
+                {"niche_normalized": niche, "population_class": population_class}
+                for niche, population_class in sorted(missing_required_benchmark_keys)
+            ],
+            "undersampled_required_cells": [
+                {
+                    "niche_normalized": niche,
+                    "population_class": population_class,
+                    "sample_size_metros": benchmark_sample_sizes.get(
+                        (niche, population_class),
+                        0,
+                    ),
+                }
+                for niche, population_class in sorted(undersampled_required_benchmark_keys)
+            ],
             "missing_fact_cells": [
                 {"niche_normalized": niche, "population_class": population_class}
                 for niche, population_class in sorted(missing_benchmark_keys)
@@ -418,6 +583,7 @@ def build_report(
                 for visible, rows in sorted(by_explore_visibility.items())
             ],
         },
+        "readiness_gates": readiness_gates,
         "groups": (
             group_summary(enriched_facts, ("niche_normalized",), label="service")
             + group_summary(enriched_facts, ("population_class",), label="population_class")
@@ -442,6 +608,8 @@ def audit_signal_coverage(
     threshold: float,
     min_benchmark_cells: int,
     min_benchmark_sample_size: int,
+    min_metric_ready_cells: int = 0,
+    min_explore_v2_rows: int = 0,
 ) -> dict[str, Any]:
     facts = fetch_pages(supabase, "seo_facts", REQUIRED_COLUMNS["seo_facts"])
     metros = fetch_pages(supabase, "metros", REQUIRED_COLUMNS["metros"])
@@ -469,6 +637,8 @@ def audit_signal_coverage(
         threshold=threshold,
         min_benchmark_cells=min_benchmark_cells,
         min_benchmark_sample_size=min_benchmark_sample_size,
+        min_metric_ready_cells=min_metric_ready_cells,
+        min_explore_v2_rows=min_explore_v2_rows,
     )
 
 
@@ -493,6 +663,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Minimum sample_size_metros for fact-backed benchmark cells (default: 8).",
     )
     parser.add_argument(
+        "--min-metric-ready-cells",
+        type=int,
+        default=0,
+        help=(
+            "Minimum benchmark cells whose full metric-family sufficiency is ready "
+            "(default: 0, disabled)."
+        ),
+    )
+    parser.add_argument(
+        "--min-explore-v2-rows",
+        type=int,
+        default=0,
+        help="Minimum report-backed Explore rows with score_system=v2 (default: 0, disabled).",
+    )
+    parser.add_argument(
         "--expected-project-ref",
         default=None,
         help="Optional Supabase project ref guard for NEXT_PUBLIC_SUPABASE_URL.",
@@ -510,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
             threshold=args.coverage_threshold,
             min_benchmark_cells=args.min_benchmark_cells,
             min_benchmark_sample_size=args.min_benchmark_sample_size,
+            min_metric_ready_cells=args.min_metric_ready_cells,
+            min_explore_v2_rows=args.min_explore_v2_rows,
         )
     except RuntimeError as exc:
         report = {"status": "fail", "failures": [str(exc)]}
