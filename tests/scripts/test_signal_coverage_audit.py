@@ -619,6 +619,113 @@ def test_readiness_gates_pass_when_benchmark_metrics_and_explore_v2_are_ready():
     }
 
 
+def test_acceptance_gates_only_passes_ready_gates_with_diagnostic_failures():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": None,
+                "avg_top5_lighthouse": None,
+                "top5_da_coverage": 0.0,
+                "top5_lighthouse_coverage": 0.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "v2",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=1,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=1,
+        min_explore_v2_rows=1,
+        acceptance_gates_only=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["failures"] == []
+    assert report["readiness_gates"]["ready"] is True
+    assert any("DA value coverage" in failure for failure in report["diagnostic_failures"])
+
+
+def test_acceptance_gates_only_fails_when_readiness_gates_block():
+    report = audit_signal_coverage.build_report(
+        facts=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "avg_top5_da": 41,
+                "avg_top5_lighthouse": 81,
+                "top5_da_coverage": 1.0,
+                "top5_lighthouse_coverage": 1.0,
+            }
+        ],
+        metros=[
+            {
+                "cbsa_code": "11111",
+                "cbsa_name": "Austin-Round Rock-Georgetown, TX",
+                "population_class": "metro_1m_5m",
+            }
+        ],
+        benchmarks=[
+            {
+                "benchmark_run_id": "run-1",
+                "niche_normalized": "roofing",
+                "population_class": "metro_1m_5m",
+                "sample_size_metros": 8,
+            }
+        ],
+        explore_cells=[
+            {
+                "cbsa_code": "11111",
+                "niche_normalized": "roofing",
+                "report_id": "report-1",
+                "score_system": "legacy",
+            }
+        ],
+        metric_sufficiency_rows=metric_rows(),
+        threshold=0.8,
+        min_benchmark_cells=2,
+        min_benchmark_sample_size=8,
+        min_metric_ready_cells=2,
+        min_explore_v2_rows=1,
+        acceptance_gates_only=True,
+    )
+
+    assert report["status"] == "fail"
+    assert report["readiness_gates"]["blocking_checks"] == [
+        "usable_benchmark_cells",
+        "metric_ready_cells",
+        "explore_v2_rows",
+    ]
+    assert report["failures"] == [
+        "usable benchmark cell count 1 below minimum 2",
+        "metric-ready benchmark cell count 1 below minimum 2",
+        "Explore V2 row count 0 below minimum 1",
+    ]
+
+
 def test_readiness_gates_block_low_metric_and_explore_v2_counts():
     report = audit_signal_coverage.build_report(
         facts=[
