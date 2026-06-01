@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from argparse import ArgumentTypeError, Namespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -121,6 +122,87 @@ def test_build_pairs_interleaves_niches_for_limited_preflights() -> None:
         ("plumber", "b"),
         ("concrete contractor", "b"),
     ]
+
+
+def test_paid_budget_estimate_includes_acquisition_add_ons() -> None:
+    args = Namespace(
+        collect_organic_telemetry=True,
+        collect_review_velocity=True,
+        collect_gbp_profile=True,
+        organic_telemetry_limit=2,
+    )
+    pairs = [
+        ("tree service", {"cbsa_code": "36540"}),
+        ("tree service", {"cbsa_code": "28940"}),
+    ]
+
+    estimate = run_pilot.estimate_dfs_paid_cost_usd(pairs, args)
+
+    assert estimate > 0
+    assert estimate == pytest.approx(0.252)
+
+
+def test_paid_budget_estimate_counts_multi_code_keyword_volume_calls() -> None:
+    args = Namespace(
+        collect_organic_telemetry=False,
+        collect_review_velocity=False,
+        collect_gbp_profile=False,
+        organic_telemetry_limit=2,
+    )
+    pairs = [("tree service", _metro("36540", "large_300k_1m", [1, 2, 3]))]
+
+    estimate = run_pilot.estimate_dfs_paid_cost_usd(pairs, args)
+
+    assert estimate == pytest.approx(0.208)
+
+
+def test_paid_acquisition_flags_require_budget() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_paid_run_budget(
+            estimated_cost_usd=0.25,
+            paid_budget_usd=None,
+            dfs_balance_usd=10.0,
+            paid_acquisition_enabled=True,
+        )
+
+    assert excinfo.value.code == 2
+
+
+def test_preflight_only_does_not_require_paid_budget_for_acquisition_flags() -> None:
+    args = Namespace(
+        preflight_only=True,
+        paid_budget_usd=None,
+        collect_organic_telemetry=True,
+        collect_review_velocity=True,
+        collect_gbp_profile=True,
+    )
+
+    assert run_pilot.paid_budget_required(args) is False
+    assert run_pilot.paid_calls_enabled(args) is False
+
+
+def test_preflight_only_with_budget_enables_paid_keyword_volume_validation() -> None:
+    args = Namespace(preflight_only=True, paid_budget_usd=1.0)
+
+    assert run_pilot.paid_budget_required(args) is False
+    assert run_pilot.paid_calls_enabled(args) is True
+
+
+def test_paid_budget_rejects_non_finite_values() -> None:
+    with pytest.raises(ArgumentTypeError, match="finite positive"):
+        run_pilot.positive_float("nan")
+
+
+def test_paid_budget_guard_rejects_negative_dfs_balance() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        run_pilot.validate_paid_run_budget(
+            estimated_cost_usd=0.25,
+            paid_budget_usd=1.0,
+            dfs_balance_usd=-0.09,
+            paid_acquisition_enabled=True,
+        )
+
+    assert excinfo.value.code == 2
 
 
 def test_core_project_services_are_selectable_for_benchmark_acquisition() -> None:

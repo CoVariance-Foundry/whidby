@@ -157,7 +157,7 @@ Linear: `WHI-99`. This is the required source-of-truth experiment contract befor
 
 The post-pilot acquisition slice is explicit opt-in only. `scripts.benchmarks.run_pilot --collect-organic-telemetry` enriches the top non-aggregator organic SERP targets with DataForSEO Backlinks Summary using `rank_scale=one_hundred` plus Lighthouse data, writing nullable `avg_top5_da`, `avg_top5_lighthouse`, coverage, and confidence fields to `seo_facts`. `--collect-review-velocity` enriches the top local-pack listings through DataForSEO Google Reviews using `cid` or `place_id` when available, writing nullable `top3_review_velocity_avg`. Persistence tests must prove these identifiers and raw provider evidence artifacts survive without inferring unknown provenance.
 
-Preflight mode must skip both acquisition add-ons even when their flags are present. These flags are for bounded backfill/acquisition runs after read-only audits identify missing DA/Lighthouse, review velocity, or undersampled benchmark cells; they do not authorize broader paid expansion or benchmark recompute until audit gates pass.
+Preflight mode must skip both acquisition add-ons even when their flags are present. Without `--paid-budget-usd`, preflight validates the selected sample and DFS target metadata only, then exits before paid DataForSEO calls; with `--paid-budget-usd`, it may validate live keyword-volume coverage after the budget and balance guard. These flags are for bounded backfill/acquisition runs after read-only audits identify missing DA/Lighthouse, review velocity, or undersampled benchmark cells; they do not authorize broader paid expansion or benchmark recompute until audit gates pass. Any paid benchmark acquisition run must pass `--paid-budget-usd`, preflight the live DataForSEO balance, and abort before paid calls when the estimated run cost exceeds the cap or the provider balance is not positive.
 
 ### CLI Commands
 
@@ -204,7 +204,7 @@ python -m scripts.explore.bulk_score --refresh-only --expected-project-ref eoajv
 Run bounded benchmark acquisition only after the read-only audits identify the smallest missing cells:
 
 ```bash
-BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m scripts.benchmarks.run_pilot --sample-mode pilot --population-class medium_100_300k --limit-pairs 8 --niche "roofing contractor" --collect-organic-telemetry --collect-review-velocity --organic-telemetry-limit 5 --review-depth 10 --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
+BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m scripts.benchmarks.run_pilot --sample-mode pilot --population-class medium_100_300k --limit-pairs 8 --niche "roofing contractor" --collect-organic-telemetry --collect-review-velocity --organic-telemetry-limit 5 --review-depth 10 --paid-budget-usd 200 --require-dfs --require-v2-persistence --expected-project-ref eoajvifhbmqmoluiokcj
 ```
 
 ### Cost And Stop Rules
@@ -218,6 +218,7 @@ BENCHMARK_SUPABASE_URL=https://eoajvifhbmqmoluiokcj.supabase.co python -m script
 | API health | Stop the current bucket when API success for attempted rows drops below `80%` after at least four attempts |
 | Persistence | Stop immediately on schema failure, missing required table/column, V2 persistence failure, or Explore refresh failure |
 | Acquisition flags | `--collect-organic-telemetry` and `--collect-review-velocity` are bounded backfill tools only; preflight skips them, and any broad paid run still requires an approved sample frame |
+| Paid budget | `scripts.benchmarks.run_pilot` requires a finite positive `--paid-budget-usd` for paid benchmark acquisition and aborts before paid calls if the estimated DataForSEO cost exceeds the cap or live balance is not positive; `--preflight-only` without a budget exits before paid DataForSEO calls |
 | Paid spend | Do not continue to the next population class if the prior class produced more than `25%` `failed` or `partial_failure` rows |
 | Residual DFS rows | Ambiguous, invalid, and no-match DFS residuals are excluded until `WHI-112`, `WHI-113`, or `WHI-114` explicitly approves a bounded batch |
 

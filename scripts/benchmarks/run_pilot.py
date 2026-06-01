@@ -8,7 +8,7 @@ Default pilot scope: 10 niches × 20 metros = 200 reports.
 Full-sample scope: 10 niches × all metros in metros_sampled.json.
 Per (niche, metro):
   1. Keyword expansion (cached per niche — one LLM call per niche total)
-  2. DataForSEO keyword_volume (batched, one task per metro)
+  2. DataForSEO keyword_volume (batched, one task per metro location code)
   3. DataForSEO SERP per top 2 keywords (extract AIO, local pack, aggregator,
      local biz, featured snippet, PAA, ads, LSA flags)
   4. Optional top-5 organic telemetry via backlinks summary + Lighthouse
@@ -25,8 +25,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -46,12 +48,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.clients.dataforseo import DataForSEOClient  # noqa: E402
+from src.clients.dataforseo import endpoints as dfs_endpoints  # noqa: E402
 from src.clients.llm.client import LLMClient  # noqa: E402
 from src.clients.supabase_persistence import (  # noqa: E402
     build_seo_evidence_artifact_rows_from_cost_records,
     evidence_family_from_endpoint,
 )
-from src.config.constants import DFS_DEFAULT_LANGUAGE_CODE  # noqa: E402
+from src.config.constants import DFS_BASE_URL, DFS_DEFAULT_LANGUAGE_CODE  # noqa: E402
 from src.pipeline.keyword_expansion import expand_keywords  # noqa: E402
 from src.pipeline.dfs_normalizers import normalize_gbp_info_rows  # noqa: E402
 from src.pipeline.gbp_completeness import compute_gbp_completeness  # noqa: E402
@@ -201,6 +204,14 @@ def positive_int(value: str) -> int:
     return parsed
 
 
+def positive_float(value: str) -> float:
+    """Parse a positive float for cost-budget controls."""
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite positive number")
+    return parsed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Collect benchmark seo_facts for stratified (niche, metro) pairs."
@@ -290,6 +301,15 @@ def parse_args() -> argparse.Namespace:
         help="Google Reviews depth per top-3 local pack item (default: 10).",
     )
     parser.add_argument(
+        "--paid-budget-usd",
+        type=positive_float,
+        default=None,
+        help=(
+            "Required for paid benchmark acquisition. Aborts before paid calls "
+            "if estimated DataForSEO spend or available balance cannot cover it."
+        ),
+    )
+    parser.add_argument(
         "--require-dfs",
         action="store_true",
         help="Fail if selected metros are not paid-eligible native DataForSEO targets.",
@@ -316,6 +336,127 @@ def parse_args() -> argparse.Namespace:
 def fail_cli(message: str) -> None:
     print(f"run_pilot.py: error: {message}", file=sys.stderr)
     sys.exit(2)
+
+
+def paid_acquisition_flags_enabled(args: argparse.Namespace) -> bool:
+    return bool(
+        args.collect_organic_telemetry
+        or args.collect_review_velocity
+        or args.collect_gbp_profile
+    )
+
+
+def paid_budget_required(args: argparse.Namespace) -> bool:
+    return not bool(getattr(args, "preflight_only", False))
+
+
+def paid_calls_enabled(args: argparse.Namespace) -> bool:
+    return not bool(getattr(args, "preflight_only", False)) or (
+        getattr(args, "paid_budget_usd", None) is not None
+    )
+
+
+def count_keyword_volume_location_codes(metro: dict[str, Any]) -> int:
+    location_codes = (
+        metro.get("keyword_volume_location_codes")
+        or metro.get("dataforseo_location_codes")
+        or []
+    )
+    return max(1, len(location_codes))
+
+
+def estimate_dfs_paid_cost_usd(
+    pairs: list[tuple[str, dict[str, Any]]],
+    args: argparse.Namespace,
+) -> float:
+    """Conservative DataForSEO cost estimate for a benchmark pilot selection."""
+    unique_niches = {niche for niche, _metro in pairs}
+    pair_count = len(pairs)
+    head_keywords_per_pair = 2
+    local_pack_targets_per_pair = 3
+
+    total = 0.0
+    total += len(unique_niches) * dfs_endpoints.KEYWORD_SUGGESTIONS.cost_per_call
+    total += sum(
+        count_keyword_volume_location_codes(metro) for _niche, metro in pairs
+    ) * dfs_endpoints.KEYWORD_VOLUME.cost_per_call
+    total += pair_count * head_keywords_per_pair * (
+        dfs_endpoints.SERP_ORGANIC.cost_per_call
+        + dfs_endpoints.SERP_MAPS.cost_per_call
+    )
+
+    preflight_only = bool(getattr(args, "preflight_only", False))
+
+    if args.collect_organic_telemetry and not preflight_only:
+        total += pair_count * args.organic_telemetry_limit * (
+            dfs_endpoints.BACKLINKS_SUMMARY.cost_per_call
+            + dfs_endpoints.LIGHTHOUSE.cost_per_call
+        )
+    if args.collect_review_velocity and not preflight_only:
+        total += (
+            pair_count
+            * local_pack_targets_per_pair
+            * dfs_endpoints.GOOGLE_REVIEWS.cost_per_call
+        )
+    if args.collect_gbp_profile and not preflight_only:
+        total += (
+            pair_count
+            * local_pack_targets_per_pair
+            * dfs_endpoints.GOOGLE_MY_BUSINESS_INFO.cost_per_call
+        )
+
+    return round(total, 6)
+
+
+def fetch_dataforseo_balance_usd(login: str, password: str) -> float:
+    """Read current DataForSEO account balance from the free appendix endpoint."""
+    url = DFS_BASE_URL.rstrip("/") + "/appendix/user_data"
+    req = urlreq.Request(url)
+    token = base64.b64encode(f"{login}:{password}".encode()).decode()
+    req.add_header("Authorization", f"Basic {token}")
+    try:
+        with urlreq.urlopen(req, timeout=20) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (OSError, ValueError, urlerror.URLError) as exc:
+        fail_cli(f"unable to preflight DataForSEO balance: {exc}")
+
+    if payload.get("status_code") != 20000:
+        fail_cli(
+            "unable to preflight DataForSEO balance: "
+            f"{payload.get('status_message') or payload.get('status_code')}"
+        )
+    result = ((payload.get("tasks") or [{}])[0].get("result") or [{}])[0]
+    balance = (result.get("money") or {}).get("balance")
+    if not isinstance(balance, int | float):
+        fail_cli("unable to preflight DataForSEO balance: missing money.balance")
+    return float(balance)
+
+
+def validate_paid_run_budget(
+    *,
+    estimated_cost_usd: float,
+    paid_budget_usd: float | None,
+    dfs_balance_usd: float | None,
+    paid_acquisition_enabled: bool,
+) -> None:
+    if paid_budget_usd is None:
+        if paid_acquisition_enabled:
+            fail_cli("--paid-budget-usd is required for paid benchmark acquisition")
+        return
+    if estimated_cost_usd > paid_budget_usd:
+        fail_cli(
+            "estimated DataForSEO spend "
+            f"${estimated_cost_usd:.4f} exceeds --paid-budget-usd ${paid_budget_usd:.4f}"
+        )
+    if dfs_balance_usd is None:
+        fail_cli("DataForSEO balance preflight is required when --paid-budget-usd is set")
+    if dfs_balance_usd <= 0:
+        fail_cli(f"DataForSEO balance must be positive before paid runs; balance=${dfs_balance_usd:.4f}")
+    if estimated_cost_usd > dfs_balance_usd:
+        fail_cli(
+            "estimated DataForSEO spend "
+            f"${estimated_cost_usd:.4f} exceeds available balance ${dfs_balance_usd:.4f}"
+        )
 
 
 def persistence_niche_key(niche: str) -> str:
@@ -1742,9 +1883,38 @@ async def main():
         fail_cli("filters produced zero (niche, metro) pairs")
     validate_paid_targets([metro for _niche, metro in pairs], require_dfs=args.require_dfs)
 
+    estimated_cost_usd = estimate_dfs_paid_cost_usd(pairs, args)
+    run_paid_calls = paid_calls_enabled(args)
+    if not run_paid_calls:
+        log.info(
+            "preflight-only selected %s pair(s) with valid DFS target metadata; "
+            "skipping paid DataForSEO calls because --paid-budget-usd was not set",
+            len(pairs),
+        )
+        return
     if not ((SUPABASE_KEY or args.preflight_only) and DFS_LOGIN and DFS_PASS and ANTHROPIC_KEY):
         log.error("missing env vars — check .env")
         sys.exit(1)
+    requires_paid_budget = paid_budget_required(args)
+    dfs_balance_usd = (
+        fetch_dataforseo_balance_usd(DFS_LOGIN, DFS_PASS)
+        if args.paid_budget_usd is not None
+        else None
+    )
+    validate_paid_run_budget(
+        estimated_cost_usd=estimated_cost_usd,
+        paid_budget_usd=args.paid_budget_usd,
+        dfs_balance_usd=dfs_balance_usd,
+        paid_acquisition_enabled=requires_paid_budget,
+    )
+    if args.paid_budget_usd is not None:
+        log.info(
+            "paid run preflight: estimated DataForSEO spend $%.4f "
+            "(budget=$%.4f; balance=$%.4f)",
+            estimated_cost_usd,
+            args.paid_budget_usd,
+            dfs_balance_usd,
+        )
     if not args.preflight_only:
         validate_v2_persistence(
             pairs,
