@@ -218,12 +218,12 @@ function HeadlineScores({ metro }: { metro: ReportMetro }) {
   const cells = [
     { label: "Demand", value: metro.scores.demand, scoreKey: "demand" as const },
     {
-      label: "Organic comp.",
+      label: "Organic ease",
       value: metro.scores.organic_competition,
       scoreKey: "organic_competition" as const,
     },
     {
-      label: "Local comp.",
+      label: "Local ease",
       value: metro.scores.local_competition,
       scoreKey: "local_competition" as const,
     },

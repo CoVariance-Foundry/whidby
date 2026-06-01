@@ -23,8 +23,8 @@ type ReportDetailResponse = {
 
 const SCORE_LABELS: Array<[string, string]> = [
   ["Demand", "demand"],
-  ["Organic comp.", "organic_competition"],
-  ["Local comp.", "local_competition"],
+  ["Organic ease", "organic_competition"],
+  ["Local ease", "local_competition"],
   ["Monetization", "monetization"],
   ["AI resilience", "ai_resilience"],
   ["Opportunity", "opportunity"],
