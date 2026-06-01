@@ -15,6 +15,18 @@ DEFAULT_ESTABLISHMENTS_PER_100K = 50.0
 DEFAULT_REVIEW_FLOOR = 30.0
 DEFAULT_REVIEW_VELOCITY = 3.0
 
+_BENCHMARK_CONFIDENCE_REQUIRED_FAMILIES = frozenset(
+    {
+        "demand",
+        "organic_serp",
+        "local_pack",
+        "review_velocity",
+        "gbp_profile",
+        "monetization",
+        "ai_serp_displacement",
+    }
+)
+
 
 def compute_v2_scores_with_repository(
     *,
@@ -56,7 +68,7 @@ def compute_v2_scores(
     )
     no_local_pack = not _bool(signals.get("local_pack_present"))
     cbp_missing = signals.get("cbp_establishments") is None and signals.get("establishments") is None
-    benchmark_confidence = benchmark.confidence_label if benchmark else "insufficient"
+    benchmark_confidence = _effective_benchmark_confidence(benchmark)
     benchmark_sample_size = benchmark.sample_size_metros if benchmark else 0
     top3_review_data_low_coverage = (
         not no_local_pack
@@ -104,7 +116,11 @@ def compute_v2_scores(
         },
         "flags": {
             "no_local_pack_detected": no_local_pack,
-            "benchmark_undersampled": benchmark is None or benchmark.is_undersampled,
+            "benchmark_undersampled": (
+                benchmark is None
+                or benchmark.is_undersampled
+                or benchmark_confidence in {"low", "insufficient"}
+            ),
             "cbp_data_missing": cbp_missing,
             "top3_review_data_low_coverage": top3_review_data_low_coverage,
             "top5_organic_data_low_coverage": top5_organic_data_low_coverage,
@@ -153,6 +169,33 @@ def _optional_number(value: Any) -> float | None:
 
 def _bool(value: Any) -> bool:
     return bool(value)
+
+
+def _effective_benchmark_confidence(benchmark: SeoBenchmarkCell | None) -> str:
+    """Return benchmark confidence after applying metric-family sufficiency rollup."""
+    if benchmark is None:
+        return "insufficient"
+
+    confidence_order = {
+        "high": 3,
+        "medium": 2,
+        "low": 1,
+        "insufficient": 0,
+    }
+    effective = (
+        benchmark.confidence_label
+        if benchmark.confidence_label in confidence_order
+        else "insufficient"
+    )
+    for metric_family, family in benchmark.metric_confidence_rollup.items():
+        if metric_family not in _BENCHMARK_CONFIDENCE_REQUIRED_FAMILIES:
+            continue
+        if not isinstance(family, Mapping):
+            continue
+        label = str(family.get("confidence_label") or "").strip()
+        if label in confidence_order and confidence_order[label] < confidence_order[effective]:
+            effective = label
+    return effective
 
 
 def _top5_organic_data_low_coverage(signals: Mapping[str, Any]) -> bool:

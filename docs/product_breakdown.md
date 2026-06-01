@@ -690,6 +690,8 @@ src/
 
 **What it does:** Takes extracted signals and computes the five sub-scores (demand, organic competition, local competition, monetization, AI resilience) plus the composite opportunity score. Strategy profile-aware.
 
+V2 scoring also accepts a `SeoBenchmarkCell` for the metro's service and population class. The app-facing benchmark confidence is the conservative effective label: start with `seo_benchmarks.confidence_label`, then downgrade to the lowest recognized scoring-required `metric_confidence_rollup[*].confidence_label`. Warning-only organic telemetry families such as top-5 authority and Lighthouse/site quality do not lower the global benchmark confidence by themselves. Scores still compute when confidence is low/insufficient; the output marks `flags.benchmark_undersampled=true` so Explore/report/strategy surfaces do not overstate benchmark readiness.
+
 **Dependencies:** M6 (Signal Extraction output)
 
 **Input/Output contract:**
