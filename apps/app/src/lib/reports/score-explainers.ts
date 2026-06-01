@@ -46,9 +46,9 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
   organic_competition: {
     title: "Organic Competition",
     definition:
-      "How easy it is to rank in traditional Google search results, based on competitor domain authority, technical quality, and keyword targeting.",
+      "How easy it is to rank in traditional Google search results, based on incumbent authority, technical quality, and keyword targeting.",
     howToRead:
-      "Higher score = weaker competition. A high score means incumbents are beatable with a well-built site.",
+      "Higher score = easier organic ranking. A high score means incumbents are beatable with a well-built site.",
     bands: SHARED_SCORE_GUIDANCE,
   },
 
@@ -57,7 +57,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
     definition:
       "How easy it is to rank in the Google Local Pack and Maps, based on review counts, review velocity, and Google Business Profile quality of incumbents.",
     howToRead:
-      "Higher score = weaker local competition. A high score means existing businesses have few reviews and under-optimized profiles.",
+      "Higher score = easier local pack ranking. A high score means existing businesses have fewer reviews, slower review velocity, or under-optimized profiles.",
     bands: SHARED_SCORE_GUIDANCE,
   },
 
