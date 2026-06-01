@@ -121,8 +121,8 @@ tests/
 | Expected-project guard | Seed and recompute commands fail closed when pointed at the wrong project |
 | Canary | One city/service pair persists report, V2 score, SEO facts, and readable Explore cache output |
 | 12x8 coverage pilot | Pilot records success, partial, and failure audit rows without treating nullable top-5 DA/Lighthouse telemetry as blocking |
-| Benchmark recompute | `seo_benchmarks` is rebuilt from accepted `seo_facts` after pilot coverage is reviewed |
-| Explore cache validation | `/explore` read models surface the seeded city/service rows with V2 preference and legacy fallback intact |
+| Benchmark recompute | `seo_benchmarks` is rebuilt from accepted `seo_facts` after pilot coverage is reviewed; readiness checks include usable benchmark-cell and metric-family sufficiency gates, not source row counts alone |
+| Explore cache validation | `/explore` read models surface the seeded city/service rows with V2 preference and legacy fallback intact; acceptance checks include V2 Explore row counts before claiming the refresh complete |
 | 50x16 seed | Full seed proceeds only after the prior gates pass |
 
 ## Scoring Coverage Experiment Spec
