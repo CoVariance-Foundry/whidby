@@ -475,6 +475,7 @@ def build_report(
     min_benchmark_sample_size: int,
     min_metric_ready_cells: int = 0,
     min_explore_v2_rows: int = 0,
+    acceptance_gates_only: bool = False,
     required_services: tuple[str, ...] = DEFAULT_REQUIRED_SERVICES,
     required_population_classes: tuple[str, ...] = DEFAULT_REQUIRED_POPULATION_CLASSES,
     metric_sufficiency_rows: list[dict[str, Any]] | None = None,
@@ -651,11 +652,17 @@ def build_report(
         ),
         min_explore_v2_rows=min_explore_v2_rows,
     )
+    diagnostic_failures = list(failures)
+    readiness_failures = []
     for check in readiness_gates["blocking_checks"]:
-        failures.append(
+        readiness_failures.append(
             f"{ACCEPTANCE_GATE_LABELS[check]} {readiness_gates['counts'][check]} "
             f"below minimum {readiness_gates['minimums'][check]}"
         )
+    if acceptance_gates_only:
+        failures = readiness_failures
+    else:
+        failures.extend(readiness_failures)
 
     report = {
         "status": "fail" if failures else "pass",
@@ -727,6 +734,8 @@ def build_report(
             )
         ),
     }
+    if acceptance_gates_only:
+        report["diagnostic_failures"] = diagnostic_failures
     if metric_sufficiency is not None:
         report["metric_sufficiency"] = metric_sufficiency
         report["required_metric_sufficiency"] = required_metric_sufficiency
@@ -743,6 +752,7 @@ def audit_signal_coverage(
     min_benchmark_sample_size: int,
     min_metric_ready_cells: int = 0,
     min_explore_v2_rows: int = 0,
+    acceptance_gates_only: bool = False,
 ) -> dict[str, Any]:
     facts = fetch_pages(supabase, "seo_facts", REQUIRED_COLUMNS["seo_facts"])
     metros = fetch_pages(supabase, "metros", REQUIRED_COLUMNS["metros"])
@@ -772,6 +782,7 @@ def audit_signal_coverage(
         min_benchmark_sample_size=min_benchmark_sample_size,
         min_metric_ready_cells=min_metric_ready_cells,
         min_explore_v2_rows=min_explore_v2_rows,
+        acceptance_gates_only=acceptance_gates_only,
     )
 
 
@@ -811,6 +822,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Minimum report-backed Explore rows with score_system=v2 (default: 0, disabled).",
     )
     parser.add_argument(
+        "--acceptance-gates-only",
+        action="store_true",
+        help=(
+            "Set exit status from the explicit benchmark, metric-ready, and Explore V2 "
+            "readiness gates while retaining broad coverage diagnostics in the JSON report."
+        ),
+    )
+    parser.add_argument(
         "--expected-project-ref",
         default=None,
         help="Optional Supabase project ref guard for NEXT_PUBLIC_SUPABASE_URL.",
@@ -830,6 +849,7 @@ def main(argv: list[str] | None = None) -> int:
             min_benchmark_sample_size=args.min_benchmark_sample_size,
             min_metric_ready_cells=args.min_metric_ready_cells,
             min_explore_v2_rows=args.min_explore_v2_rows,
+            acceptance_gates_only=args.acceptance_gates_only,
         )
     except RuntimeError as exc:
         report = {"status": "fail", "failures": [str(exc)]}
