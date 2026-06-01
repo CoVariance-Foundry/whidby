@@ -36,7 +36,7 @@ export default function ScoreBreakdownTabs({ signals, scores }: Props) {
           }}
         >
           <BreakdownPanel
-            title="Organic Competition"
+            title="Organic ease"
             scoreKey="organic_competition"
             score={scores.organic_competition}
             category="organic_competition"
@@ -49,7 +49,7 @@ export default function ScoreBreakdownTabs({ signals, scores }: Props) {
             }}
           />
           <BreakdownPanel
-            title="Local Competition"
+            title="Local ease"
             scoreKey="local_competition"
             score={scores.local_competition}
             category="local_competition"

@@ -44,7 +44,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
   },
 
   organic_competition: {
-    title: "Organic Competition",
+    title: "Organic ease",
     definition:
       "How easy it is to rank in traditional Google search results, based on incumbent authority, technical quality, and keyword targeting.",
     howToRead:
@@ -53,7 +53,7 @@ export const SCORE_EXPLAINERS: Record<ScoreKey, ScoreExplainer> = {
   },
 
   local_competition: {
-    title: "Local Competition",
+    title: "Local ease",
     definition:
       "How easy it is to rank in the Google Local Pack and Maps, based on review counts, review velocity, and Google Business Profile quality of incumbents.",
     howToRead:

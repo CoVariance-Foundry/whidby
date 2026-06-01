@@ -100,8 +100,8 @@ describe("ReportDetailModal", () => {
     render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
 
     expect(screen.getByRole("dialog", { name: /report: plumber/i })).toBeInTheDocument();
-    expect(screen.getByText("Organic Competition")).toBeInTheDocument();
-    expect(screen.getByText("Local Competition")).toBeInTheDocument();
+    expect(screen.getAllByText("Organic ease").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Local ease").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Demand").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Monetization").length).toBeGreaterThan(0);
     expect(screen.getAllByText("AI Resilience").length).toBeGreaterThan(0);
