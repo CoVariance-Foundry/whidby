@@ -105,7 +105,13 @@ describe("ScoreInfoHover", () => {
   it("competition scores show inverse-direction language", () => {
     render(<ScoreInfoHover scoreKey="organic_competition" />);
     fireEvent.click(screen.getByRole("button"));
-    expect(screen.getByText(/weaker competition/i)).toBeInTheDocument();
+    expect(screen.getByText(/higher score = easier organic ranking/i)).toBeInTheDocument();
+  });
+
+  it("local score copy frames high values as ranking ease", () => {
+    render(<ScoreInfoHover scoreKey="local_competition" />);
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText(/higher score = easier local pack ranking/i)).toBeInTheDocument();
   });
 
   it("closes on outside click", async () => {
