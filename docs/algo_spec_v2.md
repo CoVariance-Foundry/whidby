@@ -1,8 +1,8 @@
 # Widby Niche Scoring Algorithm — V2 Specification
 
-**Status:** Draft
+**Status:** Implemented scoring methodology
 **Author:** Antwoine Flowers / Kael
-**Date:** 2026-04-27
+**Date:** 2026-06-02
 **Supersedes:** `docs/algo_spec_v1_1.md`
 **Classification:** Internal IP — Covariance
 
@@ -14,7 +14,7 @@ V1.1 worked as a v0 hypothesis test. SME review with Luke (rank-and-rent SME) an
 
 The six load-bearing changes:
 
-1. **No composite opportunity score.** V1.1 collapsed five dimensions into one number, which forced contradictory direction conventions (high = better for demand, but high = harder for competition) and hid the cells that practitioners actually inspect. V2 outputs a vector. UI applies an archetype filter to derive sortable views client-side.
+1. **Raw scoring is a vector; product ranking is a projection.** V1.1 collapsed five dimensions into one number, which forced contradictory direction conventions (high = better for demand, but high = harder for competition) and hid the cells that practitioners actually inspect. V2 stores a benchmark-aware vector. Product surfaces may project that vector into an "opportunity" or strategy score, but that projection is not a sixth observed fact.
 
 2. **Direction is per-dimension and explicit.** V1.1 fought "higher = better" by inverse-scaling competition; SME feedback was unanimous: every other SEO tool uses high-competition = harder. V2 outputs a `higher_is_better` boolean per dimension and stops trying to normalize direction.
 
@@ -54,7 +54,9 @@ V2 produces a **score vector**, not a score number. Persisted to `metro_score_v2
   "flags": {
     "no_local_pack_detected": false,
     "benchmark_undersampled": false,
-    "cbp_data_missing": false
+    "cbp_data_missing": false,
+    "top3_review_data_low_coverage": false,
+    "top5_organic_data_low_coverage": false
   },
   "serp_archetype": "FRAGMENTED_WEAK",
   "ai_exposure": "AI_SHIELDED",
@@ -62,7 +64,34 @@ V2 produces a **score vector**, not a score number. Persisted to `metro_score_v2
 }
 ```
 
-**No composite.** Sorting and ranking are presentation concerns. The UI receives the vector + an archetype filter (set by user) and projects to a sortable column client-side. See §8.
+The vector above is the benchmark-aware scoring substrate used for debugging and read-model projection. The current product also carries a legacy 0-100 report headline score bundle in `reports.metros[*].scores` and `metro_scores`; support should identify which score surface a user is looking at before explaining a number.
+
+### 1.1 Product and support score surfaces
+
+There are three score layers in production:
+
+| Layer | Storage/API surface | How to read it | Benchmark role |
+| --- | --- | --- | --- |
+| Report headline scores | `reports.metros[*].scores`, `metro_scores`, report UI cards | 0-100 customer-facing scores: demand, organic ease, local ease, monetization, AI resilience, opportunity | Legacy M7 formulas do not read `seo_benchmarks`; they use the scoring-run cohort and observed signal values |
+| V2 benchmark vector | `metro_score_v2` | Five raw dimensions with direction flags: high demand/monetization/AI is good; high organic/local difficulty is hard | `seo_benchmarks` directly affect demand, local difficulty, monetization, and benchmark confidence/flags |
+| Explore/strategy projection | Explore service DTOs, `presentation_score`, strategy run items | 0-100 sortable product score for a selected lens such as Easy Win or GBP Blitz | Projects V2 fields and carries low benchmark confidence warnings when benchmarks are weak |
+
+For support/debugging, call the report UI labels "product scores" and the `metro_score_v2` fields "raw V2 scores." Product scores intentionally render competition as ease, so higher is better. Raw V2 difficulty intentionally renders competition as difficulty, so higher is harder.
+
+Current report headline semantics:
+
+- `Demand` is a 0-100 legacy M7 score based on effective search volume percentile inside the run cohort, CPC, breadth, and transactional intent.
+- `Organic ease` is the legacy `organic_competition` score. Higher means easier because it rewards weaker incumbent authority, more local-business presence, weaker technical/title signals, and fewer aggregators.
+- `Local ease` is the legacy `local_competition` score. Higher means easier because it rewards lower review barriers, lower review velocity, weaker GBP completeness, lower photo count, and lower posting activity. A missing local pack uses the configured legacy default.
+- `Monetization` is a 0-100 legacy M7 score based on CPC, business density, ads/LSA/aggregator activity, and GBP completeness.
+- `AI resilience` is a 0-100 score where higher means less AI Overview displacement risk.
+- `Opportunity` is a weighted composite of the five headline dimensions. Default balanced weights are demand `0.25`, organic `0.15`, local `0.20`, monetization `0.20`, and AI resilience `0.15`; organic/local weights can move by strategy profile. The composite is capped at `20` if any base component is below `5`, capped at `40` if any base component is below `15`, and capped at `50` when AI resilience is below `20`.
+
+Current V2 projection example:
+
+- Easy Win projection uses `min(demand_strength / 140, 1) * 100`, `100 - organic_difficulty`, `65` when `local_difficulty` is null otherwise `100 - local_difficulty`, and `ai_resilience`.
+- Easy Win weights those projected values as demand `0.25`, organic ease `0.45`, local ease `0.20`, and AI resilience `0.10`.
+- If `benchmark_confidence` is `low` or `insufficient`, the projection can still return a score, but it should carry a `benchmark_confidence_low` warning.
 
 ---
 
@@ -91,15 +120,13 @@ Benchmark cell key: `(niche_normalized, population_class)` where `population_cla
 **Benchmark lookup:**
 - `seo_benchmarks.median_total_volume_per_capita`
 - `seo_benchmarks.median_avg_cpc`
+- Missing or non-positive benchmark values fall back to `DEFAULT_VOLUME_PER_CAPITA = 0.0025` and `MEDIAN_LOCAL_SERVICE_CPC = 5.00`; the score still computes and `benchmark_undersampled` explains the weaker provenance.
 
 **Score formula:**
 ```python
 def demand_strength(observed_volume, observed_cpc, population, benchmark):
     obs_vol_per_cap = observed_volume / max(population, 1)
     bench_vol_per_cap = benchmark.median_total_volume_per_capita
-
-    if bench_vol_per_cap == 0:
-        return None  # no benchmark — flag as undersampled
 
     # Volume relative to median, capped at 2x (200)
     vol_score = min(obs_vol_per_cap / bench_vol_per_cap, 2.0) * 100
@@ -126,8 +153,8 @@ def demand_strength(observed_volume, observed_cpc, population, benchmark):
 - (Optional, if pulled) `avg_top5_da` from backlinks API
 
 **Benchmark lookup:**
-- `seo_benchmarks.median_aggregator_count`
-- `seo_benchmarks.median_local_biz_count`
+- Current score formula does not normalize organic difficulty against benchmark medians.
+- Benchmark and metric-sufficiency coverage still matter for confidence and debugging, especially top-5 DA/Lighthouse sparsity.
 
 **Score formula:**
 ```python
@@ -199,8 +226,7 @@ def local_difficulty(signals, benchmark):
 
 **Benchmark lookup:**
 - `seo_benchmarks.median_establishments_per_100k`
-- `seo_benchmarks.median_lsa_present_rate`
-- `seo_benchmarks.median_ads_present_rate`
+- `median_lsa_present_rate` and `median_ads_present_rate` are stored for analysis, but the current scoring formula uses observed ad/LSA presence directly rather than benchmark-normalizing those rates.
 
 **Score formula:**
 ```python
@@ -281,31 +307,31 @@ Minimum usable benchmark cell: sample_size_metros >= 8
 Stable benchmark cell: sample_size_metros >= 20
 Required before production cutover: every launch niche has at least one medium cell in its most common population class.
 
-### 3.3 Benchmark coverage
+### 3.3 Benchmark coverage and acceptance gates
 
-Current staging audit after the latest pilot recompute:
+Coverage is evaluated by required launch cells, not by all rows that happen to exist in `seo_benchmarks`.
 
-Current coverage totals are 43 insufficient cells, 12 low cells, and 0 medium/high cells.
+Canonical production acceptance currently requires:
 
-| Confidence | Cell count | Notes |
-|------------|------------|-------|
-| insufficient | 43 | Below scoring coverage target |
-| low | 12 | Preliminary only |
-| medium | 0 | No usable benchmark cells yet |
-| high | 0 | No stable benchmark cells yet |
+- `48` usable benchmark cells for the eight core services across the required population-class frame.
+- `48` metric-ready cells from `seo_benchmark_metric_sufficiency`, so sample size alone cannot make a cell production-ready.
+- V2 Explore row visibility above the required threshold, verified through the read-model audit rather than direct table counts alone.
+- Target Supabase project guard `eoajvifhbmqmoluiokcj` before any live acceptance claim.
 
-Full-sample runs are required before medium coverage is possible; the default pilot slice remains too thin for `sample_size_metros >= 8`.
+Use the canonical acceptance command from `docs-canonical/TEST-SPEC.md` when validating readiness:
 
-Thin-cell follow-up:
+```bash
+python -m scripts.explore.audit_signal_coverage \
+  --coverage-threshold 0.6 \
+  --min-benchmark-cells 48 \
+  --min-benchmark-sample-size 8 \
+  --min-metric-ready-cells 48 \
+  --min-explore-v2-rows 48 \
+  --acceptance-gates-only \
+  --expected-project-ref eoajvifhbmqmoluiokcj
+```
 
-| Niche | Population class | Sample metros | Confidence | Follow-up |
-|-------|------------------|---------------|------------|-----------|
-| auto repair | micro_under_50k | 1 | insufficient | +7 metros to medium |
-| concrete contractor | medium_100_300k | 1 | insufficient | +7 metros to medium |
-| plumber | large_300k_1m | 1 | insufficient | +7 metros to medium |
-| roofing contractor | large_300k_1m | 1 | insufficient | +7 metros to medium |
-
-Expanded paid collection has not yet been run in this implementation pass.
+Support should not infer readiness from one of these gates in isolation. A complaint about a score needs the score's `benchmark_sample_size`, `benchmark_confidence`, and metric-family sufficiency status for the same `(niche_normalized, population_class)` cell.
 
 ### 3.4 Refresh trigger
 
@@ -339,7 +365,19 @@ Slice-lite scores must use `score_version = "sonar-lite-0.1"` and include data-q
 
 Implemented boundary: V2 scoring reads `seo_benchmarks` through `src/scoring/benchmark_repository.py::SeoBenchmarkRepository`, with Supabase access isolated in `src/clients/seo_benchmark_repository.py::SupabaseSeoBenchmarkRepository`. Score formulas in `src/scoring/v2.py` consume repository-returned benchmark cells and do not query Supabase directly.
 
-The benchmark's confidence carries forward to the score. `metro_score_v2.benchmark_confidence` is one of `{high, medium, low, insufficient}` — copied from the benchmark cell used.
+The benchmark's confidence carries forward to the score. `metro_score_v2.benchmark_confidence` is one of `{high, medium, low, insufficient}`.
+
+Implementation detail: the persisted score uses the effective confidence from `src/scoring/v2.py`, not just the top-level benchmark label. The engine starts from `seo_benchmarks.confidence_label`, then lowers it when any required metric family in `metric_confidence_rollup` is weaker. Required families for effective confidence are:
+
+- `demand`
+- `organic_serp`
+- `local_pack`
+- `review_velocity`
+- `gbp_profile`
+- `monetization`
+- `ai_serp_displacement`
+
+`organic_authority` and `lighthouse_site_quality` remain canonical metric-sufficiency families for audits and top-5 organic telemetry. Current scoring treats sparse top-5 DA/Lighthouse as low-coverage evidence, not as zero authority or zero difficulty.
 
 If `benchmark_confidence == 'insufficient'`:
 - Compute scores anyway using fallback heuristics (e.g., median CPC = $5.00 default for the volume_per_capita normalization)
@@ -396,13 +434,13 @@ Uses `max()` deliberately — the harder of the two channels gates the practitio
 
 | V1.1 feature | Removed because |
 |---|---|
-| `composite_opportunity_score` | Hides cells practitioners actually inspect; forces direction conflicts |
+| Fixed raw `composite_opportunity_score` as the V2 substrate | Hides cells practitioners actually inspect; forces direction conflicts. Product can still project vectors into opportunity/lens scores for sorting and reporting. |
 | `breadth_bonus` (volume_breadth × 15) | Not validated by SME; arbitrary multiplier |
 | `cohort_relative percentile_rank` for demand | Cohort isn't a stable reference; meaningless for single-metro queries |
 | Effective volume AIO discount (`× (1 - aio_rate × 0.59)`) | Double-counts intent filtering; magic constants stacked |
 | Fixed `local_competition_score = 75` when no local pack | Pack absence is a diagnostic, not a feature; should be NULL |
 | Top-5 GBP completeness average | Includes non-ranking businesses; floor of top 3 is the meaningful bar |
-| `strategy_profile` weight redistribution | Within composite — irrelevant once composite is removed. Replaced by archetype filter at presentation. |
+| Legacy-only `strategy_profile` weight redistribution as the only explanation | V2 keeps raw vectors explainable first; strategy/profile/lens math belongs in the presentation or strategy projection layer and must be named as such. |
 
 ---
 
@@ -428,42 +466,72 @@ serp_archetype, ai_exposure, spec_version
 
 ## 8. Presentation contract (UI implications)
 
-V2 doesn't render a "Total opportunity: 71" badge. The UI receives the score vector + a user-selected **archetype filter**, and projects to a sortable column.
+The UI must make the score surface explicit:
 
-### 8.1 Archetype filter (user-controlled lens)
+- Report headline cards render product scores where higher is always better. Organic and local are labeled "ease" because those values are already inverted from difficulty in the legacy report score bundle.
+- V2 details and developer/debug views render `organic_difficulty` and `local_difficulty` as difficulty, where higher is harder. If those fields are shown to users, label them "difficulty" or invert them before labeling them "ease."
+- Explore and strategy results render `presentation_score` or strategy `score` as a projection. That number is useful for ranking but should be explained as a lens score, not as a raw benchmark measurement.
 
-| Archetype | Sort logic |
-|---|---|
-| `pure_rank_and_rent` | demand_strength × (100 - organic_difficulty) / 100. Local difficulty ignored. |
-| `gbp_first` | demand_strength × (100 - local_difficulty) / 100, where local_difficulty is null treated as 50. |
-| `mixed_authority` | demand_strength × (200 - organic_difficulty - local_difficulty_or_50) / 200. |
-| `directory_bypass_longtail` | Filters to FRAGMENTED_* archetypes; sort by demand × ai_resilience. |
+### 8.1 Projection and color conventions
 
-These are *presentation* aggregations, not scoring. A user can switch archetypes without rerunning scoring. The composite-as-narrative becomes the user's chosen lens, not a fixed formula in the engine.
+UI renders raw V2 cells using the dimension's `higher_is_better` flag:
 
-### 8.2 Color conventions
-
-UI renders cells using the dimension's `higher_is_better` flag:
 - `true`: high values green, low values red
 - `false`: high values red, low values green
-- `null` value: gray with an info icon explaining why (e.g., "No local pack detected for this keyword")
+- `null` value: gray with an info icon explaining why (for example, "No local pack detected for this keyword")
+
+UI renders product/report scores as higher-is-better because the report payload already uses customer-facing ease/opportunity semantics.
+
+### 8.2 Support explanation rule
+
+When explaining a disputed score, do not say "the benchmark gave this market a 71." Say:
+
+1. Observed facts came from the scoring run and durable SEO evidence rows.
+2. The benchmark cell provided the expected baseline for that niche and population class.
+3. The formula compared observed facts to that baseline where applicable.
+4. Confidence and warning flags came from sample size, metric-family sufficiency, and missing-data coverage.
+5. The product may then have projected raw fields into an opportunity or strategy lens score.
+
+This wording prevents benchmark-relative scores from sounding like arbitrary averages and prevents product projections from sounding like raw measurements.
+
+## 9. Support debugging checklist
+
+Use this checklist when a customer disagrees with a score or a report looks suspicious.
+
+1. Identify the score surface: report headline score, raw V2 `metro_score_v2` value, Explore `presentation_score`, or strategy projection score.
+2. Capture the `report_id`, `cbsa_code`, `cbsa_name`, `niche_keyword`, `niche_normalized`, `spec_version`, and score timestamp.
+3. Read `reports` and `metro_scores` for headline scores; read `metro_score_v2` for raw V2 scores, direction flags, benchmark confidence, sample size, and warning flags.
+4. Read `seo_facts` for the observed facts behind the score and `seo_evidence_artifacts` when provider request/response lineage is needed.
+5. Read `seo_benchmarks` using `(niche_normalized, benchmark_population_class)` and verify `sample_size_metros`, confidence label, and benchmark medians used by the formula.
+6. Read `seo_benchmark_metric_sufficiency` for the same benchmark run/cell to confirm whether each required metric family is ready, undersampled, or missing.
+7. Check common disagreement causes:
+   - The customer is comparing against a newer Google result than the report snapshot.
+   - The market is being compared to its population class, not to a national average.
+   - The score is preliminary because the benchmark is missing, undersampled, or low confidence.
+   - Local pack absence makes raw V2 `local_difficulty` null; it should not be interpreted as either easy or hard.
+   - Missing CBP data uses a neutral monetization fallback and sets `cbp_data_missing`.
+   - Missing top-5 DA/Lighthouse lowers evidence confidence but does not become a free easy-score boost.
+
+Recommended support language:
+
+> This score is based on the facts we observed for this report snapshot, compared against the benchmark cell for the same service and metro population class. The benchmark changes the baseline and confidence, but it does not replace the observed SERP, review, demand, monetization, or AI-exposure facts.
 
 ---
 
-## 9. Migration from V1.1
+## 10. Migration from V1.1
 
 **Database:** V1.1 tables (`metro_scores`, `metro_signals`, `reports`, `report_keywords`) are preserved as-is. New tables (`seo_facts`, `seo_benchmarks`, `metro_score_v2`) coexist. No migration script — V2 reads/writes new tables only.
 
 **Application code:**
-1. Update FastAPI `/api/niches/score` to write `metro_score_v2` in addition to `metro_scores` for one release cycle.
-2. Update Next.js scoring UI (`apps/admin`, `apps/app`) to read `metro_score_v2` and render the vector view.
-3. Once UI is validated, deprecate `metro_scores` writes.
+1. FastAPI `/api/niches/score` writes `metro_score_v2` in addition to `metro_scores`.
+2. Next.js report pages continue to render the report headline score bundle for compatibility, while Explore and strategy read models prefer V2-backed scores when present.
+3. Do not deprecate `metro_scores` writes until report headline UX has an explicit V2 vector/ease projection replacement and report E2E tests prove old reports remain readable.
 
 **Backfill strategy for existing reports:** None. V1.1 reports remain readable in their old shape; new scoring runs go through V2. The `feedback_log` schema is unchanged so the bandit work isn't disrupted.
 
 ---
 
-## 10. Open questions
+## 11. Open questions
 
 1. **Fallback when CBP cell is null** — some niches don't map cleanly to a single NAICS (e.g., "junk removal" spans 562111 and parts of 488490). Multi-NAICS aggregation is supported in `niche_naics_mapping.weight` but the scoring formula assumes a single value. Resolve in §2.4 implementation: sum CBP across all NAICS rows for the niche, weighted.
 2. **Refresh cadence for `seo_facts` of stale (niche, metro) pairs** — DFS data drifts. Proposal: TTL on facts of 90 days for benchmark eligibility.
@@ -471,7 +539,7 @@ UI renders cells using the dimension's `higher_is_better` flag:
 
 ---
 
-## 11. References
+## 12. References
 
 - V1.1 spec: `docs/algo_spec_v1_1.md` (retained as historical reference)
 - Migration: `supabase/migrations/010_v2_benchmarks.sql`
