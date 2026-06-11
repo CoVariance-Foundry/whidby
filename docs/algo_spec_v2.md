@@ -64,6 +64,14 @@ V2 produces a **score vector**, not a score number. Persisted to `metro_score_v2
 }
 ```
 
+Flag triggers:
+
+- `no_local_pack_detected`: true when `local_pack_present` is false; raw V2 `local_difficulty` is then `null`.
+- `benchmark_undersampled`: true when no benchmark cell exists, the benchmark cell is marked undersampled, or the effective benchmark confidence is `low`/`insufficient`.
+- `cbp_data_missing`: true when both `cbp_establishments` and legacy `establishments` are absent; monetization then uses the neutral CBP fallback.
+- `top3_review_data_low_coverage`: true only when a local pack exists and either `top3_review_count_coverage` or `top3_review_velocity_coverage` is below `0.67`.
+- `top5_organic_data_low_coverage`: true when top-5 DA coverage or top-5 Lighthouse coverage is below `0.60`; if explicit coverage is absent, the engine infers coverage from whether the corresponding aggregate value is present.
+
 The vector above is the benchmark-aware scoring substrate used for debugging and read-model projection. The current product also carries a legacy 0-100 report headline score bundle in `reports.metros[*].scores` and `metro_scores`; support should identify which score surface a user is looking at before explaining a number.
 
 ### 1.1 Product and support score surfaces
@@ -85,7 +93,7 @@ Current report headline semantics:
 - `Local ease` is the legacy `local_competition` score. Higher means easier because it rewards lower review barriers, lower review velocity, weaker GBP completeness, lower photo count, and lower posting activity. A missing local pack uses the configured legacy default.
 - `Monetization` is a 0-100 legacy M7 score based on CPC, business density, ads/LSA/aggregator activity, and GBP completeness.
 - `AI resilience` is a 0-100 score where higher means less AI Overview displacement risk.
-- `Opportunity` is a weighted composite of the five headline dimensions. Default balanced weights are demand `0.25`, organic `0.15`, local `0.20`, monetization `0.20`, and AI resilience `0.15`; organic/local weights can move by strategy profile. The composite is capped at `20` if any base component is below `5`, capped at `40` if any base component is below `15`, and capped at `50` when AI resilience is below `20`.
+- `Opportunity` is a weighted sum of the five headline dimensions, clamped to `0-100`. Current default balanced weights are demand `0.25`, organic `0.15`, local `0.20`, monetization `0.20`, and AI resilience `0.15`; those implemented weights total `0.95`, so this is not a normalized weighted average. Organic/local weights can move by strategy profile. The composite is capped at `20` if any base component is below `5`, capped at `40` if any base component is below `15`, and capped at `50` when AI resilience is below `20`.
 
 Current V2 projection example:
 
@@ -120,19 +128,30 @@ Benchmark cell key: `(niche_normalized, population_class)` where `population_cla
 **Benchmark lookup:**
 - `seo_benchmarks.median_total_volume_per_capita`
 - `seo_benchmarks.median_avg_cpc`
-- Missing or non-positive benchmark values fall back to `DEFAULT_VOLUME_PER_CAPITA = 0.0025` and `MEDIAN_LOCAL_SERVICE_CPC = 5.00`; the score still computes and `benchmark_undersampled` explains the weaker provenance.
+- Missing or non-positive benchmark values fall back to `DEFAULT_VOLUME_PER_CAPITA = 0.0025` and `MEDIAN_LOCAL_SERVICE_CPC = 5.00`; the score still computes. Missing, undersampled, low-confidence, or insufficient benchmark cells set `benchmark_undersampled`.
 
 **Score formula:**
 ```python
+def positive(value, default):
+    return default if value is None or value <= 0 else value
+
+
 def demand_strength(observed_volume, observed_cpc, population, benchmark):
     obs_vol_per_cap = observed_volume / max(population, 1)
-    bench_vol_per_cap = benchmark.median_total_volume_per_capita
+    bench_vol_per_cap = positive(
+        benchmark.median_total_volume_per_capita if benchmark else None,
+        DEFAULT_VOLUME_PER_CAPITA,  # 0.0025
+    )
+    bench_cpc = positive(
+        benchmark.median_avg_cpc if benchmark else None,
+        MEDIAN_LOCAL_SERVICE_CPC,  # 5.00
+    )
 
     # Volume relative to median, capped at 2x (200)
     vol_score = min(obs_vol_per_cap / bench_vol_per_cap, 2.0) * 100
 
     # CPC adjustment — if CPC is well above median, bump by up to 20%
-    cpc_ratio = observed_cpc / max(benchmark.median_avg_cpc, 0.01)
+    cpc_ratio = observed_cpc / max(bench_cpc, 0.01)
     cpc_adj = min(max(cpc_ratio, 0.5), 1.5)  # clamp 0.5x-1.5x
 
     return clamp(round(vol_score * cpc_adj), 0, 200)
