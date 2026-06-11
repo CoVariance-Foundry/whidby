@@ -1,6 +1,6 @@
 # Widby Niche Scoring Algorithm — V2 Specification
 
-**Status:** Implemented scoring methodology
+**Status:** Partially implemented methodology and support guide
 **Author:** Antwoine Flowers / Kael
 **Date:** 2026-06-02
 **Supersedes:** `docs/algo_spec_v1_1.md`
@@ -54,9 +54,7 @@ V2 produces a **score vector**, not a score number. Persisted to `metro_score_v2
   "flags": {
     "no_local_pack_detected": false,
     "benchmark_undersampled": false,
-    "cbp_data_missing": false,
-    "top3_review_data_low_coverage": false,
-    "top5_organic_data_low_coverage": false
+    "cbp_data_missing": false
   },
   "serp_archetype": "FRAGMENTED_WEAK",
   "ai_exposure": "AI_SHIELDED",
@@ -64,11 +62,14 @@ V2 produces a **score vector**, not a score number. Persisted to `metro_score_v2
 }
 ```
 
-Flag triggers:
+Persisted flag triggers:
 
 - `no_local_pack_detected`: true when `local_pack_present` is false; raw V2 `local_difficulty` is then `null`.
 - `benchmark_undersampled`: true when no benchmark cell exists, the benchmark cell is marked undersampled, or the effective benchmark confidence is `low`/`insufficient`.
 - `cbp_data_missing`: true when both `cbp_establishments` and legacy `establishments` are absent; monetization then uses the neutral CBP fallback.
+
+In-memory V2 result flags that are not currently persisted to `metro_score_v2`:
+
 - `top3_review_data_low_coverage`: true only when a local pack exists and either `top3_review_count_coverage` or `top3_review_velocity_coverage` is below `0.67`.
 - `top5_organic_data_low_coverage`: true when top-5 DA coverage or top-5 Lighthouse coverage is below `0.60`; if explicit coverage is absent, the engine infers coverage from whether the corresponding aggregate value is present.
 
@@ -82,7 +83,8 @@ There are three score layers in production:
 | --- | --- | --- | --- |
 | Report headline scores | `reports.metros[*].scores`, `metro_scores`, report UI cards | 0-100 customer-facing scores: demand, organic ease, local ease, monetization, AI resilience, opportunity | Legacy M7 formulas do not read `seo_benchmarks`; they use the scoring-run cohort and observed signal values |
 | V2 benchmark vector | `metro_score_v2` | Five raw dimensions with direction flags: high demand/monetization/AI is good; high organic/local difficulty is hard | `seo_benchmarks` directly affect demand, local difficulty, monetization, and benchmark confidence/flags |
-| Explore/strategy projection | Explore service DTOs, `presentation_score`, strategy run items | 0-100 sortable product score for a selected lens such as Easy Win or GBP Blitz | Projects V2 fields and carries low benchmark confidence warnings when benchmarks are weak |
+| Explore cached score | `explore_market_cells.presentation_score`, Explore service DTOs | 0-100 sortable cached read-model score. Current V2 rows use `greatest(coalesce(demand_strength, 0) / 2, 0)::integer`; legacy fallback rows use legacy opportunity | Exposes V2 provenance such as `benchmark_confidence`, but does not return a warning list |
+| Strategy projection | Strategy run items | 0-100 sortable product score for a selected lens such as Easy Win or GBP Blitz | Projects V2 fields and can carry strategy-specific warnings |
 
 For support/debugging, call the report UI labels "product scores" and the `metro_score_v2` fields "raw V2 scores." Product scores intentionally render competition as ease, so higher is better. Raw V2 difficulty intentionally renders competition as difficulty, so higher is harder.
 
@@ -95,7 +97,7 @@ Current report headline semantics:
 - `AI resilience` is a 0-100 score where higher means less AI Overview displacement risk.
 - `Opportunity` is a weighted sum of the five headline dimensions, clamped to `0-100`. Current default balanced weights are demand `0.25`, organic `0.15`, local `0.20`, monetization `0.20`, and AI resilience `0.15`; those implemented weights total `0.95`, so this is not a normalized weighted average. Organic/local weights can move by strategy profile. The composite is capped at `20` if any base component is below `5`, capped at `40` if any base component is below `15`, and capped at `50` when AI resilience is below `20`.
 
-Current V2 projection example:
+Current strategy projection example:
 
 - Easy Win projection uses `min(demand_strength / 140, 1) * 100`, `100 - organic_difficulty`, `65` when `local_difficulty` is null otherwise `100 - local_difficulty`, and `ai_resilience`.
 - Easy Win weights those projected values as demand `0.25`, organic ease `0.45`, local ease `0.20`, and AI resilience `0.10`.
@@ -427,25 +429,23 @@ Classification thresholds reference benchmark-relative values where applicable (
 
 Preserved unchanged from V1.1 §8.2.
 
-### 5.3 Difficulty tier — *renamed and reframed*
+### 5.3 Difficulty tier
 
-V1.1's `difficulty_tier` (EASY/MODERATE/HARD/VERY_HARD) collapsed organic+local competition into a single tier. V2 keeps the labels but bases them on the *combined* difficulty values rather than on a `combined_comp` inversely-scaled value:
+Current production `difficulty_tier` remains an M8 classification over legacy M7 ease-style competition scores, not raw V2 difficulty fields. It resolves the selected strategy profile into organic/local weights, normalizes those two weights against each other, and computes a combined ease score:
 
 ```python
-def difficulty_tier(organic_difficulty, local_difficulty):
-    # If no local pack, pure organic
-    if local_difficulty is None:
-        max_diff = organic_difficulty
-    else:
-        max_diff = max(organic_difficulty, local_difficulty)
+combined_comp = (
+    local_competition * local_weight_share
+    + organic_competition * organic_weight_share
+)
 
-    if max_diff < 30:    return 'EASY'
-    if max_diff < 55:    return 'MODERATE'
-    if max_diff < 75:    return 'HARD'
-    return 'VERY_HARD'
+if combined_comp >= 70:  return "EASY"
+if combined_comp >= 45:  return "MODERATE"
+if combined_comp >= 25:  return "HARD"
+return "VERY_HARD"
 ```
 
-Uses `max()` deliberately — the harder of the two channels gates the practitioner's strategy. A market with hard local + easy organic is still hard if the practitioner needs the local pack.
+Because the current inputs are ease-style scores, higher `combined_comp` means easier ranking. A future V2-native difficulty tier can use `organic_difficulty`/`local_difficulty`, but support should not explain production report tiers that way until the classifier is migrated.
 
 ---
 
@@ -489,7 +489,8 @@ The UI must make the score surface explicit:
 
 - Report headline cards render product scores where higher is always better. Organic and local are labeled "ease" because those values are already inverted from difficulty in the legacy report score bundle.
 - V2 details and developer/debug views render `organic_difficulty` and `local_difficulty` as difficulty, where higher is harder. If those fields are shown to users, label them "difficulty" or invert them before labeling them "ease."
-- Explore and strategy results render `presentation_score` or strategy `score` as a projection. That number is useful for ranking but should be explained as a lens score, not as a raw benchmark measurement.
+- Explore renders cached read-model `presentation_score`. For current V2 rows, this is `demand_strength / 2` clamped at zero; for legacy fallback rows, it is the legacy opportunity score.
+- Strategy results render strategy `score` as a lens projection. That number is useful for ranking but should be explained as a lens score, not as a raw benchmark measurement.
 
 ### 8.1 Projection and color conventions
 
@@ -517,11 +518,11 @@ This wording prevents benchmark-relative scores from sounding like arbitrary ave
 
 Use this checklist when a customer disagrees with a score or a report looks suspicious.
 
-1. Identify the score surface: report headline score, raw V2 `metro_score_v2` value, Explore `presentation_score`, or strategy projection score.
+1. Identify the score surface: report headline score, raw V2 `metro_score_v2` value, Explore cached `presentation_score`, or strategy projection score.
 2. Capture the `report_id`, `cbsa_code`, `cbsa_name`, `niche_keyword`, `niche_normalized`, `spec_version`, and score timestamp.
 3. Read `reports` and `metro_scores` for headline scores; read `metro_score_v2` for raw V2 scores, direction flags, benchmark confidence, sample size, and warning flags.
 4. Read `seo_facts` for the observed facts behind the score and `seo_evidence_artifacts` when provider request/response lineage is needed.
-5. Read `seo_benchmarks` using `(niche_normalized, benchmark_population_class)` and verify `sample_size_metros`, confidence label, and benchmark medians used by the formula.
+5. Read `seo_benchmarks` using `niche_normalized` plus `population_class = metro_score_v2.benchmark_population_class`; verify `sample_size_metros`, confidence label, and benchmark medians used by the formula.
 6. Read `seo_benchmark_metric_sufficiency` for the same benchmark run/cell to confirm whether each required metric family is ready, undersampled, or missing.
 7. Check common disagreement causes:
    - The customer is comparing against a newer Google result than the report snapshot.
