@@ -77,7 +77,7 @@ The vector above is the benchmark-aware scoring substrate used for debugging and
 
 ### 1.1 Product and support score surfaces
 
-There are three score layers in production:
+There are four score surfaces used by product and support:
 
 | Layer | Storage/API surface | How to read it | Benchmark role |
 | --- | --- | --- | --- |
@@ -222,12 +222,18 @@ def local_difficulty(signals, benchmark):
         return None  # Caller surfaces no_local_pack_detected = True
 
     # Review barrier — if floor is well above median, hard
-    bench_floor = benchmark.median_top3_review_count_min or 30
+    bench_floor = positive(
+        benchmark.median_top3_review_count_min if benchmark else None,
+        DEFAULT_REVIEW_FLOOR,  # 30.0
+    )
     review_pressure = min(signals.top3_review_count_min / max(bench_floor, 1), 3.0)
     review_score = (review_pressure / 3.0) * 60  # max 60 points
 
     # Velocity — active markets are harder
-    bench_vel = benchmark.median_top3_review_velocity or 3.0
+    bench_vel = positive(
+        benchmark.median_top3_review_velocity if benchmark else None,
+        DEFAULT_REVIEW_VELOCITY,  # 3.0
+    )
     vel_pressure = min(signals.top3_review_velocity_avg / max(bench_vel, 0.1), 3.0)
     vel_score = (vel_pressure / 3.0) * 40  # max 40 points
 
@@ -400,7 +406,7 @@ Implementation detail: the persisted score uses the effective confidence from `s
 
 `organic_authority` and `lighthouse_site_quality` remain canonical metric-sufficiency families for audits and top-5 organic telemetry. Current scoring treats sparse top-5 DA/Lighthouse as low-coverage evidence, not as zero authority or zero difficulty.
 
-If `benchmark_confidence == 'insufficient'`:
+If no benchmark cell exists, the benchmark cell is marked undersampled, or effective `benchmark_confidence` is `low` or `insufficient`:
 - Compute scores anyway using fallback heuristics (e.g., median CPC = $5.00 default for the volume_per_capita normalization)
 - Set `benchmark_undersampled = TRUE`
 - UI surfaces a prominent banner: "Limited benchmark data for this niche — scores are preliminary"
