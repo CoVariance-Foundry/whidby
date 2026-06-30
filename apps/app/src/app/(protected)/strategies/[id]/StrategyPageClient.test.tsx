@@ -385,6 +385,7 @@ describe("StrategyPageClient", () => {
               },
               ai_resilience_score: 32,
               warnings: ["AI overview present"],
+              report_id: "report-keyword-1",
             },
           ],
         }),
@@ -418,6 +419,10 @@ describe("StrategyPageClient", () => {
     expect(screen.getByText("search_volume_monthly: 720")).toBeInTheDocument();
     expect(screen.getByText("local_pack_present: yes")).toBeInTheDocument();
     expect(screen.getByText("AI resilience flagged")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open full report/i })).toHaveAttribute(
+      "href",
+      "/reports?open=report-keyword-1",
+    );
     const score = screen.getByRole("img", { name: "Strategy score: 86 out of 100, high" });
     expect(score).toHaveAttribute("data-score-tone", "high");
     expect(score).toHaveTextContent("86");

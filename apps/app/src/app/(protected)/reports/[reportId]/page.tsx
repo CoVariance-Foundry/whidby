@@ -3,11 +3,15 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Icon, I } from "@/lib/icons";
 import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
+import { ScoreBar } from "@/components/ScoreVisuals";
+import { StrategyResultSummary } from "@/components/strategies/StrategyResultSummary";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ReportActions from "@/components/reports/ReportActions";
+import { scoreToneForValue } from "@/lib/design-tokens";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
+import { createReportStrategyResultSummary } from "@/lib/strategy-result-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -114,18 +118,6 @@ function formatDate(iso: string): string {
   });
 }
 
-function scoreColor(score: number): string {
-  if (score >= 75) return "#0f7a57";
-  if (score >= 50) return "#a05a00";
-  return "#a3292d";
-}
-
-function scoreBarBg(score: number): string {
-  if (score >= 75) return "#dfede6";
-  if (score >= 50) return "#f6ebd4";
-  return "#f3e1e1";
-}
-
 function humanizeEnum(raw: string): string {
   return raw
     .replace(/_/g, " ")
@@ -165,6 +157,7 @@ function ScoreCell({
   scoreKey: ScoreKey;
 }) {
   const score = value ?? 0;
+  const tone = scoreToneForValue(value);
   return (
     <div>
       <div
@@ -174,28 +167,13 @@ function ScoreCell({
           fontWeight: 800,
           fontSize: 30,
           lineHeight: 1,
-          color: value == null ? "var(--ink-3)" : scoreColor(score),
+          color: tone.text,
         }}
       >
         {value == null ? "—" : Math.round(score)}
       </div>
-      <div
-        style={{
-          height: 4,
-          marginTop: 7,
-          borderRadius: 4,
-          background: scoreBarBg(score),
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            width: `${Math.min(score, 100)}%`,
-            height: "100%",
-            borderRadius: 4,
-            background: scoreColor(score),
-          }}
-        />
+      <div style={{ marginTop: 7 }}>
+        <ScoreBar value={value} label={label} hideLabel hideValue />
       </div>
       <div
         style={{
@@ -408,7 +386,7 @@ function MetroBadges({ metro }: { metro: ReportMetro }) {
   );
 }
 
-function PrimaryMetroSection({ metro }: { metro: ReportMetro }) {
+function PrimaryMetroSection({ report, metro }: { report: FullReportData; metro: ReportMetro }) {
   return (
     <section
       aria-label="Primary report opportunity"
@@ -419,29 +397,13 @@ function PrimaryMetroSection({ metro }: { metro: ReportMetro }) {
         padding: 24,
       }}
     >
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
-        <div>
-          <div
-            style={{
-              color: "var(--accent-ink)",
-              fontFamily: "var(--sans)",
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              marginBottom: 6,
-            }}
-          >
-            Top market
-          </div>
-          <h2 style={{ margin: 0, fontFamily: "var(--serif)", fontSize: 28, color: "var(--ink)" }}>
-            {metro.cbsa_name}
-          </h2>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
-          {metro.population ? <Pill>Pop. {metro.population.toLocaleString("en-US")}</Pill> : null}
-          {metro.serp_archetype ? <Pill>{humanizeEnum(metro.serp_archetype)}</Pill> : null}
-        </div>
+      <StrategyResultSummary
+        summary={createReportStrategyResultSummary({ report, metro, reportHref: null })}
+        framed={false}
+      />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14, marginBottom: 20 }}>
+        {metro.population ? <Pill>Pop. {metro.population.toLocaleString("en-US")}</Pill> : null}
+        {metro.serp_archetype ? <Pill>{humanizeEnum(metro.serp_archetype)}</Pill> : null}
       </div>
 
       <HeadlineScores metro={metro} />
@@ -563,7 +525,7 @@ export default async function ReportDetailPage({
 
       {topMetro ? (
         <>
-          <PrimaryMetroSection metro={topMetro} />
+          <PrimaryMetroSection report={report} metro={topMetro} />
           <StrategyGuidance metro={topMetro} />
           <NextMoves report={report} metro={topMetro} />
           {report.metros.slice(1).map((metro) => (
