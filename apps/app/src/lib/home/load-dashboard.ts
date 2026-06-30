@@ -9,6 +9,11 @@ import {
 import { type AccountSummary, loadAccountSummary } from "@/lib/account/summary";
 import type { ActivityItem, RecommendedItem, StatCard } from "@/lib/home/types";
 import { loadStrategyCatalog } from "@/lib/strategies/catalog";
+import {
+  getRunnableStrategyPathNodes,
+  isRunnableStrategyId,
+  sortByStrategyPathOrder,
+} from "@/lib/strategies/path-registry";
 import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strategies/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -123,46 +128,30 @@ const APP_BASE_ENV_KEYS = [
   "NEXT_PUBLIC_SITE_URL",
 ] as const;
 const STARTER_FALLBACK: LaunchSafeStrategyId = "easy_win";
-const LAUNCH_SAFE_STRATEGY_IDS = [
-  "easy_win",
-  "gbp_blitz",
-  "keyword_hijack",
-  "expand_conquer",
-] as const satisfies readonly LaunchSafeStrategyId[];
+const LAUNCH_SAFE_STRATEGY_IDS = getRunnableStrategyPathNodes().map(
+  (node) => node.strategy_id,
+) as LaunchSafeStrategyId[];
 const LAUNCH_SAFE_STRATEGY_SET = new Set<string>(LAUNCH_SAFE_STRATEGY_IDS);
 // Phase 2 route-gates Multi-market only. This branch already includes /agency,
 // so production defaults to enabled while tests can still cover the disabled card.
 const DEFAULT_MULTI_MARKET_AVAILABLE = true;
-const FALLBACK_STRATEGY_ENTRIES: Record<LaunchSafeStrategyId, StrategyCatalogEntry> = {
-  easy_win: {
-    strategy_id: "easy_win",
-    name: "Easy Win",
-    description: "Find city and service pairs with useful demand and weaker competition.",
-    status: "launch",
-    input_shape: "city_service",
-  },
-  gbp_blitz: {
-    strategy_id: "gbp_blitz",
-    name: "GBP Blitz",
-    description: "Find local packs where business profile gaps make the market easier to enter.",
-    status: "launch",
-    input_shape: "city_service",
-  },
-  keyword_hijack: {
-    strategy_id: "keyword_hijack",
-    name: "Keyword Hijack",
-    description: "Target focused service keywords where organic incumbents are weaker.",
-    status: "launch",
-    input_shape: "city_service_keyword",
-  },
-  expand_conquer: {
-    strategy_id: "expand_conquer",
-    name: "Expand & Conquer",
-    description: "Find lookalike expansion markets from a reference city and service.",
-    status: "launch",
-    input_shape: "reference_city_service",
-  },
-};
+const FALLBACK_STRATEGY_ENTRIES = Object.fromEntries(
+  getRunnableStrategyPathNodes().map((strategy) => [
+    strategy.strategy_id,
+    {
+      strategy_id: strategy.strategy_id,
+      name: strategy.name,
+      description: strategy.description,
+      status: strategy.status,
+      input_shape: strategy.input_shape,
+      path_role: strategy.path_role,
+      path_order: strategy.path_order,
+      is_visible: strategy.is_visible,
+      is_runnable: strategy.is_runnable,
+      unlock_requirement: strategy.unlock_requirement,
+    },
+  ]),
+) as Record<LaunchSafeStrategyId, StrategyCatalogEntry>;
 const DASHBOARD_NEXT_ROUTES = new Set<string>([
   "/strategies",
   "/explore",
@@ -264,8 +253,8 @@ function normalizeDashboardNextRoute(value: unknown): DashboardNextRoute {
 }
 
 function filterLaunchCatalog(catalog: StrategyCatalogResponse): StrategyCatalogResponse {
-  const strategies = catalog.strategies.filter((strategy) =>
-    LAUNCH_SAFE_STRATEGY_SET.has(strategy.strategy_id),
+  const strategies = sortByStrategyPathOrder(
+    catalog.strategies.filter((strategy) => isRunnableStrategyId(strategy.strategy_id)),
   );
   return {
     ...catalog,

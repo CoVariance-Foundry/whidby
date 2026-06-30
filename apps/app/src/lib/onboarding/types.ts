@@ -1,17 +1,12 @@
+import type { StrategyPathId } from "@/lib/strategies/path-registry";
+
 export type OnboardingIntent =
   | "find_first"
   | "scale"
   | "coach_agency"
   | "researching";
 
-export type StrategyId =
-  | "easy_win"
-  | "cash_cow"
-  | "blue_ocean"
-  | "gbp_blitz"
-  | "portfolio_builder"
-  | "expand_conquer"
-  | "seasonal_arbitrage";
+export type StrategyId = StrategyPathId;
 
 export type OnboardingNextRoute = "/strategies" | "/explore" | "/agency";
 
