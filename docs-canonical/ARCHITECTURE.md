@@ -1,8 +1,8 @@
 # Architecture
 
-<!-- docguard:version 1.4.0 -->
+<!-- docguard:version 1.6.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-05-14 -->
+<!-- docguard:last-reviewed 2026-06-30 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file describes WHAT the system is designed to be.
@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.5.3` |
-| **Last Updated** | 2026-05-22 |
+| **Version** | `1.6.0` |
+| **Last Updated** | 2026-06-30 |
 | **Owner** | @widby-team |
 
 ---
@@ -35,6 +35,32 @@ Five subsystems compose the platform:
 **Consumer app frame:** Protected consumer routes inherit a single sticky `Navbar` plus minimal app `Footer` from `apps/app/src/app/(protected)/layout.tsx`. The frame resolves the Supabase user, attempts account entitlement/usage loading, and falls back to a free-plan usage pill if entitlement summary data is unavailable. Primary authenticated navigation is Home, Strategies, Explore, Multi-market, and Reports; account settings, password, admin dashboard, and sign-out live in the profile dropdown. Page-level actions belong in page headers or client surfaces, not in a reintroduced sidebar/topbar shell.
 
 **Consumer visual system:** `apps/app` uses Inter for body/UI, DM Serif Display for display headings and italic metadata, and JetBrains Mono for code, data, and numeric displays. The root app layout owns the `next/font/google` imports and exposes the shared CSS variables (`--font-inter`, `--font-serif`, `--font-jetbrains-mono`); `apps/app/src/app/globals.css` maps those variables to the consumer design tokens. Score visuals use the shared `apps/app/src/lib/design-tokens.ts` 80/60/40 tone thresholds and `ScoreCircle` / `ScoreBar` primitives so Reports, Explore, and Strategy surfaces do not maintain route-local score color helpers. Prototype visual primitives from `whidby-ux-proto` are folded into `apps/app` incrementally through shared CSS variables/components instead of route-local one-off styling.
+
+### Consumer Synthesis Reflow
+
+The Widby Synthesis Reflow is the current product spine for the consumer app. It is a full production replacement for the stale proto-convergence and strategy-gallery direction, not a feature-flagged parallel experiment. Implementation must port the accepted reflow into `apps/app` through shared components and contracts before route-specific UI work.
+
+Segment routing is deterministic and starts from persisted onboarding/profile state plus report history where possible:
+
+| Segment | First surface | Notes |
+| --- | --- | --- |
+| `find_first` | `/` dashboard | A2 starter dashboard hero is the primary first-use experience. |
+| `scale` | `/strategies` | B2 strategies path/rail is the primary strategy surface; dashboard becomes a portfolio/status glance. |
+| `coach_agency` | `/agency` | Agency/operator users start on the batch/multi-market surface. |
+| `researching` | `/explore` | Research users start in cached Explore rather than a fresh-scan prompt. |
+
+The visible synthesis catalog is intentionally narrow: Easy Win, GBP Blitz, Expand & Conquer, Keyword Hijack as a side branch, and locked Portfolio Builder. Other cross-metro plays are deferred. GBP Blitz remains soft on physical-address handling: the product may describe markets where the user can establish a physical address, but this project must not introduce an address-dependent scoring engine.
+
+Unlocks are shared product state, not route-local display rules:
+
+```text
+scan completed -> Easy Win advances to GBP Blitz
+ranked-site declaration -> Expand & Conquer unlocks
+Keyword Hijack -> feasibility/compliance preflight before spend
+Portfolio Builder -> locked teaser only
+```
+
+Report V1.1 is part of the same reflow. `/strategies` can show an inline result summary, but the durable detail surface is a path-aware report page that shares score, confidence, AI Resilience, glossary/source context, and next-step primitives with the path.
 
 ### Consumer User Management and Entitlements
 
@@ -169,7 +195,7 @@ Filtering rules:
 
 Strategies are guided ranking lenses over the same city-service market-cell read model. They should not duplicate the Explore table; they package opinionated scoring, ordering, and explanation around strategy intent.
 
-The consumer strategy system applies strategy-specific ranking lenses over the existing cached market intelligence read model. Launch strategies are `easy_win`, `gbp_blitz`, `keyword_hijack`, and `expand_conquer`; `cash_cow` is a phase-2/flagged strategy; AI resilience is a global modifier and warning, not a standalone strategy route.
+The consumer strategy system applies strategy-specific ranking lenses over the existing cached market intelligence read model. The production strategy surface is the B2 `/strategies` path/rail, not a flat gallery/detail model. Launch path strategies are `easy_win`, `gbp_blitz`, and `expand_conquer`; `keyword_hijack` hangs as a feasibility-gated side branch; `portfolio_builder` is visible only as a locked future node. `cash_cow`, `blue_ocean`, `seasonal_arbitrage`, and other cross-metro plays are deferred unless a later project explicitly pulls them forward. AI Resilience is a global modifier and warning, not a standalone strategy route. PostHog controls strategy rollout with a master strategy flag plus per-strategy flags; those flags may hide catalog entries or disable strategy discovery/run APIs, but they do not replace entitlement, quota, or account-visibility checks.
 
 The backend boundary is `DiscoveryService` plus a Supabase-backed `StrategyRepository`. Cached discovery reads from `metros`, `census_cbp_establishments`, `niche_naics_mapping`, `seo_facts`, `seo_benchmarks`, `metro_score_v2`, `reports`, `explore_report_snapshots`, `local_pack_listing_facts`, and `metro_feature_vectors`. Competitor Intel reads `organic_competitor_facts`, `local_pack_listing_facts`, `seo_facts`, `metro_score_v2`, and `reports` through a dedicated `CompetitorIntelService`. Consumer strategy run creation enters through `apps/app /api/strategies/runs`, where account entitlements enforce free cached-only access, plus/pro fresh-run access, and batch caps before proxying to FastAPI `/api/discover`, `/api/strategy-runs`, or the existing scoring bridge.
 
@@ -181,7 +207,7 @@ DataForSEO / Census / CBP / BLS
   -> strategy repository read model
   -> DiscoveryService strategy projection
 
-apps/app strategy gallery and detail screens
+apps/app dashboard, strategies path, and Report V1.1 screens
   -> apps/app /api/strategies/runs entitlement gate
   -> FastAPI /api/discover, /api/strategy-runs, or scoring bridge
   -> DiscoveryService + StrategyRepository
@@ -219,10 +245,10 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | Response Tracking (M14) | Event collection + reply classification | `src/experiment/` | `tests/unit/test_response_tracking.py` |
 | Experiment Analysis (M15) | A/B analysis + rentability signal | `src/experiment/` | `tests/unit/test_experiment_analysis.py` |
 | Admin Eval Frontend (M16) | Research-agent dashboard, niche-finder, exploration, knowledge graph, experiments, billing operations visibility | `apps/admin/` | Admin vitest + Playwright |
-| Consumer Frontend | Light-theme scoring + reports consumer surface with protected Navbar/Footer app frame | `apps/app/` | Consumer vitest |
+| Consumer Frontend | Light-theme synthesis product surface with protected Navbar/Footer app frame, A2 dashboard, B2 strategies path, Explore, Agency, and Reports | `apps/app/` | Consumer vitest + Playwright visual QA |
 | Consumer Entitlements | Account resolution, tier quotas, Stripe billing routes, PostHog rollout flags, billing issue logging, checkout session idempotency, webhook event ordering | `apps/app/src/lib/account/`, `apps/app/src/lib/billing/`, `apps/app/src/app/api/billing/` | Consumer vitest |
 | Consumer Onboarding | Signup intent, strategy recommendation, target capture, resume state, and first-report handoff | `apps/app/src/app/(auth)/`, `apps/app/src/app/onboarding/`, `apps/app/src/app/api/onboarding/`, `apps/app/src/lib/onboarding/` | Consumer vitest + Playwright smoke |
-| Strategy Discovery | Strategy projections over cached market intelligence, account-gated strategy run creation, and FastAPI discovery proxying | `src/domain/services/discovery_service.py`, `src/clients/strategy_repository.py`, `apps/app/src/app/api/strategies/runs/` | `tests/unit/test_strategy_projection.py`, `tests/unit/test_discovery_service_strategies.py`, `tests/unit/test_api_strategy_discovery.py`, `apps/app/src/app/api/strategies/runs/route.test.ts` |
+| Strategy Discovery | Strategy projections over cached market intelligence, path/rail catalog contract, account-gated strategy run creation, and FastAPI discovery proxying | `src/domain/services/discovery_service.py`, `src/clients/strategy_repository.py`, `apps/app/src/lib/strategies/`, `apps/app/src/app/api/strategies/runs/` | `tests/unit/test_strategy_projection.py`, `tests/unit/test_discovery_service_strategies.py`, `tests/unit/test_api_strategy_discovery.py`, `apps/app/src/app/api/strategies/runs/route.test.ts`, strategy path component tests |
 | Consumer Explore Refresh | Cached Explore refresh orchestration, Next.js proxy routes, and refresh UI | `src/domain/services/explore_refresh_service.py`, `apps/app/src/app/api/explore/refresh/`, `apps/app/src/components/explore/` | Pytest, consumer vitest, Playwright smoke |
 | Niche orchestrator (operational wiring) | `score_niche_for_metro` composes M4 → M9 end-to-end | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` + live integration smoke |
 | Supabase persistence | Writes M9 reports to `reports`/`report_keywords`/`metro_signals`/`metro_scores`, including report ownership when supplied | `src/clients/supabase_persistence.py` | `tests/unit/test_supabase_persistence.py` |
@@ -410,3 +436,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.4.0 | 2026-05-14 | Explore refresh control | Documented refresh policy storage, FastAPI scoring bridge queueing, app proxy routes, and report snapshots for Explore trend analysis |
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy discovery architecture, repository boundary, source tables, and consumer data flow |
 | 1.5.1 | 2026-05-18 | Adapter boundary sync | Documented shared Supabase client accessor and consumer upstream proxy helper dependency |
+| 1.6.0 | 2026-06-30 | Synthesis Reflow | Canonicalized full replacement direction, segment routing, unlock contract, narrowed visible strategy catalog, and Report V1.1 scope |
