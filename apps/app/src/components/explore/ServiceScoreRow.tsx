@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ARCHETYPES } from "@/lib/archetypes";
 import type { ExploreCachedScore } from "@/lib/explore/types";
+import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
 import { ScoreCircle } from "@/components/ScoreVisuals";
 import { formatDate, formatDecimal, formatPercent, humanize } from "./format";
 
@@ -93,7 +94,12 @@ export default function ServiceScoreRow({
           <span>Scored {formatDate(score.last_scored_at)}</span>
           {score.score_system && <span>{score.score_system.toUpperCase()}</span>}
           {score.confidence_score != null && <span>Confidence {Math.round(score.confidence_score)}</span>}
-          {score.ai_resilience_score != null && <span>AI resilience {Math.round(score.ai_resilience_score)}</span>}
+          {score.ai_resilience_score != null && (
+            <>
+              <span>AI resilience {Math.round(score.ai_resilience_score)}</span>
+              <AIResilienceFlagBadge score={score.ai_resilience_score} />
+            </>
+          )}
           {score.ai_exposure && <span>AI {humanize(score.ai_exposure)}</span>}
           {score.difficulty_tier && <span>{humanize(score.difficulty_tier)}</span>}
           {score.business_density_per_1k != null && (

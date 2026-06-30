@@ -13,6 +13,22 @@ afterEach(() => {
 });
 
 describe("StrategyPageClient", () => {
+  it("renders accessible AI Resilience modifier controls with the default threshold", () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    expect(screen.getByRole("group", { name: /AI Resilience modifier/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("AI Resilience threshold")).toHaveValue(40);
+    expect(screen.getByLabelText("Hide flagged markets")).not.toBeChecked();
+  });
+
   it("shows a live report recovery card after cached discovery returns zero results", async () => {
     const strategy: StrategyCatalogEntry = {
       strategy_id: "easy_win",
@@ -64,7 +80,10 @@ describe("StrategyPageClient", () => {
     fireEvent.change(screen.getByLabelText("Primary keyword"), {
       target: { value: "boise plumber" },
     });
-    fireEvent.click(screen.getByLabelText("Add AI resilience warning filter"));
+    fireEvent.change(screen.getByLabelText("AI Resilience threshold"), {
+      target: { value: "55" },
+    });
+    fireEvent.click(screen.getByLabelText("Hide flagged markets"));
     fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
 
     await screen.findByText("Live report option");
@@ -82,6 +101,91 @@ describe("StrategyPageClient", () => {
       ai_resilience_filter: true,
       limit: 10,
     });
+  });
+
+  it("maps hide flagged modifier state to the existing discovery payload boolean", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("AI Resilience threshold"), {
+      target: { value: "55" },
+    });
+    fireEvent.click(screen.getByLabelText("Hide flagged markets"));
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toMatchObject({
+      lens_id: "easy_win",
+      ai_resilience_filter: true,
+      limit: 10,
+    });
+    expect(body).not.toHaveProperty("threshold");
+    expect(body).not.toHaveProperty("ai_resilience_threshold");
+  });
+
+  it("hides flagged cached results using the shared threshold helper", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "easy_win",
+      name: "Easy Win",
+      description: "Low-competition markets.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          markets: [
+            {
+              id: "boise-low",
+              rank: 1,
+              score: 82,
+              city: "Boise",
+              service: "Plumbing",
+              ai_resilience_score: 32,
+            },
+            {
+              id: "reno-safe",
+              rank: 2,
+              score: 78,
+              city: "Reno",
+              service: "HVAC",
+              v2_scores: { ai_resilience: 71 },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    global.fetch = fetchMock;
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("AI Resilience threshold"), {
+      target: { value: "50" },
+    });
+    fireEvent.click(screen.getByLabelText("Hide flagged markets"));
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    expect(await screen.findByText("HVAC in Reno")).toBeInTheDocument();
+    expect(screen.queryByText("Plumbing in Boise")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 flagged market is hidden/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Run a fresh report for this target/i)).not.toBeInTheDocument();
   });
 
   it("sends a backend-valid fresh payload for an Expand & Conquer live report", async () => {
@@ -279,6 +383,7 @@ describe("StrategyPageClient", () => {
                 search_volume_monthly: 720,
                 local_pack_present: true,
               },
+              ai_resilience_score: 32,
               warnings: ["AI overview present"],
             },
           ],
@@ -312,6 +417,7 @@ describe("StrategyPageClient", () => {
     expect(await screen.findByText("Plumbing in Boise")).toBeInTheDocument();
     expect(screen.getByText("search_volume_monthly: 720")).toBeInTheDocument();
     expect(screen.getByText("local_pack_present: yes")).toBeInTheDocument();
+    expect(screen.getByText("AI resilience flagged")).toBeInTheDocument();
     const score = screen.getByRole("img", { name: "Strategy score: 86 out of 100, high" });
     expect(score).toHaveAttribute("data-score-tone", "high");
     expect(score).toHaveTextContent("86");

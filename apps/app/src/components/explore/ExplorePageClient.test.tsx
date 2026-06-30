@@ -251,6 +251,33 @@ describe("ExplorePageClient", () => {
     );
   });
 
+  it("shows an AI Resilience flagged badge for cached service scores below threshold", () => {
+    render(
+      <ExplorePageClient
+        data={{
+          ...fixtureData,
+          cities: fixtureData.cities.map((city) =>
+            city.cbsa_code === "11111"
+              ? {
+                  ...city,
+                  cached_scores: city.cached_scores.map((score) =>
+                    score.report_id === "report-austin-roofing"
+                      ? { ...score, ai_resilience_score: 18 }
+                      : score,
+                  ),
+                }
+              : city,
+          ),
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("row", { name: /open austin/i }));
+
+    expect(screen.getByText("AI resilience flagged")).toBeTruthy();
+    expect(screen.getByLabelText(/AI Resilience flagged: score 18 below threshold 40/i)).toBeTruthy();
+  });
+
   it("moves focus into the city drawer and closes it on Escape", () => {
     render(<ExplorePageClient data={fixtureData} />);
 
