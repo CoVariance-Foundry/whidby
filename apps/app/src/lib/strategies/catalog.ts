@@ -4,56 +4,46 @@ import {
 } from "@/lib/strategies/api";
 import { strategyAccentForId } from "@/lib/design-tokens";
 import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strategies/types";
+import {
+  getStrategyPathNode,
+  getVisibleStrategyPathNodes,
+  isUserFacingStrategyId,
+  sortByStrategyPathOrder,
+} from "@/lib/strategies/path-registry";
 
-function withStrategyAccent(strategy: StrategyCatalogEntry): StrategyCatalogEntry {
+function withStrategyMetadata(strategy: StrategyCatalogEntry): StrategyCatalogEntry {
+  const pathNode = getStrategyPathNode(strategy.strategy_id);
   const accent_id = strategy.accent_id ?? strategy.strategy_id;
   const accent = strategyAccentForId(accent_id);
 
   return {
     ...strategy,
+    ...(pathNode
+      ? {
+          status: pathNode.status,
+          input_shape: pathNode.input_shape,
+          path_role: pathNode.path_role,
+          path_order: pathNode.path_order,
+          is_visible: pathNode.is_visible,
+          is_runnable: pathNode.is_runnable,
+          unlock_requirement: pathNode.unlock_requirement,
+        }
+      : {}),
     accent_id: accent.accent_id,
     accent,
   };
 }
 
 export const FALLBACK_STRATEGY_CATALOG: StrategyCatalogResponse = {
-  strategies: [
-    withStrategyAccent({
-      strategy_id: "easy_win",
-      name: "Easy Win",
-      description: "Find city and service pairs with useful demand and weaker competition.",
-      status: "launch",
-      input_shape: "city_service",
+  strategies: getVisibleStrategyPathNodes().map((node) =>
+    withStrategyMetadata({
+      strategy_id: node.strategy_id,
+      name: node.name,
+      description: node.description,
+      status: node.status,
+      input_shape: node.input_shape,
     }),
-    withStrategyAccent({
-      strategy_id: "gbp_blitz",
-      name: "GBP Blitz",
-      description: "Prioritize markets where local pack competitors leave profile gaps.",
-      status: "launch",
-      input_shape: "city_service",
-    }),
-    withStrategyAccent({
-      strategy_id: "keyword_hijack",
-      name: "Keyword Hijack",
-      description: "Rank markets through one primary keyword lens.",
-      status: "launch",
-      input_shape: "city_service_keyword",
-    }),
-    withStrategyAccent({
-      strategy_id: "expand_conquer",
-      name: "Expand & Conquer",
-      description: "Use a reference city to find lookalike expansion markets.",
-      status: "launch",
-      input_shape: "reference_city_service",
-    }),
-    withStrategyAccent({
-      strategy_id: "cash_cow",
-      name: "Cash Cow",
-      description: "Phase-2 scan for markets with stronger lead economics.",
-      status: "phase_2",
-      input_shape: "cached_scan",
-    }),
-  ],
+  ),
   global_modifiers: [
     {
       modifier_id: "ai_resilience",
@@ -62,10 +52,6 @@ export const FALLBACK_STRATEGY_CATALOG: StrategyCatalogResponse = {
     },
   ],
 };
-
-const allowedStrategyIds = new Set(
-  FALLBACK_STRATEGY_CATALOG.strategies.map((strategy) => strategy.strategy_id),
-);
 
 function isStrategyCatalogResponse(value: unknown): value is StrategyCatalogResponse {
   if (!value || typeof value !== "object") return false;
@@ -76,24 +62,24 @@ export function filterStrategyCatalog(catalog: StrategyCatalogResponse): Strateg
   const fallbackById = new Map(
     FALLBACK_STRATEGY_CATALOG.strategies.map((strategy) => [strategy.strategy_id, strategy]),
   );
-  const strategies: StrategyCatalogEntry[] = catalog.strategies
-    .filter((strategy) => allowedStrategyIds.has(strategy.strategy_id))
+  const upstreamStrategies = catalog.strategies
+    .filter((strategy) => isUserFacingStrategyId(strategy.strategy_id))
     .map((strategy) => ({
       ...fallbackById.get(strategy.strategy_id),
       ...strategy,
     }))
-    .map(withStrategyAccent)
-    .sort((a, b) => {
-      const ai = FALLBACK_STRATEGY_CATALOG.strategies.findIndex(
-        (strategy) => strategy.strategy_id === a.strategy_id,
-      );
-      const bi = FALLBACK_STRATEGY_CATALOG.strategies.findIndex(
-        (strategy) => strategy.strategy_id === b.strategy_id,
-      );
-      return ai - bi;
-    });
+    .map(withStrategyMetadata);
 
-  if (strategies.length === 0) return FALLBACK_STRATEGY_CATALOG;
+  if (upstreamStrategies.length === 0) return FALLBACK_STRATEGY_CATALOG;
+
+  const upstreamIds = new Set(upstreamStrategies.map((strategy) => strategy.strategy_id));
+  const lockedTeasers = FALLBACK_STRATEGY_CATALOG.strategies.filter(
+    (strategy) => strategy.path_role === "locked_teaser" && !upstreamIds.has(strategy.strategy_id),
+  );
+  const strategies: StrategyCatalogEntry[] = sortByStrategyPathOrder([
+    ...upstreamStrategies,
+    ...lockedTeasers,
+  ]);
 
   return {
     strategies,
@@ -118,5 +104,7 @@ export async function loadStrategyCatalog(): Promise<StrategyCatalogResponse> {
 
 export async function loadStrategy(strategyId: string): Promise<StrategyCatalogEntry | undefined> {
   const catalog = await loadStrategyCatalog();
-  return catalog.strategies.find((strategy) => strategy.strategy_id === strategyId);
+  return catalog.strategies.find(
+    (strategy) => strategy.strategy_id === strategyId && strategy.is_runnable !== false,
+  );
 }

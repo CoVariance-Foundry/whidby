@@ -235,8 +235,8 @@ describe("loadDashboard", () => {
     expect(dashboard.strategies.catalog.strategies.map((strategy) => strategy.strategy_id)).toEqual([
       "easy_win",
       "gbp_blitz",
-      "keyword_hijack",
       "expand_conquer",
+      "keyword_hijack",
     ]);
     expect(dashboard.report_error).toBeNull();
     expect(dashboard.multi_market_available).toBe(true);

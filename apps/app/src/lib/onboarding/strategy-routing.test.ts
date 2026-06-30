@@ -16,7 +16,7 @@ describe("routeOnboardingToStrategy", () => {
         focus: "agency",
       }),
     ).toMatchObject({
-      starter: "cash_cow",
+      starter: "easy_win",
       next_route: "/agency",
     });
   });
@@ -33,26 +33,27 @@ describe("routeOnboardingToStrategy", () => {
     });
   });
 
-  it("routes first-value users to Cash Cow", () => {
+  it("routes first-value users to Easy Win", () => {
     expect(
       routeOnboardingToStrategy({
         intent: "find_first",
         focus: "value",
       }),
     ).toMatchObject({
-      starter: "cash_cow",
+      starter: "easy_win",
       next_route: "/strategies",
     });
   });
 
-  it("routes city diversification to Portfolio Builder", () => {
+  it("routes city diversification to Expand & Conquer while keeping Portfolio Builder visible", () => {
     expect(
       routeOnboardingToStrategy({
         intent: "scale",
         focus: "diversify_city",
       }),
     ).toMatchObject({
-      starter: "portfolio_builder",
+      starter: "expand_conquer",
+      available: expect.arrayContaining(["portfolio_builder"]),
       next_route: "/strategies",
     });
   });
@@ -69,35 +70,50 @@ describe("routeOnboardingToStrategy", () => {
     });
   });
 
-  it("routes scale revenue focus to Cash Cow", () => {
+  it("routes scale revenue focus to Expand & Conquer", () => {
     expect(
       routeOnboardingToStrategy({
         intent: "scale",
         focus: "revenue",
       }),
     ).toMatchObject({
-      starter: "cash_cow",
+      starter: "expand_conquer",
       next_route: "/strategies",
     });
   });
 
-  it("routes scale emerging focus to Blue Ocean", () => {
+  it("routes scale emerging focus to Keyword Hijack", () => {
     expect(
       routeOnboardingToStrategy({
         intent: "scale",
         focus: "emerging",
       }),
     ).toMatchObject({
-      starter: "blue_ocean",
+      starter: "keyword_hijack",
       next_route: "/strategies",
     });
   });
 
-  it("routes scale users without a focus to Cash Cow", () => {
+  it("routes scale users without a focus to Expand & Conquer", () => {
     expect(routeOnboardingToStrategy({ intent: "scale" })).toMatchObject({
-      starter: "cash_cow",
+      starter: "expand_conquer",
       next_route: "/strategies",
     });
+  });
+
+  it("does not recommend deferred cross-metro strategies", () => {
+    const routes = [
+      routeOnboardingToStrategy({ intent: "find_first", focus: "value" }),
+      routeOnboardingToStrategy({ intent: "scale", focus: "revenue" }),
+      routeOnboardingToStrategy({ intent: "scale", focus: "emerging" }),
+      routeOnboardingToStrategy({ intent: "coach_agency", focus: "agency" }),
+    ];
+
+    for (const routing of routes) {
+      expect([routing.starter, ...routing.available]).not.toEqual(
+        expect.arrayContaining(["cash_cow", "blue_ocean", "seasonal_arbitrage"]),
+      );
+    }
   });
 
   it("routes coaching-focused users to Easy Win", () => {

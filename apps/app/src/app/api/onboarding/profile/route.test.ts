@@ -77,8 +77,14 @@ describe("/api/onboarding/profile", () => {
       account_id: entitlement.account_id,
       intent: "scale",
       focus: "revenue",
-      recommended_strategy_id: "cash_cow",
-      available_strategy_ids: ["cash_cow", "portfolio_builder"],
+      recommended_strategy_id: "expand_conquer",
+      available_strategy_ids: [
+        "expand_conquer",
+        "easy_win",
+        "gbp_blitz",
+        "keyword_hijack",
+        "portfolio_builder",
+      ],
       next_route: "/strategies",
       status: "strategy_recommended",
     };
@@ -103,7 +109,7 @@ describe("/api/onboarding/profile", () => {
     expect(body.status).toBe("success");
     expect(body.profile).toEqual(profile);
     expect(body.routing).toMatchObject({
-      starter: "cash_cow",
+      starter: "expand_conquer",
       next_route: "/strategies",
     });
     expect(supabase.profileUpsert).toHaveBeenCalledOnce();
@@ -123,11 +129,14 @@ describe("/api/onboarding/profile", () => {
       focus: "revenue",
       coach_or_agency: null,
       referral_source: "newsletter",
-      recommended_strategy_id: "cash_cow",
+      recommended_strategy_id: "expand_conquer",
       next_route: "/strategies",
       status: "strategy_recommended",
     });
-    expect(profileUpsertPayload.available_strategy_ids).toContain("cash_cow");
+    expect(profileUpsertPayload.available_strategy_ids).toContain("expand_conquer");
+    expect(profileUpsertPayload.available_strategy_ids).not.toEqual(
+      expect.arrayContaining(["cash_cow", "blue_ocean", "seasonal_arbitrage"]),
+    );
     expect(profileUpsertPayload.completed_at).toEqual(expect.any(String));
     expect(profileUpsertOptions).toEqual({ onConflict: "user_id" });
   });

@@ -112,7 +112,7 @@ describe("/api/onboarding/target", () => {
     expect(body).toEqual({
       status: "validation_error",
       message:
-        "strategy_id must be one of easy_win, cash_cow, blue_ocean, gbp_blitz, portfolio_builder, expand_conquer, seasonal_arbitrage.",
+        "strategy_id must be one of easy_win, gbp_blitz, expand_conquer, keyword_hijack.",
     });
     expect(supabase.profileMaybeSingle).not.toHaveBeenCalled();
     expect(supabase.targetUpsert).not.toHaveBeenCalled();

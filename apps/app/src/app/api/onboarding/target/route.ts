@@ -9,6 +9,7 @@ import type {
   OnboardingTargetRequest,
   StrategyId,
 } from "@/lib/onboarding/types";
+import { getRunnableStrategyPathNodes } from "@/lib/strategies/path-registry";
 import { createClient } from "@/lib/supabase/server";
 
 const VALID_GEO_SCOPES: OnboardingGeoScope[] = [
@@ -18,15 +19,10 @@ const VALID_GEO_SCOPES: OnboardingGeoScope[] = [
   "nationwide",
 ];
 
-const VALID_STRATEGY_IDS: StrategyId[] = [
-  "easy_win",
-  "cash_cow",
-  "blue_ocean",
-  "gbp_blitz",
-  "portfolio_builder",
-  "expand_conquer",
-  "seasonal_arbitrage",
-];
+const VALID_STRATEGY_IDS = getRunnableStrategyPathNodes().map(
+  (node) => node.strategy_id,
+) as StrategyId[];
+const VALID_STRATEGY_ID_MESSAGE = `strategy_id must be one of ${VALID_STRATEGY_IDS.join(", ")}.`;
 
 const VALID_METADATA_SOURCES: OnboardingMetadataSource[] = [
   "typed",
@@ -71,9 +67,7 @@ function normalizeGeoScope(value: unknown): OnboardingGeoScope {
 function normalizeStrategyId(value: unknown): StrategyId {
   const strategyId = normalizeRequiredString(value, "strategy_id");
   if (!VALID_STRATEGY_IDS.includes(strategyId as StrategyId)) {
-    throw new ValidationError(
-      "strategy_id must be one of easy_win, cash_cow, blue_ocean, gbp_blitz, portfolio_builder, expand_conquer, seasonal_arbitrage.",
-    );
+    throw new ValidationError(VALID_STRATEGY_ID_MESSAGE);
   }
   return strategyId as StrategyId;
 }

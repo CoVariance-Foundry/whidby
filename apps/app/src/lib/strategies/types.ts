@@ -1,6 +1,10 @@
 import type { StrategyAccent, StrategyAccentId } from "@/lib/design-tokens";
+import type {
+  StrategyPathRole,
+  StrategyUnlockMetadata,
+} from "@/lib/strategies/path-registry";
 
-export type StrategyStatus = "launch" | "phase_2";
+export type StrategyStatus = "launch" | "phase_2" | "locked" | "deferred";
 
 export type StrategyInputShape =
   | "city_service"
@@ -14,6 +18,11 @@ export interface StrategyCatalogEntry {
   description: string;
   status: StrategyStatus;
   input_shape: StrategyInputShape;
+  path_role?: StrategyPathRole;
+  path_order?: number;
+  is_visible?: boolean;
+  is_runnable?: boolean;
+  unlock_requirement?: StrategyUnlockMetadata;
   accent_id?: StrategyAccentId;
   accent?: StrategyAccent;
 }
