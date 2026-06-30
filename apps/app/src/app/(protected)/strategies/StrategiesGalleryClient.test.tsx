@@ -40,14 +40,24 @@ describe("StrategiesGalleryClient", () => {
     );
     const sideBranchSection = screen.getByLabelText("Side branch");
     expect(within(sideBranchSection).getByText("Keyword Hijack")).toBeInTheDocument();
-    expect(within(sideBranchSection).getByText("Unlock: Feasibility preflight")).toBeInTheDocument();
+    const keywordCard = within(sideBranchSection).getByText("Keyword Hijack").closest("article");
+    expect(keywordCard).not.toBeNull();
+    expect(keywordCard as HTMLElement).toHaveTextContent("Unlock: Feasibility preflight");
+    expect(
+      within(sideBranchSection).getByRole("button", { name: /what is feasibility/i }),
+    ).toBeInTheDocument();
 
     const lockedSection = screen.getByLabelText("Locked node");
     expect(within(lockedSection).getByText("Portfolio Builder")).toBeInTheDocument();
+    expect(
+      within(lockedSection).getByRole("button", { name: /what is portfolio builder/i }),
+    ).toBeInTheDocument();
     expect(within(lockedSection).getByLabelText("Portfolio Builder is locked")).toHaveAttribute(
       "aria-disabled",
       "true",
     );
+    expect(screen.getByRole("button", { name: /what is ai resilience/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /what is lookalike/i })).toBeInTheDocument();
     expect(screen.queryByText(/cash cow/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/blue ocean/i)).not.toBeInTheDocument();
   });
