@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.7.6`     |
-| **Last Updated** | 2026-05-31  |
+| **Version**      | `1.8.0`     |
+| **Last Updated** | 2026-06-30  |
 | **Owner**        | @widby-team |
 
 
@@ -66,6 +66,7 @@
 | InternalUserEntitlement | Supabase `internal_user_entitlements` table | user_id (UUID) | Internal operator/test override for quota exemption |
 | OnboardingProfile   | Supabase `onboarding_profiles` table  | id (UUID); unique user_id | Durable signup/onboarding answers, recommended strategy, and resume route |
 | OnboardingTarget    | Supabase `onboarding_targets` table   | id (UUID); unique profile + strategy | Selected strategy, service, and resolved geography for first-report handoff |
+| RankedSiteDeclaration | Supabase `ranked_site_declarations` table or equivalent account-scoped fields | account_id + normalized domain/service | User-declared ranked site state that unlocks Expand & Conquer |
 
 V2 scoring consumes SeoBenchmark rows through `src.scoring.benchmark_repository.SeoBenchmarkRepository`. Scoring formulas must not query Supabase directly; Supabase access belongs in repository adapters such as `src.clients.seo_benchmark_repository.SupabaseSeoBenchmarkRepository`.
 
@@ -321,11 +322,35 @@ Valid profile statuses:
 | `upgrade_required` | User selected a fresh flow without a plan/quota that allows it. |
 | `report_ready` | The first generated report is available. |
 
-`recommended_strategy_id` must be one of the strategy catalog ids from the consumer app (`easy_win`, `cash_cow`, `blue_ocean`, `gbp_blitz`, `portfolio_builder`, `expand_conquer`, `seasonal_arbitrage`). Strategy routing is deterministic from `intent`, `focus`, and optional `coach_or_agency` so it remains testable without Supabase.
+`recommended_strategy_id` must be one of the strategy catalog ids from the consumer app. For the Synthesis Reflow production replacement, user-facing recommendations and visible path nodes are limited to `easy_win`, `gbp_blitz`, `keyword_hijack`, `expand_conquer`, and locked `portfolio_builder`. Legacy/future ids such as `cash_cow`, `blue_ocean`, and `seasonal_arbitrage` may exist in historical data or internal fallback code, but they must not be presented as runnable synthesis paths unless a later project explicitly pulls them forward. Strategy routing is deterministic from `intent`, `focus`, optional `coach_or_agency`, report history, and ranked-site declaration state so it remains testable without Supabase.
 
 `onboarding_targets` stores the user's selected target for resume and report start. City-level targets should preserve Mapbox/DataForSEO metadata when selected through autocomplete; state or broad-region targets should preserve `geo_scope`, `state`, and `resolved_label` and hand off to Explore or batch workflows when no single city scoring target exists.
 
 Free users can persist onboarding state and cached-route choices, but fresh scoring still follows `usage_counters` and account entitlement rules.
+
+### Synthesis Reflow State Contracts
+
+The Synthesis Reflow should reuse existing profile, account, report, and strategy-run tables wherever possible. New persisted state is allowed only when existing records cannot prove the product state. For Wave 0, the only new state called out by the accepted product direction is ranked-site declaration state.
+
+Segment routing inputs:
+
+| Input | Source | Routing use |
+| --- | --- | --- |
+| `intent` / `focus` / `coach_or_agency` | `onboarding_profiles` | Initial segment classification and first surface |
+| Report history | `reports`, `strategy_runs`, `strategy_run_items` | Distinguish first-time from scale/operator states where possible |
+| Ranked-site declaration | `ranked_site_declarations` or equivalent account-scoped fields | Unlock Expand & Conquer |
+| Entitlement/quota | `subscriptions`, `usage_counters`, `internal_user_entitlements` | Preserve existing fresh/cached access rules |
+
+Unlock rules are data contracts:
+
+| Unlock | Required state | Runtime behavior |
+| --- | --- | --- |
+| Easy Win -> GBP Blitz | Completed scan/report lineage for the account | Mark GBP Blitz as the next path step after Easy Win completion |
+| Expand & Conquer | Active ranked-site declaration scoped to the account/user | Unlock the Expand & Conquer path without inferring ownership from a typed URL alone |
+| Keyword Hijack | Feasibility/compliance preflight result | Do not consume fresh-report quota or queue spend before preflight passes |
+| Portfolio Builder | None in this project | Display locked teaser only; do not create runnable cross-metro state |
+
+Report V1.1 must reuse canonical report lineage (`reports`, `metro_score_v2`, `seo_facts`, `strategy_runs`, and child tables) rather than create a separate report store for inline strategy results.
 
 ## Schema Definitions
 
@@ -432,6 +457,26 @@ Free users can persist onboarding state and cached-route choices, but fresh scor
 | `metadata_source` | text | No | `typed`, `mapbox_selected`, `recent_history`, `fallback_cbsa` | Provenance for scoring handoff |
 | `created_at` | timestamptz | Yes | default now() | Creation timestamp |
 | `updated_at` | timestamptz | Yes | default now() | Last target update timestamp |
+
+### RankedSiteDeclaration (`ranked_site_declarations`)
+
+This table is planned for the Synthesis Reflow unlock contract. If implementation chooses account/profile columns instead of a separate table, the same fields and constraints must remain expressible and testable.
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `id` | UUID | Yes | primary key | Stable declaration id |
+| `account_id` | UUID | Yes | references `accounts.id` | Account that receives the unlock |
+| `user_id` | UUID | Yes | references `user_profiles.user_id` | User who made or updated the declaration |
+| `site_url` | text | No | valid URL when present | User-entered ranked site URL |
+| `site_domain_normalized` | text | Yes | lowercase host/domain | Dedupe key and display-safe site identity |
+| `niche_normalized` | text | No | normalized service key | Optional service/niche associated with the ranked site |
+| `cbsa_code` | text | No | references `metros.cbsa_code` when present | Optional primary market associated with the ranked site |
+| `proof_state` | text | Yes | `declared`, `verified`, `rejected`; default `declared` | Verification posture for future hardening |
+| `active` | boolean | Yes | default true | Inactive declarations do not unlock Expand & Conquer |
+| `metadata` | jsonb | Yes | default `{}` | Non-sensitive structured provenance; do not store secrets |
+| `declared_at` | timestamptz | Yes | default now() | Initial declaration timestamp |
+| `created_at` | timestamptz | Yes | default now() | Creation timestamp |
+| `updated_at` | timestamptz | Yes | default now() | Last declaration update timestamp |
 
 ### ExploreRefreshPolicy (`explore_refresh_policies`)
 
@@ -701,3 +746,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.7.4   | 2026-05-24 | WHI-126 benchmark lineage schema | Added benchmark run lineage and metric-family sufficiency entities |
 | 1.7.5   | 2026-05-24 | WHI-127 evidence lineage schema | Added raw SEO evidence artifacts and local-pack stable identifier lineage |
 | 1.7.6   | 2026-05-31 | WHI-127 review fix | Added persisted collection context id lineage for raw SEO evidence artifacts |
+| 1.8.0   | 2026-06-30 | Synthesis Reflow | Added segment routing inputs, unlock data contracts, and planned ranked-site declaration schema |

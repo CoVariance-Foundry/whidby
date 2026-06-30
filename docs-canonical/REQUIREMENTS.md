@@ -1,8 +1,8 @@
 # Requirements
 
-<!-- docguard:version 1.0.0 -->
+<!-- docguard:version 1.1.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-04-05 -->
+<!-- docguard:last-reviewed 2026-06-30 -->
 <!-- docguard:owner @widby-team -->
 
 > Tracks functional requirements, non-functional requirements, and success criteria.
@@ -58,6 +58,22 @@
 | FR-040 | P1 | System MUST assemble a complete report matching the output schema (Algo Spec §10) | Pending |
 | FR-041 | P1 | System MUST persist reports and feedback logs to Supabase | Pending |
 
+### Consumer Synthesis Reflow
+
+| ID | Priority | Requirement | Status |
+|----|----------|-------------|--------|
+| FR-100 | P1 | Consumer app MUST treat Widby Synthesis Reflow as a full production replacement for the stale strategy gallery/proto-convergence direction, not as a parallel experiment | Planned |
+| FR-101 | P1 | Segment routing MUST map `find_first -> /`, `scale -> /strategies`, `coach_agency -> /agency`, and `researching -> /explore` from persisted profile/report state | Planned |
+| FR-102 | P1 | The `find_first` dashboard MUST use the A2 starter hero as the first useful surface and preserve existing entitlement/quota gates for fresh scans | Planned |
+| FR-103 | P1 | `/strategies` MUST render a B2 path/rail instead of a flat gallery while keeping the nav label `Strategies` | Planned |
+| FR-104 | P1 | Strategy unlocks MUST be shared state: scan completion advances Easy Win to GBP Blitz, ranked-site declaration unlocks Expand & Conquer, and Keyword Hijack requires feasibility preflight before spend | Planned |
+| FR-105 | P1 | The visible catalog MUST include Easy Win, GBP Blitz, Expand & Conquer, Keyword Hijack, and locked Portfolio Builder only; all other cross-metro plays remain deferred | Planned |
+| FR-106 | P1 | Report V1.1 MUST be the durable detail surface behind inline strategy results and include path-aware next steps | Planned |
+| FR-107 | P1 | AI Resilience MUST be a shared modifier with default threshold `40`, configurable in scan/user controls where exposed | Planned |
+| FR-108 | P1 | The reflow MUST preserve existing account entitlement, quota consumption/refund, and cached-report visibility behavior | Planned |
+| FR-109 | P2 | GBP Blitz copy MUST stay soft on address requirements and MUST NOT introduce an address-dependent scoring engine in this project | Planned |
+| FR-110 | P2 | `balanced` weighting MAY remain available internally/debugging, but MUST NOT be presented as a user-facing strategy choice in the synthesis reflow | Planned |
+
 ## Non-Functional Requirements
 
 | ID | Category | Requirement | Metric |
@@ -70,6 +86,9 @@
 | NFR-006 | Quality | All Python code passes `ruff check` (line-length 100, py311) | CI gate |
 | NFR-007 | Quality | All TypeScript/JS passes `npm run lint` | CI gate |
 | NFR-008 | Reliability | Partial upstream failure returns usable low-confidence result | Verified by degraded-mode tests |
+| NFR-009 | Execution | Every synthesis reflow child ticket records exact tests, visual evidence paths, and residual risks in Linear before closeout | Linear handoff gate |
+| NFR-010 | Frontend QA | Every touched frontend state has Playwright coverage or an explicit no-frontend-change note plus desktop/mobile screenshot evidence when UI changes | Visual QA gate |
+| NFR-011 | Source of truth | Readiness claims MUST be based on current repo, CI, rendered UI, and live-provider evidence when relevant; memory-only claims are prohibited | Review gate |
 
 ## Success Criteria
 
@@ -81,6 +100,9 @@
 | SC-004 | Counter reconciliation | Unit test: summary counts match keyword-level records | 100% |
 | SC-005 | Deterministic ordering | Repeated-run test | >=99% identical |
 | SC-006 | Informational exclusion tracking | Unit test: exclusions reported at result level | 100% |
+| SC-100 | Synthesis source of truth | Canonical docs and execution runbook describe the accepted routing, unlock, catalog, and verification contract | 100% before Wave 1 |
+| SC-101 | Visual replacement confidence | Playwright traces/screenshots cover every frontend state touched by a synthesis child ticket | 100% of touched states |
+| SC-102 | Entitlement preservation | Existing free/plus/pro/quota-exempt tests continue to pass after synthesis changes | 100% of existing gates |
 
 ## User Input Configuration
 
@@ -127,6 +149,20 @@
 | FR-015 | `src/pipeline/keyword_expansion.py` | `tests/unit/test_keyword_expansion.py` | ✅ |
 | FR-016 | `src/pipeline/keyword_expansion.py` | `tests/unit/test_keyword_expansion.py` | ✅ |
 
+## Traceability Matrix (Synthesis Reflow - Planned)
+
+| Requirement | Source File / Contract | Test / Evidence | Status |
+|-------------|------------------------|-----------------|--------|
+| FR-100 | `docs-canonical/ARCHITECTURE.md`, `docs/widby-synthesis-reflow-agent-runbook.md` | `npx docguard-cli guard`, Linear handoff | Planned |
+| FR-101 | `apps/app/src/lib/onboarding/`, future segment router | Segment-router unit tests + Playwright routing smoke | Planned |
+| FR-102 | `apps/app/src/components/home/`, `apps/app/src/app/(protected)/page.tsx` | Component tests + dashboard visual QA | Planned |
+| FR-103 | `apps/app/src/app/(protected)/strategies/`, strategy path registry | Component tests + `/strategies` Playwright visual QA | Planned |
+| FR-104 | Strategy path registry + ranked-site declaration state | Unit tests for unlock matrix + E2E unlock smoke | Planned |
+| FR-105 | Strategy path registry | Catalog contract tests + screenshot of locked Portfolio Builder | Planned |
+| FR-106 | `apps/app/src/app/(protected)/reports/` | Report V1.1 component tests + report detail visual QA | Planned |
+| FR-107 | Shared AI Resilience controls/state | Unit/component tests for threshold `40` and user overrides | Planned |
+| FR-108 | Existing entitlement/quota routes and tests | Existing route tests plus touched-flow E2E | Planned |
+
 ---
 
 ## Revision History
@@ -135,3 +171,4 @@
 |---------|------|--------|---------|
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md`, `docs/product_breakdown.md` |
+| 1.1.0 | 2026-06-30 | Synthesis Reflow | Added product replacement, segment routing, unlock, catalog, Report V1.1, and agent execution requirements |

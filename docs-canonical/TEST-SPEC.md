@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.7.9 -->
+<!-- docguard:version 1.8.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-05-31 -->
+<!-- docguard:last-reviewed 2026-06-30 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
@@ -17,6 +17,7 @@
 | Integration | Yes (advisory, not CI-blocking) | Live API calls | pytest with `@pytest.mark.integration` |
 | E2E | Optional | Full pipeline runs | Custom scripts |
 | Contract | Yes | Module I/O boundaries | pytest (schema validation) |
+| Visual E2E | Yes | Every touched consumer/admin frontend state | Playwright screenshots/traces |
 
 ## Coverage Rules
 
@@ -342,6 +343,21 @@ Additional contract checks for scoring/autocomplete:
 | Expand & Conquer | Feature-vector similarity plus equal-or-lower competition filter | `tests/unit/test_discovery_service_strategies.py` |
 | Consumer entitlements | Free cached-only, plus/pro fresh strategy run allowed, internal quota-exempt admins allowed, batch cap enforced | `apps/app/src/app/api/strategies/runs/route.test.ts` |
 
+## Synthesis Reflow Tests
+
+| Scope | Required Coverage | Required Tests / Evidence |
+| --- | --- | --- |
+| Source-of-truth docs | Full replacement, segment routing, unlock model, visible catalog, cross-metro deferral, and Report V1.1 scope are documented before implementation | `npx docguard-cli guard`, `npx docguard-cli diff`, Linear handoff for `WHI-144` |
+| Agent execution runbook | Context order, work loop, CI gates, visual gates, no-memory readiness claims, entitlement preservation, and handoff template are documented | `docs/widby-synthesis-reflow-agent-runbook.md`, Linear handoff for `WHI-146` |
+| Segment router | `find_first -> /`, `scale -> /strategies`, `coach_agency -> /agency`, `researching -> /explore`, plus report-history and ranked-site inputs | Unit tests for the router and Playwright route smoke per segment |
+| Strategy path registry | Visible catalog is Easy Win, GBP Blitz, Expand & Conquer, Keyword Hijack side branch, and locked Portfolio Builder only | Registry unit tests and `/strategies` visual screenshots |
+| Unlock matrix | Scan completion advances Easy Win -> GBP Blitz; ranked-site declaration unlocks Expand & Conquer; Keyword Hijack preflight gates spend | Unit tests for unlock state plus Playwright E2E for each exposed state |
+| A2 dashboard | `find_first` hero, quota/upgrade states, loading/error states, and scan start affordance | Component tests plus desktop/mobile dashboard screenshots |
+| B2 strategies path | Path rail, side branch, inline result summary, full-report CTA, locked Portfolio Builder teaser | Component tests plus desktop/mobile `/strategies` screenshots |
+| Report V1.1 | Durable detail surface, path-aware next steps, AI Resilience/confidence/source/glossary context, and report-to-path links | Report component tests plus Playwright report-detail screenshots |
+| Entitlement preservation | Existing free/plus/pro/quota-exempt behavior is unchanged by reflow UI | Existing entitlement route tests plus touched-flow E2E |
+| GBP Blitz softness | Copy references markets where the user can establish a physical address without requiring address-engine input | Component/copy tests or reviewer-visible screenshot evidence |
+
 ## Internal Entitlement and Staging Account Tests
 
 | Scope | Required Coverage | Required Tests |
@@ -398,21 +414,33 @@ Additional contract checks for scoring/autocomplete:
 
 | Gate | Scope | Blocks Merge? |
 |------|-------|---------------|
+| `npx docguard-cli guard` | Canonical docs and doc sync | Yes for doc-changing tickets |
+| `npx docguard-cli diff` | Intentional documentation/code drift review | Yes for doc-changing tickets unless drift is logged |
 | `ruff check` | All Python files | Yes |
 | `pytest tests/unit/` | All unit tests pass | Yes |
 | `npm run lint` | All TypeScript/JS in affected workspaces | Yes |
+| `npx --no-install tsc --noEmit` | Affected TypeScript workspace | Yes |
+| Playwright visual QA | Every touched frontend state, desktop and mobile where applicable | Yes for frontend-changing tickets |
+| Screenshot/trace artifacts | User-facing frontend states touched by the ticket | Yes for frontend-changing tickets |
 | Spec artifact presence | Feature branch touches module scope | Yes |
 | Docs-sync validation | Architecture docs updated when interfaces change | Yes |
 | Integration tests | Real API calls (`@pytest.mark.integration`) | No (advisory) |
 
+Docs-only tickets such as `WHI-144` and `WHI-146` do not require frontend screenshots when no rendered UI changes. Their handoff must explicitly say "no frontend surface changed" and include DocGuard evidence.
+
 ## Validation Commands
 
 ```bash
+npx docguard-cli guard
+npx docguard-cli diff
 ruff check src tests
 python -m pytest tests/unit/ -v
 python -m pytest tests/unit/ --cov=src --cov-report=term-missing
 python -m pytest tests/integration/ -v -m integration
 npm run lint
+npm --workspace apps/app test --
+cd apps/app && npx --no-install tsc --noEmit
+npm run qa:visual:app
 ```
 
 ---
@@ -442,3 +470,4 @@ npm run lint
 | 1.7.7 | 2026-05-24 | WHI-126 benchmark lineage schema | Added benchmark mode parsing and metric-family sufficiency migration test obligations |
 | 1.7.8 | 2026-05-24 | WHI-127 evidence lineage schema | Added local-place identifier and raw SEO evidence artifact persistence test obligations |
 | 1.7.9 | 2026-05-31 | WHI-127 review fix | Added collection context id and non-fatal evidence side-channel failure test obligations |
+| 1.8.0 | 2026-06-30 | Synthesis Reflow | Added source-of-truth, agent-runbook, path, unlock, visual QA, and standard approval gate obligations |
