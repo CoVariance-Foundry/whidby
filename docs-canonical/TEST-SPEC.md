@@ -99,6 +99,14 @@ tests/
 | Readiness audit | `metros`, CBP, NAICS mapping, scores | Fails clearly when canonical tables are missing, empty, or hidden from PostgREST schema cache |
 | Explore E2E smoke | Explore table, filters, drawer, run-report control | Loads from backend API and exposes run report even when a city has no cached services |
 
+## Segment Fixture Test Obligations
+
+| Test | Scope | Expected |
+|------|-------|----------|
+| Segment fixture dry-run manifest | `scripts/supabase/seed_segment_fixtures.py --dry-run` | Prints deterministic `find_first`, `scale`, `coach_agency`, and `researching` fixture IDs/routes without requiring or exposing secrets |
+| Segment fixture payload contracts | `tests/scripts/test_seed_segment_fixtures.py` | Covers common/per-fixture password resolution, coach-agency admin-capable onboarding state, scale report/declaration payloads, and live upsert order |
+| Segment fixture E2E smoke | `apps/app/e2e/segment-fixtures.spec.ts` | Logs in each configured fixture through the normal auth callback, asserts the routed surface heading, blocks fresh paid API routes, skips cleanly when fixture credentials are absent, and skips only the `researching` route when `NEXT_PUBLIC_API_URL` is not configured for `/explore` data |
+
 ## V2 Scoring Test Obligations
 
 | Scope | Required Coverage | Required Tests |
