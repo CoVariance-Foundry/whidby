@@ -16,6 +16,59 @@ import type { StrategyRunRequest } from "@/lib/strategies/types";
 
 const MAX_FRESH_TARGETS = 100;
 
+function normalizedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function keywordTokenCount(value: string): number {
+  return value.match(/[a-z0-9]+/gi)?.length ?? 0;
+}
+
+function targetHasKeywordHijackShape(target: unknown): boolean {
+  if (!target || typeof target !== "object") return false;
+  const record = target as Record<string, unknown>;
+  const keyword = normalizedString(record.primary_keyword);
+  const cityOrMarket = Boolean(
+    normalizedString(record.cbsa_code) ||
+      normalizedString(record.city) ||
+      normalizedString(record.city_id) ||
+      normalizedString(record.reference_city_id),
+  );
+  const service = Boolean(
+    normalizedString(record.service) ||
+      normalizedString(record.niche_keyword) ||
+      normalizedString(record.niche_normalized),
+  );
+  return Boolean(keyword && cityOrMarket && service && keywordTokenCount(keyword) >= 2);
+}
+
+function hasKeywordHijackTargetShape(body: StrategyRunRequest) {
+  const keyword = normalizedString(body.primary_keyword);
+  const city = normalizedString(body.city);
+  const service = normalizedString(body.service);
+  if (keyword && city && service && keywordTokenCount(keyword) >= 2) return true;
+  if (Array.isArray(body.targets) && body.targets.length > 0) {
+    return body.targets.every(targetHasKeywordHijackShape);
+  }
+  return false;
+}
+
+function isKeywordHijackFeasibilityMissing({
+  mode,
+  strategyId,
+  body,
+}: {
+  mode: StrategyRunRequest["mode"];
+  strategyId: string | undefined;
+  body: StrategyRunRequest;
+}) {
+  return (
+    mode === "fresh" &&
+    strategyId === "keyword_hijack" &&
+    (body.feasibility_preflight_passed !== true || !hasKeywordHijackTargetShape(body))
+  );
+}
+
 async function refundFreshReportQuota(accountId: string): Promise<void> {
   try {
     await refundReportQuota(createAdminClient(), accountId);
@@ -73,6 +126,24 @@ export async function POST(req: NextRequest) {
           {
             status: "validation_error",
             message: "Fresh strategy runs are limited to 100 target pairs.",
+          },
+          { status: 400 },
+        );
+      }
+
+      if (
+        isKeywordHijackFeasibilityMissing({
+          mode,
+          strategyId: strategy_id,
+          body,
+        })
+      ) {
+        return NextResponse.json(
+          {
+            status: "validation_error",
+            code: "keyword_hijack_feasibility_required",
+            message:
+              "Keyword Hijack requires a feasibility preflight before fresh report spend.",
           },
           { status: 400 },
         );

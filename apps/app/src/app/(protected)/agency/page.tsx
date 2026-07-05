@@ -179,7 +179,7 @@ function customRowReady(row: CustomTargetRow) {
 }
 
 function hasPrimaryKeyword(value: string) {
-  return value.trim().length >= 2;
+  return (value.match(/[a-z0-9]+/gi) ?? []).length >= 2;
 }
 
 function customRowToTarget(row: CustomTargetRow, fallbackPrimaryKeyword: string): QueuedTarget {
@@ -584,6 +584,11 @@ export default function AgencyPage() {
           primary_keyword:
             strategyLens === "keyword_hijack" && globalPrimaryKeywordReady
               ? primaryKeyword.trim()
+              : undefined,
+          feasibility_preflight_passed:
+            strategyLens === "keyword_hijack" &&
+            targets.every((target) => hasPrimaryKeyword(target.primary_keyword ?? ""))
+              ? true
               : undefined,
           targets: targets.map((target) => ({
             cbsa_code: target.cbsa_code,

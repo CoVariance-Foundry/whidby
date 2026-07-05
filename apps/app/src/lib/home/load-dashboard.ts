@@ -13,7 +13,7 @@ import type { OnboardingNextRoute } from "@/lib/onboarding/types";
 import { loadStrategyCatalog } from "@/lib/strategies/catalog";
 import {
   getRunnableStrategyPathNodes,
-  isRunnableStrategyId,
+  isUserFacingStrategyId,
   sortByStrategyPathOrder,
 } from "@/lib/strategies/path-registry";
 import type { RunnableStrategyPathId } from "@/lib/strategies/path-registry";
@@ -83,12 +83,18 @@ interface RankedSiteDeclarationProbeRow {
   id: string;
 }
 
+interface AccountOwnedReportProbeRow {
+  id: string;
+}
+
 interface DashboardOnboardingContext {
   profile: OnboardingProfileRow | null;
   target: OnboardingTargetRow | null;
   starter_strategy_id: LaunchSafeStrategyId;
   shortcut_strategy_ids: LaunchSafeStrategyId[];
   next_route: DashboardNextRoute;
+  has_completed_scan: boolean;
+  has_ranked_site_declaration: boolean;
   error: DashboardError | null;
 }
 
@@ -247,7 +253,7 @@ function normalizeShortcutStrategyIds(
 
 function filterLaunchCatalog(catalog: StrategyCatalogResponse): StrategyCatalogResponse {
   const strategies = sortByStrategyPathOrder(
-    catalog.strategies.filter((strategy) => isRunnableStrategyId(strategy.strategy_id)),
+    catalog.strategies.filter((strategy) => isUserFacingStrategyId(strategy.strategy_id)),
   );
   return {
     ...catalog,
@@ -360,6 +366,27 @@ async function hasActiveRankedSiteDeclaration(
   return Boolean(data as RankedSiteDeclarationProbeRow | null);
 }
 
+async function hasAccountOwnedReport(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("reports")
+    .select("id")
+    .eq("owner_account_id", accountId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[dashboard] account-owned report probe failed", {
+      message: error.message,
+    });
+    return false;
+  }
+
+  return Boolean(data as AccountOwnedReportProbeRow | null);
+}
+
 async function loadReportsDashboard(
   options: LoadDashboardOptions,
 ): Promise<{
@@ -420,6 +447,7 @@ export async function loadDashboard(
 
   let account: DashboardAccountState;
   let canLoadReports = false;
+  let hasCompletedScan = false;
   let hasRankedSiteDeclaration = false;
   let onboardingRows: Awaited<ReturnType<typeof loadOnboardingContext>> = {
     profile: null,
@@ -431,10 +459,10 @@ export async function loadDashboard(
     const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     onboardingRows = await loadOnboardingContext(supabase, user);
-    hasRankedSiteDeclaration = await hasActiveRankedSiteDeclaration(
-      supabase,
-      entitlement.account_id,
-    );
+    [hasCompletedScan, hasRankedSiteDeclaration] = await Promise.all([
+      hasAccountOwnedReport(supabase, entitlement.account_id),
+      hasActiveRankedSiteDeclaration(supabase, entitlement.account_id),
+    ]);
     canLoadReports = true;
 
     try {
@@ -486,7 +514,7 @@ export async function loadDashboard(
   const segmentRoute = resolveOnboardingSegmentRoute({
     profile: onboardingRows.profile,
     report_history: {
-      completed_report_count: reports.stats.total_reports,
+      completed_report_count: hasCompletedScan ? 1 : 0,
       has_ranked_site_declaration: hasRankedSiteDeclaration,
     },
   });
@@ -496,6 +524,8 @@ export async function loadDashboard(
     starter_strategy_id: starter,
     shortcut_strategy_ids: shortcutIds,
     next_route: segmentRoute.route,
+    has_completed_scan: hasCompletedScan,
+    has_ranked_site_declaration: hasRankedSiteDeclaration,
     error: onboardingRows.error,
   };
 

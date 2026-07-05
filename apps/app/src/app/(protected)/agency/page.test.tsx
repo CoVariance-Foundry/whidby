@@ -133,10 +133,7 @@ describe("AgencyPage", () => {
     await user.type(screen.getByLabelText("Custom target 1 city"), "Tulsa");
     await user.type(screen.getByLabelText("Custom target 1 state"), "OK");
     await user.type(screen.getByLabelText("Custom target 1 service"), "Water damage");
-    await user.type(
-      screen.getByLabelText("Custom target 1 primary keyword"),
-      "water mitigation",
-    );
+    await user.type(screen.getByLabelText("Custom target 1 primary keyword"), "water mitigation");
     await user.click(screen.getByRole("button", { name: /Review targets/i }));
 
     expect(
@@ -232,10 +229,17 @@ describe("AgencyPage", () => {
     expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
     expect(fetchMock).not.toHaveBeenCalled();
 
-    await user.type(
-      screen.getByLabelText("Custom target 1 primary keyword"),
-      "water mitigation",
-    );
+    const primaryKeywordInput = screen.getByLabelText("Custom target 1 primary keyword");
+    await user.type(primaryKeywordInput, "plumber");
+    expect(
+      screen.getByText(
+        "Keyword Hijack needs a primary keyword on every custom target or in the global field.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review targets/i })).toBeDisabled();
+
+    await user.clear(primaryKeywordInput);
+    await user.type(primaryKeywordInput, "water mitigation");
     await user.click(screen.getByRole("button", { name: /Review targets/i }));
 
     expect(
@@ -250,6 +254,7 @@ describe("AgencyPage", () => {
     expect(runPayload).toMatchObject({
       mode: "fresh",
       strategy_id: "keyword_hijack",
+      feasibility_preflight_passed: true,
       targets: [
         {
           cbsa_code: "custom:tulsa:ok",

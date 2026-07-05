@@ -114,6 +114,8 @@ function dashboardFixture(overrides: DashboardFixtureOverrides = {}): DashboardD
       starter_strategy_id: "gbp_blitz",
       shortcut_strategy_ids: ["gbp_blitz", "easy_win", "keyword_hijack"],
       next_route: "/strategies",
+      has_completed_scan: true,
+      has_ranked_site_declaration: false,
       error: null,
     },
     strategies: {

@@ -71,6 +71,23 @@ async function blockFreshPaidApis(page: Page) {
   );
 }
 
+async function assertSegmentSurface(fixture: SegmentFixture, page: Page) {
+  if (fixture.segment !== "scale") return;
+
+  await expect(page.getByLabel("B2 strategy path rail")).toBeVisible();
+  await expect(page.getByText("Easy Win").first()).toBeVisible();
+  await expect(page.getByText("GBP Blitz").first()).toBeVisible();
+  await expect(page.getByText("Expand & Conquer").first()).toBeVisible();
+  await expect(page.getByText("Keyword Hijack").first()).toBeVisible();
+  await expect(page.getByText("Portfolio Builder").first()).toBeVisible();
+  await expect(page.getByText("Cash Cow")).toHaveCount(0);
+  await expect(page.getByText("Blue Ocean")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/wave4-scale-strategy-path.png",
+    fullPage: true,
+  });
+}
+
 test.describe("seeded segment fixtures", () => {
   for (const fixture of fixtures) {
     test(`${fixture.segment} routes to ${fixture.expectedPath}`, async ({ page }) => {
@@ -104,6 +121,7 @@ test.describe("seeded segment fixtures", () => {
       await expect(
         page.getByRole("heading", { name: fixture.heading }).first(),
       ).toBeVisible({ timeout: 10_000 });
+      await assertSegmentSurface(fixture, page);
     });
   }
 });

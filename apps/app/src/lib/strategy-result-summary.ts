@@ -106,7 +106,7 @@ export function createInlineStrategyResultSummary({
     ai_resilience_score: normalizeScore(aiResilienceScore),
     evidence,
     warnings: normalizeWarnings(warnings),
-    report_href: reportHref(reportId),
+    report_href: fullReportHref(reportId),
     source_context: {
       ...sourceContext,
       city,

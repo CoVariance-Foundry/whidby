@@ -29,6 +29,29 @@ describe("StrategyPageClient", () => {
     expect(screen.getByLabelText("Hide flagged markets")).not.toBeChecked();
   });
 
+  // @req FR-103
+  it("keeps directly opened locked strategies disabled", () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "expand_conquer",
+      name: "Expand & Conquer",
+      description: "Reference-market expansion.",
+      status: "launch",
+      input_shape: "reference_city_service",
+    };
+
+    render(
+      <StrategyPageClient
+        strategy={strategy}
+        lockedReason="Declare a ranked site before starting Expand & Conquer."
+      />,
+    );
+
+    expect(screen.getByText("Declare a ranked site before starting Expand & Conquer.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reference city id")).toBeDisabled();
+    expect(screen.getByLabelText("Service")).toBeDisabled();
+    expect(screen.getByRole("button", { name: /run discovery/i })).toBeDisabled();
+  });
+
   it("shows a live report recovery card after cached discovery returns zero results", async () => {
     const strategy: StrategyCatalogEntry = {
       strategy_id: "easy_win",
@@ -80,6 +103,8 @@ describe("StrategyPageClient", () => {
     fireEvent.change(screen.getByLabelText("Primary keyword"), {
       target: { value: "boise plumber" },
     });
+    fireEvent.click(screen.getByLabelText(/keyword matches the city and service intent/i));
+    fireEvent.click(screen.getByLabelText(/avoids keyword stuffing/i));
     fireEvent.change(screen.getByLabelText("AI Resilience threshold"), {
       target: { value: "55" },
     });
@@ -98,9 +123,66 @@ describe("StrategyPageClient", () => {
       city: "Boise",
       service: "plumbing",
       primary_keyword: "boise plumber",
+      feasibility_preflight_passed: true,
       ai_resilience_filter: true,
       limit: 10,
     });
+  });
+
+  // @req FR-104
+  it("blocks Keyword Hijack discovery until the feasibility preflight passes", () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "keyword_hijack",
+      name: "Keyword Hijack",
+      description: "Keyword-led markets.",
+      status: "launch",
+      input_shape: "city_service_keyword",
+    };
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("Primary keyword"), {
+      target: { value: "boise plumber" },
+    });
+
+    const runButton = screen.getByRole("button", { name: /run discovery/i });
+    expect(runButton).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText(/keyword matches the city and service intent/i));
+    expect(runButton).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText(/avoids keyword stuffing/i));
+    expect(runButton).not.toBeDisabled();
+  });
+
+  it("requires a two-token primary keyword for Keyword Hijack discovery", () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "keyword_hijack",
+      name: "Keyword Hijack",
+      description: "Keyword-led markets.",
+      status: "launch",
+      input_shape: "city_service_keyword",
+    };
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("Primary keyword"), {
+      target: { value: "plumber" },
+    });
+    fireEvent.click(screen.getByLabelText(/keyword matches the city and service intent/i));
+    fireEvent.click(screen.getByLabelText(/avoids keyword stuffing/i));
+
+    const runButton = screen.getByRole("button", { name: /run discovery/i });
+    expect(runButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Primary keyword"), {
+      target: { value: "boise plumber" },
+    });
+    expect(runButton).not.toBeDisabled();
   });
 
   it("maps hide flagged modifier state to the existing discovery payload boolean", async () => {
@@ -358,10 +440,11 @@ describe("StrategyPageClient", () => {
     expect(screen.getByText("strategy-run-1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open report/i })).toHaveAttribute(
       "href",
-      "/reports?open=report-1",
+      "/reports/report-1",
     );
   });
 
+  // @req FR-106
   it("sends primary_keyword for keyword_hijack and renders a returned result", async () => {
     const strategy: StrategyCatalogEntry = {
       strategy_id: "keyword_hijack",
@@ -401,6 +484,8 @@ describe("StrategyPageClient", () => {
     fireEvent.change(screen.getByLabelText("Primary keyword"), {
       target: { value: "boise plumber" },
     });
+    fireEvent.click(screen.getByLabelText(/keyword matches the city and service intent/i));
+    fireEvent.click(screen.getByLabelText(/avoids keyword stuffing/i));
     fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -412,16 +497,20 @@ describe("StrategyPageClient", () => {
       ai_resilience_filter: false,
       limit: 10,
     });
+    expect(body).not.toHaveProperty("feasibility_preflight_passed");
     expect(body.city_filters).toEqual([{ field: "name", operator: "like", value: "Boise" }]);
     expect(body.service_filters).toEqual([{ field: "name", operator: "like", value: "plumbing" }]);
 
     expect(await screen.findByText("Plumbing in Boise")).toBeInTheDocument();
     expect(screen.getByText("search_volume_monthly: 720")).toBeInTheDocument();
     expect(screen.getByText("local_pack_present: yes")).toBeInTheDocument();
+    expect(screen.getByText("Feasibility preflight passed")).toBeInTheDocument();
+    expect(screen.getByText("AI overview present")).toBeInTheDocument();
+    expect(screen.getByText("Keyword Hijack risk: keep the keyword lens narrow")).toBeInTheDocument();
     expect(screen.getByText("AI resilience flagged")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open full report/i })).toHaveAttribute(
       "href",
-      "/reports?open=report-keyword-1",
+      "/reports/report-keyword-1",
     );
     const score = screen.getByRole("img", { name: "Strategy score: 86 out of 100, high" });
     expect(score).toHaveAttribute("data-score-tone", "high");
