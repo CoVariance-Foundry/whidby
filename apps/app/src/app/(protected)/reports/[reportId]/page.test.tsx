@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 
 const mocks = vi.hoisted(() => ({
   headersGet: vi.fn(),
+  loadCurrentProductUnlockState: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
@@ -44,6 +45,10 @@ vi.mock("@/lib/supabase/client", () => ({
   })),
 }));
 
+vi.mock("@/lib/onboarding/unlock-state", () => ({
+  loadCurrentProductUnlockState: mocks.loadCurrentProductUnlockState,
+}));
+
 beforeEach(() => {
   delete process.env.WIDBY_APP_BASE_URL;
   delete process.env.NEXT_PUBLIC_APP_URL;
@@ -57,6 +62,10 @@ beforeEach(() => {
     return values[name] ?? null;
   });
   global.fetch = vi.fn();
+  mocks.loadCurrentProductUnlockState.mockResolvedValue({
+    has_completed_scan: true,
+    has_ranked_site_declaration: false,
+  });
   vi.clearAllMocks();
 });
 
@@ -71,11 +80,16 @@ describe("ReportDetailPage", () => {
     ).rejects.toThrow("NEXT_NOT_FOUND");
 
     expect(global.fetch).not.toHaveBeenCalled();
+    expect(mocks.loadCurrentProductUnlockState).not.toHaveBeenCalled();
     expect(notFound).toHaveBeenCalledOnce();
   });
 
   it("renders the shared V1.1 report detail surface from existing report data", async () => {
     process.env.WIDBY_APP_BASE_URL = "https://app.thewidby.test";
+    mocks.loadCurrentProductUnlockState.mockResolvedValue({
+      has_completed_scan: true,
+      has_ranked_site_declaration: true,
+    });
     vi.mocked(global.fetch).mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -124,6 +138,11 @@ describe("ReportDetailPage", () => {
     expect(screen.getByRole("heading", { name: "plumber" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /score and verdict/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /next steps/i })).toBeInTheDocument();
+    expect(mocks.loadCurrentProductUnlockState).toHaveBeenCalledOnce();
+    expect(screen.getByRole("link", { name: /continue to expand & conquer/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/strategies/expand_conquer?"),
+    );
     expect(screen.getAllByText("Standard scoring").length).toBeGreaterThan(0);
     expect(container).not.toHaveTextContent(/balanced/i);
   });

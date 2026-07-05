@@ -4,16 +4,18 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Icon, I } from "@/lib/icons";
 import type { FullReportData } from "@/lib/niche-finder/types";
+import type { ReportNextStepContext } from "@/lib/reports/report-next-steps";
 import ReportActions from "@/components/reports/ReportActions";
 import ReportV11Detail from "@/components/reports/ReportV11Detail";
 
 interface Props {
   report: FullReportData;
+  nextStepContext?: ReportNextStepContext;
   onClose: () => void;
   onDelete?: (reportId: string) => Promise<void>;
 }
 
-export default function ReportDetailModal({ report, onClose, onDelete }: Props) {
+export default function ReportDetailModal({ report, nextStepContext, onClose, onDelete }: Props) {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -95,6 +97,7 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
         <ReportV11Detail
           report={report}
           variant="modal"
+          nextStepContext={nextStepContext}
           showBackLink={false}
           headerAccessory={closeButton}
           actions={<ReportActions report={report} onDelete={onDelete} />}

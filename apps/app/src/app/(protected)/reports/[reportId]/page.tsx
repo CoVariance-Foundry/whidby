@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ReportActions from "@/components/reports/ReportActions";
 import ReportV11Detail from "@/components/reports/ReportV11Detail";
 import type { FullReportData } from "@/lib/niche-finder/types";
+import { loadCurrentProductUnlockState } from "@/lib/onboarding/unlock-state";
 
 export const dynamic = "force-dynamic";
 
@@ -107,10 +108,12 @@ export default async function ReportDetailPage({
   const { reportId } = await params;
   const report = await loadReport(reportId);
   if (!report) notFound();
+  const nextStepContext = await loadCurrentProductUnlockState();
 
   return (
     <ReportV11Detail
       report={report}
+      nextStepContext={nextStepContext}
       actions={<ReportActions report={report} enableArchiveDelete />}
     />
   );

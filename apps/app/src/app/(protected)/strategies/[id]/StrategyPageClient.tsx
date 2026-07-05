@@ -40,6 +40,13 @@ interface LiveReportTarget {
   limit: number;
 }
 
+export interface StrategyInitialInputs {
+  city?: string;
+  service?: string;
+  primary_keyword?: string;
+  reference_city_id?: string;
+}
+
 interface StrategyRunResponse {
   status?: string;
   code?: string;
@@ -315,6 +322,10 @@ function isQuotaExhausted(body: StrategyRunResponse) {
   );
 }
 
+function initialInputValue(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
+
 function LiveReportRecoveryCard({
   target,
   state,
@@ -531,14 +542,20 @@ function LiveReportRecoveryCard({
 export default function StrategyPageClient({
   strategy,
   lockedReason = null,
+  initialInputs = {},
 }: {
   strategy: StrategyCatalogEntry;
   lockedReason?: string | null;
+  initialInputs?: StrategyInitialInputs;
 }) {
-  const [city, setCity] = useState("");
-  const [service, setService] = useState("");
-  const [primaryKeyword, setPrimaryKeyword] = useState("");
-  const [referenceCityId, setReferenceCityId] = useState("");
+  const [city, setCity] = useState(() => initialInputValue(initialInputs.city));
+  const [service, setService] = useState(() => initialInputValue(initialInputs.service));
+  const [primaryKeyword, setPrimaryKeyword] = useState(() =>
+    initialInputValue(initialInputs.primary_keyword),
+  );
+  const [referenceCityId, setReferenceCityId] = useState(() =>
+    initialInputValue(initialInputs.reference_city_id),
+  );
   const [keywordIntentConfirmed, setKeywordIntentConfirmed] = useState(false);
   const [keywordComplianceConfirmed, setKeywordComplianceConfirmed] = useState(false);
   const [aiResilienceModifier, setAiResilienceModifier] = useState<AIResilienceModifierState>(

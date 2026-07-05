@@ -4,7 +4,7 @@ import { Icon, I } from "@/lib/icons";
 import { loadDashboard } from "@/lib/home/load-dashboard";
 import { loadStrategy } from "@/lib/strategies/catalog";
 import type { StrategyCatalogEntry } from "@/lib/strategies/types";
-import StrategyPageClient from "./StrategyPageClient";
+import StrategyPageClient, { type StrategyInitialInputs } from "./StrategyPageClient";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,46 @@ function lockReasonForStrategy(
   return null;
 }
 
-export default async function StrategyPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+type StrategyPageSearchParams = Record<string, string | string[] | undefined>;
+
+function firstSearchParam(
+  params: StrategyPageSearchParams,
+  key: keyof StrategyInitialInputs,
+): string | undefined {
+  const rawValue = params[key];
+  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+async function resolveSearchParams(
+  searchParams: Promise<StrategyPageSearchParams> | StrategyPageSearchParams | undefined,
+): Promise<StrategyPageSearchParams> {
+  return searchParams ? searchParams : {};
+}
+
+function parseInitialInputs(searchParams: StrategyPageSearchParams): StrategyInitialInputs {
+  const city = firstSearchParam(searchParams, "city");
+  const service = firstSearchParam(searchParams, "service");
+  const primaryKeyword = firstSearchParam(searchParams, "primary_keyword");
+  const referenceCityId = firstSearchParam(searchParams, "reference_city_id");
+  return {
+    ...(city ? { city } : {}),
+    ...(service ? { service } : {}),
+    ...(primaryKeyword ? { primary_keyword: primaryKeyword } : {}),
+    ...(referenceCityId ? { reference_city_id: referenceCityId } : {}),
+  };
+}
+
+export default async function StrategyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }> | { id: string };
+  searchParams?: Promise<StrategyPageSearchParams> | StrategyPageSearchParams;
+}) {
   const resolvedParams = await params;
+  const resolvedSearchParams = await resolveSearchParams(searchParams);
   const strategy = await loadStrategy(resolvedParams.id);
 
   if (!strategy) {
@@ -51,7 +89,11 @@ export default async function StrategyPage({ params }: { params: Promise<{ id: s
       <Link href="/strategies" className="btn-ghost" style={{ textDecoration: "none", marginBottom: 16 }}>
         <Icon d={I.arrow} style={{ transform: "rotate(180deg)" }} /> Back
       </Link>
-      <StrategyPageClient strategy={strategy} lockedReason={lockedReason} />
+      <StrategyPageClient
+        strategy={strategy}
+        lockedReason={lockedReason}
+        initialInputs={parseInitialInputs(resolvedSearchParams)}
+      />
     </main>
   );
 }

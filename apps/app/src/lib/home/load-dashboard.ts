@@ -8,6 +8,7 @@ import {
 } from "@/lib/account/entitlements";
 import { type AccountSummary, loadAccountSummary } from "@/lib/account/summary";
 import type { ActivityItem, RecommendedItem, StatCard } from "@/lib/home/types";
+import { loadProductUnlockState } from "@/lib/onboarding/unlock-state";
 import { resolveOnboardingSegmentRoute } from "@/lib/onboarding/segment-routing";
 import type { OnboardingNextRoute } from "@/lib/onboarding/types";
 import { loadStrategyCatalog } from "@/lib/strategies/catalog";
@@ -77,14 +78,6 @@ interface OnboardingTargetRow {
   resolved_label?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
-}
-
-interface RankedSiteDeclarationProbeRow {
-  id: string;
-}
-
-interface AccountOwnedReportProbeRow {
-  id: string;
 }
 
 interface DashboardOnboardingContext {
@@ -343,50 +336,6 @@ async function loadOnboardingContext(
   };
 }
 
-async function hasActiveRankedSiteDeclaration(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  accountId: string,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("ranked_site_declarations")
-    .select("id")
-    .eq("account_id", accountId)
-    .eq("active", true)
-    .in("proof_state", ["declared", "verified"])
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.warn("[dashboard] ranked-site declaration probe failed", {
-      message: error.message,
-    });
-    return false;
-  }
-
-  return Boolean(data as RankedSiteDeclarationProbeRow | null);
-}
-
-async function hasAccountOwnedReport(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  accountId: string,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("reports")
-    .select("id")
-    .eq("owner_account_id", accountId)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.warn("[dashboard] account-owned report probe failed", {
-      message: error.message,
-    });
-    return false;
-  }
-
-  return Boolean(data as AccountOwnedReportProbeRow | null);
-}
-
 async function loadReportsDashboard(
   options: LoadDashboardOptions,
 ): Promise<{
@@ -459,10 +408,9 @@ export async function loadDashboard(
     const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     onboardingRows = await loadOnboardingContext(supabase, user);
-    [hasCompletedScan, hasRankedSiteDeclaration] = await Promise.all([
-      hasAccountOwnedReport(supabase, entitlement.account_id),
-      hasActiveRankedSiteDeclaration(supabase, entitlement.account_id),
-    ]);
+    const unlockState = await loadProductUnlockState(supabase, entitlement.account_id);
+    hasCompletedScan = unlockState.has_completed_scan;
+    hasRankedSiteDeclaration = unlockState.has_ranked_site_declaration;
     canLoadReports = true;
 
     try {

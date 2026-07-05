@@ -135,18 +135,43 @@ describe("ReportDetailModal", () => {
     expect(url.searchParams.get("cbsa_code")).toBe("38060");
   });
 
-  it("links secondary next moves only to launch-ready strategies", () => {
+  it("renders WHI-163 next steps with locked ranked-site expansion by default", () => {
     render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
 
-    expect(screen.getByRole("link", { name: /validate rank ease/i })).toHaveAttribute(
-      "href",
-      "/strategies/easy_win",
+    const gbpBlitzLink = screen.getByRole("link", { name: /continue to gbp blitz/i });
+    const href = gbpBlitzLink.getAttribute("href");
+    expect(href).toBeTruthy();
+    const url = new URL(href ?? "", "http://localhost");
+    expect(url.pathname).toBe("/strategies/gbp_blitz");
+    expect(url.searchParams.get("from_report")).toBe("1");
+    expect(url.searchParams.get("report_id")).toBe("rpt_123");
+    expect(url.searchParams.get("city")).toBe("Phoenix-Mesa-Chandler, AZ");
+    expect(url.searchParams.get("service")).toBe("plumber");
+    expect(url.searchParams.get("cbsa_code")).toBe("38060");
+    expect(screen.getByText(/expand & conquer requires a ranked site/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /continue to expand & conquer/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/validate rank ease/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/find lookalike cities/i)).not.toBeInTheDocument();
+  });
+
+  it("unlocks Expand & Conquer next steps when ranked-site context is supplied", () => {
+    render(
+      <ReportDetailModal
+        report={report}
+        nextStepContext={{ has_completed_scan: true, has_ranked_site_declaration: true }}
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+      />,
     );
-    expect(screen.getByRole("link", { name: /find lookalike cities/i })).toHaveAttribute(
-      "href",
-      "/strategies/expand_conquer",
-    );
-    expect(screen.queryByRole("link", { name: /check economics/i })).not.toBeInTheDocument();
+
+    const expandConquerLink = screen.getByRole("link", { name: /continue to expand & conquer/i });
+    const href = expandConquerLink.getAttribute("href");
+    expect(href).toBeTruthy();
+    const url = new URL(href ?? "", "http://localhost");
+    expect(url.pathname).toBe("/strategies/expand_conquer");
+    expect(url.searchParams.get("reference_city_id")).toBe("38060");
+    expect(url.searchParams.get("service")).toBe("plumber");
+    expect(screen.queryByText(/requires a ranked site/i)).not.toBeInTheDocument();
   });
 
   it("renders an AI Resilience flagged badge when report score is below the default threshold", () => {

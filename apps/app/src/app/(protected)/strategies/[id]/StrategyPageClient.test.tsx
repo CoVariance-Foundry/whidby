@@ -29,6 +29,70 @@ describe("StrategyPageClient", () => {
     expect(screen.getByLabelText("Hide flagged markets")).not.toBeChecked();
   });
 
+  it("prefills city and service inputs from report query context", () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "gbp_blitz",
+      name: "GBP Blitz",
+      description: "Local-pack momentum.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+
+    render(
+      <StrategyPageClient
+        strategy={strategy}
+        initialInputs={{ city: "Phoenix-Mesa-Chandler, AZ", service: "plumber" }}
+      />,
+    );
+
+    expect(screen.getByLabelText("City")).toHaveValue("Phoenix-Mesa-Chandler, AZ");
+    expect(screen.getByLabelText("Service")).toHaveValue("plumber");
+  });
+
+  it("prefills keyword and reference-city inputs where the strategy shape uses them", () => {
+    const keywordStrategy: StrategyCatalogEntry = {
+      strategy_id: "keyword_hijack",
+      name: "Keyword Hijack",
+      description: "Keyword-led markets.",
+      status: "launch",
+      input_shape: "city_service_keyword",
+    };
+    const referenceStrategy: StrategyCatalogEntry = {
+      strategy_id: "expand_conquer",
+      name: "Expand & Conquer",
+      description: "Reference-market expansion.",
+      status: "launch",
+      input_shape: "reference_city_service",
+    };
+
+    const { unmount } = render(
+      <StrategyPageClient
+        strategy={keywordStrategy}
+        initialInputs={{
+          city: "Boise",
+          service: "plumbing",
+          primary_keyword: "boise plumber",
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("City")).toHaveValue("Boise");
+    expect(screen.getByLabelText("Service")).toHaveValue("plumbing");
+    expect(screen.getByLabelText("Primary keyword")).toHaveValue("boise plumber");
+
+    unmount();
+
+    render(
+      <StrategyPageClient
+        strategy={referenceStrategy}
+        initialInputs={{ service: "plumbing", reference_city_id: "38060" }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Reference city id")).toHaveValue("38060");
+    expect(screen.getByLabelText("Service")).toHaveValue("plumbing");
+  });
+
   // @req FR-103
   it("keeps directly opened locked strategies disabled", () => {
     const strategy: StrategyCatalogEntry = {

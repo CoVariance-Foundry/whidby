@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { Icon, I } from "@/lib/icons";
 import type { TableRow } from "@/components/reports/ReportsTable";
+import { loadCurrentProductUnlockState } from "@/lib/onboarding/unlock-state";
 import ReportsPageClient from "./ReportsPageClient";
 
 export const dynamic = "force-dynamic";
@@ -67,7 +68,10 @@ async function loadReportRows(): Promise<TableRow[]> {
 }
 
 export default async function ReportsPage() {
-  const rows = await loadReportRows();
+  const [rows, nextStepContext] = await Promise.all([
+    loadReportRows(),
+    loadCurrentProductUnlockState(),
+  ]);
 
   return (
     <main
@@ -130,7 +134,7 @@ export default async function ReportsPage() {
           <Icon d={I.plus} /> New report
         </Link>
       </header>
-      <ReportsPageClient rows={rows} />
+      <ReportsPageClient rows={rows} nextStepContext={nextStepContext} />
     </main>
   );
 }
