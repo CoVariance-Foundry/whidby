@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSafeNext } from "@/lib/auth/safe-next";
 import type { OnboardingProfileStatus } from "@/lib/onboarding/types";
+import { resolveOnboardingSegmentRoute } from "@/lib/onboarding/segment-routing";
 
 type OnboardingResumeProfile = {
   status: OnboardingProfileStatus;
   next_route: string | null;
+  intent: string | null;
 };
 
-const STORED_ROUTE_STATUSES: OnboardingProfileStatus[] = ["strategy_recommended"];
+const SEGMENT_ROUTE_STATUSES: OnboardingProfileStatus[] = [
+  "strategy_recommended",
+  "cached_route_selected",
+];
 
 const INCOMPLETE_STATUSES: OnboardingProfileStatus[] = [
   "profile_started",
@@ -31,8 +36,9 @@ function resolveSuccessPath(
     return "/onboarding";
   }
 
-  if (STORED_ROUTE_STATUSES.includes(profile.status)) {
-    return isSafeNext(profile.next_route) ? profile.next_route : "/onboarding";
+  if (SEGMENT_ROUTE_STATUSES.includes(profile.status)) {
+    const { route } = resolveOnboardingSegmentRoute({ profile });
+    return isSafeNext(route) ? route : "/onboarding";
   }
 
   return "/reports";
@@ -69,7 +75,7 @@ export async function GET(request: Request) {
 
       const { data: profile, error: profileError } = await supabase
         .from("onboarding_profiles")
-        .select("status,next_route")
+        .select("status,next_route,intent")
         .eq("user_id", user.id)
         .maybeSingle();
 

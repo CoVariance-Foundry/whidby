@@ -180,6 +180,7 @@ describe("loadDashboard", () => {
       id: "profile-1",
       user_id: user.id,
       account_id: entitlement.account_id,
+      intent: "scale",
       recommended_strategy_id: "gbp_blitz",
       available_strategy_ids: ["gbp_blitz", "easy_win"],
       next_route: "/strategies",
@@ -278,6 +279,7 @@ describe("loadDashboard", () => {
       id: "profile-1",
       user_id: user.id,
       account_id: entitlement.account_id,
+      intent: "find_first",
       recommended_strategy_id: "cash_cow",
       available_strategy_ids: [
         "cash_cow",
@@ -304,12 +306,47 @@ describe("loadDashboard", () => {
       "gbp_blitz",
       "expand_conquer",
     ]);
-    expect(dashboard.onboarding.next_route).toBe("/strategies");
+    expect(dashboard.onboarding.next_route).toBe("/");
     expect(dashboard.strategies.shortcuts.map((strategy) => strategy.strategy_id)).toEqual([
       "easy_win",
       "gbp_blitz",
       "expand_conquer",
     ]);
+  });
+
+  it("uses report history to route profiles without a persisted intent to strategies", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.onboarding.next_route).toBe("/strategies");
+  });
+
+  it("routes first-run accounts with no reports to the dashboard", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ status: "success", dashboard: emptyReportsDashboardFixture() }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.onboarding.next_route).toBe("/");
   });
 
   it("still loads reports when account summary loading fails after entitlement resolves", async () => {
@@ -543,5 +580,24 @@ function createSupabaseMock(options: {
       }
       throw new Error(`Unexpected table ${table}`);
     }),
+  };
+}
+
+function emptyReportsDashboardFixture() {
+  return {
+    stats: {
+      total_reports: 0,
+      avg_score: 0,
+      watchlist: 0,
+      niches_scored: 0,
+    },
+    recent: [],
+    recommended: [],
+    stat_cards: [
+      { label: "Niches scored", value: "0" },
+      { label: "Watchlist", value: "0" },
+      { label: "Avg score", value: "0" },
+      { label: "Reports", value: "0" },
+    ],
   };
 }
