@@ -49,6 +49,70 @@ describe("StrategyPageClient", () => {
     expect(screen.getByLabelText("Service")).toHaveValue("plumber");
   });
 
+  it("uses report cbsa_code when prefilled strategy discovery is submitted", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "gbp_blitz",
+      name: "GBP Blitz",
+      description: "Local-pack momentum.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    render(
+      <StrategyPageClient
+        strategy={strategy}
+        initialInputs={{
+          city: "Phoenix-Mesa-Chandler, AZ",
+          cbsa_code: "38060",
+          service: "plumber",
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.city_filters).toEqual([{ field: "cbsa_code", operator: "eq", value: "38060" }]);
+    expect(body.service_filters).toEqual([{ field: "name", operator: "like", value: "plumber" }]);
+  });
+
+  it("falls back to city name when the report-prefilled city is edited", async () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "gbp_blitz",
+      name: "GBP Blitz",
+      description: "Local-pack momentum.",
+      status: "launch",
+      input_shape: "city_service",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ markets: [] }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+
+    render(
+      <StrategyPageClient
+        strategy={strategy}
+        initialInputs={{
+          city: "Phoenix-Mesa-Chandler, AZ",
+          cbsa_code: "38060",
+          service: "plumber",
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.click(screen.getByRole("button", { name: /run discovery/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.city_filters).toEqual([{ field: "name", operator: "like", value: "Boise" }]);
+  });
+
   it("prefills keyword and reference-city inputs where the strategy shape uses them", () => {
     const keywordStrategy: StrategyCatalogEntry = {
       strategy_id: "keyword_hijack",

@@ -86,6 +86,7 @@ describe("StrategyPage", () => {
       params: Promise.resolve({ id: "gbp_blitz" }),
       searchParams: Promise.resolve({
         city: "Phoenix-Mesa-Chandler, AZ",
+        cbsa_code: "38060",
         service: "plumber",
         primary_keyword: "phoenix emergency plumber",
         reference_city_id: "38060",
@@ -98,6 +99,7 @@ describe("StrategyPage", () => {
     expect(screen.getByTestId("strategy-page-client")).toHaveTextContent("GBP Blitz");
     expect(mocks.strategyClientProps?.initialInputs).toEqual({
       city: "Phoenix-Mesa-Chandler, AZ",
+      cbsa_code: "38060",
       service: "plumber",
       primary_keyword: "phoenix emergency plumber",
       reference_city_id: "38060",

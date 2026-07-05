@@ -45,11 +45,13 @@ async function resolveSearchParams(
 
 function parseInitialInputs(searchParams: StrategyPageSearchParams): StrategyInitialInputs {
   const city = firstSearchParam(searchParams, "city");
+  const cbsaCode = firstSearchParam(searchParams, "cbsa_code");
   const service = firstSearchParam(searchParams, "service");
   const primaryKeyword = firstSearchParam(searchParams, "primary_keyword");
   const referenceCityId = firstSearchParam(searchParams, "reference_city_id");
   return {
     ...(city ? { city } : {}),
+    ...(cbsaCode ? { cbsa_code: cbsaCode } : {}),
     ...(service ? { service } : {}),
     ...(primaryKeyword ? { primary_keyword: primaryKeyword } : {}),
     ...(referenceCityId ? { reference_city_id: referenceCityId } : {}),
