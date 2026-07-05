@@ -54,6 +54,14 @@ function humanizeToken(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+export function userFacingStrategyProfileLabel(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "balanced") return "Standard scoring";
+  if (normalized === "auto") return "Adaptive scoring";
+  return humanizeToken(value);
+}
+
 export function reportHref(reportId: string | null | undefined): string | null {
   if (!reportId?.trim()) return null;
   return `/reports?open=${encodeURIComponent(reportId.trim())}`;
@@ -138,7 +146,7 @@ export function createReportStrategyResultSummary({
     report_href: href,
     source_context: {
       strategy_id: report.strategy_profile,
-      strategy_name: humanizeToken(report.strategy_profile),
+      strategy_name: userFacingStrategyProfileLabel(report.strategy_profile),
       city: metro.cbsa_name,
       service: report.niche_keyword,
       segment: report.report_depth,
