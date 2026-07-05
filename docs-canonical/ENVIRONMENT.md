@@ -179,6 +179,52 @@ For Vercel preview E2E, set these env vars in the project's **Preview** environm
 
 Any previously committed test-account passwords should be treated as exposed and rotated before reuse.
 
+### Segment fixture seeding (Wave 2 onboarding router)
+
+WHI-154 adds deterministic local E2E fixtures for the onboarding segment router
+and ranked-site unlock path. Dry-run mode prints the fixture manifest and does
+not require Supabase credentials or passwords:
+
+```bash
+python scripts/supabase/seed_segment_fixtures.py --dry-run
+```
+
+Live seed mode upserts Auth users, account state, onboarding profiles,
+onboarding targets, and optional report/declaration rows:
+
+```bash
+SUPABASE_URL=<project-url> \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+WHIDBY_SEGMENT_FIXTURE_PASSWORD=<shared-fixture-password> \
+python scripts/supabase/seed_segment_fixtures.py
+```
+
+Do not print, commit, or paste secret values. Live mode requires
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and either
+`WHIDBY_SEGMENT_FIXTURE_PASSWORD` or the per-fixture password env var below.
+
+| Segment | Email env | Default email | Password env | Route | Plan |
+|---------|-----------|---------------|--------------|-------|------|
+| `find_first` | `WHIDBY_SEGMENT_FIND_FIRST_EMAIL` | `segment-find-first@widby.dev` | `WHIDBY_SEGMENT_FIND_FIRST_PASSWORD` | `/` | `free` |
+| `scale` | `WHIDBY_SEGMENT_SCALE_EMAIL` | `segment-scale@widby.dev` | `WHIDBY_SEGMENT_SCALE_PASSWORD` | `/strategies` | `plus` |
+| `coach_agency` | `WHIDBY_SEGMENT_COACH_AGENCY_EMAIL` | `segment-coach-agency@widby.dev` | `WHIDBY_SEGMENT_COACH_AGENCY_PASSWORD` | `/agency` | `pro` |
+| `researching` | `WHIDBY_SEGMENT_RESEARCHING_EMAIL` | `segment-researching@widby.dev` | `WHIDBY_SEGMENT_RESEARCHING_PASSWORD` | `/explore` | `free` |
+
+Deterministic seeded IDs for handoff and E2E lookup:
+
+| Segment | Profile ID | Target ID | Optional seeded IDs |
+|---------|------------|-----------|---------------------|
+| `find_first` | `00000000-0000-4000-8000-000000010154` | `00000000-0000-4000-8000-000000020154` | none |
+| `scale` | `00000000-0000-4000-8000-000000030154` | `00000000-0000-4000-8000-000000040154` | report `00000000-0000-4000-8000-000000000154`, declaration `00000000-0000-4000-8000-000000001154` |
+| `coach_agency` | `00000000-0000-4000-8000-000000050154` | `00000000-0000-4000-8000-000000060154` | none |
+| `researching` | `00000000-0000-4000-8000-000000070154` | `00000000-0000-4000-8000-000000080154` | none |
+
+Run the local smoke after seeding and setting fixture credentials:
+
+```bash
+npm --workspace apps/app run test:e2e -- segment-fixtures.spec.ts
+```
+
 ## Staging Environment
 
 The project uses a `dev` branch as a staging/integration gate. Feature branches PR into `dev`; verified work on `dev` PRs into `main` for production.
