@@ -288,10 +288,23 @@ export async function POST(req: NextRequest) {
     }
 
     const declaration = data as RankedSiteDeclaration;
+    const { data: declarationsData, error: declarationsError } = await loadDeclarations(
+      supabase,
+      entitlement.account_id,
+    );
+
+    if (declarationsError) {
+      return queryErrorResponse(
+        declarationsError,
+        "Ranked-site declaration was saved, but unlock state could not be refreshed.",
+      );
+    }
+
+    const declarations = (declarationsData ?? []) as RankedSiteDeclaration[];
     return NextResponse.json({
       status: "success",
       declaration,
-      unlock: summarizeRankedSiteUnlock([declaration]),
+      unlock: summarizeRankedSiteUnlock(declarations),
     });
   } catch (error) {
     if (error instanceof EntitlementError) {
@@ -330,6 +343,7 @@ export async function PATCH(req: NextRequest) {
       .update(patchPayload)
       .eq("id", id)
       .eq("account_id", entitlement.account_id)
+      .eq("created_by_user_id", user.id)
       .select()
       .maybeSingle();
 

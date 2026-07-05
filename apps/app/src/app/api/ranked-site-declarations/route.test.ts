@@ -109,6 +109,13 @@ describe("/api/ranked-site-declarations", () => {
     });
     const supabase = createSupabaseMock({
       insertResult: { data: saved, error: null },
+      listResult: {
+        data: [
+          declaration({ id: "existing-active", active: true, proof_state: "verified" }),
+          saved,
+        ],
+        error: null,
+      },
     });
     mocks.createClient.mockResolvedValue(supabase);
 
@@ -135,6 +142,7 @@ describe("/api/ranked-site-declarations", () => {
       unlock: {
         expand_conquer_unlocked: true,
         unlocked_strategy_ids: ["expand_conquer"],
+        active_declaration_id: "existing-active",
       },
     });
     expect(supabase.insert).toHaveBeenCalledOnce();
@@ -160,6 +168,10 @@ describe("/api/ranked-site-declarations", () => {
       deactivated_at: null,
     });
     expect(payload.declared_at).toEqual(expect.any(String));
+    expect(supabase.listEq).toHaveBeenCalledWith(
+      "account_id",
+      entitlement.account_id,
+    );
   });
 
   it("returns 400 when POST lacks a valid domain", async () => {
@@ -238,6 +250,10 @@ describe("/api/ranked-site-declarations", () => {
       "account_id",
       entitlement.account_id,
     );
+    expect(supabase.updateEqCreatedBy).toHaveBeenCalledWith(
+      "created_by_user_id",
+      user.id,
+    );
   });
 
   it("does not let this user route mark declarations verified", async () => {
@@ -288,7 +304,8 @@ function createSupabaseMock(options: {
 
   const updateMaybeSingle = vi.fn().mockResolvedValue(updateResult);
   const updateSelect = vi.fn(() => ({ maybeSingle: updateMaybeSingle }));
-  const updateEqAccount = vi.fn(() => ({ select: updateSelect }));
+  const updateEqCreatedBy = vi.fn(() => ({ select: updateSelect }));
+  const updateEqAccount = vi.fn(() => ({ eq: updateEqCreatedBy }));
   const updateEqId = vi.fn(() => ({ eq: updateEqAccount }));
   const update = vi.fn(() => ({ eq: updateEqId }));
 
@@ -300,6 +317,7 @@ function createSupabaseMock(options: {
     update,
     updateEqId,
     updateEqAccount,
+    updateEqCreatedBy,
     from: vi.fn((table: string) => {
       if (table === "ranked_site_declarations") {
         return {
