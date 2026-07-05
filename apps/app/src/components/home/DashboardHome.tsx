@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { Icon, I } from "@/lib/icons";
 import type { DashboardData } from "@/lib/home/load-dashboard";
-import type { StrategyCatalogEntry } from "@/lib/strategies/types";
 import NextMoveCard from "@/components/NextMoveCard";
 
 function formatNumber(value: number) {
@@ -17,20 +16,6 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function inputShapeLabel(strategy: StrategyCatalogEntry) {
-  switch (strategy.input_shape) {
-    case "city_service_keyword":
-      return "City + service + keyword";
-    case "reference_city_service":
-      return "Reference city + service";
-    case "cached_scan":
-      return "Cached scan";
-    case "city_service":
-    default:
-      return "City + service";
-  }
 }
 
 function Card({
@@ -148,22 +133,33 @@ function AccountWarningNotice({ dashboard }: { dashboard: DashboardData }) {
   );
 }
 
-function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
-  if (dashboard.account.status !== "ready") return null;
-  if (dashboard.account.summary.fresh_reports_used !== 0) {
-    return null;
-  }
-
-  const starter = dashboard.strategies.starter;
+function FindFirstStarterHero({ dashboard }: { dashboard: DashboardData }) {
+  if (dashboard.onboarding.next_route !== "/") return null;
+  const starter =
+    dashboard.strategies.catalog.strategies.find(
+      (strategy) => strategy.strategy_id === "easy_win",
+    ) ?? dashboard.strategies.starter;
   const canRunFresh = dashboard.account.can_run_fresh_reports;
   const primaryHref = canRunFresh ? `/strategies/${starter.strategy_id}` : "/explore";
+  const account = dashboard.account.status === "ready" ? dashboard.account : null;
+  const isFree = account?.entitlement.plan_key === "free";
+  const hasUsedScan = (account?.summary.fresh_reports_used ?? 0) > 0;
+  const secondaryHref = canRunFresh ? "/strategies" : "/settings";
+  const secondaryLabel = canRunFresh ? "Compare strategy path" : "Review plan";
+  const body = canRunFresh
+    ? hasUsedScan
+      ? `${starter.name} stays your shortest path to another focused market check.`
+      : `${starter.name} is ready for a focused city and service scan.`
+    : isFree
+      ? "Free accounts can browse cached opportunities now and upgrade before spending on fresh scans."
+      : "Your fresh scan quota is used for this period. Cached Explore stays available while quota resets.";
 
   return (
     <Card
       style={{
-        border: "2px solid #8fd6b2",
+        border: "2px solid var(--accent)",
         borderLeft: "6px solid var(--accent)",
-        background: "linear-gradient(90deg, var(--accent-soft), var(--card) 28%)",
+        background: "var(--card)",
         padding: 0,
         overflow: "hidden",
       }}
@@ -203,7 +199,7 @@ function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
               textTransform: "uppercase",
             }}
           >
-            Start here
+            Find first
           </p>
           <h2
             style={{
@@ -215,12 +211,10 @@ function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
               lineHeight: 1.15,
             }}
           >
-            Three steps to your first report.
+            Find your first Easy Win market.
           </h2>
           <p style={{ margin: "8px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5 }}>
-            {canRunFresh
-              ? `Takes about five minutes. ${starter.name} is ready when you are.`
-              : "Your account can browse cached opportunities now, and upgrade when fresh scans are needed."}
+            {body}
           </p>
           <ol
             style={{
@@ -233,7 +227,7 @@ function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
             }}
           >
             {[
-              "Pick your strategy lens",
+              "Start with Easy Win",
               "Confirm city and service",
               "Review the scored report",
             ].map((step, index) => (
@@ -272,17 +266,11 @@ function FirstRunBanner({ dashboard }: { dashboard: DashboardData }) {
         </div>
         <div style={{ display: "flex", flex: "1 1 210px", flexDirection: "column", gap: 10, alignItems: "stretch", maxWidth: 260 }}>
           <ActionLink href={primaryHref} ariaLabel="Start first dashboard action">
-            {canRunFresh ? `Open ${starter.name}` : "Explore cached reports"} <Icon d={I.arrow} />
+            {canRunFresh ? `Start ${starter.name}` : "Explore cached reports"} <Icon d={I.arrow} />
           </ActionLink>
-          {canRunFresh ? (
-            <ActionLink href="/explore" variant="ghost">
-              Or browse Explore first
-            </ActionLink>
-          ) : (
-            <ActionLink href="/settings" variant="ghost">
-              Manage plan
-            </ActionLink>
-          )}
+          <ActionLink href={secondaryHref} variant="ghost">
+            {secondaryLabel}
+          </ActionLink>
         </div>
       </div>
     </Card>
@@ -348,99 +336,159 @@ function UsageStrip({ dashboard }: { dashboard: DashboardData }) {
   );
 }
 
-function RecommendedHero({ dashboard }: { dashboard: DashboardData }) {
-  const starter = dashboard.strategies.starter;
-  const canRunFresh = dashboard.account.can_run_fresh_reports;
-  const primaryHref = canRunFresh ? `/strategies/${starter.strategy_id}` : "/explore";
+function ScalePortfolioGlance({ dashboard }: { dashboard: DashboardData }) {
+  if (dashboard.onboarding.next_route !== "/strategies") return null;
+  const latest = dashboard.recent.at(0);
+  const statusRows = [
+    {
+      label: "Markets reviewed",
+      value: formatNumber(dashboard.stats.total_reports),
+    },
+    {
+      label: "Average score",
+      value: dashboard.stats.total_reports > 0 ? formatNumber(dashboard.stats.avg_score) : "No scores yet",
+    },
+    {
+      label: "Latest report",
+      value: latest ? `${latest.city} · ${latest.niche}` : "No recent reports",
+    },
+  ];
 
   return (
-    <section
-      aria-labelledby="recommended-strategy-heading"
-      style={{
-        background: "linear-gradient(135deg, #1f1b16, #343025)",
-        border: "1px solid #403a2c",
-        borderRadius: 8,
-        padding: 22,
-        color: "var(--paper)",
-        boxShadow: "0 16px 40px rgba(31,27,22,0.16)",
-      }}
-    >
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18, alignItems: "center" }}>
-        <div>
-          <div
-            aria-hidden="true"
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 10,
-              background: "rgba(15,122,87,0.22)",
-              color: "#8fd6b2",
-              display: "grid",
-              placeItems: "center",
-              marginBottom: 14,
-            }}
-          >
-            <Icon d={I.target} size={20} />
-          </div>
-          <p style={{ margin: 0, color: "#8fd6b2", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
-            Recommended for you
+    <Card ariaLabelledBy="portfolio-glance-heading">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18, alignItems: "stretch" }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, color: "var(--accent-ink)", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
+            Scale
           </p>
           <h2
-            id="recommended-strategy-heading"
+            id="portfolio-glance-heading"
             style={{
-              margin: "7px 0 0",
-              color: "var(--paper)",
+              margin: "6px 0 0",
+              color: "var(--ink)",
               fontFamily: "var(--serif)",
-              fontSize: 32,
+              fontSize: 26,
               fontWeight: 400,
-              lineHeight: 1.1,
+              lineHeight: 1.12,
             }}
           >
-            {starter.name}
+            Portfolio status
           </h2>
-          <p
-            style={{
-              margin: "8px 0 0",
-              maxWidth: 720,
-              color: "#d8cfb8",
-              fontSize: 14,
-              lineHeight: 1.55,
-              fontStyle: "italic",
-            }}
-          >
-            Where should I look first for a rank-and-rent opportunity?
+          <p style={{ margin: "8px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5 }}>
+            Use the strategy path to compare your next market, then return here to track recent reports.
           </p>
-          <p style={{ margin: "8px 0 0", maxWidth: 720, color: "#eee7d7", fontSize: 14, lineHeight: 1.55 }}>
-            {starter.description} Start here when you want one focused lens instead of a broad browse.
-          </p>
-          <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span className="chip" style={{ cursor: "default", background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.18)", color: "#eee7d7" }}>
-              {starter.strategy_id}
-            </span>
-            <span className="chip" style={{ cursor: "default", background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.18)", color: "#eee7d7" }}>
-              {inputShapeLabel(starter)}
-            </span>
+          <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            {statusRows.map((row) => (
+              <div
+                key={row.label}
+                style={{
+                  border: "1px solid var(--rule)",
+                  borderRadius: 8,
+                  background: "var(--paper)",
+                  padding: 12,
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ color: "var(--ink-3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>
+                  {row.label}
+                </div>
+                <div style={{ marginTop: 6, color: "var(--ink)", fontSize: 15, fontWeight: 700, overflowWrap: "anywhere" }}>
+                  {row.value}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "stretch" }}>
-          <Link
-            href={primaryHref}
-            className="btn-primary"
-            style={{ justifyContent: "center", textDecoration: "none", whiteSpace: "normal", background: "var(--accent)" }}
-            aria-label={`Open recommended strategy ${starter.name}`}
-          >
-            {canRunFresh ? `Run ${starter.name}` : "Explore cached reports"} <Icon d={I.arrow} />
-          </Link>
-          <Link href="/strategies" style={{ color: "#eee7d7", fontSize: 12, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            See all strategies
-          </Link>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
+          <ActionLink href="/strategies" ariaLabel="Open portfolio builder">
+            Open portfolio builder <Icon d={I.arrow} />
+          </ActionLink>
+          <ActionLink href={latest ? `/reports?open=${encodeURIComponent(latest.id)}` : "/reports"} variant="ghost">
+            {latest ? "Review latest report" : "Open reports"}
+          </ActionLink>
         </div>
       </div>
-    </section>
+    </Card>
+  );
+}
+
+function SegmentFirstSurfaceCard({ dashboard }: { dashboard: DashboardData }) {
+  if (dashboard.onboarding.next_route === "/" || dashboard.onboarding.next_route === "/strategies") {
+    return null;
+  }
+
+  const agencyAvailable = dashboard.multi_market_available;
+  const surface =
+    dashboard.onboarding.next_route === "/agency"
+      ? agencyAvailable
+        ? {
+            eyebrow: "Coach and agency",
+            heading: "Start in the agency workspace.",
+            body: "Qualify territories in one batch and keep the dashboard as a status surface.",
+            primaryHref: "/agency",
+            primaryLabel: "Open agency workspace",
+            secondaryHref: "/reports",
+            secondaryLabel: "Review reports",
+          }
+        : {
+            eyebrow: "Coach and agency",
+            heading: "Agency workspace is not available yet.",
+            body: "Use reports and cached research while batch territory tooling is unavailable.",
+            primaryHref: "/reports",
+            primaryLabel: "Review reports",
+            secondaryHref: "/explore",
+            secondaryLabel: "Open Explore",
+          }
+      : {
+          eyebrow: "Researching",
+          heading: "Start with cached market research.",
+          body: "Browse existing opportunities without spending a fresh scan, then promote only the markets worth testing.",
+          primaryHref: "/explore",
+          primaryLabel: "Open Explore",
+          secondaryHref: "/strategies",
+          secondaryLabel: "Compare strategies",
+        };
+
+  return (
+    <Card ariaLabelledBy="segment-first-surface-heading">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+          <p style={{ margin: 0, color: "var(--accent-ink)", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
+            {surface.eyebrow}
+          </p>
+          <h2
+            id="segment-first-surface-heading"
+            style={{
+              margin: "6px 0 0",
+              color: "var(--ink)",
+              fontFamily: "var(--serif)",
+              fontSize: 24,
+              fontWeight: 400,
+              lineHeight: 1.15,
+            }}
+          >
+            {surface.heading}
+          </h2>
+          <p style={{ margin: "8px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5 }}>
+            {surface.body}
+          </p>
+        </div>
+        <div style={{ display: "flex", flex: "1 1 220px", flexDirection: "column", gap: 10, maxWidth: 280 }}>
+          <ActionLink href={surface.primaryHref} ariaLabel={surface.primaryLabel}>
+            {surface.primaryLabel} <Icon d={I.arrow} />
+          </ActionLink>
+          <ActionLink href={surface.secondaryHref} variant="ghost">
+            {surface.secondaryLabel}
+          </ActionLink>
+        </div>
+      </div>
+    </Card>
   );
 }
 
 function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
+  const showAgencyCard = dashboard.onboarding.next_route === "/agency";
+
   return (
     <section aria-label="Dashboard destinations" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
       <NextMoveCard
@@ -450,22 +498,22 @@ function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
         ctaLabel="Open Explore"
       />
 
-      {dashboard.multi_market_available ? (
+      {showAgencyCard && dashboard.multi_market_available ? (
         <NextMoveCard
           href="/agency"
-          title="Multi-market scan"
-          subtitle="For agencies and scaled operators."
-          ctaLabel="Open agency tools"
+          title="Agency workspace"
+          subtitle="Batch territory checks for coaching and agency workflows."
+          ctaLabel="Open agency workspace"
         />
-      ) : (
+      ) : showAgencyCard ? (
         <Card ariaLabelledBy="multi-market-card-heading">
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <h2 id="multi-market-card-heading" style={{ margin: 0, color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 20, fontWeight: 400 }}>
-                Multi-market scan
+                Agency workspace
               </h2>
               <p style={{ margin: "7px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5, fontStyle: "italic" }}>
-                For agencies and scaled operators.
+                Batch territory checks for coaching and agency workflows.
               </p>
             </div>
             <span
@@ -485,7 +533,7 @@ function SecondaryCards({ dashboard }: { dashboard: DashboardData }) {
             </span>
           </div>
         </Card>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -628,9 +676,10 @@ export default function DashboardHome({ dashboard }: { dashboard: DashboardData 
 
           <AccountWarningNotice dashboard={dashboard} />
           <ReportErrorNotice dashboard={dashboard} />
-          <FirstRunBanner dashboard={dashboard} />
+          <FindFirstStarterHero dashboard={dashboard} />
           <UsageStrip dashboard={dashboard} />
-          <RecommendedHero dashboard={dashboard} />
+          <ScalePortfolioGlance dashboard={dashboard} />
+          <SegmentFirstSurfaceCard dashboard={dashboard} />
           <SecondaryCards dashboard={dashboard} />
           <StrategyShortcuts dashboard={dashboard} />
           <RecentReports dashboard={dashboard} />
