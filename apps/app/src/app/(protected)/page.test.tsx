@@ -244,7 +244,7 @@ describe("HomePage dashboard", () => {
     expect(screen.queryByRole("link", { name: "Compare strategy path" })).not.toBeInTheDocument();
   });
 
-  it("keeps the find_first hero visible when recent rows are cached reports", async () => {
+  it("keeps the find_first hero visible with returning-user copy when reports exist", async () => {
     await renderHome(
       findFirstDashboard({
         account: {
@@ -252,8 +252,8 @@ describe("HomePage dashboard", () => {
           error: null,
           summary: {
             ...readySummary,
-            fresh_reports_used: 0,
-            fresh_reports_remaining: 10,
+            fresh_reports_used: 1,
+            fresh_reports_remaining: 9,
           },
           entitlement: {
             account_id: "account-1",
@@ -265,7 +265,8 @@ describe("HomePage dashboard", () => {
       }),
     );
 
-    expect(screen.getByText("Find your first Easy Win market.")).toBeInTheDocument();
+    expect(screen.getByText("Run another Easy Win market check.")).toBeInTheDocument();
+    expect(screen.queryByText("Find your first Easy Win market.")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dallas, TX/i })).toHaveAttribute(
       "href",
       "/reports?open=report-123",

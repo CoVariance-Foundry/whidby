@@ -138,7 +138,8 @@ function FindFirstStarterHero({ dashboard }: { dashboard: DashboardData }) {
   const starter =
     dashboard.strategies.catalog.strategies.find(
       (strategy) => strategy.strategy_id === "easy_win",
-    ) ?? dashboard.strategies.starter;
+    ) ?? (dashboard.strategies.starter.strategy_id === "easy_win" ? dashboard.strategies.starter : null);
+  if (!starter) return null;
   const canRunFresh = dashboard.account.can_run_fresh_reports;
   const primaryHref = canRunFresh ? `/strategies/${starter.strategy_id}` : "/explore";
   const account = dashboard.account.status === "ready" ? dashboard.account : null;
@@ -146,6 +147,9 @@ function FindFirstStarterHero({ dashboard }: { dashboard: DashboardData }) {
   const hasUsedScan = (account?.summary.fresh_reports_used ?? 0) > 0;
   const secondaryHref = canRunFresh ? "/strategies" : "/settings";
   const secondaryLabel = canRunFresh ? "Compare strategy path" : "Review plan";
+  const heading = hasUsedScan
+    ? `Run another ${starter.name} market check.`
+    : `Find your first ${starter.name} market.`;
   const body = canRunFresh
     ? hasUsedScan
       ? `${starter.name} stays your shortest path to another focused market check.`
@@ -211,7 +215,7 @@ function FindFirstStarterHero({ dashboard }: { dashboard: DashboardData }) {
               lineHeight: 1.15,
             }}
           >
-            Find your first Easy Win market.
+            {heading}
           </h2>
           <p style={{ margin: "8px 0 0", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.5 }}>
             {body}
@@ -227,7 +231,7 @@ function FindFirstStarterHero({ dashboard }: { dashboard: DashboardData }) {
             }}
           >
             {[
-              "Start with Easy Win",
+              `Start with ${starter.name}`,
               "Confirm city and service",
               "Review the scored report",
             ].map((step, index) => (
@@ -413,33 +417,34 @@ function ScalePortfolioGlance({ dashboard }: { dashboard: DashboardData }) {
 }
 
 function SegmentFirstSurfaceCard({ dashboard }: { dashboard: DashboardData }) {
-  if (dashboard.onboarding.next_route === "/" || dashboard.onboarding.next_route === "/strategies") {
+  const route = dashboard.onboarding.next_route;
+  if (route === "/" || route === "/strategies") {
     return null;
   }
 
   const agencyAvailable = dashboard.multi_market_available;
-  const surface =
-    dashboard.onboarding.next_route === "/agency"
-      ? agencyAvailable
-        ? {
-            eyebrow: "Coach and agency",
-            heading: "Start in the agency workspace.",
-            body: "Qualify territories in one batch and keep the dashboard as a status surface.",
-            primaryHref: "/agency",
-            primaryLabel: "Open agency workspace",
-            secondaryHref: "/reports",
-            secondaryLabel: "Review reports",
-          }
-        : {
-            eyebrow: "Coach and agency",
-            heading: "Agency workspace is not available yet.",
-            body: "Use reports and cached research while batch territory tooling is unavailable.",
-            primaryHref: "/reports",
-            primaryLabel: "Review reports",
-            secondaryHref: "/explore",
-            secondaryLabel: "Open Explore",
-          }
+  const surface = route === "/agency"
+    ? agencyAvailable
+      ? {
+          eyebrow: "Coach and agency",
+          heading: "Start in the agency workspace.",
+          body: "Qualify territories in one batch and keep the dashboard as a status surface.",
+          primaryHref: "/agency",
+          primaryLabel: "Open agency workspace",
+          secondaryHref: "/reports",
+          secondaryLabel: "Review reports",
+        }
       : {
+          eyebrow: "Coach and agency",
+          heading: "Agency workspace is not available yet.",
+          body: "Use reports and cached research while batch territory tooling is unavailable.",
+          primaryHref: "/reports",
+          primaryLabel: "Review reports",
+          secondaryHref: "/explore",
+          secondaryLabel: "Open Explore",
+        }
+    : route === "/explore"
+      ? {
           eyebrow: "Researching",
           heading: "Start with cached market research.",
           body: "Browse existing opportunities without spending a fresh scan, then promote only the markets worth testing.",
@@ -447,7 +452,10 @@ function SegmentFirstSurfaceCard({ dashboard }: { dashboard: DashboardData }) {
           primaryLabel: "Open Explore",
           secondaryHref: "/strategies",
           secondaryLabel: "Compare strategies",
-        };
+        }
+      : null;
+
+  if (!surface) return null;
 
   return (
     <Card ariaLabelledBy="segment-first-surface-heading">
