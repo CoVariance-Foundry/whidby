@@ -50,7 +50,8 @@ function resolveResumePath(
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const nextParam = searchParams.get("next");
-  const explicitSafeNext = isSafeNext(nextParam) ? nextParam : null;
+  const explicitSafeNext =
+    isSafeNext(nextParam) && nextParam !== "/" ? nextParam : null;
 
   const supabase = await createClient();
   const {

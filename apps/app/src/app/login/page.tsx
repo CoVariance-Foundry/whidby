@@ -90,12 +90,13 @@ function LoginForm() {
 
   async function resolvePostLoginDestination() {
     const nextParam = searchParams.get("next");
-    if (isSafeNext(nextParam)) {
-      return nextParam;
-    }
+    const resumePath =
+      isSafeNext(nextParam) && nextParam
+        ? `/api/auth/resume?next=${encodeURIComponent(nextParam)}`
+        : "/api/auth/resume";
 
     try {
-      const response = await fetch("/api/auth/resume", {
+      const response = await fetch(resumePath, {
         cache: "no-store",
       });
       if (!response.ok) return "/";

@@ -59,6 +59,29 @@ describe("GET /api/auth/resume", () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  it("treats root next as resumable segment routing", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "strategy_recommended",
+          intent: "scale",
+          next_route: "/",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(
+      new Request("http://localhost/api/auth/resume?next=/"),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ status: "success", next: "/strategies" });
+    expect(supabase.profileEq).toHaveBeenCalledWith("user_id", "user-1");
+  });
+
   it("routes strategy-recommended scale users to strategies", async () => {
     const supabase = createSupabaseMock({
       profileResult: {
