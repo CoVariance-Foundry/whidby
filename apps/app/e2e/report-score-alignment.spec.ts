@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers/auth";
+import { escapeRegExp } from "./helpers/text";
 
 type ReportListRow = {
   id: string;
@@ -29,10 +30,6 @@ const SCORE_LABELS: Array<[string, string]> = [
   ["AI Resilience", "ai_resilience"],
   ["Opportunity", "opportunity"],
 ];
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 test.describe("Report score alignment", () => {
   test("list and detail pages render scores from authenticated report APIs", async ({

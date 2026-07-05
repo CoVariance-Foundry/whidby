@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { signIn } from "./helpers/auth";
+import { escapeRegExp } from "./helpers/text";
 
 type ReportListRow = {
   id: string;
@@ -115,10 +116,6 @@ async function loadReportFixture(page: Page) {
   return { report, metro };
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 test.describe.serial("synthesis reflow E2E", () => {
   test("runs dashboard to strategy inline result to report detail without paid API calls", async ({
     page,
@@ -178,12 +175,17 @@ test.describe.serial("synthesis reflow E2E", () => {
       .getByRole("heading", { name: "Easy Win" })
       .locator("xpath=ancestor::article");
     const easyWinButton = easyWinCard.getByRole("button").last();
-    if ((await easyWinButton.textContent())?.match(/work this step/i)) {
+    const cityInput = page.getByLabel("City");
+    const serviceInput = page.getByLabel("Service");
+    if (!(await cityInput.isVisible().catch(() => false))) {
+      await expect(easyWinButton).toHaveText(/work this step/i);
       await easyWinButton.click();
     }
 
-    await page.getByLabel("City").fill(report.city);
-    await page.getByLabel("Service").fill(report.niche);
+    await expect(cityInput).toBeVisible();
+    await expect(serviceInput).toBeVisible();
+    await cityInput.fill(report.city);
+    await serviceInput.fill(report.niche);
     await page.getByRole("button", { name: /run discovery/i }).click();
 
     await expect(
