@@ -33,11 +33,20 @@ interface LiveReportTarget {
   inputShape: StrategyInputShape;
   city: string;
   service: string;
+  cbsaCode: string;
   primaryKeyword: string;
   referenceCityId: string;
   feasibilityPreflightPassed: boolean;
   aiResilienceModifier: AIResilienceModifierState;
   limit: number;
+}
+
+export interface StrategyInitialInputs {
+  city?: string;
+  cbsa_code?: string;
+  service?: string;
+  primary_keyword?: string;
+  reference_city_id?: string;
 }
 
 interface StrategyRunResponse {
@@ -184,6 +193,7 @@ function primaryKeywordTokenCount(value: string): number {
 function buildPayload({
   strategy,
   city,
+  cbsaCode,
   service,
   primaryKeyword,
   referenceCityId,
@@ -192,6 +202,7 @@ function buildPayload({
 }: {
   strategy: StrategyCatalogEntry;
   city: string;
+  cbsaCode: string;
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
@@ -200,7 +211,9 @@ function buildPayload({
 }): StrategyDiscoverRequest {
   return {
     lens_id: strategy.strategy_id,
-    city_filters: city.trim()
+    city_filters: cbsaCode.trim()
+      ? [{ field: "cbsa_code", operator: "=", value: cbsaCode.trim() }]
+      : city.trim()
       ? [{ field: "name", operator: "like", value: city.trim() }]
       : [],
     service_filters: service.trim()
@@ -218,6 +231,7 @@ function buildPayload({
 function liveReportTarget({
   strategy,
   city,
+  cbsaCode,
   service,
   primaryKeyword,
   referenceCityId,
@@ -227,6 +241,7 @@ function liveReportTarget({
 }: {
   strategy: StrategyCatalogEntry;
   city: string;
+  cbsaCode: string;
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
@@ -238,6 +253,7 @@ function liveReportTarget({
     strategyId: strategy.strategy_id,
     inputShape: strategy.input_shape,
     city: strategy.input_shape === "reference_city_service" ? "" : city.trim(),
+    cbsaCode: strategy.input_shape === "reference_city_service" ? "" : cbsaCode.trim(),
     service: service.trim(),
     primaryKeyword:
       strategy.input_shape === "city_service_keyword" ? primaryKeyword.trim() : "",
@@ -262,6 +278,7 @@ function liveReportTargetKey(target: LiveReportTarget) {
     target.strategyId,
     target.inputShape,
     target.city,
+    target.cbsaCode,
     target.referenceCityId,
     target.service,
     target.primaryKeyword,
@@ -313,6 +330,10 @@ function isQuotaExhausted(body: StrategyRunResponse) {
     body.code === "quota_exceeded" ||
     body.status === "quota_exceeded"
   );
+}
+
+function initialInputValue(value: string | undefined): string {
+  return value?.trim() ?? "";
 }
 
 function LiveReportRecoveryCard({
@@ -531,14 +552,21 @@ function LiveReportRecoveryCard({
 export default function StrategyPageClient({
   strategy,
   lockedReason = null,
+  initialInputs = {},
 }: {
   strategy: StrategyCatalogEntry;
   lockedReason?: string | null;
+  initialInputs?: StrategyInitialInputs;
 }) {
-  const [city, setCity] = useState("");
-  const [service, setService] = useState("");
-  const [primaryKeyword, setPrimaryKeyword] = useState("");
-  const [referenceCityId, setReferenceCityId] = useState("");
+  const [city, setCity] = useState(() => initialInputValue(initialInputs.city));
+  const [cbsaCode, setCbsaCode] = useState(() => initialInputValue(initialInputs.cbsa_code));
+  const [service, setService] = useState(() => initialInputValue(initialInputs.service));
+  const [primaryKeyword, setPrimaryKeyword] = useState(() =>
+    initialInputValue(initialInputs.primary_keyword),
+  );
+  const [referenceCityId, setReferenceCityId] = useState(() =>
+    initialInputValue(initialInputs.reference_city_id),
+  );
   const [keywordIntentConfirmed, setKeywordIntentConfirmed] = useState(false);
   const [keywordComplianceConfirmed, setKeywordComplianceConfirmed] = useState(false);
   const [aiResilienceModifier, setAiResilienceModifier] = useState<AIResilienceModifierState>(
@@ -604,6 +632,7 @@ export default function StrategyPageClient({
     const payload = buildPayload({
       strategy,
       city,
+      cbsaCode,
       service,
       primaryKeyword,
       referenceCityId,
@@ -613,6 +642,7 @@ export default function StrategyPageClient({
     const requestedTarget = liveReportTarget({
       strategy,
       city,
+      cbsaCode,
       service,
       primaryKeyword,
       referenceCityId,
@@ -818,7 +848,10 @@ export default function StrategyPageClient({
                 <Icon d={I.mapPin} />
                 <input
                   value={city}
-                  onChange={(event) => setCity(event.target.value)}
+                  onChange={(event) => {
+                    setCity(event.target.value);
+                    setCbsaCode("");
+                  }}
                   placeholder="Austin"
                   disabled={isUnavailable}
                   aria-label="City"

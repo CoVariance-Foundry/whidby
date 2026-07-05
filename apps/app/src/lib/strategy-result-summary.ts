@@ -1,4 +1,8 @@
-import type { AIResilienceModifierState } from "@/lib/ai-resilience-modifier";
+import {
+  DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
+  type AIResilienceModifierState,
+  normalizeAIResilienceModifierState,
+} from "@/lib/ai-resilience-modifier";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 
 export interface StrategyResultSourceContext {
@@ -23,6 +27,108 @@ export interface StrategyResultSummaryDto {
   warnings: string[];
   report_href?: string | null;
   source_context: StrategyResultSourceContext;
+}
+
+export interface ReportGuidanceEvidence {
+  narrative: string[];
+  actionItems: string[];
+  evidence: string[];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function normalizeBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+  if (typeof value !== "string") return undefined;
+
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "off"].includes(normalized)) return false;
+  return undefined;
+}
+
+function modifierInputFromRecord(
+  record: Record<string, unknown> | null,
+): Partial<AIResilienceModifierState> | null {
+  if (!record) return null;
+
+  const threshold = record.threshold ?? record.ai_resilience_threshold;
+  const hideFlagged = normalizeBoolean(record.hide_flagged ?? record.ai_resilience_filter);
+  const input: Partial<AIResilienceModifierState> = {};
+
+  if (threshold != null) input.threshold = Number(threshold);
+  if (hideFlagged != null) input.hide_flagged = hideFlagged;
+
+  return Object.keys(input).length > 0 ? input : null;
+}
+
+function reportModifierInput(report: FullReportData): Partial<AIResilienceModifierState> | null {
+  const meta = asRecord(report.meta);
+  const sourceContext = asRecord(meta?.source_context);
+  const userState = asRecord(meta?.user_state);
+
+  return (
+    modifierInputFromRecord(asRecord(meta?.modifier_state)) ??
+    modifierInputFromRecord(asRecord(meta?.ai_resilience_modifier_state)) ??
+    modifierInputFromRecord(asRecord(meta?.ai_resilience_modifier)) ??
+    modifierInputFromRecord(asRecord(sourceContext?.modifier_state)) ??
+    modifierInputFromRecord(asRecord(userState?.ai_resilience_modifier))
+  );
+}
+
+function normalizeText(value: unknown): string | null {
+  return typeof value === "string" ? value.trim() || null : null;
+}
+
+function normalizeTextList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(normalizeText).filter((item): item is string => Boolean(item));
+  }
+  const item = normalizeText(value);
+  return item ? [item] : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+export function normalizeReportGuidanceEvidence(
+  guidance: ReportMetro["guidance"] | null | undefined,
+): ReportGuidanceEvidence {
+  const record = asRecord(guidance);
+  if (!record) {
+    return { narrative: [], actionItems: [], evidence: [] };
+  }
+
+  const generated = asRecord(record.guidance);
+  const narrative = uniqueStrings(
+    [
+      normalizeText(record.summary),
+      normalizeText(generated?.["headline"]),
+      normalizeText(generated?.["strategy"]),
+      normalizeText(generated?.["ai_resilience_note"]),
+    ].filter((item): item is string => Boolean(item)),
+  );
+  const actionItems = uniqueStrings([
+    ...normalizeTextList(record.action_items),
+    ...normalizeTextList(generated?.["priority_actions"]),
+  ]);
+
+  return {
+    narrative,
+    actionItems,
+    evidence: uniqueStrings([...narrative, ...actionItems]),
+  };
 }
 
 function normalizeScore(value: unknown): number | null {
@@ -54,6 +160,14 @@ function humanizeToken(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+export function userFacingStrategyProfileLabel(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "balanced") return "Standard scoring";
+  if (normalized === "auto") return "Adaptive scoring";
+  return humanizeToken(value);
+}
+
 export function reportHref(reportId: string | null | undefined): string | null {
   if (!reportId?.trim()) return null;
   return `/reports?open=${encodeURIComponent(reportId.trim())}`;
@@ -62,6 +176,14 @@ export function reportHref(reportId: string | null | undefined): string | null {
 export function fullReportHref(reportId: string | null | undefined): string | null {
   if (!reportId?.trim()) return null;
   return `/reports/${encodeURIComponent(reportId.trim())}`;
+}
+
+export function resolveReportAIResilienceModifierState(
+  report: FullReportData,
+): AIResilienceModifierState {
+  return normalizeAIResilienceModifierState(
+    reportModifierInput(report) ?? DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
+  );
 }
 
 export function createInlineStrategyResultSummary({
@@ -119,11 +241,15 @@ export function createReportStrategyResultSummary({
   report,
   metro,
   reportHref: href = fullReportHref(report.id),
+  modifierState = resolveReportAIResilienceModifierState(report),
 }: {
   report: FullReportData;
   metro: ReportMetro;
   reportHref?: string | null;
+  modifierState?: AIResilienceModifierState | null;
 }): StrategyResultSummaryDto {
+  const guidanceEvidence = normalizeReportGuidanceEvidence(metro.guidance);
+
   return {
     id: `${report.id}:${metro.cbsa_code}`,
     title: `${report.niche_keyword} in ${metro.cbsa_name}`,
@@ -133,15 +259,16 @@ export function createReportStrategyResultSummary({
     verdict: metro.difficulty_tier ?? null,
     confidence_score: normalizeScore(metro.scores.confidence?.score),
     ai_resilience_score: normalizeScore(metro.scores.ai_resilience),
-    evidence: metro.guidance?.summary ? [metro.guidance.summary] : [],
+    evidence: guidanceEvidence.evidence,
     warnings: normalizeWarnings(metro.scores.confidence?.flags),
     report_href: href,
     source_context: {
       strategy_id: report.strategy_profile,
-      strategy_name: humanizeToken(report.strategy_profile),
+      strategy_name: userFacingStrategyProfileLabel(report.strategy_profile),
       city: metro.cbsa_name,
       service: report.niche_keyword,
       segment: report.report_depth,
+      modifier_state: modifierState,
     },
   };
 }

@@ -9,6 +9,7 @@ import ReportDetailModal from "@/components/reports/ReportDetailModal";
 import { createClient } from "@/lib/supabase/client";
 import type { ArchetypeId } from "@/lib/archetypes";
 import type { FullReportData } from "@/lib/niche-finder/types";
+import type { ReportNextStepContext } from "@/lib/reports/report-next-steps";
 import { Icon, I } from "@/lib/icons";
 
 type ModalState =
@@ -21,9 +22,10 @@ type SortKey = "newest" | "oldest" | "score_desc" | "score_asc";
 
 interface Props {
   rows: TableRow[];
+  nextStepContext: ReportNextStepContext;
 }
 
-export default function ReportsPageClient({ rows: initialRows }: Props) {
+export default function ReportsPageClient({ rows: initialRows, nextStepContext }: Props) {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState(initialRows);
   const [query, setQuery] = useState("");
@@ -418,6 +420,7 @@ export default function ReportsPageClient({ rows: initialRows }: Props) {
       {modal.kind === "open" && (
         <ReportDetailModal
           report={modal.report}
+          nextStepContext={nextStepContext}
           onClose={() => setModal({ kind: "closed" })}
           onDelete={handleDelete}
         />

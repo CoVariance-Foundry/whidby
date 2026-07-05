@@ -40,6 +40,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
   };
 
   let maybeSingle: ReturnType<typeof vi.fn>;
+  let reportsSelect: ReturnType<typeof vi.fn>;
   let v2Limit: ReturnType<typeof vi.fn>;
   const reportRow = {
     id: "r1",
@@ -68,7 +69,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       data: [],
       error: null,
     });
-    const reportsSelect = vi.fn(() => ({
+    reportsSelect = vi.fn(() => ({
       eq: vi.fn(() => ({ maybeSingle })),
     }));
     const v2Select = vi.fn(() => ({
@@ -113,12 +114,13 @@ describe("GET /api/agent/reports/[reportId]", () => {
 
     expect(res.status).toBe(200);
     expect(body.status).toBe("success");
+    expect(reportsSelect).toHaveBeenCalledWith(expect.stringContaining("meta"));
     expect(body.report).toMatchObject({
       id: "r1",
       niche_keyword: "roofing",
       geo_target: "Phoenix, AZ",
       strategy_profile: "balanced",
-      meta: null,
+      meta: { total_api_calls: 7 },
     });
   });
 
@@ -227,7 +229,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       niche_keyword: "roofing",
       geo_target: "Phoenix, AZ",
       resolved_weights: { organic: 0.6, local: 0.4 },
-      meta: null,
+      meta: { source: "supabase" },
       spec_version: "2.0",
       access_scope: "account",
       owner_account_id: entitlement.account_id,
@@ -253,6 +255,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       niche_keyword: "roofing",
       geo_target: "Phoenix, AZ",
       resolved_weights: { organic: 0.6, local: 0.4 },
+      meta: { source: "supabase" },
       access_scope: "account",
       owner_account_id: entitlement.account_id,
     });
@@ -271,6 +274,7 @@ describe("GET /api/agent/reports/[reportId]", () => {
       id: "r1",
       niche_keyword: "roofing",
       geo_target: "Phoenix, AZ",
+      meta: { source: "supabase" },
     });
   });
 
