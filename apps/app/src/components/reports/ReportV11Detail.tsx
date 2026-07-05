@@ -17,8 +17,10 @@ import {
 import {
   createReportStrategyResultSummary,
   normalizeReportGuidanceEvidence,
+  resolveReportAIResilienceModifierState,
   userFacingStrategyProfileLabel,
 } from "@/lib/strategy-result-summary";
+import type { AIResilienceModifierState } from "@/lib/ai-resilience-modifier";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 
@@ -63,6 +65,12 @@ const SCORE_CELLS = [
   { label: "Opportunity", scoreKey: "opportunity" },
 ] as const satisfies readonly { label: string; scoreKey: ScoreKey }[];
 
+const SOURCE_CONFIDENCE_DEFINITION =
+  "How much evidence supports the current market read. Higher confidence means Widby had stronger source coverage for this report.";
+
+const SOURCE_CONFIDENCE_CONTEXT =
+  "Sparse or degraded data can lower confidence even when the opportunity score is still usable.";
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -89,6 +97,10 @@ function reportDepthLabel(value: string | null | undefined): string | null {
   if (!value?.trim()) return null;
   const normalized = value.trim().toLowerCase();
   return REPORT_DEPTH_LABELS[normalized] ?? humanizeToken(value);
+}
+
+function modifierVisibilityLabel(modifier: AIResilienceModifierState): string {
+  return modifier.hide_flagged ? "Hide flagged on" : "Flagged markets visible";
 }
 
 function archetypeLabel(id?: string): { label: string; glyph: string } {
@@ -333,10 +345,12 @@ function ScoreCell({
   label,
   value,
   scoreKey,
+  aiResilienceThreshold,
 }: {
   label: string;
   value: number | undefined;
   scoreKey: ScoreKey;
+  aiResilienceThreshold: number;
 }) {
   const tone = scoreToneForValue(value);
   return (
@@ -372,14 +386,20 @@ function ScoreCell({
       </div>
       {scoreKey === "ai_resilience" ? (
         <div style={{ marginTop: 7 }}>
-          <AIResilienceFlagBadge score={value} />
+          <AIResilienceFlagBadge score={value} threshold={aiResilienceThreshold} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function ScoreGrid({ metro }: { metro: ReportMetro }) {
+function ScoreGrid({
+  metro,
+  aiResilienceThreshold,
+}: {
+  metro: ReportMetro;
+  aiResilienceThreshold: number;
+}) {
   const scores = (metro.scores ?? {}) as Partial<MetroScores>;
   return (
     <section
@@ -396,6 +416,7 @@ function ScoreGrid({ metro }: { metro: ReportMetro }) {
           label={cell.label}
           value={scores[cell.scoreKey]}
           scoreKey={cell.scoreKey}
+          aiResilienceThreshold={aiResilienceThreshold}
         />
       ))}
     </section>
@@ -405,6 +426,8 @@ function ScoreGrid({ metro }: { metro: ReportMetro }) {
 function MetroBadges({ metro }: { metro: ReportMetro }) {
   const scores = (metro.scores ?? {}) as Partial<MetroScores>;
   const archetype = archetypeLabel(metro.serp_archetype);
+  const confidenceLabel =
+    scores.confidence?.score != null ? String(Math.round(scores.confidence.score)) : "Not scored yet";
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
       {metro.population ? <Pill>Pop. {metro.population.toLocaleString("en-US")}</Pill> : null}
@@ -422,12 +445,110 @@ function MetroBadges({ metro }: { metro: ReportMetro }) {
       {metro.ai_exposure ? (
         <Pill>AI exposure: {enumLabel(metro.ai_exposure, EXPOSURE_LABELS)}</Pill>
       ) : null}
-      {scores.confidence ? (
-        <Pill>Confidence: {Math.round(scores.confidence.score)}</Pill>
-      ) : (
-        <Pill>Confidence: Not scored yet</Pill>
-      )}
+      <Pill>
+        <Term
+          termKey="source_confidence"
+          label="Source confidence"
+          fallbackDefinition={SOURCE_CONFIDENCE_DEFINITION}
+          fallbackContext={SOURCE_CONFIDENCE_CONTEXT}
+        />
+        : {confidenceLabel}
+      </Pill>
     </div>
+  );
+}
+
+function SourceContextItem({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string | null;
+  children?: ReactNode;
+}) {
+  const content = children ?? value;
+  if (!content) return null;
+
+  return (
+    <div>
+      <dt
+        style={{
+          margin: 0,
+          color: "var(--ink-3)",
+          fontFamily: "var(--serif)",
+          fontSize: 11,
+          fontStyle: "italic",
+        }}
+      >
+        {label}
+      </dt>
+      <dd
+        style={{
+          margin: "4px 0 0",
+          color: "var(--ink)",
+          fontFamily: "var(--mono)",
+          fontSize: 13,
+          lineHeight: 1.35,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {content}
+      </dd>
+    </div>
+  );
+}
+
+function ReportSourceContext({
+  report,
+  metro,
+  modifierState,
+}: {
+  report: FullReportData;
+  metro: ReportMetro;
+  modifierState: AIResilienceModifierState;
+}) {
+  const summary = createReportStrategyResultSummary({
+    report,
+    metro,
+    reportHref: null,
+    modifierState,
+  });
+  const context = summary.source_context;
+  const segmentLabel = reportDepthLabel(context.segment);
+
+  return (
+    <section
+      aria-label="Report source context"
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--rule)",
+        borderRadius: 8,
+        padding: 16,
+      }}
+    >
+      <h2 style={sectionHeadingStyle()}>Source context</h2>
+      <dl
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: "12px 16px",
+          margin: 0,
+        }}
+      >
+        <SourceContextItem label="Strategy" value={context.strategy_name} />
+        <SourceContextItem label="City" value={context.city} />
+        <SourceContextItem label="Service" value={context.service} />
+        <SourceContextItem label="Segment / report depth" value={segmentLabel} />
+        <SourceContextItem label="AI threshold">
+          {modifierState.threshold}{" "}
+          <span style={{ color: "var(--ink-3)", fontFamily: "var(--sans)", fontSize: 12 }}>
+            flags scores below this value
+          </span>
+        </SourceContextItem>
+        <SourceContextItem label="Modifier state" value={modifierVisibilityLabel(modifierState)} />
+      </dl>
+    </section>
   );
 }
 
@@ -513,12 +634,14 @@ function MetroDetailSection({
   primary,
   reportHref,
   reportCtaLabel,
+  modifierState,
 }: {
   report: FullReportData;
   metro: ReportMetro;
   primary?: boolean;
   reportHref?: string | null;
   reportCtaLabel?: string;
+  modifierState: AIResilienceModifierState;
 }) {
   return (
     <section
@@ -532,9 +655,16 @@ function MetroDetailSection({
     >
       {primary ? (
         <StrategyResultSummary
-          summary={createReportStrategyResultSummary({ report, metro, reportHref })}
+          summary={createReportStrategyResultSummary({
+            report,
+            metro,
+            reportHref,
+            modifierState,
+          })}
           framed={false}
           reportCtaLabel={reportCtaLabel}
+          aiResilienceThreshold={modifierState.threshold}
+          modifierState={modifierState}
         />
       ) : (
         <h2
@@ -550,7 +680,7 @@ function MetroDetailSection({
       )}
 
       <div style={{ marginTop: primary ? 20 : 0 }}>
-        <ScoreGrid metro={metro} />
+        <ScoreGrid metro={metro} aiResilienceThreshold={modifierState.threshold} />
         <MetroBadges metro={metro} />
       </div>
       <SignalsSection metro={metro} />
@@ -683,7 +813,7 @@ function MetaSection({ meta }: { meta: FullReportData["meta"] }) {
           listStyle: "none",
         }}
       >
-        Source context
+        Run metadata
       </summary>
       <div
         style={{
@@ -732,6 +862,7 @@ function ReportV11Content(props: ReportV11DetailProps & { variant: ReportV11Vari
   const metros = Array.isArray(report.metros) ? report.metros : [];
   const topMetro = metros[0];
   const bodyPadding = variant === "modal" ? "20px 24px 28px" : 0;
+  const modifierState = resolveReportAIResilienceModifierState(report);
 
   return (
     <>
@@ -752,16 +883,23 @@ function ReportV11Content(props: ReportV11DetailProps & { variant: ReportV11Vari
       >
         {topMetro ? (
           <>
+            <ReportSourceContext report={report} metro={topMetro} modifierState={modifierState} />
             <MetroDetailSection
               report={report}
               metro={topMetro}
               primary
               reportHref={primaryReportHref}
               reportCtaLabel={reportCtaLabel}
+              modifierState={modifierState}
             />
             <NextMoves report={report} metro={topMetro} context={nextStepContext} />
             {metros.slice(1).map((metro) => (
-              <MetroDetailSection key={metro.cbsa_code || metro.cbsa_name} report={report} metro={metro} />
+              <MetroDetailSection
+                key={metro.cbsa_code || metro.cbsa_name}
+                report={report}
+                metro={metro}
+                modifierState={modifierState}
+              />
             ))}
           </>
         ) : (

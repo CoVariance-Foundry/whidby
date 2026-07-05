@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { AnchorHTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ReportV11Detail from "./ReportV11Detail";
@@ -80,6 +81,18 @@ describe("ReportV11Detail", () => {
 
     expect(screen.getByRole("heading", { name: "plumber" })).toBeInTheDocument();
     expect(screen.getAllByText("Easy Win").length).toBeGreaterThan(0);
+    const sourceContext = screen.getByRole("region", { name: /report source context/i });
+    expect(within(sourceContext).getByText("Strategy")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("Easy Win")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("City")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("Phoenix-Mesa-Chandler, AZ")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("Service")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("plumber")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("Segment / report depth")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("Standard report")).toBeInTheDocument();
+    expect(within(sourceContext).getByText("AI threshold")).toBeInTheDocument();
+    expect(within(sourceContext).getByText(/flags scores below this value/i)).toBeInTheDocument();
+    expect(within(sourceContext).getByText("Flagged markets visible")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /score and verdict/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /signal scores/i })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /score breakdown/i })).toBeInTheDocument();
@@ -98,6 +111,75 @@ describe("ReportV11Detail", () => {
       "href",
       expect.stringContaining("report_id=rpt_123"),
     );
+  });
+
+  it("explains confidence through the shared glossary tooltip inside the report", async () => {
+    const user = userEvent.setup();
+    render(<ReportV11Detail report={report} />);
+
+    const button = screen.getByRole("button", { name: /what is source confidence/i });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(button);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(button).toHaveAttribute("aria-describedby", tooltip.id);
+    expect(tooltip).toHaveTextContent(/how much evidence supports the current market read/i);
+    expect(tooltip).toHaveTextContent(/sparse or degraded data can lower confidence/i);
+  });
+
+  it("flags AI Resilience scores below the default threshold of 40", () => {
+    render(
+      <ReportV11Detail
+        report={{
+          ...report,
+          metros: [
+            {
+              ...report.metros[0],
+              scores: {
+                ...report.metros[0].scores,
+                ai_resilience: 32,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("AI resilience flagged")).toHaveLength(2);
+    expect(screen.getAllByLabelText(/AI Resilience flagged: score 32 below threshold 40/i)).toHaveLength(2);
+  });
+
+  it("uses report user-state modifier threshold when available", () => {
+    render(
+      <ReportV11Detail
+        report={{
+          ...report,
+          meta: {
+            ai_resilience_modifier: {
+              threshold: 30,
+              hide_flagged: true,
+            },
+          },
+          metros: [
+            {
+              ...report.metros[0],
+              scores: {
+                ...report.metros[0].scores,
+                ai_resilience: 32,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const sourceContext = screen.getByRole("region", { name: /report source context/i });
+    expect(within(sourceContext).getByText("Hide flagged on")).toBeInTheDocument();
+    expect(screen.getByText("AI threshold: 30")).toBeInTheDocument();
+    expect(screen.queryByText("AI resilience flagged")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/below threshold 40/i)).not.toBeInTheDocument();
   });
 
   it("renders an unlocked Expand & Conquer next step when ranked-site context is supplied", () => {
@@ -141,7 +223,7 @@ describe("ReportV11Detail", () => {
 
     expect(screen.getAllByText("Standard scoring").length).toBeGreaterThan(0);
     expect(container).not.toHaveTextContent(/balanced/i);
-    expect(screen.getByText("Confidence: Not scored yet")).toBeInTheDocument();
+    expect(screen.getByText(/not scored yet/i)).toBeInTheDocument();
     expect(screen.getByText("Signal-level evidence is not available for this report yet.")).toBeInTheDocument();
     expect(screen.getByText("No narrative evidence is available for this report yet.")).toBeInTheDocument();
   });

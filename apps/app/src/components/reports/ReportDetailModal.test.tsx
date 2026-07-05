@@ -100,6 +100,12 @@ describe("ReportDetailModal", () => {
     render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
 
     expect(screen.getByRole("dialog", { name: /report: plumber/i })).toBeInTheDocument();
+    const sourceContext = screen.getByRole("region", { name: /report source context/i });
+    expect(sourceContext).toHaveTextContent("Easy Win");
+    expect(sourceContext).toHaveTextContent("Phoenix-Mesa-Chandler, AZ");
+    expect(sourceContext).toHaveTextContent("plumber");
+    expect(sourceContext).toHaveTextContent("Standard report");
+    expect(sourceContext).toHaveTextContent("flags scores below this value");
     expect(screen.getAllByText("Organic ease").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Local ease").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Demand").length).toBeGreaterThan(0);
