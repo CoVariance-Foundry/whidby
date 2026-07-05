@@ -23,7 +23,7 @@ SIGNALS: dict[str, dict[str, Any]] = {
 }
 
 SCORED = ScoredMarket(
-    market=Market(city=BOISE, service=PLUMBING, signals=SIGNALS),
+    market=Market(city=BOISE, service=PLUMBING, signals=SIGNALS, report_id="report-1"),
     opportunity_score=68.5,
     lens_id="balanced",
     rank=1,
@@ -48,6 +48,7 @@ def test_post_discover_returns_markets():
     assert len(data["markets"]) == 1
     assert data["markets"][0]["rank"] == 1
     assert data["markets"][0]["opportunity_score"] == 68.5
+    assert data["markets"][0]["report_id"] == "report-1"
     assert data["markets"][0]["city"]["name"] == "Boise"
     assert data["markets"][0]["service"]["name"] == "Plumbing"
     assert data["lens"]["lens_id"] == "balanced"

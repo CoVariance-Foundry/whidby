@@ -1,9 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
 import { AIResilienceModifierControls } from "@/components/AIResilienceModifierControls";
-import { ScoreCircle } from "@/components/ScoreVisuals";
+import { StrategyResultSummary } from "@/components/strategies/StrategyResultSummary";
 import {
   DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
   type AIResilienceModifierState,
@@ -12,23 +11,16 @@ import {
   toAIResilienceFilterPayload,
 } from "@/lib/ai-resilience-modifier";
 import { Icon, I } from "@/lib/icons";
+import {
+  createInlineStrategyResultSummary,
+  type StrategyResultSummaryDto,
+} from "@/lib/strategy-result-summary";
 import type {
   StrategyCatalogEntry,
   StrategyDiscoverRequest,
   StrategyInputShape,
   StrategyRunRequest,
 } from "@/lib/strategies/types";
-
-interface StrategyResultCard {
-  id: string;
-  rank: number | null;
-  score: number | null;
-  city: string;
-  service: string;
-  strategy_evidence: string[];
-  warnings: string[];
-  ai_resilience_score: number | null;
-}
 
 interface DiscoverResponse {
   markets?: unknown[];
@@ -77,6 +69,14 @@ function readString(record: Record<string, unknown>, keys: string[], fallback = 
   return fallback;
 }
 
+function readOptionalString(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
 function readNumber(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = record[key];
@@ -114,7 +114,15 @@ function formatValue(value: unknown): string {
   }
 }
 
-function normalizeResult(item: unknown, index: number): StrategyResultCard {
+function normalizeResult({
+  item,
+  index,
+  strategy,
+}: {
+  item: unknown;
+  index: number;
+  strategy: StrategyCatalogEntry;
+}): StrategyResultSummaryDto {
   const record = asRecord(item);
   const cityRecord = asRecord(record.city);
   const serviceRecord = asRecord(record.service);
@@ -122,17 +130,28 @@ function normalizeResult(item: unknown, index: number): StrategyResultCard {
   const evidence = readStringArray(record.strategy_evidence).concat(readStringArray(record.evidence));
   const warnings = readStringArray(record.warnings);
   const aiResilienceScore = readAIResilienceScore(record);
+  const scores = asRecord(record.scores);
+  const confidence = asRecord(record.confidence ?? scores.confidence);
+  const city = readString(record, ["city", "city_name", "metro_name", "cbsa_name"], readString(cityRecord, ["name", "city_name"], "Unknown city"));
+  const service = readString(record, ["service", "service_name", "niche"], readString(serviceRecord, ["name", "label"], "Unknown service"));
 
-  return {
+  return createInlineStrategyResultSummary({
     id: readString(record, ["id", "market_id", "cbsa_code"], `result-${index}`),
     rank: readNumber(record, ["rank"]) ?? index + 1,
     score,
-    city: readString(record, ["city", "city_name", "metro_name", "cbsa_name"], readString(cityRecord, ["name", "city_name"], "Unknown city")),
-    service: readString(record, ["service", "service_name", "niche"], readString(serviceRecord, ["name", "label"], "Unknown service")),
-    strategy_evidence: evidence,
+    city,
+    service,
+    confidenceScore: readNumber(record, ["confidence_score"]) ?? readNumber(confidence, ["score"]),
+    reportId: readOptionalString(record, ["report_id"]),
+    evidence,
     warnings,
-    ai_resilience_score: aiResilienceScore,
-  };
+    aiResilienceScore,
+    sourceContext: {
+      strategy_id: strategy.strategy_id,
+      strategy_name: strategy.name,
+      segment: strategy.path_role ?? strategy.status,
+    },
+  });
 }
 
 function inputHint(strategy: StrategyCatalogEntry) {
@@ -270,77 +289,6 @@ function isQuotaExhausted(body: StrategyRunResponse) {
     body.code === "monthly_report_quota_exceeded" ||
     body.code === "quota_exceeded" ||
     body.status === "quota_exceeded"
-  );
-}
-
-function ResultCard({
-  result,
-  aiResilienceModifier,
-}: {
-  result: StrategyResultCard;
-  aiResilienceModifier: AIResilienceModifierState;
-}) {
-  return (
-    <article
-      style={{
-        background: "var(--card)",
-        border: "1px solid var(--rule)",
-        borderRadius: 8,
-        padding: 16,
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto",
-        gap: 16,
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {result.rank ? (
-            <span style={{ fontFamily: "var(--mono)", color: "var(--ink-3)", fontSize: 12 }}>
-              #{result.rank}
-            </span>
-          ) : null}
-          <h3 style={{ margin: 0, fontSize: 16, color: "var(--ink)" }}>
-            {result.service} in {result.city}
-          </h3>
-          <AIResilienceFlagBadge
-            score={result.ai_resilience_score}
-            threshold={aiResilienceModifier.threshold}
-          />
-        </div>
-        {result.strategy_evidence.length > 0 ? (
-          <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5 }}>
-            {result.strategy_evidence.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <p style={{ margin: "10px 0 0", color: "var(--ink-3)", fontSize: 13 }}>
-            No strategy evidence returned for this row.
-          </p>
-        )}
-        {result.warnings.length > 0 ? (
-          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-            {result.warnings.map((warning) => (
-              <span
-                key={warning}
-                style={{
-                  alignSelf: "flex-start",
-                  color: "var(--warn)",
-                  background: "var(--warn-soft)",
-                  border: "1px solid var(--rule)",
-                  borderRadius: 999,
-                  padding: "4px 8px",
-                  fontSize: 12,
-                }}
-              >
-                {warning}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <ScoreCircle value={result.score} label="Strategy score" size={68} />
-    </article>
   );
 }
 
@@ -552,7 +500,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   const [limit, setLimit] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<StrategyResultCard[]>([]);
+  const [results, setResults] = useState<StrategyResultSummaryDto[]>([]);
   const [zeroResultTarget, setZeroResultTarget] = useState<LiveReportTarget | null>(null);
   const [liveRunState, setLiveRunState] = useState<LiveRunState>({ status: "idle" });
   const liveRunRequestIdRef = useRef(0);
@@ -631,7 +579,15 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       }
 
       const rawResults = Array.isArray(body.markets) ? body.markets : Array.isArray(body.results) ? body.results : [];
-      setResults(rawResults.map(normalizeResult));
+      setResults(
+        rawResults.map((item, index) =>
+          normalizeResult({
+            item,
+            index,
+            strategy,
+          }),
+        ),
+      );
       if (rawResults.length === 0) {
         zeroResultTargetKeyRef.current = liveReportTargetKey(requestedTarget);
         setZeroResultTarget(requestedTarget);
@@ -893,10 +849,11 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
         {visibleResults.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {visibleResults.map((result) => (
-              <ResultCard
+              <StrategyResultSummary
                 key={result.id}
-                result={result}
-                aiResilienceModifier={aiResilienceModifier}
+                summary={result}
+                aiResilienceThreshold={aiResilienceModifier.threshold}
+                modifierState={aiResilienceModifier}
               />
             ))}
           </div>

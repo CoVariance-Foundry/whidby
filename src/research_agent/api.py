@@ -1941,6 +1941,7 @@ async def discover(req: DiscoverRequest, request: Request) -> dict[str, Any]:
         "markets": [
             {
                 "rank": r.rank,
+                "report_id": r.market.report_id,
                 "opportunity_score": round(r.opportunity_score, 1),
                 "lens_id": r.lens_id,
                 "city": {
