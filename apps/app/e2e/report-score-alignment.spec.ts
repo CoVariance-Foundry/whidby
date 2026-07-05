@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers/auth";
+import { escapeRegExp } from "./helpers/text";
 
 type ReportListRow = {
   id: string;
@@ -26,7 +27,7 @@ const SCORE_LABELS: Array<[string, string]> = [
   ["Organic ease", "organic_competition"],
   ["Local ease", "local_competition"],
   ["Monetization", "monetization"],
-  ["AI resilience", "ai_resilience"],
+  ["AI Resilience", "ai_resilience"],
   ["Opportunity", "opportunity"],
 ];
 
@@ -73,16 +74,21 @@ test.describe("Report score alignment", () => {
     await page.goto(`/reports/${report.id}`);
     await page.waitForLoadState("networkidle");
 
-    const headline = page.getByRole("region", { name: "Headline scores" });
-    await expect(headline).toBeVisible();
-    await expect(page.getByText(`v${report.spec_version}`, { exact: true })).toBeVisible();
-    const headlineText = await headline.textContent();
+    await expect(page.getByRole("region", { name: "Report source context" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Score and verdict" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Next steps" })).toBeVisible();
+    await expect(
+      page.getByText(new RegExp(`report v${escapeRegExp(report.spec_version)}`, "i")),
+    ).toBeVisible();
+    const signalScores = page.getByRole("region", { name: "Signal scores" });
+    await expect(signalScores).toBeVisible();
+    const signalText = await signalScores.textContent();
 
     for (const [label, key] of SCORE_LABELS) {
       const value = scores?.[key];
       expect(typeof value, `${label} score missing from detail API`).toBe("number");
-      expect(headlineText).toContain(label);
-      expect(headlineText).toContain(String(Math.round(value as number)));
+      expect(signalText).toContain(label);
+      expect(signalText).toContain(String(Math.round(value as number)));
     }
   });
 });
