@@ -234,6 +234,46 @@ describe("POST /api/strategies/runs", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("allows Keyword Hijack fresh runs with validated target-array preflight", async () => {
+    const req = new Request("http://localhost/api/strategies/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "fresh",
+        strategy_id: "keyword_hijack",
+        primary_keyword: "boise plumber",
+        feasibility_preflight_passed: true,
+        targets: [
+          {
+            cbsa_code: "14260",
+            niche_normalized: "plumbing",
+            niche_keyword: "Plumbing",
+            primary_keyword: "boise plumber",
+          },
+        ],
+      }),
+    });
+
+    const res = await POST(req as never);
+
+    expect(res.status).toBe(200);
+    const init = vi.mocked(global.fetch).mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      mode: "fresh",
+      strategy_id: "keyword_hijack",
+      feasibility_preflight_passed: true,
+      quota_consumed: 1,
+      targets: [
+        {
+          cbsa_code: "14260",
+          niche_normalized: "plumbing",
+          niche_keyword: "Plumbing",
+          primary_keyword: "boise plumber",
+        },
+      ],
+    });
+    expect(mocks.consumeReportQuota).toHaveBeenCalledOnce();
+  });
+
   it("normalizes legacy lens_id to strategy_id for upstream runs", async () => {
     const req = new Request("http://localhost/api/strategies/runs", {
       method: "POST",

@@ -585,6 +585,11 @@ export default function AgencyPage() {
             strategyLens === "keyword_hijack" && globalPrimaryKeywordReady
               ? primaryKeyword.trim()
               : undefined,
+          feasibility_preflight_passed:
+            strategyLens === "keyword_hijack" &&
+            targets.every((target) => hasPrimaryKeyword(target.primary_keyword ?? ""))
+              ? true
+              : undefined,
           targets: targets.map((target) => ({
             cbsa_code: target.cbsa_code,
             niche_normalized: target.niche_normalized,

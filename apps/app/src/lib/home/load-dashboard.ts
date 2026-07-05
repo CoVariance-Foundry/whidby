@@ -83,6 +83,10 @@ interface RankedSiteDeclarationProbeRow {
   id: string;
 }
 
+interface AccountOwnedReportProbeRow {
+  id: string;
+}
+
 interface DashboardOnboardingContext {
   profile: OnboardingProfileRow | null;
   target: OnboardingTargetRow | null;
@@ -362,6 +366,27 @@ async function hasActiveRankedSiteDeclaration(
   return Boolean(data as RankedSiteDeclarationProbeRow | null);
 }
 
+async function hasAccountOwnedReport(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("reports")
+    .select("id")
+    .eq("owner_account_id", accountId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[dashboard] account-owned report probe failed", {
+      message: error.message,
+    });
+    return false;
+  }
+
+  return Boolean(data as AccountOwnedReportProbeRow | null);
+}
+
 async function loadReportsDashboard(
   options: LoadDashboardOptions,
 ): Promise<{
@@ -434,15 +459,14 @@ export async function loadDashboard(
     const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     onboardingRows = await loadOnboardingContext(supabase, user);
-    hasRankedSiteDeclaration = await hasActiveRankedSiteDeclaration(
-      supabase,
-      entitlement.account_id,
-    );
+    [hasCompletedScan, hasRankedSiteDeclaration] = await Promise.all([
+      hasAccountOwnedReport(supabase, entitlement.account_id),
+      hasActiveRankedSiteDeclaration(supabase, entitlement.account_id),
+    ]);
     canLoadReports = true;
 
     try {
       const summary = await loadAccountSummary({ supabase, user, entitlement });
-      hasCompletedScan = summary.fresh_reports_used > 0;
       account = {
         status: "ready",
         error: null,

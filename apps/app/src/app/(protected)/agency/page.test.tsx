@@ -250,6 +250,7 @@ describe("AgencyPage", () => {
     expect(runPayload).toMatchObject({
       mode: "fresh",
       strategy_id: "keyword_hijack",
+      feasibility_preflight_passed: true,
       targets: [
         {
           cbsa_code: "custom:tulsa:ok",
