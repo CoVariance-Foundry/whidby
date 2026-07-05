@@ -74,7 +74,12 @@ const readySummary = {
   billing_management_available: true,
 } as const;
 
-function dashboardFixture(overrides: Partial<DashboardData> = {}): DashboardData {
+type DashboardFixtureOverrides = Partial<Omit<DashboardData, "onboarding" | "strategies">> & {
+  onboarding?: Partial<DashboardData["onboarding"]>;
+  strategies?: Partial<DashboardData["strategies"]>;
+};
+
+function dashboardFixture(overrides: DashboardFixtureOverrides = {}): DashboardData {
   const base: DashboardData = {
     stats: {
       total_reports: 12,
@@ -127,11 +132,24 @@ function dashboardFixture(overrides: Partial<DashboardData> = {}): DashboardData
     ...base,
     ...overrides,
     account: overrides.account ?? base.account,
-    onboarding: overrides.onboarding ?? base.onboarding,
-    strategies: overrides.strategies ?? base.strategies,
+    onboarding: overrides.onboarding ? { ...base.onboarding, ...overrides.onboarding } : base.onboarding,
+    strategies: overrides.strategies ? { ...base.strategies, ...overrides.strategies } : base.strategies,
     stats: overrides.stats ?? base.stats,
     recent: overrides.recent ?? base.recent,
   };
+}
+
+function findFirstDashboard(overrides: DashboardFixtureOverrides = {}) {
+  return dashboardFixture({
+    ...overrides,
+    onboarding: {
+      next_route: "/",
+      starter_strategy_id: "easy_win",
+      shortcut_strategy_ids: ["easy_win", "gbp_blitz", "keyword_hijack"],
+      ...overrides.onboarding,
+    },
+    strategies: overrides.strategies,
+  });
 }
 
 async function renderHome(dashboard: DashboardData) {
@@ -145,9 +163,10 @@ afterEach(() => {
 });
 
 describe("HomePage dashboard", () => {
-  it("routes paid first-run accounts to the launch-safe starter strategy", async () => {
+  // @req FR-102
+  it("renders the find_first A2 hero and routes paid accounts to Easy Win", async () => {
     await renderHome(
-      dashboardFixture({
+      findFirstDashboard({
         recent: [],
         account: {
           status: "ready",
@@ -169,24 +188,25 @@ describe("HomePage dashboard", () => {
 
     expect(screen.getByLabelText("Start first dashboard action")).toHaveAttribute(
       "href",
-      "/strategies/gbp_blitz",
+      "/strategies/easy_win",
     );
     expect(screen.getByLabelText("Start first dashboard action")).toHaveTextContent(
-      "Open GBP Blitz",
+      "Start Easy Win",
     );
-    expect(screen.getByText("Three steps to your first report.")).toBeInTheDocument();
-    expect(screen.getByText("Pick your strategy lens")).toBeInTheDocument();
+    expect(screen.getByText("Find your first Easy Win market.")).toBeInTheDocument();
+    expect(screen.getByText("Start with Easy Win")).toBeInTheDocument();
     expect(screen.getByText("Confirm city and service")).toBeInTheDocument();
     expect(screen.getByText("Review the scored report")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Or browse Explore first" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Compare strategy path" })).toHaveAttribute(
       "href",
-      "/explore",
+      "/strategies",
     );
+    expect(screen.queryByText("Portfolio status")).not.toBeInTheDocument();
   });
 
-  it("routes free first-run accounts to cached Explore and account settings", async () => {
+  it("routes free find_first accounts to cached Explore and account settings", async () => {
     await renderHome(
-      dashboardFixture({
+      findFirstDashboard({
         recent: [],
         account: {
           status: "ready",
@@ -217,23 +237,23 @@ describe("HomePage dashboard", () => {
     expect(screen.getByLabelText("Start first dashboard action")).toHaveTextContent(
       "Explore cached reports",
     );
-    expect(screen.getAllByRole("link", { name: "Manage plan" }).at(0)).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Review plan" })).toHaveAttribute(
       "href",
       "/settings",
     );
-    expect(screen.queryByRole("link", { name: "Or browse Explore first" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Compare strategy path" })).not.toBeInTheDocument();
   });
 
-  it("keeps the first-run banner visible when recent rows are cached reports", async () => {
+  it("keeps the find_first hero visible with returning-user copy when reports exist", async () => {
     await renderHome(
-      dashboardFixture({
+      findFirstDashboard({
         account: {
           status: "ready",
           error: null,
           summary: {
             ...readySummary,
-            fresh_reports_used: 0,
-            fresh_reports_remaining: 10,
+            fresh_reports_used: 1,
+            fresh_reports_remaining: 9,
           },
           entitlement: {
             account_id: "account-1",
@@ -245,14 +265,16 @@ describe("HomePage dashboard", () => {
       }),
     );
 
-    expect(screen.getByText("Three steps to your first report.")).toBeInTheDocument();
+    expect(screen.getByText("Run another Easy Win market check.")).toBeInTheDocument();
+    expect(screen.queryByText("Find your first Easy Win market.")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dallas, TX/i })).toHaveAttribute(
       "href",
       "/reports?open=report-123",
     );
   });
 
-  it("renders usage values, recommended CTA, multi-market link, launch shortcuts, and recent report links", async () => {
+  // @req FR-110
+  it("renders usage values, scale portfolio glance, launch shortcuts, and recent report links", async () => {
     await renderHome(dashboardFixture());
 
     const usage = screen.getByLabelText("Dashboard usage");
@@ -277,24 +299,20 @@ describe("HomePage dashboard", () => {
       "/strategies",
     );
 
-    expect(screen.getByText("Recommended for you")).toBeInTheDocument();
-    expect(screen.getByLabelText("Open recommended strategy GBP Blitz")).toHaveAttribute(
-      "href",
-      "/strategies/gbp_blitz",
-    );
-    expect(screen.getByLabelText("Open recommended strategy GBP Blitz")).toHaveTextContent(
-      "Run GBP Blitz",
-    );
-    expect(screen.getByRole("link", { name: "See all strategies" })).toHaveAttribute(
+    expect(screen.queryByText("Find your first Easy Win market.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recommended for you")).not.toBeInTheDocument();
+    expect(screen.getByText("Portfolio status")).toBeInTheDocument();
+    expect(screen.getByText("Markets reviewed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open portfolio builder")).toHaveAttribute(
       "href",
       "/strategies",
     );
-    expect(screen.getByRole("link", { name: /Open agency tools/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Review latest report" })).toHaveAttribute(
       "href",
-      "/agency",
+      "/reports?open=report-123",
     );
     expect(screen.getByText("Explore cached data")).toBeInTheDocument();
-    expect(screen.getByText("Multi-market scan")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open agency workspace/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dallas, TX/i })).toHaveAttribute(
       "href",
       "/reports?open=report-123",
@@ -303,13 +321,51 @@ describe("HomePage dashboard", () => {
     expect(screen.getByText("Easy Win")).toBeInTheDocument();
     expect(screen.getByText("Keyword Hijack")).toBeInTheDocument();
     expect(screen.queryByText("Cash Cow")).not.toBeInTheDocument();
+    expect(screen.queryByText("BALANCED")).not.toBeInTheDocument();
   });
 
-  it("shows the disabled multi-market fallback when agency tools are unavailable", async () => {
-    await renderHome(dashboardFixture({ multi_market_available: false }));
+  it("shows the disabled agency fallback when agency tools are unavailable", async () => {
+    await renderHome(
+      dashboardFixture({
+        onboarding: {
+          next_route: "/agency",
+        },
+        multi_market_available: false,
+      }),
+    );
 
-    expect(screen.queryByRole("link", { name: /Open agency tools/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open agency workspace")).not.toBeInTheDocument();
+    expect(screen.getByText("Agency workspace is not available yet.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review reports" })).toHaveAttribute("href", "/reports");
     expect(screen.getByText("Coming soon")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("renders a coach_agency dashboard card back to the agency workspace", async () => {
+    await renderHome(
+      dashboardFixture({
+        onboarding: {
+          next_route: "/agency",
+        },
+      }),
+    );
+
+    expect(screen.getByText("Start in the agency workspace.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open agency workspace")).toHaveAttribute("href", "/agency");
+    expect(screen.queryByText("Blue Ocean")).not.toBeInTheDocument();
+  });
+
+  it("renders a researching dashboard card back to cached Explore", async () => {
+    await renderHome(
+      dashboardFixture({
+        onboarding: {
+          next_route: "/explore",
+        },
+      }),
+    );
+
+    expect(screen.getByText("Start with cached market research.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open Explore")).toHaveAttribute("href", "/explore");
+    expect(screen.queryByText("Find your first Easy Win market.")).not.toBeInTheDocument();
   });
 
   it("renders an actionable account error state", async () => {
@@ -368,11 +424,8 @@ describe("HomePage dashboard", () => {
       "usage counters: relation unavailable",
     );
     expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByText("Recommended for you")).toBeInTheDocument();
-    expect(screen.getByLabelText("Open recommended strategy GBP Blitz")).toHaveAttribute(
-      "href",
-      "/strategies/gbp_blitz",
-    );
+    expect(screen.getByText("Portfolio status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open portfolio builder")).toHaveAttribute("href", "/strategies");
     expect(screen.getByRole("link", { name: /Dallas, TX/i })).toHaveAttribute(
       "href",
       "/reports?open=report-123",
@@ -391,6 +444,6 @@ describe("HomePage dashboard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Reports response was invalid JSON.",
     );
-    expect(screen.getByText("Recommended for you")).toBeInTheDocument();
+    expect(screen.getByText("Portfolio status")).toBeInTheDocument();
   });
 });
