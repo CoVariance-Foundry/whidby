@@ -75,9 +75,9 @@ test.describe("next= round-trip — authenticated flow", () => {
     "requires E2E_AUTH_EMAIL / E2E_AUTH_PASSWORD (see CLAUDE.md Auth & Test Accounts)",
   );
 
-  test("sign in without next -> lands on /reports", async ({ page }) => {
-    await signIn(page, { expectLandOn: /\/reports(\?|$)/ });
-    expect(new URL(page.url()).pathname).toBe("/reports");
+  test("sign in without next -> lands on dashboard", async ({ page }) => {
+    await signIn(page, { expectLandOn: (url) => url.pathname === "/" });
+    expect(new URL(page.url()).pathname).toBe("/");
   });
 
   test("sign in with ?next=/reports -> lands on /reports", async ({ page }) => {
@@ -119,37 +119,37 @@ test.describe("next= round-trip — open-redirect rejection", () => {
     "requires E2E_AUTH_EMAIL / E2E_AUTH_PASSWORD (see CLAUDE.md Auth & Test Accounts)",
   );
 
-  test("?next=//evil.com is ignored -> lands on /reports", async ({ page }) => {
+  test("?next=//evil.com is ignored -> lands on dashboard", async ({ page }) => {
     await signIn(page, {
       loginQuery: "?next=%2F%2Fevil.com",
-      expectLandOn: /\/reports(\?|$)/,
+      expectLandOn: (url) => url.pathname === "/",
     });
     const url = new URL(page.url());
     expect(url.hostname).toBe("localhost");
-    expect(url.pathname).toBe("/reports");
+    expect(url.pathname).toBe("/");
   });
 
-  test("?next=/\\evil.com is ignored -> lands on /reports", async ({ page }) => {
+  test("?next=/\\evil.com is ignored -> lands on dashboard", async ({ page }) => {
     // %2F = "/", %5C = "\"
     await signIn(page, {
       loginQuery: "?next=%2F%5Cevil.com",
-      expectLandOn: /\/reports(\?|$)/,
+      expectLandOn: (url) => url.pathname === "/",
     });
     const url = new URL(page.url());
     expect(url.hostname).toBe("localhost");
-    expect(url.pathname).toBe("/reports");
+    expect(url.pathname).toBe("/");
   });
 
-  test("?next=https://evil.com is ignored -> lands on /reports", async ({
+  test("?next=https://evil.com is ignored -> lands on dashboard", async ({
     page,
   }) => {
     await signIn(page, {
       loginQuery: "?next=https%3A%2F%2Fevil.com",
-      expectLandOn: /\/reports(\?|$)/,
+      expectLandOn: (url) => url.pathname === "/",
     });
     const url = new URL(page.url());
     expect(url.hostname).toBe("localhost");
-    expect(url.pathname).toBe("/reports");
+    expect(url.pathname).toBe("/");
   });
 });
 
@@ -163,18 +163,18 @@ test.describe("next= round-trip — authed user visits /login", () => {
   // and run in parallel. Playwright allocates a fresh browser context per test
   // by default; no shared session cookie is needed.
 
-  test("already-authed visit to /login -> /reports", async ({ page }) => {
-    await signIn(page, { expectLandOn: /\/reports(\?|$)/ });
+  test("already-authed visit to /login -> dashboard", async ({ page }) => {
+    await signIn(page, { expectLandOn: (url) => url.pathname === "/" });
     // Now already authenticated — hit /login again.
     await page.goto("/login");
-    await page.waitForURL(/\/reports(\?|$)/, { timeout: 10_000 });
-    expect(new URL(page.url()).pathname).toBe("/reports");
+    await page.waitForURL((url) => url.pathname === "/", { timeout: 10_000 });
+    expect(new URL(page.url()).pathname).toBe("/");
   });
 
   test("already-authed visit to /login?next=/reports/specific honors next", async ({
     page,
   }) => {
-    await signIn(page, { expectLandOn: /\/reports(\?|$)/ });
+    await signIn(page, { expectLandOn: (url) => url.pathname === "/" });
     await page.goto("/login?next=%2Freports%2Fspecific");
     await page.waitForURL(/\/reports\/specific$/, { timeout: 10_000 });
     expect(new URL(page.url()).pathname).toBe("/reports/specific");
