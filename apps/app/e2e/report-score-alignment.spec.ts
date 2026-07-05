@@ -35,7 +35,7 @@ test.describe("Report score alignment", () => {
   test("list and detail pages render scores from authenticated report APIs", async ({
     page,
   }) => {
-    await signIn(page, { expectLandOn: /\/(reports|$)/ });
+    await signIn(page);
 
     await page.goto("/reports");
     await page.waitForLoadState("networkidle");

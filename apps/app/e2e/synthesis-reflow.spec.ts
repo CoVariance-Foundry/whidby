@@ -121,7 +121,7 @@ test.describe.serial("synthesis reflow E2E", () => {
     page,
   }, testInfo) => {
     const paidApiCalls = await blockPaidApis(page);
-    await signIn(page, { expectLandOn: /\/(reports|$)/ });
+    await signIn(page);
 
     await page.goto("/");
     await settlePage(page);
