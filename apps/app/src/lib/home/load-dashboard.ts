@@ -79,6 +79,10 @@ interface OnboardingTargetRow {
   [key: string]: unknown;
 }
 
+interface RankedSiteDeclarationProbeRow {
+  id: string;
+}
+
 interface DashboardOnboardingContext {
   profile: OnboardingProfileRow | null;
   target: OnboardingTargetRow | null;
@@ -333,6 +337,29 @@ async function loadOnboardingContext(
   };
 }
 
+async function hasActiveRankedSiteDeclaration(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("ranked_site_declarations")
+    .select("id")
+    .eq("account_id", accountId)
+    .eq("active", true)
+    .in("proof_state", ["declared", "verified"])
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[dashboard] ranked-site declaration probe failed", {
+      message: error.message,
+    });
+    return false;
+  }
+
+  return Boolean(data as RankedSiteDeclarationProbeRow | null);
+}
+
 async function loadReportsDashboard(
   options: LoadDashboardOptions,
 ): Promise<{
@@ -393,6 +420,7 @@ export async function loadDashboard(
 
   let account: DashboardAccountState;
   let canLoadReports = false;
+  let hasRankedSiteDeclaration = false;
   let onboardingRows: Awaited<ReturnType<typeof loadOnboardingContext>> = {
     profile: null,
     target: null,
@@ -403,6 +431,10 @@ export async function loadDashboard(
     const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     onboardingRows = await loadOnboardingContext(supabase, user);
+    hasRankedSiteDeclaration = await hasActiveRankedSiteDeclaration(
+      supabase,
+      entitlement.account_id,
+    );
     canLoadReports = true;
 
     try {
@@ -453,7 +485,10 @@ export async function loadDashboard(
       : { reports: emptyReportsDashboard(), report_error: null };
   const segmentRoute = resolveOnboardingSegmentRoute({
     profile: onboardingRows.profile,
-    report_history: { completed_report_count: reports.stats.total_reports },
+    report_history: {
+      completed_report_count: reports.stats.total_reports,
+      has_ranked_site_declaration: hasRankedSiteDeclaration,
+    },
   });
   const onboarding: DashboardOnboardingContext = {
     profile: onboardingRows.profile,

@@ -256,6 +256,73 @@ describe("/api/ranked-site-declarations", () => {
     );
   });
 
+  it("does not clear stored site_url on domain-only PATCH", async () => {
+    const updated = declaration({
+      id: "target-declaration",
+      site_domain: "new-domain.example",
+    });
+    const supabase = createSupabaseMock({
+      updateResult: { data: updated, error: null },
+      listResult: { data: [updated], error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const req = new Request("http://localhost/api/ranked-site-declarations", {
+      method: "PATCH",
+      body: JSON.stringify({
+        id: "target-declaration",
+        site_domain: "new-domain.example",
+      }),
+    });
+
+    const res = await PATCH(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      status: "success",
+      declaration: updated,
+    });
+    const [payload] = supabase.update.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+    ];
+    expect(payload).toMatchObject({
+      updated_by_user_id: user.id,
+      site_domain: "new-domain.example",
+    });
+    expect(payload).not.toHaveProperty("site_url");
+  });
+
+  it("returns 409 when PATCH collides with an active declaration target", async () => {
+    const supabase = createSupabaseMock({
+      updateResult: {
+        data: null,
+        error: {
+          message: "duplicate active ranked-site declaration",
+          code: "23505",
+        },
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const req = new Request("http://localhost/api/ranked-site-declarations", {
+      method: "PATCH",
+      body: JSON.stringify({
+        id: "target-declaration",
+        site_domain: "duplicate.example",
+      }),
+    });
+
+    const res = await PATCH(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body).toEqual({
+      status: "error",
+      message: "duplicate active ranked-site declaration",
+    });
+  });
+
   it("does not let this user route mark declarations verified", async () => {
     const supabase = createSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);

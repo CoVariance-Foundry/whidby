@@ -139,6 +139,25 @@ describe("GET /auth/callback", () => {
     expect(res.headers.get("location")).toBe("http://localhost/explore");
   });
 
+  it("preserves cached-route stored routes even when intent maps elsewhere", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "cached_route_selected",
+          intent: "scale",
+          next_route: "/explore",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/auth/callback?code=ok"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost/explore");
+  });
+
   it("ignores unsafe next and applies onboarding resume logic", async () => {
     const supabase = createSupabaseMock({
       profileResult: {

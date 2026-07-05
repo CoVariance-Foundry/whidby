@@ -327,6 +327,33 @@ describe("loadDashboard", () => {
     expect(dashboard.onboarding.next_route).toBe("/strategies");
   });
 
+  it("uses active ranked-site declarations to route profiles without persisted intent to strategies", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+      declarationResult: { data: { id: "declaration-1" }, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ status: "success", dashboard: emptyReportsDashboardFixture() }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.onboarding.next_route).toBe("/strategies");
+    expect(supabase.declarationEqAccount).toHaveBeenCalledWith(
+      "account_id",
+      entitlement.account_id,
+    );
+  });
+
   it("routes first-run accounts with no reports to the dashboard", async () => {
     const supabase = createSupabaseMock({
       profileResult: { data: null, error: null },
@@ -546,9 +573,11 @@ type QueryResult = {
 function createSupabaseMock(options: {
   profileResult?: QueryResult;
   targetResult?: QueryResult;
+  declarationResult?: QueryResult;
 } = {}) {
   const profileResult = options.profileResult ?? { data: null, error: null };
   const targetResult = options.targetResult ?? { data: null, error: null };
+  const declarationResult = options.declarationResult ?? { data: null, error: null };
 
   const profileMaybeSingle = vi.fn().mockResolvedValue(profileResult);
   const profileEq = vi.fn(() => ({ maybeSingle: profileMaybeSingle }));
@@ -560,6 +589,13 @@ function createSupabaseMock(options: {
   const targetEq = vi.fn(() => ({ order: targetOrder }));
   const targetSelect = vi.fn(() => ({ eq: targetEq }));
 
+  const declarationMaybeSingle = vi.fn().mockResolvedValue(declarationResult);
+  const declarationLimit = vi.fn(() => ({ maybeSingle: declarationMaybeSingle }));
+  const declarationIn = vi.fn(() => ({ limit: declarationLimit }));
+  const declarationEqActive = vi.fn(() => ({ in: declarationIn }));
+  const declarationEqAccount = vi.fn(() => ({ eq: declarationEqActive }));
+  const declarationSelect = vi.fn(() => ({ eq: declarationEqAccount }));
+
   return {
     profileEq,
     profileMaybeSingle,
@@ -567,6 +603,11 @@ function createSupabaseMock(options: {
     targetOrder,
     targetLimit,
     targetMaybeSingle,
+    declarationEqAccount,
+    declarationEqActive,
+    declarationIn,
+    declarationLimit,
+    declarationMaybeSingle,
     from: vi.fn((table: string) => {
       if (table === "onboarding_profiles") {
         return {
@@ -576,6 +617,11 @@ function createSupabaseMock(options: {
       if (table === "onboarding_targets") {
         return {
           select: targetSelect,
+        };
+      }
+      if (table === "ranked_site_declarations") {
+        return {
+          select: declarationSelect,
         };
       }
       throw new Error(`Unexpected table ${table}`);

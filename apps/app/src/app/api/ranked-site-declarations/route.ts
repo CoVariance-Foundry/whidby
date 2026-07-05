@@ -100,6 +100,17 @@ function normalizeDomainFromPayload(payload: JsonObject): {
   };
 }
 
+function normalizeDomainPatchFromPayload(payload: JsonObject): JsonObject {
+  const domain = normalizeDomainFromPayload(payload);
+  const updates: JsonObject = { site_domain: domain.site_domain };
+
+  if (hasOwn(payload, "site_url")) {
+    updates.site_url = domain.site_url;
+  }
+
+  return updates;
+}
+
 function normalizeServiceFromPayload(payload: JsonObject): {
   niche_keyword: string;
   niche_normalized: string;
@@ -148,7 +159,7 @@ function buildPatchPayload(payload: JsonObject, userId: string) {
   }
 
   if (hasOwn(payload, "site_url") || hasOwn(payload, "site_domain")) {
-    Object.assign(updates, normalizeDomainFromPayload(payload));
+    Object.assign(updates, normalizeDomainPatchFromPayload(payload));
   }
 
   if (hasOwn(payload, "city")) {
@@ -348,6 +359,13 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
 
     if (updateError) {
+      if (updateError.code === "23505") {
+        return queryErrorResponse(
+          updateError,
+          "An active ranked-site declaration already exists for this site, city, and service.",
+          409,
+        );
+      }
       return queryErrorResponse(updateError, "Failed to update ranked-site declaration.");
     }
 

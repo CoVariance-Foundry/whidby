@@ -12,7 +12,6 @@ type OnboardingResumeProfile = {
 
 const SEGMENT_ROUTE_STATUSES: OnboardingProfileStatus[] = [
   "strategy_recommended",
-  "cached_route_selected",
 ];
 
 const INCOMPLETE_STATUSES: OnboardingProfileStatus[] = [
@@ -34,6 +33,10 @@ function resolveSuccessPath(
 
   if (profile.status === "target_selected") {
     return "/onboarding";
+  }
+
+  if (profile.status === "cached_route_selected") {
+    return isSafeNext(profile.next_route) ? profile.next_route : "/onboarding";
   }
 
   if (SEGMENT_ROUTE_STATUSES.includes(profile.status)) {
