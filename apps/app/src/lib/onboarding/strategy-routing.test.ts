@@ -29,7 +29,7 @@ describe("routeOnboardingToStrategy", () => {
       }),
     ).toMatchObject({
       starter: "easy_win",
-      next_route: "/strategies",
+      next_route: "/",
     });
   });
 
@@ -41,7 +41,7 @@ describe("routeOnboardingToStrategy", () => {
       }),
     ).toMatchObject({
       starter: "easy_win",
-      next_route: "/strategies",
+      next_route: "/",
     });
   });
 
@@ -124,14 +124,14 @@ describe("routeOnboardingToStrategy", () => {
       }),
     ).toMatchObject({
       starter: "easy_win",
-      next_route: "/strategies",
+      next_route: "/agency",
     });
   });
 
   it("routes coach or agency users without a focus to Easy Win", () => {
     expect(routeOnboardingToStrategy({ intent: "coach_agency" })).toMatchObject({
       starter: "easy_win",
-      next_route: "/strategies",
+      next_route: "/agency",
     });
   });
 });

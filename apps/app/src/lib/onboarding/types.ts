@@ -8,7 +8,7 @@ export type OnboardingIntent =
 
 export type StrategyId = StrategyPathId;
 
-export type OnboardingNextRoute = "/strategies" | "/explore" | "/agency";
+export type OnboardingNextRoute = "/" | "/strategies" | "/explore" | "/agency";
 
 export type OnboardingFocus =
   | "niche"

@@ -41,7 +41,7 @@ const routing = {
   starter: "easy_win",
   available: ["easy_win", "gbp_blitz", "keyword_hijack"],
   rationale: "Start with one city.",
-  next_route: "/strategies",
+  next_route: "/",
 } as const;
 
 function jsonResponse(body: unknown, init?: ResponseInit) {

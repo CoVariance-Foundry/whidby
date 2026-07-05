@@ -7,8 +7,8 @@
 | Metadata         | Value       |
 | ---------------- | ----------- |
 | **Status**       | approved    |
-| **Version**      | `1.8.0`     |
-| **Last Updated** | 2026-06-30  |
+| **Version**      | `1.8.1`     |
+| **Last Updated** | 2026-07-05  |
 | **Owner**        | @widby-team |
 
 
@@ -460,21 +460,28 @@ Report V1.1 must reuse canonical report lineage (`reports`, `metro_score_v2`, `s
 
 ### RankedSiteDeclaration (`ranked_site_declarations`)
 
-This table is planned for the Synthesis Reflow unlock contract. If implementation chooses account/profile columns instead of a separate table, the same fields and constraints must remain expressible and testable.
+This table persists the Synthesis Reflow unlock contract. Active declarations with `proof_state` of `declared` or `verified` unlock Expand & Conquer. Deactivation uses `active=false`; declarations are not user-deleted. The app-side pure unlock/domain helper lives at `apps/app/src/lib/strategies/ranked-site-declarations.ts`.
 
 | Field | Type | Required | Constraints | Description |
 | --- | --- | --- | --- | --- |
 | `id` | UUID | Yes | primary key | Stable declaration id |
 | `account_id` | UUID | Yes | references `accounts.id` | Account that receives the unlock |
-| `user_id` | UUID | Yes | references `user_profiles.user_id` | User who made or updated the declaration |
+| `created_by_user_id` | UUID | Yes | references `auth.users.id` | User who made the declaration |
+| `updated_by_user_id` | UUID | No | references `auth.users.id` | Last user to update the declaration |
+| `site_name` | text | Yes | non-empty | User-facing site/business label |
 | `site_url` | text | No | valid URL when present | User-entered ranked site URL |
-| `site_domain_normalized` | text | Yes | lowercase host/domain | Dedupe key and display-safe site identity |
-| `niche_normalized` | text | No | normalized service key | Optional service/niche associated with the ranked site |
+| `site_domain` | text | Yes | lowercase host/domain | Dedupe key and display-safe site identity |
+| `city` | text | Yes | non-empty | Primary ranked city |
+| `state` | text | Yes | at least two characters | State/admin region for the ranked city |
 | `cbsa_code` | text | No | references `metros.cbsa_code` when present | Optional primary market associated with the ranked site |
-| `proof_state` | text | Yes | `declared`, `verified`, `rejected`; default `declared` | Verification posture for future hardening |
+| `niche_keyword` | text | Yes | non-empty | Display service/niche associated with the ranked site |
+| `niche_normalized` | text | Yes | normalized service key | Dedupe key and strategy-run input |
+| `proof_state` | text | Yes | `declared`, `verified`, `needs_review`, `rejected`; default `declared` | Verification posture for future hardening |
 | `active` | boolean | Yes | default true | Inactive declarations do not unlock Expand & Conquer |
 | `metadata` | jsonb | Yes | default `{}` | Non-sensitive structured provenance; do not store secrets |
 | `declared_at` | timestamptz | Yes | default now() | Initial declaration timestamp |
+| `verified_at` | timestamptz | No | — | Verification timestamp when proof is upgraded |
+| `deactivated_at` | timestamptz | No | — | Set when the declaration is deactivated |
 | `created_at` | timestamptz | Yes | default now() | Creation timestamp |
 | `updated_at` | timestamptz | Yes | default now() | Last declaration update timestamp |
 
@@ -747,3 +754,4 @@ FIXED_WEIGHTS = {"demand": 0.25, "monetization": 0.20, "ai_resilience": 0.15}
 | 1.7.5   | 2026-05-24 | WHI-127 evidence lineage schema | Added raw SEO evidence artifacts and local-pack stable identifier lineage |
 | 1.7.6   | 2026-05-31 | WHI-127 review fix | Added persisted collection context id lineage for raw SEO evidence artifacts |
 | 1.8.0   | 2026-06-30 | Synthesis Reflow | Added segment routing inputs, unlock data contracts, and planned ranked-site declaration schema |
+| 1.8.1   | 2026-07-05 | WHI-153 ranked-site declaration | Updated ranked-site declaration schema to the implemented account/user-scoped persistence contract |

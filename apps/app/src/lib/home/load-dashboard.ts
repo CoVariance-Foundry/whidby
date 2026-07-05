@@ -8,6 +8,8 @@ import {
 } from "@/lib/account/entitlements";
 import { type AccountSummary, loadAccountSummary } from "@/lib/account/summary";
 import type { ActivityItem, RecommendedItem, StatCard } from "@/lib/home/types";
+import { resolveOnboardingSegmentRoute } from "@/lib/onboarding/segment-routing";
+import type { OnboardingNextRoute } from "@/lib/onboarding/types";
 import { loadStrategyCatalog } from "@/lib/strategies/catalog";
 import {
   getRunnableStrategyPathNodes,
@@ -19,7 +21,7 @@ import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strate
 import { createClient } from "@/lib/supabase/server";
 
 type LaunchSafeStrategyId = RunnableStrategyPathId;
-type DashboardNextRoute = "/strategies" | "/explore" | "/agency";
+type DashboardNextRoute = OnboardingNextRoute;
 
 interface DashboardError {
   message: string;
@@ -56,6 +58,7 @@ interface OnboardingProfileRow {
   id: string;
   user_id?: string | null;
   account_id?: string | null;
+  intent?: string | null;
   recommended_strategy_id?: string | null;
   available_strategy_ids?: string[] | null;
   next_route?: string | null;
@@ -74,6 +77,10 @@ interface OnboardingTargetRow {
   resolved_label?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
+}
+
+interface RankedSiteDeclarationProbeRow {
+  id: string;
 }
 
 interface DashboardOnboardingContext {
@@ -149,12 +156,6 @@ const FALLBACK_STRATEGY_ENTRIES = Object.fromEntries(
     },
   ]),
 ) as Record<LaunchSafeStrategyId, StrategyCatalogEntry>;
-const DASHBOARD_NEXT_ROUTES = new Set<string>([
-  "/strategies",
-  "/explore",
-  "/agency",
-]);
-
 function normalizeAppBaseUrl(baseUrl: string) {
   const trimmed = baseUrl.trim().replace(/\/$/, "");
   if (!trimmed) return "";
@@ -242,11 +243,6 @@ function normalizeShortcutStrategyIds(
     : [];
   const unique = Array.from(new Set([starter, ...shortcuts]));
   return unique.length ? unique : [STARTER_FALLBACK];
-}
-
-function normalizeDashboardNextRoute(value: unknown): DashboardNextRoute {
-  if (typeof value !== "string") return "/strategies";
-  return DASHBOARD_NEXT_ROUTES.has(value) ? (value as DashboardNextRoute) : "/strategies";
 }
 
 function filterLaunchCatalog(catalog: StrategyCatalogResponse): StrategyCatalogResponse {
@@ -341,6 +337,29 @@ async function loadOnboardingContext(
   };
 }
 
+async function hasActiveRankedSiteDeclaration(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("ranked_site_declarations")
+    .select("id")
+    .eq("account_id", accountId)
+    .eq("active", true)
+    .in("proof_state", ["declared", "verified"])
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[dashboard] ranked-site declaration probe failed", {
+      message: error.message,
+    });
+    return false;
+  }
+
+  return Boolean(data as RankedSiteDeclarationProbeRow | null);
+}
+
 async function loadReportsDashboard(
   options: LoadDashboardOptions,
 ): Promise<{
@@ -401,6 +420,7 @@ export async function loadDashboard(
 
   let account: DashboardAccountState;
   let canLoadReports = false;
+  let hasRankedSiteDeclaration = false;
   let onboardingRows: Awaited<ReturnType<typeof loadOnboardingContext>> = {
     profile: null,
     target: null,
@@ -411,6 +431,10 @@ export async function loadDashboard(
     const supabase = await createClient();
     const { user, entitlement } = await resolveEntitlementContext(supabase);
     onboardingRows = await loadOnboardingContext(supabase, user);
+    hasRankedSiteDeclaration = await hasActiveRankedSiteDeclaration(
+      supabase,
+      entitlement.account_id,
+    );
     canLoadReports = true;
 
     try {
@@ -455,18 +479,25 @@ export async function loadDashboard(
     starter: strategyEntryById(catalog, starter),
     shortcuts: shortcutIds.map((strategyId) => strategyEntryById(catalog, strategyId)),
   };
+  const { reports, report_error } =
+    canLoadReports
+      ? await loadReportsDashboard(options)
+      : { reports: emptyReportsDashboard(), report_error: null };
+  const segmentRoute = resolveOnboardingSegmentRoute({
+    profile: onboardingRows.profile,
+    report_history: {
+      completed_report_count: reports.stats.total_reports,
+      has_ranked_site_declaration: hasRankedSiteDeclaration,
+    },
+  });
   const onboarding: DashboardOnboardingContext = {
     profile: onboardingRows.profile,
     target: onboardingRows.target,
     starter_strategy_id: starter,
     shortcut_strategy_ids: shortcutIds,
-    next_route: normalizeDashboardNextRoute(onboardingRows.profile?.next_route),
+    next_route: segmentRoute.route,
     error: onboardingRows.error,
   };
-  const { reports, report_error } =
-    canLoadReports
-      ? await loadReportsDashboard(options)
-      : { reports: emptyReportsDashboard(), report_error: null };
 
   return {
     ...reports,

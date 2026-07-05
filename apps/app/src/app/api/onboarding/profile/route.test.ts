@@ -141,6 +141,50 @@ describe("/api/onboarding/profile", () => {
     expect(profileUpsertOptions).toEqual({ onConflict: "user_id" });
   });
 
+  it("persists first-segment users with the dashboard as their first surface", async () => {
+    const profile = {
+      id: "profile-1",
+      user_id: user.id,
+      account_id: entitlement.account_id,
+      intent: "find_first",
+      focus: "niche",
+      recommended_strategy_id: "easy_win",
+      available_strategy_ids: ["easy_win", "gbp_blitz", "keyword_hijack"],
+      next_route: "/",
+      status: "strategy_recommended",
+    };
+    const supabase = createSupabaseMock({
+      upsertResult: { data: profile, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const req = new Request("http://localhost/api/onboarding/profile", {
+      method: "POST",
+      body: JSON.stringify({
+        intent: "find_first",
+        focus: "niche",
+      }),
+    });
+
+    const res = await POST(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.routing).toMatchObject({
+      starter: "easy_win",
+      next_route: "/",
+    });
+    expect(supabase.profileUpsert).toHaveBeenCalledOnce();
+    const [profileUpsertPayload] = supabase.profileUpsert.mock.calls[0] as unknown as [
+      { next_route: string; user_id: string; account_id: string },
+    ];
+    expect(profileUpsertPayload).toMatchObject({
+      user_id: user.id,
+      account_id: entitlement.account_id,
+      next_route: "/",
+    });
+  });
+
   it("returns 400 for invalid intent and does not upsert", async () => {
     const supabase = createSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);

@@ -82,11 +82,12 @@ describe("GET /auth/callback", () => {
     expect(res.headers.get("location")).toBe("http://localhost/onboarding");
   });
 
-  it("redirects strategy_recommended profiles to their stored next_route", async () => {
+  it("redirects strategy_recommended profiles through their canonical segment route", async () => {
     const supabase = createSupabaseMock({
       profileResult: {
         data: {
           status: "strategy_recommended",
+          intent: "scale",
           next_route: "/strategies",
         },
         error: null,
@@ -100,11 +101,69 @@ describe("GET /auth/callback", () => {
     expect(res.headers.get("location")).toBe("http://localhost/strategies");
   });
 
+  it("uses persisted intent before stale stored routes", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "strategy_recommended",
+          intent: "find_first",
+          next_route: "/strategies",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/auth/callback?code=ok"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost/");
+  });
+
+  it("returns cached-route research users to Explore", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "cached_route_selected",
+          intent: "researching",
+          next_route: "/explore",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/auth/callback?code=ok"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost/explore");
+  });
+
+  it("preserves cached-route stored routes even when intent maps elsewhere", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "cached_route_selected",
+          intent: "scale",
+          next_route: "/explore",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/auth/callback?code=ok"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost/explore");
+  });
+
   it("ignores unsafe next and applies onboarding resume logic", async () => {
     const supabase = createSupabaseMock({
       profileResult: {
         data: {
           status: "target_selected",
+          intent: "scale",
           next_route: "/onboarding",
         },
         error: null,
@@ -125,6 +184,7 @@ describe("GET /auth/callback", () => {
       profileResult: {
         data: {
           status: "target_selected",
+          intent: "scale",
           next_route: "/strategies",
         },
         error: null,
@@ -140,7 +200,6 @@ describe("GET /auth/callback", () => {
 
   it.each([
     "report_queued",
-    "cached_route_selected",
     "upgrade_required",
     "report_ready",
   ])("redirects terminal onboarding status %s to reports", async (status) => {
@@ -148,6 +207,7 @@ describe("GET /auth/callback", () => {
       profileResult: {
         data: {
           status,
+          intent: "find_first",
           next_route: "/onboarding",
         },
         error: null,

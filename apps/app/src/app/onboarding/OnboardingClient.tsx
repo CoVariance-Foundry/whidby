@@ -42,9 +42,9 @@ type ProfileResponse = {
 
 const DEFAULT_ROUTING: OnboardingStrategyRouting = {
   starter: "easy_win",
-  available: ["easy_win", "cash_cow", "blue_ocean", "gbp_blitz"],
+  available: ["easy_win", "gbp_blitz", "keyword_hijack"],
   rationale: "Start with one city and one service so the first report is concrete.",
-  next_route: "/strategies",
+  next_route: "/",
 };
 
 type ProfileChoice = {

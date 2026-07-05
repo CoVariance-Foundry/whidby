@@ -109,7 +109,7 @@ function LoginForm() {
       failCountRef.current = 0;
       setLockedUntil(null);
       const nextParam = searchParams.get("next");
-      const dest = isSafeNext(nextParam) ? nextParam : "/reports";
+      const dest = isSafeNext(nextParam) ? nextParam : "/";
       router.replace(dest);
       router.refresh();
     }

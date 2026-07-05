@@ -180,6 +180,7 @@ describe("loadDashboard", () => {
       id: "profile-1",
       user_id: user.id,
       account_id: entitlement.account_id,
+      intent: "scale",
       recommended_strategy_id: "gbp_blitz",
       available_strategy_ids: ["gbp_blitz", "easy_win"],
       next_route: "/strategies",
@@ -278,6 +279,7 @@ describe("loadDashboard", () => {
       id: "profile-1",
       user_id: user.id,
       account_id: entitlement.account_id,
+      intent: "find_first",
       recommended_strategy_id: "cash_cow",
       available_strategy_ids: [
         "cash_cow",
@@ -304,12 +306,74 @@ describe("loadDashboard", () => {
       "gbp_blitz",
       "expand_conquer",
     ]);
-    expect(dashboard.onboarding.next_route).toBe("/strategies");
+    expect(dashboard.onboarding.next_route).toBe("/");
     expect(dashboard.strategies.shortcuts.map((strategy) => strategy.strategy_id)).toEqual([
       "easy_win",
       "gbp_blitz",
       "expand_conquer",
     ]);
+  });
+
+  it("uses report history to route profiles without a persisted intent to strategies", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.onboarding.next_route).toBe("/strategies");
+  });
+
+  it("uses active ranked-site declarations to route profiles without persisted intent to strategies", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+      declarationResult: { data: { id: "declaration-1" }, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ status: "success", dashboard: emptyReportsDashboardFixture() }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.onboarding.next_route).toBe("/strategies");
+    expect(supabase.declarationEqAccount).toHaveBeenCalledWith(
+      "account_id",
+      entitlement.account_id,
+    );
+  });
+
+  it("routes first-run accounts with no reports to the dashboard", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ status: "success", dashboard: emptyReportsDashboardFixture() }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.onboarding.next_route).toBe("/");
   });
 
   it("still loads reports when account summary loading fails after entitlement resolves", async () => {
@@ -509,9 +573,11 @@ type QueryResult = {
 function createSupabaseMock(options: {
   profileResult?: QueryResult;
   targetResult?: QueryResult;
+  declarationResult?: QueryResult;
 } = {}) {
   const profileResult = options.profileResult ?? { data: null, error: null };
   const targetResult = options.targetResult ?? { data: null, error: null };
+  const declarationResult = options.declarationResult ?? { data: null, error: null };
 
   const profileMaybeSingle = vi.fn().mockResolvedValue(profileResult);
   const profileEq = vi.fn(() => ({ maybeSingle: profileMaybeSingle }));
@@ -523,6 +589,13 @@ function createSupabaseMock(options: {
   const targetEq = vi.fn(() => ({ order: targetOrder }));
   const targetSelect = vi.fn(() => ({ eq: targetEq }));
 
+  const declarationMaybeSingle = vi.fn().mockResolvedValue(declarationResult);
+  const declarationLimit = vi.fn(() => ({ maybeSingle: declarationMaybeSingle }));
+  const declarationIn = vi.fn(() => ({ limit: declarationLimit }));
+  const declarationEqActive = vi.fn(() => ({ in: declarationIn }));
+  const declarationEqAccount = vi.fn(() => ({ eq: declarationEqActive }));
+  const declarationSelect = vi.fn(() => ({ eq: declarationEqAccount }));
+
   return {
     profileEq,
     profileMaybeSingle,
@@ -530,6 +603,11 @@ function createSupabaseMock(options: {
     targetOrder,
     targetLimit,
     targetMaybeSingle,
+    declarationEqAccount,
+    declarationEqActive,
+    declarationIn,
+    declarationLimit,
+    declarationMaybeSingle,
     from: vi.fn((table: string) => {
       if (table === "onboarding_profiles") {
         return {
@@ -541,7 +619,31 @@ function createSupabaseMock(options: {
           select: targetSelect,
         };
       }
+      if (table === "ranked_site_declarations") {
+        return {
+          select: declarationSelect,
+        };
+      }
       throw new Error(`Unexpected table ${table}`);
     }),
+  };
+}
+
+function emptyReportsDashboardFixture() {
+  return {
+    stats: {
+      total_reports: 0,
+      avg_score: 0,
+      watchlist: 0,
+      niches_scored: 0,
+    },
+    recent: [],
+    recommended: [],
+    stat_cards: [
+      { label: "Niches scored", value: "0" },
+      { label: "Watchlist", value: "0" },
+      { label: "Avg score", value: "0" },
+      { label: "Reports", value: "0" },
+    ],
   };
 }
