@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Icon, I } from "@/lib/icons";
+import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ReportActions from "@/components/reports/ReportActions";
@@ -210,6 +211,11 @@ function ScoreCell({
         {label}
         <ScoreInfoHover scoreKey={scoreKey} />
       </div>
+      {scoreKey === "ai_resilience" ? (
+        <div style={{ marginTop: 7 }}>
+          <AIResilienceFlagBadge score={value} />
+        </div>
+      ) : null}
     </div>
   );
 }
