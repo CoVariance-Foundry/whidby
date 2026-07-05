@@ -13,7 +13,7 @@ import type { OnboardingNextRoute } from "@/lib/onboarding/types";
 import { loadStrategyCatalog } from "@/lib/strategies/catalog";
 import {
   getRunnableStrategyPathNodes,
-  isRunnableStrategyId,
+  isUserFacingStrategyId,
   sortByStrategyPathOrder,
 } from "@/lib/strategies/path-registry";
 import type { RunnableStrategyPathId } from "@/lib/strategies/path-registry";
@@ -89,6 +89,8 @@ interface DashboardOnboardingContext {
   starter_strategy_id: LaunchSafeStrategyId;
   shortcut_strategy_ids: LaunchSafeStrategyId[];
   next_route: DashboardNextRoute;
+  has_completed_scan: boolean;
+  has_ranked_site_declaration: boolean;
   error: DashboardError | null;
 }
 
@@ -247,7 +249,7 @@ function normalizeShortcutStrategyIds(
 
 function filterLaunchCatalog(catalog: StrategyCatalogResponse): StrategyCatalogResponse {
   const strategies = sortByStrategyPathOrder(
-    catalog.strategies.filter((strategy) => isRunnableStrategyId(strategy.strategy_id)),
+    catalog.strategies.filter((strategy) => isUserFacingStrategyId(strategy.strategy_id)),
   );
   return {
     ...catalog,
@@ -420,6 +422,7 @@ export async function loadDashboard(
 
   let account: DashboardAccountState;
   let canLoadReports = false;
+  let hasCompletedScan = false;
   let hasRankedSiteDeclaration = false;
   let onboardingRows: Awaited<ReturnType<typeof loadOnboardingContext>> = {
     profile: null,
@@ -439,6 +442,7 @@ export async function loadDashboard(
 
     try {
       const summary = await loadAccountSummary({ supabase, user, entitlement });
+      hasCompletedScan = summary.fresh_reports_used > 0;
       account = {
         status: "ready",
         error: null,
@@ -486,7 +490,7 @@ export async function loadDashboard(
   const segmentRoute = resolveOnboardingSegmentRoute({
     profile: onboardingRows.profile,
     report_history: {
-      completed_report_count: reports.stats.total_reports,
+      completed_report_count: hasCompletedScan ? 1 : 0,
       has_ranked_site_declaration: hasRankedSiteDeclaration,
     },
   });
@@ -496,6 +500,8 @@ export async function loadDashboard(
     starter_strategy_id: starter,
     shortcut_strategy_ids: shortcutIds,
     next_route: segmentRoute.route,
+    has_completed_scan: hasCompletedScan,
+    has_ranked_site_declaration: hasRankedSiteDeclaration,
     error: onboardingRows.error,
   };
 

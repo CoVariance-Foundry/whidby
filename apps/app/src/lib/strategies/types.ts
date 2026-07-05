@@ -59,6 +59,7 @@ export interface StrategyRunRequest {
   service?: string;
   primary_keyword?: string | null;
   reference_city_id?: string | null;
+  feasibility_preflight_passed?: boolean;
   ai_resilience_filter?: boolean;
   limit?: number;
   targets?: Record<string, unknown>[];

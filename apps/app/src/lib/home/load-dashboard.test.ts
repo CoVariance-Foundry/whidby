@@ -106,11 +106,13 @@ const strategyCatalog = {
       input_shape: "reference_city_service",
     },
     {
-      strategy_id: "cash_cow",
-      name: "Cash Cow",
-      description: "Phase 2 lead economics.",
-      status: "phase_2",
+      strategy_id: "portfolio_builder",
+      name: "Portfolio Builder",
+      description: "Plan portfolio moves.",
+      status: "locked",
       input_shape: "cached_scan",
+      path_role: "locked_teaser",
+      is_runnable: false,
     },
   ],
   global_modifiers: [
@@ -226,6 +228,7 @@ describe("loadDashboard", () => {
       starter_strategy_id: "gbp_blitz",
       shortcut_strategy_ids: ["gbp_blitz", "easy_win"],
       next_route: "/strategies",
+      has_completed_scan: true,
       error: null,
     });
     expect(dashboard.strategies.starter.strategy_id).toBe("gbp_blitz");
@@ -238,6 +241,7 @@ describe("loadDashboard", () => {
       "gbp_blitz",
       "expand_conquer",
       "keyword_hijack",
+      "portfolio_builder",
     ]);
     expect(dashboard.report_error).toBeNull();
     expect(dashboard.multi_market_available).toBe(true);
@@ -333,6 +337,11 @@ describe("loadDashboard", () => {
       declarationResult: { data: { id: "declaration-1" }, error: null },
     });
     mocks.createClient.mockResolvedValue(supabase);
+    mocks.loadAccountSummary.mockResolvedValueOnce({
+      ...accountSummary,
+      fresh_reports_used: 0,
+      fresh_reports_remaining: 10,
+    });
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({ status: "success", dashboard: emptyReportsDashboardFixture() }),
@@ -359,6 +368,11 @@ describe("loadDashboard", () => {
       profileResult: { data: null, error: null },
     });
     mocks.createClient.mockResolvedValue(supabase);
+    mocks.loadAccountSummary.mockResolvedValueOnce({
+      ...accountSummary,
+      fresh_reports_used: 0,
+      fresh_reports_remaining: 10,
+    });
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({ status: "success", dashboard: emptyReportsDashboardFixture() }),
@@ -373,6 +387,27 @@ describe("loadDashboard", () => {
       app_base_url: "https://app.example.test",
     });
 
+    expect(dashboard.onboarding.next_route).toBe("/");
+    expect(dashboard.onboarding.has_completed_scan).toBe(false);
+  });
+
+  it("does not treat shared cached dashboard reports as a completed account scan", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: { data: null, error: null },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.loadAccountSummary.mockResolvedValueOnce({
+      ...accountSummary,
+      fresh_reports_used: 0,
+      fresh_reports_remaining: 10,
+    });
+
+    const dashboard = await loadDashboard({
+      app_base_url: "https://app.example.test",
+    });
+
+    expect(dashboard.stats.total_reports).toBe(2);
+    expect(dashboard.onboarding.has_completed_scan).toBe(false);
     expect(dashboard.onboarding.next_route).toBe("/");
   });
 

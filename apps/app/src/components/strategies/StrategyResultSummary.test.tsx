@@ -57,7 +57,7 @@ describe("StrategyResultSummary", () => {
     expect(screen.getByRole("img", { name: "Strategy score: 86 out of 100, high" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open full report/i })).toHaveAttribute(
       "href",
-      "/reports?open=report-1",
+      "/reports/report-1",
     );
   });
 

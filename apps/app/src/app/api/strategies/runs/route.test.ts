@@ -11,6 +11,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: mocks.createClient,
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => ({ rpc: vi.fn() })),
+}));
+
 vi.mock("@/lib/account/entitlements", () => {
   class EntitlementError extends Error {
     constructor(
@@ -151,7 +155,10 @@ describe("POST /api/strategies/runs", () => {
       body: JSON.stringify({
         mode: "fresh",
         strategy_id: "keyword_hijack",
+        city: "Boise",
+        service: "plumbing",
         primary_keyword: "boise plumber",
+        feasibility_preflight_passed: true,
       }),
     });
 
@@ -165,7 +172,10 @@ describe("POST /api/strategies/runs", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({
       mode: "fresh",
       strategy_id: "keyword_hijack",
+      city: "Boise",
+      service: "plumbing",
       primary_keyword: "boise plumber",
+      feasibility_preflight_passed: true,
       quota_consumed: 1,
       account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
@@ -179,6 +189,49 @@ describe("POST /api/strategies/runs", () => {
       expect.anything(),
       "33333333-3333-3333-3333-333333333333",
     );
+  });
+
+  it("rejects Keyword Hijack fresh runs before consuming quota when feasibility is missing", async () => {
+    const req = new Request("http://localhost/api/strategies/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "fresh",
+        strategy_id: "keyword_hijack",
+        primary_keyword: "boise plumber",
+      }),
+    });
+
+    const res = await POST(req as never);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "keyword_hijack_feasibility_required",
+    });
+    expect(mocks.consumeReportQuota).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects Keyword Hijack fresh runs before consuming quota when target shape is invalid", async () => {
+    const req = new Request("http://localhost/api/strategies/runs", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "fresh",
+        strategy_id: "keyword_hijack",
+        city: "Boise",
+        service: "plumbing",
+        primary_keyword: "plumber",
+        feasibility_preflight_passed: true,
+      }),
+    });
+
+    const res = await POST(req as never);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "keyword_hijack_feasibility_required",
+    });
+    expect(mocks.consumeReportQuota).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("normalizes legacy lens_id to strategy_id for upstream runs", async () => {

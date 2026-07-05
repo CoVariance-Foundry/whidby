@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { AIResilienceModifierControls } from "@/components/AIResilienceModifierControls";
+import Term from "@/components/glossary/Term";
 import { StrategyResultSummary } from "@/components/strategies/StrategyResultSummary";
 import {
   DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
@@ -34,6 +35,7 @@ interface LiveReportTarget {
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
+  feasibilityPreflightPassed: boolean;
   aiResilienceModifier: AIResilienceModifierState;
   limit: number;
 }
@@ -129,6 +131,10 @@ function normalizeResult({
   const score = readNumber(record, ["score", "strategy_score", "opportunity_score"]);
   const evidence = readStringArray(record.strategy_evidence).concat(readStringArray(record.evidence));
   const warnings = readStringArray(record.warnings);
+  const strategyWarnings =
+    strategy.strategy_id === "keyword_hijack"
+      ? [...warnings, "Keyword Hijack risk: feasibility preflight passed"]
+      : warnings;
   const aiResilienceScore = readAIResilienceScore(record);
   const scores = asRecord(record.scores);
   const confidence = asRecord(record.confidence ?? scores.confidence);
@@ -144,7 +150,7 @@ function normalizeResult({
     confidenceScore: readNumber(record, ["confidence_score"]) ?? readNumber(confidence, ["score"]),
     reportId: readOptionalString(record, ["report_id"]),
     evidence,
-    warnings,
+    warnings: strategyWarnings,
     aiResilienceScore,
     sourceContext: {
       strategy_id: strategy.strategy_id,
@@ -156,7 +162,7 @@ function normalizeResult({
 
 function inputHint(strategy: StrategyCatalogEntry) {
   if (strategy.input_shape === "city_service_keyword") {
-    return "Send a city, service, and one primary keyword to rank matching markets.";
+    return "Validate one primary keyword before any fresh-report spend.";
   }
   if (strategy.input_shape === "reference_city_service") {
     return "Send a reference city and service to search lookalike expansion markets.";
@@ -207,6 +213,7 @@ function liveReportTarget({
   service,
   primaryKeyword,
   referenceCityId,
+  feasibilityPreflightPassed,
   aiResilienceModifier,
   limit,
 }: {
@@ -215,6 +222,7 @@ function liveReportTarget({
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
+  feasibilityPreflightPassed: boolean;
   aiResilienceModifier: AIResilienceModifierState;
   limit: number;
 }): LiveReportTarget {
@@ -227,6 +235,8 @@ function liveReportTarget({
       strategy.input_shape === "city_service_keyword" ? primaryKeyword.trim() : "",
     referenceCityId:
       strategy.input_shape === "reference_city_service" ? referenceCityId.trim() : "",
+    feasibilityPreflightPassed:
+      strategy.strategy_id === "keyword_hijack" ? feasibilityPreflightPassed : false,
     aiResilienceModifier,
     limit,
   };
@@ -247,6 +257,7 @@ function liveReportTargetKey(target: LiveReportTarget) {
     target.referenceCityId,
     target.service,
     target.primaryKeyword,
+    target.feasibilityPreflightPassed,
     target.aiResilienceModifier.threshold,
     target.aiResilienceModifier.hide_flagged,
     target.limit,
@@ -271,6 +282,10 @@ function buildFreshRunPayload(target: LiveReportTarget): StrategyRunRequest {
 
   if (target.inputShape === "city_service_keyword") {
     payload.primary_keyword = target.primaryKeyword;
+  }
+
+  if (target.strategyId === "keyword_hijack") {
+    payload.feasibility_preflight_passed = target.feasibilityPreflightPassed;
   }
 
   return payload;
@@ -391,6 +406,22 @@ function LiveReportRecoveryCard({
         </div>
       </div>
 
+      {target.strategyId === "keyword_hijack" ? (
+        <div
+          style={{
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            background: "var(--warn-soft)",
+            color: "var(--warn)",
+            padding: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          Feasibility preflight passed. Keep the keyword lens narrow and avoid keyword stuffing or misleading page intent.
+        </div>
+      ) : null}
+
       <p style={{ margin: 0, color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5 }}>
         Live report generation uses 1 monthly report credit for paid users. Free users can keep browsing cached results or upgrade from Settings.
       </p>
@@ -473,7 +504,7 @@ function LiveReportRecoveryCard({
           {reportId ? (
             <>
               {" "}
-              <a href={`/reports?open=${encodeURIComponent(reportId)}`} style={{ color: "inherit", fontWeight: 800 }}>
+              <a href={`/reports/${encodeURIComponent(reportId)}`} style={{ color: "inherit", fontWeight: 800 }}>
                 Open report
               </a>
               .
@@ -489,11 +520,19 @@ function LiveReportRecoveryCard({
   );
 }
 
-export default function StrategyPageClient({ strategy }: { strategy: StrategyCatalogEntry }) {
+export default function StrategyPageClient({
+  strategy,
+  lockedReason = null,
+}: {
+  strategy: StrategyCatalogEntry;
+  lockedReason?: string | null;
+}) {
   const [city, setCity] = useState("");
   const [service, setService] = useState("");
   const [primaryKeyword, setPrimaryKeyword] = useState("");
   const [referenceCityId, setReferenceCityId] = useState("");
+  const [keywordIntentConfirmed, setKeywordIntentConfirmed] = useState(false);
+  const [keywordComplianceConfirmed, setKeywordComplianceConfirmed] = useState(false);
   const [aiResilienceModifier, setAiResilienceModifier] = useState<AIResilienceModifierState>(
     DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
   );
@@ -507,7 +546,10 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   const zeroResultTargetKeyRef = useRef<string | null>(null);
 
   const isPhase2Unavailable = strategy.status === "phase_2";
-  const isUnavailable = isPhase2Unavailable;
+  const isUnavailable = isPhase2Unavailable || Boolean(lockedReason);
+  const isKeywordHijack = strategy.strategy_id === "keyword_hijack";
+  const feasibilityPreflightPassed =
+    !isKeywordHijack || (keywordIntentConfirmed && keywordComplianceConfirmed);
 
   const visibleResults = useMemo(
     () =>
@@ -526,10 +568,24 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       return referenceCityId.trim().length > 0 && service.trim().length > 0;
     }
     if (strategy.input_shape === "city_service_keyword") {
-      return city.trim().length > 0 && service.trim().length > 0 && primaryKeyword.trim().length > 0;
+      return (
+        city.trim().length > 0 &&
+        service.trim().length > 0 &&
+        primaryKeyword.trim().length > 0 &&
+        feasibilityPreflightPassed
+      );
     }
     return city.trim().length > 0 && service.trim().length > 0;
-  }, [city, isLoading, isUnavailable, primaryKeyword, referenceCityId, service, strategy.input_shape]);
+  }, [
+    city,
+    feasibilityPreflightPassed,
+    isLoading,
+    isUnavailable,
+    primaryKeyword,
+    referenceCityId,
+    service,
+    strategy.input_shape,
+  ]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -550,6 +606,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       service,
       primaryKeyword,
       referenceCityId,
+      feasibilityPreflightPassed,
       aiResilienceModifier,
       limit,
     });
@@ -711,6 +768,24 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
           </div>
         ) : null}
 
+        {lockedReason ? (
+          <div
+            role="status"
+            style={{
+              border: "1px solid var(--rule)",
+              borderRadius: 8,
+              background: "var(--warn-soft)",
+              color: "var(--warn)",
+              padding: 12,
+              fontSize: 13,
+              lineHeight: 1.5,
+              marginBottom: 16,
+            }}
+          >
+            {lockedReason}
+          </div>
+        ) : null}
+
         <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {strategy.input_shape === "reference_city_service" ? (
             <label>
@@ -772,6 +847,52 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
                 />
               </div>
             </label>
+          ) : null}
+
+          {isKeywordHijack ? (
+            <fieldset
+              style={{
+                border: "1px solid var(--rule)",
+                borderRadius: 8,
+                padding: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                background: "var(--paper-alt)",
+              }}
+            >
+              <legend
+                style={{
+                  color: "var(--ink)",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  padding: "0 4px",
+                }}
+              >
+                <Term termKey="feasibility" label="Feasibility preflight" />
+              </legend>
+              <p style={{ color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+                Confirm the keyword is a real service-intent query before spending a fresh report credit.
+              </p>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "var(--ink-2)", fontSize: 13, lineHeight: 1.45 }}>
+                <input
+                  type="checkbox"
+                  checked={keywordIntentConfirmed}
+                  onChange={(event) => setKeywordIntentConfirmed(event.target.checked)}
+                  disabled={isUnavailable}
+                />
+                The keyword matches the city and service intent.
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "var(--ink-2)", fontSize: 13, lineHeight: 1.45 }}>
+                <input
+                  type="checkbox"
+                  checked={keywordComplianceConfirmed}
+                  onChange={(event) => setKeywordComplianceConfirmed(event.target.checked)}
+                  disabled={isUnavailable}
+                />
+                The plan avoids keyword stuffing and misleading page intent.
+              </label>
+            </fieldset>
           ) : null}
 
           <label>

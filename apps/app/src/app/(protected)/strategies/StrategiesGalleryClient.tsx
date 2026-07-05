@@ -1,11 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Term from "@/components/glossary/Term";
 import { Icon, I } from "@/lib/icons";
 import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strategies/types";
 import { sortByStrategyPathOrder } from "@/lib/strategies/path-registry";
+import StrategyPageClient from "./[id]/StrategyPageClient";
+
+export interface StrategyPathUnlockState {
+  has_completed_scan: boolean;
+  has_ranked_site_declaration: boolean;
+}
+
+const DEFAULT_UNLOCK_STATE: StrategyPathUnlockState = {
+  has_completed_scan: false,
+  has_ranked_site_declaration: false,
+};
 
 const inputLabels: Record<StrategyCatalogEntry["input_shape"], string> = {
   city_service: "City + service",
@@ -13,12 +23,6 @@ const inputLabels: Record<StrategyCatalogEntry["input_shape"], string> = {
   reference_city_service: "Reference city + service",
   cached_scan: "Cached scan",
 };
-
-function pathRoleLabel(strategy: StrategyCatalogEntry) {
-  if (strategy.path_role === "side_branch") return "Side branch";
-  if (strategy.path_role === "locked_teaser") return "Locked";
-  return "Path step";
-}
 
 function strategyTitle(strategy: StrategyCatalogEntry): ReactNode {
   if (strategy.strategy_id === "portfolio_builder") {
@@ -59,104 +63,174 @@ function unlockLabel(strategy: StrategyCatalogEntry): ReactNode {
   return requirement.label;
 }
 
-function StrategyCard({ strategy }: { strategy: StrategyCatalogEntry }) {
-  const isLocked = strategy.is_runnable === false || strategy.path_role === "locked_teaser";
-  const badgeColor = isLocked ? "var(--warn)" : "var(--accent)";
-  const badgeBackground = isLocked ? "var(--warn-soft)" : "var(--accent-soft)";
+function isUnlocked(strategy: StrategyCatalogEntry, unlockState: StrategyPathUnlockState) {
+  if (strategy.is_runnable === false || strategy.path_role === "locked_teaser") return false;
+  const requirementId = strategy.unlock_requirement?.requirement_id ?? "none";
+  if (requirementId === "none") return true;
+  if (requirementId === "scan_completed") return unlockState.has_completed_scan;
+  if (requirementId === "ranked_site_declaration") {
+    return unlockState.has_ranked_site_declaration;
+  }
+  if (requirementId === "feasibility_preflight") return true;
+  return false;
+}
+
+function currentPathStrategyId(unlockState: StrategyPathUnlockState) {
+  if (unlockState.has_ranked_site_declaration) return "expand_conquer";
+  if (unlockState.has_completed_scan) return "gbp_blitz";
+  return "easy_win";
+}
+
+function lockMessage(strategy: StrategyCatalogEntry) {
+  const requirementId = strategy.unlock_requirement?.requirement_id;
+  if (strategy.path_role === "locked_teaser" || requirementId === "future_release") {
+    return "Future path node; not runnable in this project.";
+  }
+  if (requirementId === "scan_completed") return "Complete a scan to unlock this step.";
+  if (requirementId === "ranked_site_declaration") {
+    return "Declare a ranked site to unlock this expansion step.";
+  }
+  return "This strategy is not available yet.";
+}
+
+function StrategyPathNode({
+  strategy,
+  unlockState,
+  selected,
+  current,
+  onSelect,
+}: {
+  strategy: StrategyCatalogEntry;
+  unlockState: StrategyPathUnlockState;
+  selected: boolean;
+  current: boolean;
+  onSelect: (strategy: StrategyCatalogEntry) => void;
+}) {
+  const unlocked = isUnlocked(strategy, unlockState);
+  const locked = !unlocked;
+  const sideBranch = strategy.path_role === "side_branch";
+  const lockedTeaser = strategy.path_role === "locked_teaser";
   const unlock = unlockLabel(strategy);
+
   return (
     <article
       style={{
-        background: "var(--card)",
-        border: "1px solid var(--rule)",
+        background: selected ? "var(--accent-soft)" : "var(--card)",
+        border: selected ? "1px solid var(--accent)" : "1px solid var(--rule)",
         borderRadius: 8,
-        padding: 18,
-        display: "flex",
-        flexDirection: "column",
-        gap: 14,
-        minHeight: 210,
+        padding: 14,
+        display: "grid",
+        gap: 12,
+        minHeight: 188,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
         <div>
-          <h2 style={{ fontFamily: "var(--serif)", fontSize: 19, margin: 0, color: "var(--ink)" }}>
+          <div style={{ color: "var(--ink-3)", fontFamily: "var(--mono)", fontSize: 12 }}>
+            {sideBranch ? "Side branch" : lockedTeaser ? "Future" : `Step ${strategy.path_order ?? ""}`}
+          </div>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "5px 0 0", color: "var(--ink)" }}>
             {strategyTitle(strategy)}
           </h2>
-          <div
+        </div>
+        {current ? (
+          <span
             style={{
-              color: "var(--ink-3)",
-              fontSize: 12,
-              marginTop: 6,
-              fontFamily: "var(--mono)",
+              alignSelf: "flex-start",
+              border: "1px solid var(--accent)",
+              borderRadius: 999,
+              color: "var(--accent-ink)",
+              background: "var(--accent-soft)",
+              fontSize: 11,
+              fontWeight: 800,
+              padding: "4px 8px",
+              whiteSpace: "nowrap",
             }}
           >
-            {strategy.strategy_id}
-          </div>
-        </div>
-        <span
-          style={{
-            alignSelf: "flex-start",
-            border: "1px solid var(--rule-strong)",
-            borderRadius: 999,
-            color: badgeColor,
-            background: badgeBackground,
-            fontSize: 11,
-            fontWeight: 700,
-            padding: "4px 8px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {pathRoleLabel(strategy)}
-        </span>
+            Current
+          </span>
+        ) : null}
       </div>
 
-      <p style={{ color: "var(--ink-2)", fontSize: 14, lineHeight: 1.5, margin: 0 }}>
+      <p style={{ color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5, margin: 0 }}>
         {strategyDescription(strategy)}
       </p>
-      {unlock ? (
-        <div style={{ color: "var(--ink-3)", fontSize: 12, lineHeight: 1.45 }}>
-          Unlock: {unlock}
-        </div>
-      ) : null}
 
-      <div style={{ marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <span style={{ color: "var(--ink-3)", fontSize: 12 }}>
-          {inputLabels[strategy.input_shape]}
-        </span>
-        {isLocked ? (
-          <span
-            className="btn-ghost"
-            aria-label={`${strategy.name} is locked`}
-            aria-disabled="true"
-            style={{ opacity: 0.72 }}
-          >
-            Locked
-          </span>
-        ) : (
-          <Link
-            href={`/strategies/${strategy.strategy_id}`}
-            className="btn-primary"
-            style={{ textDecoration: "none" }}
-            aria-label={`Open ${strategy.name}`}
-          >
-            Open <Icon d={I.arrow} />
-          </Link>
-        )}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ color: "var(--ink-3)", fontSize: 12 }}>{inputLabels[strategy.input_shape]}</span>
+        {unlock ? <span style={{ color: "var(--ink-3)", fontSize: 12 }}>Unlock: {unlock}</span> : null}
       </div>
+
+      {locked ? (
+        <div
+          aria-label={`${strategy.name} is locked`}
+          aria-disabled="true"
+          style={{
+            marginTop: "auto",
+            color: "var(--warn)",
+            background: "var(--warn-soft)",
+            border: "1px solid var(--rule)",
+            borderRadius: 8,
+            padding: "9px 10px",
+            fontSize: 12,
+            lineHeight: 1.45,
+          }}
+        >
+          {lockMessage(strategy)}
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={selected ? "btn-primary" : "btn-ghost"}
+          aria-pressed={selected}
+          onClick={() => onSelect(strategy)}
+          style={{ marginTop: "auto", justifySelf: "start" }}
+        >
+          {selected ? "Working here" : "Work this step"} <Icon d={I.arrow} />
+        </button>
+      )}
     </article>
   );
 }
 
-export default function StrategiesGalleryClient({ catalog }: { catalog: StrategyCatalogResponse }) {
-  const pathSteps = sortByStrategyPathOrder(
-    catalog.strategies.filter((strategy) => strategy.path_role === "rail_step"),
+export default function StrategiesGalleryClient({
+  catalog,
+  unlockState = DEFAULT_UNLOCK_STATE,
+}: {
+  catalog: StrategyCatalogResponse;
+  unlockState?: StrategyPathUnlockState;
+}) {
+  const pathSteps = useMemo(
+    () => sortByStrategyPathOrder(catalog.strategies.filter((strategy) => strategy.path_role === "rail_step")),
+    [catalog.strategies],
   );
-  const sideBranches = sortByStrategyPathOrder(
-    catalog.strategies.filter((strategy) => strategy.path_role === "side_branch"),
+  const sideBranches = useMemo(
+    () => sortByStrategyPathOrder(catalog.strategies.filter((strategy) => strategy.path_role === "side_branch")),
+    [catalog.strategies],
   );
-  const lockedTeasers = sortByStrategyPathOrder(
-    catalog.strategies.filter((strategy) => strategy.path_role === "locked_teaser"),
+  const lockedTeasers = useMemo(
+    () => sortByStrategyPathOrder(catalog.strategies.filter((strategy) => strategy.path_role === "locked_teaser")),
+    [catalog.strategies],
   );
+  const runnableStrategies = useMemo(
+    () =>
+      [...pathSteps, ...sideBranches].filter((strategy) =>
+        isUnlocked(strategy, unlockState),
+      ),
+    [pathSteps, sideBranches, unlockState],
+  );
+  const currentStrategyId = currentPathStrategyId(unlockState);
+  const initialStrategy =
+    runnableStrategies.find((strategy) => strategy.strategy_id === currentStrategyId) ??
+    runnableStrategies[0] ??
+    pathSteps[0] ??
+    sideBranches[0];
+  const [selectedStrategyId, setSelectedStrategyId] = useState(
+    initialStrategy?.strategy_id ?? "easy_win",
+  );
+  const selectedStrategy =
+    runnableStrategies.find((strategy) => strategy.strategy_id === selectedStrategyId) ??
+    initialStrategy;
   const aiModifier = catalog.global_modifiers.find((modifier) => modifier.modifier_id === "ai_resilience");
 
   return (
@@ -167,7 +241,7 @@ export default function StrategiesGalleryClient({ catalog }: { catalog: Strategy
             Strategy path
           </h1>
           <p className="page-sub" style={{ marginBottom: 0 }}>
-            Follow the production path from first scan to expansion, with side-branch checks surfaced only where they fit the work.
+            Work the launch path from first scan to expansion, with risky keyword moves gated before spend.
           </p>
         </div>
         {aiModifier ? (
@@ -190,63 +264,95 @@ export default function StrategiesGalleryClient({ catalog }: { catalog: Strategy
         ) : null}
       </header>
 
-      <section aria-labelledby="path-strategies">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h2 id="path-strategies" style={{ fontSize: 13, color: "var(--ink-3)", textTransform: "uppercase", fontWeight: 700, margin: 0 }}>
-            Path steps
-          </h2>
-          <span style={{ color: "var(--ink-3)", fontSize: 12 }}>{pathSteps.length} available</span>
-        </div>
+      <section aria-label="B2 strategy path rail">
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 14,
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+            gap: 12,
           }}
         >
           {pathSteps.map((strategy) => (
-            <StrategyCard key={strategy.strategy_id} strategy={strategy} />
+            <StrategyPathNode
+              key={strategy.strategy_id}
+              strategy={strategy}
+              unlockState={unlockState}
+              selected={selectedStrategy?.strategy_id === strategy.strategy_id}
+              current={currentStrategyId === strategy.strategy_id}
+              onSelect={(nextStrategy) => setSelectedStrategyId(nextStrategy.strategy_id)}
+            />
           ))}
         </div>
       </section>
 
-      {sideBranches.length > 0 ? (
-        <section aria-labelledby="side-branch-strategies">
-          <h2 id="side-branch-strategies" style={{ fontSize: 13, color: "var(--ink-3)", textTransform: "uppercase", fontWeight: 700, margin: "0 0 12px" }}>
-            Side branch
-          </h2>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 360px))",
-              gap: 14,
-            }}
-          >
-            {sideBranches.map((strategy) => (
-              <StrategyCard key={strategy.strategy_id} strategy={strategy} />
-            ))}
-          </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+          gap: 18,
+          alignItems: "start",
+        }}
+      >
+        <section aria-label="Inline strategy workbench">
+          {selectedStrategy ? (
+            <StrategyPageClient key={selectedStrategy.strategy_id} strategy={selectedStrategy} />
+          ) : (
+            <div
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--rule)",
+                borderRadius: 8,
+                padding: 18,
+                color: "var(--ink-2)",
+              }}
+            >
+              No runnable strategy is available.
+            </div>
+          )}
         </section>
-      ) : null}
 
-      {lockedTeasers.length > 0 ? (
-        <section aria-labelledby="locked-strategies">
-          <h2 id="locked-strategies" style={{ fontSize: 13, color: "var(--ink-3)", textTransform: "uppercase", fontWeight: 700, margin: "0 0 12px" }}>
-            Locked node
-          </h2>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 360px))",
-              gap: 14,
-            }}
-          >
-            {lockedTeasers.map((strategy) => (
-              <StrategyCard key={strategy.strategy_id} strategy={strategy} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+        <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {sideBranches.length > 0 ? (
+            <section aria-label="Keyword Hijack side branch">
+              <h2 style={{ fontSize: 13, color: "var(--ink-3)", textTransform: "uppercase", fontWeight: 800, margin: "0 0 10px" }}>
+                Side branch
+              </h2>
+              <div style={{ display: "grid", gap: 12 }}>
+                {sideBranches.map((strategy) => (
+                  <StrategyPathNode
+                    key={strategy.strategy_id}
+                    strategy={strategy}
+                    unlockState={unlockState}
+                    selected={selectedStrategy?.strategy_id === strategy.strategy_id}
+                    current={false}
+                    onSelect={(nextStrategy) => setSelectedStrategyId(nextStrategy.strategy_id)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {lockedTeasers.length > 0 ? (
+            <section aria-label="Future path node">
+              <h2 style={{ fontSize: 13, color: "var(--ink-3)", textTransform: "uppercase", fontWeight: 800, margin: "0 0 10px" }}>
+                Future
+              </h2>
+              <div style={{ display: "grid", gap: 12 }}>
+                {lockedTeasers.map((strategy) => (
+                  <StrategyPathNode
+                    key={strategy.strategy_id}
+                    strategy={strategy}
+                    unlockState={unlockState}
+                    selected={false}
+                    current={false}
+                    onSelect={(nextStrategy) => setSelectedStrategyId(nextStrategy.strategy_id)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }
