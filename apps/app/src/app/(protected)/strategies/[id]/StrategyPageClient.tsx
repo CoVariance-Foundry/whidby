@@ -131,9 +131,13 @@ function normalizeResult({
   const score = readNumber(record, ["score", "strategy_score", "opportunity_score"]);
   const evidence = readStringArray(record.strategy_evidence).concat(readStringArray(record.evidence));
   const warnings = readStringArray(record.warnings);
+  const strategyEvidence =
+    strategy.strategy_id === "keyword_hijack"
+      ? [...evidence, "Feasibility preflight passed"]
+      : evidence;
   const strategyWarnings =
     strategy.strategy_id === "keyword_hijack"
-      ? [...warnings, "Keyword Hijack risk: feasibility preflight passed"]
+      ? [...warnings, "Keyword Hijack risk: keep the keyword lens narrow"]
       : warnings;
   const aiResilienceScore = readAIResilienceScore(record);
   const scores = asRecord(record.scores);
@@ -149,7 +153,7 @@ function normalizeResult({
     service,
     confidenceScore: readNumber(record, ["confidence_score"]) ?? readNumber(confidence, ["score"]),
     reportId: readOptionalString(record, ["report_id"]),
-    evidence,
+    evidence: strategyEvidence,
     warnings: strategyWarnings,
     aiResilienceScore,
     sourceContext: {

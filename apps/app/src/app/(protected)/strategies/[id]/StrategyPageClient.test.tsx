@@ -476,8 +476,9 @@ describe("StrategyPageClient", () => {
     expect(await screen.findByText("Plumbing in Boise")).toBeInTheDocument();
     expect(screen.getByText("search_volume_monthly: 720")).toBeInTheDocument();
     expect(screen.getByText("local_pack_present: yes")).toBeInTheDocument();
+    expect(screen.getByText("Feasibility preflight passed")).toBeInTheDocument();
     expect(screen.getByText("AI overview present")).toBeInTheDocument();
-    expect(screen.getByText("Keyword Hijack risk: feasibility preflight passed")).toBeInTheDocument();
+    expect(screen.getByText("Keyword Hijack risk: keep the keyword lens narrow")).toBeInTheDocument();
     expect(screen.getByText("AI resilience flagged")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open full report/i })).toHaveAttribute(
       "href",
