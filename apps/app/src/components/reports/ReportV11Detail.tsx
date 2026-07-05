@@ -10,6 +10,11 @@ import { Icon, I } from "@/lib/icons";
 import type { FullReportData, MetroScores, ReportMetro } from "@/lib/niche-finder/types";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
 import {
+  buildReportNextSteps,
+  type ReportNextStep,
+  type ReportNextStepContext,
+} from "@/lib/reports/report-next-steps";
+import {
   createReportStrategyResultSummary,
   normalizeReportGuidanceEvidence,
   userFacingStrategyProfileLabel,
@@ -27,6 +32,7 @@ interface ReportV11DetailProps {
   showBackLink?: boolean;
   primaryReportHref?: string | null;
   reportCtaLabel?: string;
+  nextStepContext?: ReportNextStepContext;
 }
 
 const DIFFICULTY_LABELS: Record<string, string> = {
@@ -553,42 +559,38 @@ function MetroDetailSection({
   );
 }
 
-function buildCompetitorIntelHref(report: FullReportData, metro: ReportMetro): string {
-  const params = new URLSearchParams();
-  params.set("report_id", report.id);
-  params.set("city", metro.cbsa_name || report.geo_target);
-  params.set("service", report.niche_keyword);
-  if (metro.cbsa_code) params.set("cbsa_code", metro.cbsa_code);
-  return `/competitor-intel?${params.toString()}`;
-}
-
 function NextMoveCard({
-  href,
-  title,
-  subtitle,
-  primary = false,
+  step,
 }: {
-  href: string;
-  title: string;
-  subtitle: string;
-  primary?: boolean;
+  step: ReportNextStep;
 }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "block",
-        padding: 16,
-        borderRadius: 8,
-        border: primary ? "1px solid var(--ink)" : "1px solid var(--rule)",
-        background: "var(--card)",
-        color: "inherit",
-        textDecoration: "none",
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{title}</div>
+  const statusLabel =
+    step.state === "locked" ? step.requirement_label ?? "Locked" : step.state === "future" ? "Future" : null;
+  const content = (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{step.title}</div>
+        {statusLabel ? (
+          <span
+            style={{
+              border: "1px solid var(--rule)",
+              borderRadius: 999,
+              color: step.state === "future" ? "var(--ink-3)" : "var(--warn)",
+              background: step.state === "future" ? "var(--paper-alt)" : "var(--warn-soft)",
+              fontSize: 10.5,
+              fontWeight: 800,
+              letterSpacing: "0.02em",
+              padding: "3px 7px",
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {statusLabel}
+          </span>
+        ) : null}
+      </div>
       <div style={{ marginTop: 4, fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.45 }}>
-        {subtitle}
+        {step.subtitle}
       </div>
       <div
         style={{
@@ -596,18 +598,52 @@ function NextMoveCard({
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
-          color: "var(--accent)",
+          color: step.href ? "var(--accent)" : "var(--ink-3)",
           fontSize: 12,
           fontWeight: 700,
         }}
       >
-        Continue <Icon d={I.arrow} />
+        {step.cta_label ?? (step.href ? "Continue" : "Locked")}
+        {step.href ? <Icon d={I.arrow} /> : null}
       </div>
+    </>
+  );
+  const cardStyle: CSSProperties = {
+    display: "block",
+    padding: 16,
+    borderRadius: 8,
+    border: step.primary ? "1px solid var(--ink)" : "1px solid var(--rule)",
+    background: step.href ? "var(--card)" : "var(--paper-alt)",
+    color: "inherit",
+    textDecoration: "none",
+    minHeight: 144,
+  };
+
+  if (!step.href) {
+    return (
+      <article style={cardStyle}>
+        {content}
+      </article>
+    );
+  }
+
+  return (
+    <Link href={step.href} style={cardStyle}>
+      {content}
     </Link>
   );
 }
 
-function NextMoves({ report, metro }: { report: FullReportData; metro: ReportMetro }) {
+function NextMoves({
+  report,
+  metro,
+  context,
+}: {
+  report: FullReportData;
+  metro: ReportMetro;
+  context?: ReportNextStepContext;
+}) {
+  const nextSteps = buildReportNextSteps({ report, metro, context });
   return (
     <section aria-label="Next steps">
       <h2 style={sectionHeadingStyle()}>Next steps</h2>
@@ -618,22 +654,9 @@ function NextMoves({ report, metro }: { report: FullReportData; metro: ReportMet
           gap: 12,
         }}
       >
-        <NextMoveCard
-          href={buildCompetitorIntelHref(report, metro)}
-          title="Run Competitor Intel"
-          subtitle="See who is ranking and how to win this market."
-          primary
-        />
-        <NextMoveCard
-          href="/strategies/easy_win"
-          title="Validate rank ease"
-          subtitle="Run Easy Win on this market."
-        />
-        <NextMoveCard
-          href="/strategies/expand_conquer"
-          title="Find lookalike cities"
-          subtitle="Replicate this playbook in similar markets."
-        />
+        {nextSteps.map((step) => (
+          <NextMoveCard key={step.id} step={step} />
+        ))}
       </div>
     </section>
   );
@@ -704,6 +727,7 @@ function ReportV11Content(props: ReportV11DetailProps & { variant: ReportV11Vari
     showBackLink = variant === "page",
     primaryReportHref = variant === "page" ? null : undefined,
     reportCtaLabel = variant === "modal" ? "Open full report page" : "Open full report",
+    nextStepContext,
   } = props;
   const metros = Array.isArray(report.metros) ? report.metros : [];
   const topMetro = metros[0];
@@ -735,7 +759,7 @@ function ReportV11Content(props: ReportV11DetailProps & { variant: ReportV11Vari
               reportHref={primaryReportHref}
               reportCtaLabel={reportCtaLabel}
             />
-            <NextMoves report={report} metro={topMetro} />
+            <NextMoves report={report} metro={topMetro} context={nextStepContext} />
             {metros.slice(1).map((metro) => (
               <MetroDetailSection key={metro.cbsa_code || metro.cbsa_name} report={report} metro={metro} />
             ))}

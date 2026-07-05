@@ -88,10 +88,31 @@ describe("ReportV11Detail", () => {
     expect(screen.getAllByText("AI Resilience").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Confidence: 90").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Strong local service opportunity.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /continue to gbp blitz/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/strategies/gbp_blitz?"),
+    );
+    expect(screen.getByText(/expand & conquer requires a ranked site/i)).toBeInTheDocument();
+    expect(screen.getByText(/future portfolio planning node/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /run competitor intel/i })).toHaveAttribute(
       "href",
       expect.stringContaining("report_id=rpt_123"),
     );
+  });
+
+  it("renders an unlocked Expand & Conquer next step when ranked-site context is supplied", () => {
+    render(
+      <ReportV11Detail
+        report={{ ...report, strategy_profile: "replication" }}
+        nextStepContext={{ has_ranked_site_declaration: true }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /continue to expand & conquer/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/strategies/expand_conquer?"),
+    );
+    expect(screen.queryByText(/requires a ranked site/i)).not.toBeInTheDocument();
   });
 
   it("degrades gracefully when optional fields are missing and does not expose BALANCED", () => {
