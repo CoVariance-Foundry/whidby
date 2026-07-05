@@ -14,6 +14,12 @@ def _latest_whi9_migration_sql() -> str:
     return matches[-1].read_text()
 
 
+def _latest_whi153_migration_sql() -> str:
+    matches = sorted(MIGRATIONS_DIR.glob("*_whi153_ranked_site_declarations.sql"))
+    assert matches, "WHI-153 ranked-site declaration migration is missing"
+    return matches[-1].read_text()
+
+
 def test_v2_top5_fact_fields_migration_extends_seo_facts() -> None:
     """V2 facts persist nullable top-5 organic signals for benchmark recompute."""
     sql = (MIGRATIONS_DIR / "022_v2_scoring_persistence_contract.sql").read_text()
@@ -175,3 +181,54 @@ def test_whi9_competitor_intel_migration_adds_multi_unit_quota_rpcs() -> None:
     assert "GRANT EXECUTE ON FUNCTION public.refund_usage_quota(UUID, TEXT, INT) TO service_role" in sql
     assert "REVOKE EXECUTE ON FUNCTION public.refund_report_quota(UUID) FROM authenticated" in sql
     assert "GRANT EXECUTE ON FUNCTION public.refund_report_quota(UUID) TO service_role" in sql
+
+
+def test_whi153_ranked_site_declarations_migration_adds_schema() -> None:
+    sql = _latest_whi153_migration_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS public.ranked_site_declarations" in sql
+    for column in (
+        "account_id UUID NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE",
+        "created_by_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE",
+        "updated_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL",
+        "site_name TEXT NOT NULL",
+        "site_url TEXT",
+        "site_domain TEXT NOT NULL",
+        "city TEXT NOT NULL",
+        "state TEXT NOT NULL",
+        "cbsa_code TEXT REFERENCES public.metros(cbsa_code)",
+        "niche_keyword TEXT NOT NULL",
+        "niche_normalized TEXT NOT NULL",
+        "active BOOLEAN NOT NULL DEFAULT true",
+        "metadata JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "deactivated_at TIMESTAMPTZ",
+    ):
+        assert column in sql
+
+    assert "proof_state TEXT NOT NULL DEFAULT 'declared'" in sql
+    assert "proof_state IN ('declared', 'verified', 'needs_review', 'rejected')" in sql
+    assert "idx_ranked_site_declarations_account_active" in sql
+    assert "idx_ranked_site_declarations_unlock" in sql
+    assert "WHERE active = true AND proof_state IN ('declared', 'verified')" in sql
+    assert "idx_ranked_site_declarations_active_target" in sql
+    assert "COALESCE(cbsa_code, '')" in sql
+    assert "ranked_site_declarations_set_updated_at" in sql
+    assert "EXECUTE FUNCTION public.set_updated_at()" in sql
+
+
+def test_whi153_ranked_site_declarations_migration_enables_scoped_rls() -> None:
+    sql = _latest_whi153_migration_sql()
+
+    assert "ALTER TABLE public.ranked_site_declarations ENABLE ROW LEVEL SECURITY" in sql
+    assert "Account members can read ranked site declarations" in sql
+    assert "USING (public.is_account_member(account_id))" in sql
+    assert "Users can insert own ranked site declarations" in sql
+    assert "Users can update own ranked site declarations" in sql
+    assert "created_by_user_id = (SELECT auth.uid())" in sql
+    assert "AND public.is_account_member(account_id)" in sql
+    assert "Service role full access on ranked site declarations" in sql
+    assert "TO service_role" in sql
+    assert "REVOKE ALL ON TABLE public.ranked_site_declarations FROM anon" in sql
+    assert "GRANT SELECT, INSERT, UPDATE ON TABLE public.ranked_site_declarations TO authenticated" in sql
+    assert "GRANT ALL ON TABLE public.ranked_site_declarations TO service_role" in sql
+    assert "FOR DELETE" not in sql
