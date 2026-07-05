@@ -6,6 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { isSafeNext } from "@/lib/auth/safe-next";
 
 type Status = "idle" | "loading" | "error";
+type ResumeResponse = {
+  status?: string;
+  next?: string;
+};
 
 // Progressive backoff caps UI-driven credential stuffing attempts. After each
 // failure: 1s, 2s, 4s, 8s, 15s (capped). Resets on success or page refresh.
@@ -84,6 +88,28 @@ function LoginForm() {
     return result;
   }
 
+  async function resolvePostLoginDestination() {
+    const nextParam = searchParams.get("next");
+    const resumePath =
+      isSafeNext(nextParam) && nextParam
+        ? `/api/auth/resume?next=${encodeURIComponent(nextParam)}`
+        : "/api/auth/resume";
+
+    try {
+      const response = await fetch(resumePath, {
+        cache: "no-store",
+      });
+      if (!response.ok) return "/";
+      const body = (await response.json()) as ResumeResponse;
+      return isSafeNext(body.next) ? body.next : "/";
+    } catch (error) {
+      console.error("[login] resume lookup failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return "/";
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isBusy) return;
@@ -108,8 +134,7 @@ function LoginForm() {
     } else {
       failCountRef.current = 0;
       setLockedUntil(null);
-      const nextParam = searchParams.get("next");
-      const dest = isSafeNext(nextParam) ? nextParam : "/";
+      const dest = await resolvePostLoginDestination();
       router.replace(dest);
       router.refresh();
     }
