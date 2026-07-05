@@ -82,7 +82,6 @@ test.describe("seeded segment fixtures", () => {
       await signIn(page, {
         email: credentials.email,
         password: credentials.password,
-        loginQuery: `?next=${encodeURIComponent(fixture.expectedPath)}`,
         expectLandOn: (url) => url.pathname === fixture.expectedPath,
       });
       await page.waitForLoadState("networkidle");
