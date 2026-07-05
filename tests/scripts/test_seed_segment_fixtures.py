@@ -94,8 +94,14 @@ def test_coach_agency_onboarding_payload_is_admin_capable(monkeypatch):
         "focus": "agency",
         "coach_or_agency": "agency",
         "referral_source": "segment_fixture",
-        "recommended_strategy_id": "gbp_blitz",
-        "available_strategy_ids": ["easy_win", "gbp_blitz", "expand_conquer"],
+        "recommended_strategy_id": "easy_win",
+        "available_strategy_ids": [
+            "easy_win",
+            "gbp_blitz",
+            "expand_conquer",
+            "keyword_hijack",
+            "portfolio_builder",
+        ],
         "next_route": "/agency",
         "status": "strategy_recommended",
         "completed_at": "2026-07-05T00:00:00Z",
@@ -125,6 +131,10 @@ def test_scale_report_and_ranked_site_declaration_payloads(monkeypatch):
     assert report["access_scope"] == "account"
     assert report["strategy_profile"] == "expand_conquer"
     assert report["meta"]["segment"] == "scale"
+    assert report["metros"][0]["cbsa_code"] == "24860"
+    assert report["metros"][0]["cbsa_name"] == "Greenville-Anderson-Greer, SC"
+    assert report["metros"][0]["scores"]["opportunity"] == 74
+    assert report["metros"][0]["signals"]["demand"]["total_search_volume"] == 4200
 
     assert declaration is not None
     assert declaration["id"] == "00000000-0000-4000-8000-000000001154"

@@ -8,9 +8,11 @@ type SegmentFixture = {
   passwordEnv: string;
   expectedPath: string;
   heading: RegExp;
+  requiresExploreApi?: boolean;
 };
 
 const commonPassword = process.env.WHIDBY_SEGMENT_FIXTURE_PASSWORD;
+const hasExploreApi = Boolean(process.env.NEXT_PUBLIC_API_URL?.trim());
 
 const fixtures: SegmentFixture[] = [
   {
@@ -35,7 +37,7 @@ const fixtures: SegmentFixture[] = [
     defaultEmail: "segment-coach-agency@widby.dev",
     passwordEnv: "WHIDBY_SEGMENT_COACH_AGENCY_PASSWORD",
     expectedPath: "/agency",
-    heading: /^multi-market scan$/i,
+    heading: /^qualify territories in one batch\.$/i,
   },
   {
     segment: "researching",
@@ -44,6 +46,7 @@ const fixtures: SegmentFixture[] = [
     passwordEnv: "WHIDBY_SEGMENT_RESEARCHING_PASSWORD",
     expectedPath: "/explore",
     heading: /^cities & service data$/i,
+    requiresExploreApi: true,
   },
 ];
 
@@ -80,12 +83,20 @@ test.describe("seeded segment fixtures", () => {
       if (!credentials) {
         return;
       }
+      const missingExploreApi = Boolean(fixture.requiresExploreApi && !hasExploreApi);
+      // REASON: /explore loads backend data server-side, outside Playwright route interception.
+      test.skip(
+        missingExploreApi,
+        "requires NEXT_PUBLIC_API_URL pointing at a running Explore API backend",
+      );
+      if (missingExploreApi) {
+        return;
+      }
 
       await blockFreshPaidApis(page);
       await signIn(page, {
         email: credentials.email,
         password: credentials.password,
-        loginQuery: `?next=${encodeURIComponent(fixture.expectedPath)}`,
         expectLandOn: (url) => url.pathname === fixture.expectedPath,
       });
       await page.waitForLoadState("networkidle");

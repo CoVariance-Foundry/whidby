@@ -125,8 +125,14 @@ FIXTURE_DEFAULTS: tuple[SegmentFixtureDefaults, ...] = (
         next_route="/agency",
         profile_id="00000000-0000-4000-8000-000000050154",
         target_id="00000000-0000-4000-8000-000000060154",
-        strategy_id="gbp_blitz",
-        available_strategy_ids=("easy_win", "gbp_blitz", "expand_conquer"),
+        strategy_id="easy_win",
+        available_strategy_ids=(
+            "easy_win",
+            "gbp_blitz",
+            "expand_conquer",
+            "keyword_hijack",
+            "portfolio_builder",
+        ),
         niche_keyword="hvac",
         city="Phoenix",
         state="AZ",
@@ -279,9 +285,45 @@ def report_payload(
         "keyword_expansion": {},
         "metros": [
             {
+                "cbsa_code": "24860",
+                "cbsa_name": "Greenville-Anderson-Greer, SC",
                 "city": defaults.city,
                 "state": defaults.state,
-                "cbsa_code": None,
+                "population": 975480,
+                "serp_archetype": "FRAG_WEAK",
+                "difficulty_tier": "MODERATE",
+                "ai_exposure": "AI_MINIMAL",
+                "scores": {
+                    "demand": 72,
+                    "organic_competition": 68,
+                    "local_competition": 64,
+                    "monetization": 76,
+                    "ai_resilience": 82,
+                    "opportunity": 74,
+                    "confidence": {"score": 88},
+                },
+                "signals": {
+                    "demand": {
+                        "total_search_volume": 4200,
+                        "avg_cpc": 9.8,
+                    },
+                    "organic_competition": {
+                        "avg_top5_da": 24,
+                    },
+                    "local_competition": {
+                        "top3_review_count_min": 18,
+                    },
+                    "monetization": {
+                        "business_density": 42,
+                    },
+                    "ai_resilience": {
+                        "aio_trigger_rate": 0.04,
+                    },
+                },
+                "guidance": {
+                    "summary": "Seeded scale fixture report for safe dashboard/report history rendering.",
+                    "action_items": ["Use the ranked-site declaration to validate scale routing."],
+                },
             }
         ],
         "meta": {

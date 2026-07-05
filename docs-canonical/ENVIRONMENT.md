@@ -225,6 +225,10 @@ Run the local smoke after seeding and setting fixture credentials:
 npm --workspace apps/app run test:e2e -- segment-fixtures.spec.ts
 ```
 
+The `researching` case lands on `/explore`, whose server loader calls the
+research API. Set `NEXT_PUBLIC_API_URL` to a running API backend before running
+that case; without it, the Playwright smoke skips only the researching route.
+
 ## Staging Environment
 
 The project uses a `dev` branch as a staging/integration gate. Feature branches PR into `dev`; verified work on `dev` PRs into `main` for production.
