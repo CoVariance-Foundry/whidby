@@ -119,7 +119,12 @@ describe("ReportDetailPage", () => {
                 },
               },
             ],
-            meta: null,
+            meta: {
+              ai_resilience_modifier: {
+                threshold: 90,
+                hide_flagged: true,
+              },
+            },
           },
         }),
         { status: 200 },
@@ -145,5 +150,7 @@ describe("ReportDetailPage", () => {
     );
     expect(screen.getAllByText("Standard scoring").length).toBeGreaterThan(0);
     expect(container).not.toHaveTextContent(/balanced/i);
+    expect(screen.getByText("AI threshold: 90")).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/AI Resilience flagged: score 85 below threshold 90/i)).toHaveLength(2);
   });
 });
