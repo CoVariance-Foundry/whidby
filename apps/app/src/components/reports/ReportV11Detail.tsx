@@ -365,7 +365,7 @@ function ScoreCell({
           color: tone.text,
         }}
       >
-        {value == null ? "-" : Math.round(value)}
+        {value == null ? "\u2014" : Math.round(value)}
       </div>
       <div style={{ marginTop: 7 }}>
         <ScoreBar value={value} label={label} hideLabel hideValue />
@@ -793,7 +793,15 @@ function NextMoves({
 }
 
 function MetaSection({ meta }: { meta: FullReportData["meta"] }) {
-  if (!meta || Object.keys(meta).length === 0) return null;
+  if (
+    !meta ||
+    (meta.processing_time_seconds == null &&
+      meta.total_api_calls == null &&
+      meta.total_cost_usd == null)
+  ) {
+    return null;
+  }
+
   return (
     <details
       style={{

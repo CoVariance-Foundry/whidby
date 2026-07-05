@@ -178,8 +178,37 @@ describe("ReportV11Detail", () => {
     const sourceContext = screen.getByRole("region", { name: /report source context/i });
     expect(within(sourceContext).getByText("Hide flagged on")).toBeInTheDocument();
     expect(screen.getByText("AI threshold: 30")).toBeInTheDocument();
+    expect(screen.queryByText("Run metadata")).not.toBeInTheDocument();
     expect(screen.queryByText("AI resilience flagged")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/below threshold 40/i)).not.toBeInTheDocument();
+  });
+
+  it("ignores top-level report meta keys that are not explicit AI modifier state", () => {
+    render(
+      <ReportV11Detail
+        report={{
+          ...report,
+          meta: {
+            threshold: 90,
+            hide_flagged: true,
+          },
+          metros: [
+            {
+              ...report.metros[0],
+              scores: {
+                ...report.metros[0].scores,
+                ai_resilience: 85,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("AI threshold: 40")).toBeInTheDocument();
+    expect(screen.queryByText("AI threshold: 90")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI resilience flagged")).not.toBeInTheDocument();
+    expect(screen.queryByText("Run metadata")).not.toBeInTheDocument();
   });
 
   it("renders an unlocked Expand & Conquer next step when ranked-site context is supplied", () => {
@@ -211,6 +240,7 @@ describe("ReportV11Detail", () => {
               ai_exposure: undefined,
               scores: {
                 ...report.metros[0].scores,
+                demand: undefined as unknown as number,
                 confidence: undefined,
               },
               signals: undefined,
@@ -223,6 +253,7 @@ describe("ReportV11Detail", () => {
 
     expect(screen.getAllByText("Standard scoring").length).toBeGreaterThan(0);
     expect(container).not.toHaveTextContent(/balanced/i);
+    expect(screen.getAllByText("\u2014").length).toBeGreaterThan(0);
     expect(screen.getByText(/not scored yet/i)).toBeInTheDocument();
     expect(screen.getByText("Signal-level evidence is not available for this report yet.")).toBeInTheDocument();
     expect(screen.getByText("No narrative evidence is available for this report yet.")).toBeInTheDocument();

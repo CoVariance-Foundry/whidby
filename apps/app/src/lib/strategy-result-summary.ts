@@ -77,8 +77,7 @@ function reportModifierInput(report: FullReportData): Partial<AIResilienceModifi
     modifierInputFromRecord(asRecord(meta?.ai_resilience_modifier_state)) ??
     modifierInputFromRecord(asRecord(meta?.ai_resilience_modifier)) ??
     modifierInputFromRecord(asRecord(sourceContext?.modifier_state)) ??
-    modifierInputFromRecord(asRecord(userState?.ai_resilience_modifier)) ??
-    modifierInputFromRecord(meta)
+    modifierInputFromRecord(asRecord(userState?.ai_resilience_modifier))
   );
 }
 
