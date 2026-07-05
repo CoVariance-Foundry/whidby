@@ -77,6 +77,9 @@ test.describe("seeded segment fixtures", () => {
         !credentials,
         `requires ${fixture.passwordEnv} or WHIDBY_SEGMENT_FIXTURE_PASSWORD`,
       );
+      if (!credentials) {
+        return;
+      }
 
       await blockFreshPaidApis(page);
       await signIn(page, {
