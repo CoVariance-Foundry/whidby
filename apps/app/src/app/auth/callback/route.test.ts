@@ -120,12 +120,12 @@ describe("GET /auth/callback", () => {
     expect(res.headers.get("location")).toBe("http://localhost/");
   });
 
-  it("returns cached-route research users to Explore", async () => {
+  it("returns cached-route users to their stored safe route before intent routing", async () => {
     const supabase = createSupabaseMock({
       profileResult: {
         data: {
           status: "cached_route_selected",
-          intent: "researching",
+          intent: "scale",
           next_route: "/explore",
         },
         error: null,
