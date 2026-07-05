@@ -157,6 +157,34 @@ describe("StrategyPageClient", () => {
     expect(runButton).not.toBeDisabled();
   });
 
+  it("requires a two-token primary keyword for Keyword Hijack discovery", () => {
+    const strategy: StrategyCatalogEntry = {
+      strategy_id: "keyword_hijack",
+      name: "Keyword Hijack",
+      description: "Keyword-led markets.",
+      status: "launch",
+      input_shape: "city_service_keyword",
+    };
+
+    render(<StrategyPageClient strategy={strategy} />);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Boise" } });
+    fireEvent.change(screen.getByLabelText("Service"), { target: { value: "plumbing" } });
+    fireEvent.change(screen.getByLabelText("Primary keyword"), {
+      target: { value: "plumber" },
+    });
+    fireEvent.click(screen.getByLabelText(/keyword matches the city and service intent/i));
+    fireEvent.click(screen.getByLabelText(/avoids keyword stuffing/i));
+
+    const runButton = screen.getByRole("button", { name: /run discovery/i });
+    expect(runButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Primary keyword"), {
+      target: { value: "boise plumber" },
+    });
+    expect(runButton).not.toBeDisabled();
+  });
+
   it("maps hide flagged modifier state to the existing discovery payload boolean", async () => {
     const strategy: StrategyCatalogEntry = {
       strategy_id: "easy_win",

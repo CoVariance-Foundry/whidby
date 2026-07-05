@@ -177,6 +177,10 @@ function inputHint(strategy: StrategyCatalogEntry) {
   return "Send a city and service to search cached market intelligence.";
 }
 
+function primaryKeywordTokenCount(value: string): number {
+  return value.match(/[a-z0-9]+/gi)?.length ?? 0;
+}
+
 function buildPayload({
   strategy,
   city,
@@ -576,6 +580,7 @@ export default function StrategyPageClient({
         city.trim().length > 0 &&
         service.trim().length > 0 &&
         primaryKeyword.trim().length > 0 &&
+        (!isKeywordHijack || primaryKeywordTokenCount(primaryKeyword) >= 2) &&
         feasibilityPreflightPassed
       );
     }
@@ -583,6 +588,7 @@ export default function StrategyPageClient({
   }, [
     city,
     feasibilityPreflightPassed,
+    isKeywordHijack,
     isLoading,
     isUnavailable,
     primaryKeyword,
