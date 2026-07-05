@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
@@ -13,6 +13,10 @@ import { GET } from "./route";
 describe("GET /api/auth/resume", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns 401 when no signed-in user exists", async () => {
@@ -52,7 +56,7 @@ describe("GET /api/auth/resume", () => {
 
     expect(res.status).toBe(200);
     expect(body).toEqual({ status: "success", next: "/reports/abc" });
-    expect(supabase.profileEq).toHaveBeenCalledWith("user_id", "user-1");
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
   it("routes strategy-recommended scale users to strategies", async () => {
@@ -113,6 +117,83 @@ describe("GET /api/auth/resume", () => {
 
     expect(res.status).toBe(200);
     expect(body).toEqual({ status: "success", next: "/onboarding" });
+  });
+
+  it("returns cached safe routes", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "cached_route_selected",
+          intent: "scale",
+          next_route: "/explore",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/api/auth/resume"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ status: "success", next: "/explore" });
+  });
+
+  it("falls back to onboarding for unsafe cached routes", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: {
+          status: "cached_route_selected",
+          intent: "scale",
+          next_route: "//evil.example",
+        },
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/api/auth/resume"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ status: "success", next: "/onboarding" });
+  });
+
+  it("routes users without an onboarding profile to onboarding", async () => {
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: null,
+        error: null,
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/api/auth/resume"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ status: "success", next: "/onboarding" });
+  });
+
+  it("falls back to onboarding when profile lookup fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = createSupabaseMock({
+      profileResult: {
+        data: null,
+        error: { message: "profile lookup failed" },
+      },
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const res = await GET(new Request("http://localhost/api/auth/resume"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ status: "success", next: "/onboarding" });
+    expect(consoleError).toHaveBeenCalledWith(
+      "[auth/resume] onboarding profile lookup failed",
+      { message: "profile lookup failed" },
+    );
   });
 
   it("ignores unsafe next values", async () => {

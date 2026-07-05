@@ -49,9 +49,8 @@ function resolveResumePath(
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const explicitSafeNext = isSafeNext(searchParams.get("next"))
-    ? searchParams.get("next")
-    : null;
+  const nextParam = searchParams.get("next");
+  const explicitSafeNext = isSafeNext(nextParam) ? nextParam : null;
 
   const supabase = await createClient();
   const {
@@ -64,6 +63,10 @@ export async function GET(request: Request) {
       { status: "error", next: "/login" },
       { status: 401 },
     );
+  }
+
+  if (explicitSafeNext) {
+    return NextResponse.json({ status: "success", next: explicitSafeNext });
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -81,7 +84,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     status: "success",
     next: resolveResumePath(
-      explicitSafeNext,
+      null,
       profileError ? null : (profile as OnboardingResumeProfile | null),
     ),
   });
