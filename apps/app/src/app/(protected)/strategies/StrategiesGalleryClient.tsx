@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
+import Term from "@/components/glossary/Term";
 import { Icon, I } from "@/lib/icons";
 import type { StrategyCatalogEntry, StrategyCatalogResponse } from "@/lib/strategies/types";
 import { sortByStrategyPathOrder } from "@/lib/strategies/path-registry";
@@ -18,10 +20,50 @@ function pathRoleLabel(strategy: StrategyCatalogEntry) {
   return "Path step";
 }
 
+function strategyTitle(strategy: StrategyCatalogEntry): ReactNode {
+  if (strategy.strategy_id === "portfolio_builder") {
+    return <Term termKey="portfolio_builder" label={strategy.name} />;
+  }
+  return strategy.name;
+}
+
+function textWithTerm(text: string, term: { label: string; termKey: string }): ReactNode {
+  const index = text.toLocaleLowerCase().indexOf(term.label.toLocaleLowerCase());
+  if (index < 0) return text;
+  const matchedLabel = text.slice(index, index + term.label.length);
+  return (
+    <>
+      {text.slice(0, index)}
+      <Term termKey={term.termKey} label={matchedLabel} />
+      {text.slice(index + term.label.length)}
+    </>
+  );
+}
+
+function strategyDescription(strategy: StrategyCatalogEntry): ReactNode {
+  if (strategy.strategy_id === "expand_conquer") {
+    return textWithTerm(strategy.description, { termKey: "lookalike", label: "lookalike" });
+  }
+  return strategy.description;
+}
+
+function unlockLabel(strategy: StrategyCatalogEntry): ReactNode {
+  const requirement = strategy.unlock_requirement;
+  if (!requirement) return null;
+  if (requirement.requirement_id === "feasibility_preflight") {
+    return textWithTerm(requirement.label, { termKey: "feasibility", label: "Feasibility" });
+  }
+  if (requirement.requirement_id === "ranked_site_declaration") {
+    return textWithTerm(requirement.label, { termKey: "ranked_site", label: "Ranked site" });
+  }
+  return requirement.label;
+}
+
 function StrategyCard({ strategy }: { strategy: StrategyCatalogEntry }) {
   const isLocked = strategy.is_runnable === false || strategy.path_role === "locked_teaser";
   const badgeColor = isLocked ? "var(--warn)" : "var(--accent)";
   const badgeBackground = isLocked ? "var(--warn-soft)" : "var(--accent-soft)";
+  const unlock = unlockLabel(strategy);
   return (
     <article
       style={{
@@ -38,7 +80,7 @@ function StrategyCard({ strategy }: { strategy: StrategyCatalogEntry }) {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div>
           <h2 style={{ fontFamily: "var(--serif)", fontSize: 19, margin: 0, color: "var(--ink)" }}>
-            {strategy.name}
+            {strategyTitle(strategy)}
           </h2>
           <div
             style={{
@@ -69,11 +111,11 @@ function StrategyCard({ strategy }: { strategy: StrategyCatalogEntry }) {
       </div>
 
       <p style={{ color: "var(--ink-2)", fontSize: 14, lineHeight: 1.5, margin: 0 }}>
-        {strategy.description}
+        {strategyDescription(strategy)}
       </p>
-      {strategy.unlock_requirement ? (
+      {unlock ? (
         <div style={{ color: "var(--ink-3)", fontSize: 12, lineHeight: 1.45 }}>
-          Unlock: {strategy.unlock_requirement.label}
+          Unlock: {unlock}
         </div>
       ) : null}
 
@@ -140,7 +182,10 @@ export default function StrategiesGalleryClient({ catalog }: { catalog: Strategy
               maxWidth: 320,
             }}
           >
-            <strong style={{ color: "var(--ink)" }}>{aiModifier.name}</strong>: warnings stay visible; results are not hidden.
+            <strong style={{ color: "var(--ink)" }}>
+              <Term termKey="ai_resilience" label={aiModifier.name} />
+            </strong>
+            : warnings stay visible; results are not hidden.
           </div>
         ) : null}
       </header>

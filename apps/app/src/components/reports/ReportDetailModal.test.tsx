@@ -105,6 +105,10 @@ describe("ReportDetailModal", () => {
     expect(screen.getAllByText("Demand").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Monetization").length).toBeGreaterThan(0);
     expect(screen.getAllByText("AI Resilience").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /what is archetype/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /what is keyword difficulty \/ kd/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /export json/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /delete report/i })).toBeInTheDocument();
     expect(screen.queryByText(/keyword expansion/i)).not.toBeInTheDocument();

@@ -27,7 +27,18 @@ afterEach(() => {
 
 describe("StrategiesGalleryClient", () => {
   it("shows path steps, side branch, and locked Portfolio Builder while omitting deferred plays", () => {
-    render(<StrategiesGalleryClient catalog={FALLBACK_STRATEGY_CATALOG} />);
+    const catalog = {
+      ...FALLBACK_STRATEGY_CATALOG,
+      strategies: FALLBACK_STRATEGY_CATALOG.strategies.map((strategy) =>
+        strategy.strategy_id === "expand_conquer"
+          ? {
+              ...strategy,
+              description: "Backend copy keeps lookalike expansion markets in the path.",
+            }
+          : strategy,
+      ),
+    };
+    render(<StrategiesGalleryClient catalog={catalog} />);
 
     const pathSection = screen.getByLabelText("Path steps");
     expect(within(pathSection).getByText("Easy Win")).toBeInTheDocument();
@@ -35,19 +46,32 @@ describe("StrategiesGalleryClient", () => {
     expect(within(pathSection).getByText("Expand & Conquer")).toBeInTheDocument();
     const expandCard = within(pathSection).getByText("Expand & Conquer").closest("article");
     expect(expandCard).not.toBeNull();
+    expect(expandCard as HTMLElement).toHaveTextContent(
+      "Backend copy keeps lookalike expansion markets in the path.",
+    );
     expect(within(expandCard as HTMLElement).getByRole("link", { name: /open expand & conquer/i })).toHaveClass(
       "btn-primary",
     );
     const sideBranchSection = screen.getByLabelText("Side branch");
     expect(within(sideBranchSection).getByText("Keyword Hijack")).toBeInTheDocument();
-    expect(within(sideBranchSection).getByText("Unlock: Feasibility preflight")).toBeInTheDocument();
+    const keywordCard = within(sideBranchSection).getByText("Keyword Hijack").closest("article");
+    expect(keywordCard).not.toBeNull();
+    expect(keywordCard as HTMLElement).toHaveTextContent("Unlock: Feasibility preflight");
+    expect(
+      within(sideBranchSection).getByRole("button", { name: /what is feasibility/i }),
+    ).toBeInTheDocument();
 
     const lockedSection = screen.getByLabelText("Locked node");
     expect(within(lockedSection).getByText("Portfolio Builder")).toBeInTheDocument();
+    expect(
+      within(lockedSection).getByRole("button", { name: /what is portfolio builder/i }),
+    ).toBeInTheDocument();
     expect(within(lockedSection).getByLabelText("Portfolio Builder is locked")).toHaveAttribute(
       "aria-disabled",
       "true",
     );
+    expect(screen.getByRole("button", { name: /what is ai resilience/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /what is lookalike/i })).toBeInTheDocument();
     expect(screen.queryByText(/cash cow/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/blue ocean/i)).not.toBeInTheDocument();
   });
