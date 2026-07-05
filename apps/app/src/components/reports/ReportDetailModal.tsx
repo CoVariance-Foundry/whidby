@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import Term from "@/components/glossary/Term";
 import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
 import { scoreToneForValue } from "@/lib/design-tokens";
@@ -178,7 +179,7 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
             letterSpacing: "0.02em",
           }}
         >
-          {arch.label}
+          <Term termKey="archetype" label="Archetype" />: {arch.label}
         </span>
       </div>
 
@@ -202,7 +203,10 @@ function MetroCard({ metro }: { metro: ReportMetro }) {
       {/* Badges row */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {metro.difficulty_tier && (
-          <Pill>Difficulty: {DIFFICULTY_LABELS[metro.difficulty_tier] ?? humanizeEnum(metro.difficulty_tier)}</Pill>
+          <Pill>
+            <Term termKey="keyword_difficulty" label="KD" />:{" "}
+            {DIFFICULTY_LABELS[metro.difficulty_tier] ?? humanizeEnum(metro.difficulty_tier)}
+          </Pill>
         )}
         {metro.ai_exposure && (
           <Pill>AI exposure: {EXPOSURE_LABELS[metro.ai_exposure] ?? humanizeEnum(metro.ai_exposure)}</Pill>
