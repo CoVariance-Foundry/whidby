@@ -77,7 +77,7 @@ describe("StrategyPageClient", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.city_filters).toEqual([{ field: "cbsa_code", operator: "eq", value: "38060" }]);
+    expect(body.city_filters).toEqual([{ field: "cbsa_code", operator: "=", value: "38060" }]);
     expect(body.service_filters).toEqual([{ field: "name", operator: "like", value: "plumber" }]);
   });
 

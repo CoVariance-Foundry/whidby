@@ -212,7 +212,7 @@ function buildPayload({
   return {
     lens_id: strategy.strategy_id,
     city_filters: cbsaCode.trim()
-      ? [{ field: "cbsa_code", operator: "eq", value: cbsaCode.trim() }]
+      ? [{ field: "cbsa_code", operator: "=", value: cbsaCode.trim() }]
       : city.trim()
       ? [{ field: "name", operator: "like", value: city.trim() }]
       : [],
