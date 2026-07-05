@@ -125,6 +125,49 @@ describe("ReportV11Detail", () => {
     expect(screen.getByText("No narrative evidence is available for this report yet.")).toBeInTheDocument();
   });
 
+  it("renders nested generated M8 guidance in the summary and evidence sections", () => {
+    render(
+      <ReportV11Detail
+        report={{
+          ...report,
+          metros: [
+            {
+              ...report.metros[0],
+              guidance: {
+                guidance: {
+                  headline: "Phoenix has a fast local-pack opening.",
+                  strategy: "Launch a proof-led city page before the pack gets more expensive.",
+                  priority_actions: [
+                    "Refresh GBP proof for the highest-converting service line.",
+                    "Map review gaps against the top three operators.",
+                  ],
+                  ai_resilience_note: "AI overviews are unlikely to absorb urgent plumbing demand.",
+                  guidance_status: "generated",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("No additional evidence is available for this result.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No narrative evidence is available for this report yet.")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Phoenix has a fast local-pack opening.").length).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getAllByText("Launch a proof-led city page before the pack gets more expensive.").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getAllByText("AI overviews are unlikely to absorb urgent plumbing demand.").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getAllByText("Refresh GBP proof for the highest-converting service line.").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getAllByText("Map review gaps against the top three operators.").length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
   it("renders an empty-state shell for reports without metro rows", () => {
     render(<ReportV11Detail report={{ ...report, metros: [] }} />);
 

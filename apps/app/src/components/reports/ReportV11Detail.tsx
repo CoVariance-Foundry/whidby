@@ -11,6 +11,7 @@ import type { FullReportData, MetroScores, ReportMetro } from "@/lib/niche-finde
 import type { ScoreKey } from "@/lib/reports/score-explainers";
 import {
   createReportStrategyResultSummary,
+  normalizeReportGuidanceEvidence,
   userFacingStrategyProfileLabel,
 } from "@/lib/strategy-result-summary";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
@@ -443,12 +444,14 @@ function SignalsSection({ metro }: { metro: ReportMetro }) {
 }
 
 function EvidenceSection({ metro }: { metro: ReportMetro }) {
-  const summary = metro.guidance?.summary?.trim();
-  const actionItems = metro.guidance?.action_items?.filter((item) => item.trim()) ?? [];
+  const guidanceEvidence = normalizeReportGuidanceEvidence(metro.guidance);
+  const hasEvidence =
+    guidanceEvidence.narrative.length > 0 || guidanceEvidence.actionItems.length > 0;
+
   return (
     <section aria-label="Evidence" style={{ marginTop: 20 }}>
       <h3 style={sectionHeadingStyle()}>Evidence</h3>
-      {summary || actionItems.length > 0 ? (
+      {hasEvidence ? (
         <div
           style={{
             background: "linear-gradient(135deg, #1f1b16, #393124)",
@@ -457,19 +460,24 @@ function EvidenceSection({ metro }: { metro: ReportMetro }) {
             color: "#fff",
           }}
         >
-          {summary ? (
+          {guidanceEvidence.narrative.map((item, index) => (
             <p
+              key={item}
               style={{
-                margin: "0 0 14px",
+                margin:
+                  index === guidanceEvidence.narrative.length - 1 &&
+                  guidanceEvidence.actionItems.length === 0
+                    ? 0
+                    : "0 0 14px",
                 color: "#eee8dc",
                 fontSize: 14,
                 lineHeight: 1.6,
               }}
             >
-              {summary}
+              {item}
             </p>
-          ) : null}
-          {actionItems.length > 0 ? (
+          ))}
+          {guidanceEvidence.actionItems.length > 0 ? (
             <ol
               style={{
                 margin: 0,
@@ -480,7 +488,7 @@ function EvidenceSection({ metro }: { metro: ReportMetro }) {
                 fontSize: 13.5,
               }}
             >
-              {actionItems.map((item) => (
+              {guidanceEvidence.actionItems.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ol>

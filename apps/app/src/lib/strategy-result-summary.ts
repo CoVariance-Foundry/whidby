@@ -25,6 +25,68 @@ export interface StrategyResultSummaryDto {
   source_context: StrategyResultSourceContext;
 }
 
+export interface ReportGuidanceEvidence {
+  narrative: string[];
+  actionItems: string[];
+  evidence: string[];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function normalizeText(value: unknown): string | null {
+  return typeof value === "string" ? value.trim() || null : null;
+}
+
+function normalizeTextList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(normalizeText).filter((item): item is string => Boolean(item));
+  }
+  const item = normalizeText(value);
+  return item ? [item] : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+export function normalizeReportGuidanceEvidence(
+  guidance: ReportMetro["guidance"] | null | undefined,
+): ReportGuidanceEvidence {
+  const record = asRecord(guidance);
+  if (!record) {
+    return { narrative: [], actionItems: [], evidence: [] };
+  }
+
+  const generated = asRecord(record.guidance);
+  const narrative = uniqueStrings(
+    [
+      normalizeText(record.summary),
+      normalizeText(generated?.["headline"]),
+      normalizeText(generated?.["strategy"]),
+      normalizeText(generated?.["ai_resilience_note"]),
+    ].filter((item): item is string => Boolean(item)),
+  );
+  const actionItems = uniqueStrings([
+    ...normalizeTextList(record.action_items),
+    ...normalizeTextList(generated?.["priority_actions"]),
+  ]);
+
+  return {
+    narrative,
+    actionItems,
+    evidence: uniqueStrings([...narrative, ...actionItems]),
+  };
+}
+
 function normalizeScore(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value === "string" && !value.trim()) return null;
@@ -132,6 +194,8 @@ export function createReportStrategyResultSummary({
   metro: ReportMetro;
   reportHref?: string | null;
 }): StrategyResultSummaryDto {
+  const guidanceEvidence = normalizeReportGuidanceEvidence(metro.guidance);
+
   return {
     id: `${report.id}:${metro.cbsa_code}`,
     title: `${report.niche_keyword} in ${metro.cbsa_name}`,
@@ -141,7 +205,7 @@ export function createReportStrategyResultSummary({
     verdict: metro.difficulty_tier ?? null,
     confidence_score: normalizeScore(metro.scores.confidence?.score),
     ai_resilience_score: normalizeScore(metro.scores.ai_resilience),
-    evidence: metro.guidance?.summary ? [metro.guidance.summary] : [],
+    evidence: guidanceEvidence.evidence,
     warnings: normalizeWarnings(metro.scores.confidence?.flags),
     report_href: href,
     source_context: {
