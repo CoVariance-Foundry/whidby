@@ -317,9 +317,9 @@ function NextMoves({ report, metro }: { report: FullReportData; metro: ReportMet
       primary: true,
     },
     {
-      href: "/strategies/cash_cow",
-      title: "Check economics",
-      subtitle: "Pressure-test monetization and lead value with the cash cow lens.",
+      href: "/strategies/easy_win",
+      title: "Find the next Easy Win",
+      subtitle: "Pressure-test demand, competition, and monetization with the launch lens.",
       primary: false,
     },
     {

@@ -112,7 +112,35 @@ describe("/api/onboarding/target", () => {
     expect(body).toEqual({
       status: "validation_error",
       message:
-        "strategy_id must be one of easy_win, cash_cow, blue_ocean, gbp_blitz, portfolio_builder, expand_conquer, seasonal_arbitrage.",
+        "strategy_id must be one of easy_win, gbp_blitz, expand_conquer, keyword_hijack.",
+    });
+    expect(supabase.profileMaybeSingle).not.toHaveBeenCalled();
+    expect(supabase.targetUpsert).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 for visible locked strategy_id before profile lookup", async () => {
+    const supabase = createSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const req = new Request("http://localhost/api/onboarding/target", {
+      method: "POST",
+      body: JSON.stringify({
+        strategy_id: "portfolio_builder",
+        niche_keyword: "roofing",
+        geo_scope: "city",
+        city: "Phoenix",
+      }),
+    });
+
+    const res = await POST(req as never);
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body).toEqual({
+      status: "locked_strategy",
+      code: "strategy_locked",
+      message:
+        "Portfolio Builder is visible as a locked path node and cannot be selected as an onboarding target yet.",
     });
     expect(supabase.profileMaybeSingle).not.toHaveBeenCalled();
     expect(supabase.targetUpsert).not.toHaveBeenCalled();

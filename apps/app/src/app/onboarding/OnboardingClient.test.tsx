@@ -39,7 +39,7 @@ vi.mock("@/components/niche-finder/CityAutocomplete", () => ({
 
 const routing = {
   starter: "easy_win",
-  available: ["easy_win", "cash_cow", "blue_ocean", "gbp_blitz"],
+  available: ["easy_win", "gbp_blitz", "keyword_hijack"],
   rationale: "Start with one city.",
   next_route: "/strategies",
 } as const;

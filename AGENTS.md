@@ -165,13 +165,3 @@ S529 Strategy feature flag design — modeling PostHog rollout controls for the 
 
 Access 447k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
-
-## Cursor Cloud specific instructions
-
-Dependencies are installed by the startup update script (`npm install` + `pip install -e ".[dev]"`). Standard commands live in `docs-canonical/ENVIRONMENT.md` and the Build & Dev Commands table above. Non-obvious caveats for this VM:
-
-- **Python tools are not on `PATH`.** `pip install` places `pytest`/`ruff`/`uvicorn` in `~/.local/bin`, which is not on `PATH`. Invoke them as modules: `python3 -m pytest tests/unit/ -q`, `python3 -m ruff check src tests`, `python3 -m uvicorn ...`. The interpreter is `python3` (there is no `python` alias).
-- **Run the FastAPI bridge directly, not via `npm run dev:api`.** `dev:api` uses Docker Compose and `dev:api:local` is hardcoded to macOS (`arch -arm64 uvicorn ...`). On this Linux VM start it with `python3 -m uvicorn src.research_agent.api:app --port 8000`. The service degrades gracefully when Supabase/Anthropic/DataForSEO env vars are absent (logs warnings; dry-run scoring still works).
-- **Core scoring runs with zero secrets via dry-run.** `POST http://localhost:8000/api/niches/score` with body `{"niche":"plumber","city":"Huntsville","state":"AL","dry_run":true}` returns a full scored report from fixtures, bypassing DataForSEO/Anthropic/Supabase. This is the cheapest end-to-end smoke of the scoring pipeline.
-- **Frontends boot without secrets but auth/persistence/scoring UI do not.** `npm run dev:app` (3002), `dev:admin` (3001), `dev:web` (3000) serve fine; `/` redirects to `/login` (200). Authenticated flows (niche-finder UI, reports, billing) require real Supabase + API secrets in a root `.env` (copy `.env.example`). Without them the proxy logs `Missing Supabase env vars`.
-- **Known pre-existing failures (not environment-related).** `tests/unit/test_pipeline_orchestrator.py::test_score_niche_for_metro_composes_pipeline_and_returns_result` fails on a `seo_evidence_artifacts` assertion, and `npm run lint` fails on a `react-hooks/set-state-in-effect` error in `apps/admin/.../experiments/page.tsx`. `apps/app` and `apps/web` lint clean (warnings only).

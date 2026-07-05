@@ -7,8 +7,13 @@ import type {
   OnboardingGeoScope,
   OnboardingMetadataSource,
   OnboardingTargetRequest,
-  StrategyId,
 } from "@/lib/onboarding/types";
+import {
+  getRunnableStrategyPathNodes,
+  getStrategyPathNode,
+  isRunnableStrategyId,
+} from "@/lib/strategies/path-registry";
+import type { RunnableStrategyPathId } from "@/lib/strategies/path-registry";
 import { createClient } from "@/lib/supabase/server";
 
 const VALID_GEO_SCOPES: OnboardingGeoScope[] = [
@@ -18,15 +23,10 @@ const VALID_GEO_SCOPES: OnboardingGeoScope[] = [
   "nationwide",
 ];
 
-const VALID_STRATEGY_IDS: StrategyId[] = [
-  "easy_win",
-  "cash_cow",
-  "blue_ocean",
-  "gbp_blitz",
-  "portfolio_builder",
-  "expand_conquer",
-  "seasonal_arbitrage",
-];
+const RUNNABLE_STRATEGY_IDS = getRunnableStrategyPathNodes().map(
+  (node) => node.strategy_id,
+) satisfies RunnableStrategyPathId[];
+const VALID_STRATEGY_ID_MESSAGE = `strategy_id must be one of ${RUNNABLE_STRATEGY_IDS.join(", ")}.`;
 
 const VALID_METADATA_SOURCES: OnboardingMetadataSource[] = [
   "typed",
@@ -36,6 +36,7 @@ const VALID_METADATA_SOURCES: OnboardingMetadataSource[] = [
 ];
 
 class ValidationError extends Error {}
+class LockedStrategyError extends Error {}
 
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== "string" || !value.trim()) {
@@ -68,14 +69,18 @@ function normalizeGeoScope(value: unknown): OnboardingGeoScope {
   return value as OnboardingGeoScope;
 }
 
-function normalizeStrategyId(value: unknown): StrategyId {
+function normalizeStrategyId(value: unknown): RunnableStrategyPathId {
   const strategyId = normalizeRequiredString(value, "strategy_id");
-  if (!VALID_STRATEGY_IDS.includes(strategyId as StrategyId)) {
-    throw new ValidationError(
-      "strategy_id must be one of easy_win, cash_cow, blue_ocean, gbp_blitz, portfolio_builder, expand_conquer, seasonal_arbitrage.",
+  const pathNode = getStrategyPathNode(strategyId);
+  if (!pathNode?.is_visible) {
+    throw new ValidationError(VALID_STRATEGY_ID_MESSAGE);
+  }
+  if (!isRunnableStrategyId(strategyId)) {
+    throw new LockedStrategyError(
+      `${pathNode.name} is visible as a locked path node and cannot be selected as an onboarding target yet.`,
     );
   }
-  return strategyId as StrategyId;
+  return strategyId;
 }
 
 function normalizeMetadataSource(value: unknown): OnboardingMetadataSource | null {
@@ -224,6 +229,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { status: "validation_error", message: error.message },
         { status: 400 },
+      );
+    }
+
+    if (error instanceof LockedStrategyError) {
+      return NextResponse.json(
+        {
+          status: "locked_strategy",
+          code: "strategy_locked",
+          message: error.message,
+        },
+        { status: 409 },
       );
     }
 
