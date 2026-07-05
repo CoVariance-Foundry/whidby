@@ -12,10 +12,10 @@ export function routeOnboardingToStrategy(
   if (intent === "find_first") {
     if (focus === "value") {
       return {
-        starter: "cash_cow",
-        available: ["easy_win", "cash_cow", "blue_ocean", "gbp_blitz"],
+        starter: "easy_win",
+        available: ["easy_win", "gbp_blitz", "keyword_hijack"],
         rationale:
-          "You want to validate whether a market is worth building in. Cash Cow shows you what each lead is worth before you commit.",
+          "You want to validate whether a market is worth building in. Easy Win gives you the simplest first scan before you branch into profile gaps or keyword checks.",
         next_route: "/strategies",
       };
     }
@@ -23,7 +23,7 @@ export function routeOnboardingToStrategy(
     if (focus === "process") {
       return {
         starter: "easy_win",
-        available: ["easy_win", "gbp_blitz", "cash_cow", "blue_ocean"],
+        available: ["easy_win", "gbp_blitz", "keyword_hijack"],
         rationale:
           "You are new to the R&R process. Easy Win gives you the cleanest first data point: one city, one service, one score.",
         next_route: "/strategies",
@@ -33,7 +33,7 @@ export function routeOnboardingToStrategy(
     if (focus === "ranking") {
       return {
         starter: "easy_win",
-        available: ["easy_win", "gbp_blitz", "cash_cow", "blue_ocean"],
+        available: ["easy_win", "gbp_blitz", "keyword_hijack"],
         rationale:
           "Learning how to rank is your block. Easy Win targets markets with weak competition so your first site can reach page 1.",
         next_route: "/strategies",
@@ -42,7 +42,7 @@ export function routeOnboardingToStrategy(
 
     return {
       starter: "easy_win",
-      available: ["easy_win", "cash_cow", "blue_ocean", "gbp_blitz"],
+      available: ["easy_win", "gbp_blitz", "keyword_hijack"],
       rationale:
         "Picking the right niche is your block. Easy Win surfaces markets where competition is weakest: the fastest path to your first ranked site.",
       next_route: "/strategies",
@@ -52,16 +52,16 @@ export function routeOnboardingToStrategy(
   if (intent === "scale") {
     if (focus === "diversify_city") {
       return {
-        starter: "portfolio_builder",
+        starter: "expand_conquer",
         available: [
-          "portfolio_builder",
           "expand_conquer",
-          "cash_cow",
-          "blue_ocean",
           "easy_win",
+          "gbp_blitz",
+          "keyword_hijack",
+          "portfolio_builder",
         ],
         rationale:
-          "You want to add services in cities you already own. Portfolio Builder finds adjacent categories so you diversify without cannibalizing.",
+          "You want to add services in cities you already own. Expand & Conquer is the active path, with Portfolio Builder visible as a future node.",
         next_route: "/strategies",
       };
     }
@@ -71,9 +71,10 @@ export function routeOnboardingToStrategy(
         starter: "expand_conquer",
         available: [
           "expand_conquer",
+          "gbp_blitz",
+          "easy_win",
+          "keyword_hijack",
           "portfolio_builder",
-          "cash_cow",
-          "seasonal_arbitrage",
         ],
         rationale:
           "You have a proven playbook. Expand & Conquer finds cities statistically similar to your success with equal-or-lower competition.",
@@ -83,46 +84,46 @@ export function routeOnboardingToStrategy(
 
     if (focus === "revenue") {
       return {
-        starter: "cash_cow",
+        starter: "expand_conquer",
         available: [
-          "cash_cow",
-          "portfolio_builder",
           "expand_conquer",
           "easy_win",
-          "blue_ocean",
+          "gbp_blitz",
+          "keyword_hijack",
+          "portfolio_builder",
         ],
         rationale:
-          "You can rank. Now you want higher-value leads. Cash Cow ranks markets by revenue and demand signals.",
+          "You can rank. Expand & Conquer keeps the active path focused on repeatable markets while the heavier portfolio economics work stays deferred.",
         next_route: "/strategies",
       };
     }
 
     if (focus === "emerging") {
       return {
-        starter: "blue_ocean",
+        starter: "keyword_hijack",
         available: [
-          "blue_ocean",
-          "cash_cow",
-          "expand_conquer",
+          "keyword_hijack",
+          "easy_win",
+          "gbp_blitz",
           "portfolio_builder",
         ],
         rationale:
-          "You want to stay ahead of the competition curve. Blue Ocean surfaces categories with rising demand but empty SERPs.",
+          "You want to stay ahead of the competition curve. Keyword Hijack is the side branch for focused keyword checks before spend.",
         next_route: "/strategies",
       };
     }
 
     return {
-      starter: "cash_cow",
+      starter: "expand_conquer",
       available: [
-        "cash_cow",
-        "portfolio_builder",
         "expand_conquer",
-        "blue_ocean",
         "easy_win",
+        "gbp_blitz",
+        "keyword_hijack",
+        "portfolio_builder",
       ],
       rationale:
-        "With sites already ranked, Cash Cow helps you pick the next highest-value market to add.",
+        "With sites already ranked, Expand & Conquer helps you find the next repeatable market while deferred cross-metro plays stay out of the active path.",
       next_route: "/strategies",
     };
   }
@@ -130,18 +131,16 @@ export function routeOnboardingToStrategy(
   if (intent === "coach_agency") {
     if (focus === "agency") {
       return {
-        starter: "cash_cow",
+        starter: "easy_win",
         available: [
-          "cash_cow",
-          "expand_conquer",
-          "portfolio_builder",
-          "blue_ocean",
-          "gbp_blitz",
           "easy_win",
-          "seasonal_arbitrage",
+          "gbp_blitz",
+          "expand_conquer",
+          "keyword_hijack",
+          "portfolio_builder",
         ],
         rationale:
-          "Lead generation for clients means Cash Cow plus multi-market analysis is your primary workflow for qualifying territories at scale.",
+          "Lead generation for clients routes to Agency, while the strategy path keeps the active catalog simple.",
         next_route: "/agency",
       };
     }
@@ -151,12 +150,10 @@ export function routeOnboardingToStrategy(
         starter: "easy_win",
         available: [
           "easy_win",
-          "cash_cow",
-          "blue_ocean",
           "gbp_blitz",
-          "portfolio_builder",
           "expand_conquer",
-          "seasonal_arbitrage",
+          "keyword_hijack",
+          "portfolio_builder",
         ],
         rationale:
           "You teach R&R. Easy Win is where most students start, and the rest of the strategy set shows the progression.",
@@ -168,12 +165,10 @@ export function routeOnboardingToStrategy(
       starter: "easy_win",
       available: [
         "easy_win",
-        "cash_cow",
-        "blue_ocean",
         "gbp_blitz",
-        "portfolio_builder",
         "expand_conquer",
-        "seasonal_arbitrage",
+        "keyword_hijack",
+        "portfolio_builder",
       ],
       rationale:
         "You do both teaching and client work. Start with Easy Win as the reference point while keeping every strategy available.",
@@ -184,7 +179,7 @@ export function routeOnboardingToStrategy(
   if (intent === "researching") {
     return {
       starter: "easy_win",
-      available: ["easy_win", "cash_cow", "blue_ocean", "gbp_blitz"],
+      available: ["easy_win", "gbp_blitz", "keyword_hijack"],
       rationale:
         "You are exploring. Start in Explore Mode so you can browse cached data before spending scans.",
       next_route: "/explore",
@@ -193,7 +188,7 @@ export function routeOnboardingToStrategy(
 
   return {
     starter: "easy_win",
-    available: ["easy_win", "cash_cow", "blue_ocean", "gbp_blitz"],
+    available: ["easy_win", "gbp_blitz", "keyword_hijack"],
     rationale: "",
     next_route: "/strategies",
   };

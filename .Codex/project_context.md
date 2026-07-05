@@ -2,8 +2,6 @@
 
 ## Scoring Coverage & Benchmark Hardening
 
-2026-06-02 docs pass: `docs/algo_spec_v2.md` now documents the scoring methodology for product/support debugging. It separates report headline product scores, raw V2 benchmark vectors in `metro_score_v2`, and Explore/strategy projection scores; explains where `seo_benchmarks` affect actual V2 scores versus confidence; and includes a support checklist for disputed report scores. `docs-canonical/DATA-MODEL.md` points future agents to that doc as the score-explanation source of truth.
-
 `WHI-99` defines the production scoring coverage experiment in `docs-canonical/TEST-SPEC.md`. The source-of-truth spec gates paid production sampling behind the expected Supabase project ref `eoajvifhbmqmoluiokcj`, DFS-ready metros only, a one-pair canary, and a bounded 12x8 pilot across micro/small/medium/large/metro/mega population classes and the core services roofing, plumbing, hvac, tree service, auto repair, water damage restoration, electrician, and locksmith.
 
 The experiment measures API success, persistence through `reports`, `metro_scores`, `metro_score_v2`, `seo_facts`, and `explore_market_cells`, signal coverage by scoring component, benchmark usability at `sample_size_metros >= 8`, and app visibility. Classification thresholds are reliable, score-with-warning, telemetry-only, remove, and acquire-more-data. Top-5 DA and Lighthouse stay telemetry; missing values lower confidence but do not block scoring.
