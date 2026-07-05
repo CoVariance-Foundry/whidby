@@ -143,4 +143,24 @@ describe("ReportDetailModal", () => {
     );
     expect(screen.queryByRole("link", { name: /check economics/i })).not.toBeInTheDocument();
   });
+
+  it("renders an AI Resilience flagged badge when report score is below the default threshold", () => {
+    const flaggedReport: FullReportData = {
+      ...report,
+      metros: [
+        {
+          ...report.metros[0],
+          scores: {
+            ...report.metros[0].scores,
+            ai_resilience: 32,
+          },
+        },
+      ],
+    };
+
+    render(<ReportDetailModal report={flaggedReport} onClose={vi.fn()} onDelete={vi.fn()} />);
+
+    expect(screen.getByText("AI resilience flagged")).toBeInTheDocument();
+    expect(screen.getByLabelText(/AI Resilience flagged: score 32 below threshold 40/i)).toBeInTheDocument();
+  });
 });

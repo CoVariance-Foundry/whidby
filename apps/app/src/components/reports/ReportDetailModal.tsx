@@ -8,6 +8,7 @@ import { Icon, I } from "@/lib/icons";
 import { ARCHETYPES } from "@/lib/archetypes";
 import { scoreToneForValue } from "@/lib/design-tokens";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
+import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
 import { ScoreBar, ScoreCircle } from "@/components/ScoreVisuals";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
@@ -123,6 +124,11 @@ function ScoreCell({ label, value, scoreKey }: { label: string; value: number | 
       <div style={{ marginTop: 6 }}>
         <ScoreBar value={value} label={label} hideLabel hideValue />
       </div>
+      {scoreKey === "ai_resilience" ? (
+        <div style={{ marginTop: 7 }}>
+          <AIResilienceFlagBadge score={value} />
+        </div>
+      ) : null}
     </div>
   );
 }

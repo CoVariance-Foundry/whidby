@@ -1,7 +1,16 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
+import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
+import { AIResilienceModifierControls } from "@/components/AIResilienceModifierControls";
 import { ScoreCircle } from "@/components/ScoreVisuals";
+import {
+  DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
+  type AIResilienceModifierState,
+  filterAIResilienceFlagged,
+  readAIResilienceScore,
+  toAIResilienceFilterPayload,
+} from "@/lib/ai-resilience-modifier";
 import { Icon, I } from "@/lib/icons";
 import type {
   StrategyCatalogEntry,
@@ -18,6 +27,7 @@ interface StrategyResultCard {
   service: string;
   strategy_evidence: string[];
   warnings: string[];
+  ai_resilience_score: number | null;
 }
 
 interface DiscoverResponse {
@@ -32,7 +42,7 @@ interface LiveReportTarget {
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
-  aiResilienceFilter: boolean;
+  aiResilienceModifier: AIResilienceModifierState;
   limit: number;
 }
 
@@ -111,6 +121,7 @@ function normalizeResult(item: unknown, index: number): StrategyResultCard {
   const score = readNumber(record, ["score", "strategy_score", "opportunity_score"]);
   const evidence = readStringArray(record.strategy_evidence).concat(readStringArray(record.evidence));
   const warnings = readStringArray(record.warnings);
+  const aiResilienceScore = readAIResilienceScore(record);
 
   return {
     id: readString(record, ["id", "market_id", "cbsa_code"], `result-${index}`),
@@ -120,6 +131,7 @@ function normalizeResult(item: unknown, index: number): StrategyResultCard {
     service: readString(record, ["service", "service_name", "niche"], readString(serviceRecord, ["name", "label"], "Unknown service")),
     strategy_evidence: evidence,
     warnings,
+    ai_resilience_score: aiResilienceScore,
   };
 }
 
@@ -142,7 +154,7 @@ function buildPayload({
   service,
   primaryKeyword,
   referenceCityId,
-  aiResilienceFilter,
+  aiResilienceModifier,
   limit,
 }: {
   strategy: StrategyCatalogEntry;
@@ -150,7 +162,7 @@ function buildPayload({
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
-  aiResilienceFilter: boolean;
+  aiResilienceModifier: AIResilienceModifierState;
   limit: number;
 }): StrategyDiscoverRequest {
   return {
@@ -165,7 +177,7 @@ function buildPayload({
       strategy.input_shape === "city_service_keyword" ? primaryKeyword.trim() : null,
     reference_city_id:
       strategy.input_shape === "reference_city_service" ? referenceCityId.trim() : null,
-    ai_resilience_filter: aiResilienceFilter,
+    ...toAIResilienceFilterPayload(aiResilienceModifier),
     limit,
   };
 }
@@ -176,7 +188,7 @@ function liveReportTarget({
   service,
   primaryKeyword,
   referenceCityId,
-  aiResilienceFilter,
+  aiResilienceModifier,
   limit,
 }: {
   strategy: StrategyCatalogEntry;
@@ -184,7 +196,7 @@ function liveReportTarget({
   service: string;
   primaryKeyword: string;
   referenceCityId: string;
-  aiResilienceFilter: boolean;
+  aiResilienceModifier: AIResilienceModifierState;
   limit: number;
 }): LiveReportTarget {
   return {
@@ -196,7 +208,7 @@ function liveReportTarget({
       strategy.input_shape === "city_service_keyword" ? primaryKeyword.trim() : "",
     referenceCityId:
       strategy.input_shape === "reference_city_service" ? referenceCityId.trim() : "",
-    aiResilienceFilter,
+    aiResilienceModifier,
     limit,
   };
 }
@@ -216,7 +228,8 @@ function liveReportTargetKey(target: LiveReportTarget) {
     target.referenceCityId,
     target.service,
     target.primaryKeyword,
-    target.aiResilienceFilter,
+    target.aiResilienceModifier.threshold,
+    target.aiResilienceModifier.hide_flagged,
     target.limit,
   ]);
 }
@@ -226,7 +239,7 @@ function buildFreshRunPayload(target: LiveReportTarget): StrategyRunRequest {
     mode: "fresh",
     strategy_id: target.strategyId,
     service: target.service,
-    ai_resilience_filter: target.aiResilienceFilter,
+    ...toAIResilienceFilterPayload(target.aiResilienceModifier),
     limit: target.limit,
   };
 
@@ -260,7 +273,13 @@ function isQuotaExhausted(body: StrategyRunResponse) {
   );
 }
 
-function ResultCard({ result }: { result: StrategyResultCard }) {
+function ResultCard({
+  result,
+  aiResilienceModifier,
+}: {
+  result: StrategyResultCard;
+  aiResilienceModifier: AIResilienceModifierState;
+}) {
   return (
     <article
       style={{
@@ -283,6 +302,10 @@ function ResultCard({ result }: { result: StrategyResultCard }) {
           <h3 style={{ margin: 0, fontSize: 16, color: "var(--ink)" }}>
             {result.service} in {result.city}
           </h3>
+          <AIResilienceFlagBadge
+            score={result.ai_resilience_score}
+            threshold={aiResilienceModifier.threshold}
+          />
         </div>
         {result.strategy_evidence.length > 0 ? (
           <ul style={{ margin: "10px 0 0", paddingLeft: 18, color: "var(--ink-2)", fontSize: 13, lineHeight: 1.5 }}>
@@ -523,7 +546,9 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
   const [service, setService] = useState("");
   const [primaryKeyword, setPrimaryKeyword] = useState("");
   const [referenceCityId, setReferenceCityId] = useState("");
-  const [aiResilienceFilter, setAiResilienceFilter] = useState(false);
+  const [aiResilienceModifier, setAiResilienceModifier] = useState<AIResilienceModifierState>(
+    DEFAULT_AI_RESILIENCE_MODIFIER_STATE,
+  );
   const [limit, setLimit] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -535,6 +560,17 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
 
   const isPhase2Unavailable = strategy.status === "phase_2";
   const isUnavailable = isPhase2Unavailable;
+
+  const visibleResults = useMemo(
+    () =>
+      filterAIResilienceFlagged(
+        results,
+        (result) => result.ai_resilience_score,
+        aiResilienceModifier,
+      ),
+    [aiResilienceModifier, results],
+  );
+  const hiddenFlaggedResultCount = results.length - visibleResults.length;
 
   const canSubmit = useMemo(() => {
     if (isUnavailable || isLoading) return false;
@@ -557,7 +593,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       service,
       primaryKeyword,
       referenceCityId,
-      aiResilienceFilter,
+      aiResilienceModifier,
       limit,
     });
     const requestedTarget = liveReportTarget({
@@ -566,7 +602,7 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
       service,
       primaryKeyword,
       referenceCityId,
-      aiResilienceFilter,
+      aiResilienceModifier,
       limit,
     });
 
@@ -798,16 +834,12 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
             </div>
           </label>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--ink-2)", fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={aiResilienceFilter}
-              onChange={(event) => setAiResilienceFilter(event.target.checked)}
-              disabled={isUnavailable}
-              style={{ accentColor: "var(--accent)" }}
-            />
-            Add AI resilience warning filter
-          </label>
+          <AIResilienceModifierControls
+            value={aiResilienceModifier}
+            onChange={setAiResilienceModifier}
+            disabled={isUnavailable}
+            idPrefix={`strategy-${strategy.strategy_id}-ai-resilience`}
+          />
 
           <button type="submit" className="btn-primary" disabled={!canSubmit}>
             {isLoading ? "Searching..." : "Run discovery"} <Icon d={I.arrow} />
@@ -839,11 +871,48 @@ export default function StrategyPageClient({ strategy }: { strategy: StrategyCat
           </div>
         ) : null}
 
-        {results.length > 0 ? (
+        {hiddenFlaggedResultCount > 0 ? (
+          <div
+            role="status"
+            style={{
+              background: "var(--warn-soft)",
+              color: "var(--warn)",
+              border: "1px solid var(--rule)",
+              borderRadius: 8,
+              padding: 12,
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {hiddenFlaggedResultCount} flagged{" "}
+            {hiddenFlaggedResultCount === 1 ? "market is" : "markets are"} hidden by
+            the AI Resilience modifier.
+          </div>
+        ) : null}
+
+        {visibleResults.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {results.map((result) => (
-              <ResultCard key={result.id} result={result} />
+            {visibleResults.map((result) => (
+              <ResultCard
+                key={result.id}
+                result={result}
+                aiResilienceModifier={aiResilienceModifier}
+              />
             ))}
+          </div>
+        ) : results.length > 0 ? (
+          <div
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--rule)",
+              borderRadius: 8,
+              padding: 16,
+              color: "var(--ink-3)",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            All returned markets are hidden by the current AI Resilience threshold.
           </div>
         ) : zeroResultTarget ? (
           <>
