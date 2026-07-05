@@ -9,11 +9,13 @@ import { ARCHETYPES } from "@/lib/archetypes";
 import { scoreToneForValue } from "@/lib/design-tokens";
 import type { FullReportData, ReportMetro } from "@/lib/niche-finder/types";
 import { AIResilienceFlagBadge } from "@/components/AIResilienceFlagBadge";
-import { ScoreBar, ScoreCircle } from "@/components/ScoreVisuals";
+import { ScoreBar } from "@/components/ScoreVisuals";
+import { StrategyResultSummary } from "@/components/strategies/StrategyResultSummary";
 import ScoreInfoHover from "@/components/reports/ScoreInfoHover";
 import ScoreBreakdownTabs from "@/components/reports/ScoreBreakdownTabs";
 import ReportActions from "@/components/reports/ReportActions";
 import type { ScoreKey } from "@/lib/reports/score-explainers";
+import { createReportStrategyResultSummary } from "@/lib/strategy-result-summary";
 
 interface Props {
   report: FullReportData;
@@ -537,40 +539,14 @@ export default function ReportDetailModal({ report, onClose, onDelete }: Props) 
 
         {/* Body */}
         <div style={{ padding: "20px 24px 28px" }}>
-          {/* Opportunity headline */}
-          {report.metros.length > 0 && (
+          {topMetro ? (
             <div style={{ marginBottom: 24 }}>
-              <div
-                style={{
-                  fontFamily: "var(--serif)",
-                  fontStyle: "italic",
-                  fontSize: 11,
-                  color: "var(--ink-3)",
-                  marginBottom: 4,
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                Top opportunity score
-                <ScoreInfoHover scoreKey="opportunity" />
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
-                <ScoreCircle
-                  value={report.metros[0].scores.opportunity}
-                  label="Top opportunity score"
-                  size={78}
-                />
-                <div style={{ width: 132, paddingBottom: 10 }}>
-                  <ScoreBar
-                    value={report.metros[0].scores.opportunity}
-                    label="Top opportunity score"
-                    hideLabel
-                    hideValue
-                  />
-                </div>
-              </div>
+              <StrategyResultSummary
+                summary={createReportStrategyResultSummary({ report, metro: topMetro })}
+                reportCtaLabel="Open full report page"
+              />
             </div>
-          )}
+          ) : null}
 
           {/* Metros */}
           {report.metros.length > 0 && (

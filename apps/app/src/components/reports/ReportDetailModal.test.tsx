@@ -118,6 +118,11 @@ describe("ReportDetailModal", () => {
   it("links the top market to Competitor Intel with report context", () => {
     render(<ReportDetailModal report={report} onClose={vi.fn()} onDelete={vi.fn()} />);
 
+    expect(screen.getByRole("link", { name: /open full report page/i })).toHaveAttribute(
+      "href",
+      "/reports/rpt_123",
+    );
+
     const link = screen.getByRole("link", { name: /run competitor intel/i });
     const href = link.getAttribute("href");
     expect(href).toBeTruthy();
@@ -160,7 +165,7 @@ describe("ReportDetailModal", () => {
 
     render(<ReportDetailModal report={flaggedReport} onClose={vi.fn()} onDelete={vi.fn()} />);
 
-    expect(screen.getByText("AI resilience flagged")).toBeInTheDocument();
-    expect(screen.getByLabelText(/AI Resilience flagged: score 32 below threshold 40/i)).toBeInTheDocument();
+    expect(screen.getAllByText("AI resilience flagged")).toHaveLength(2);
+    expect(screen.getAllByLabelText(/AI Resilience flagged: score 32 below threshold 40/i)).toHaveLength(2);
   });
 });
