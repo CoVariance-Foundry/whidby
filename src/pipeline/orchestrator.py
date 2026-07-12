@@ -240,14 +240,23 @@ async def score_niche_for_metro(
 
     v2_scores = None
     if benchmark_repository is not None:
-        v2_scores = _compute_v2_scores_for_orchestrator(
-            niche_normalized=niche.strip().lower(),
-            cbsa_code=resolved.cbsa_code,
-            signals=signals,
-            population=resolved.population,
-            benchmark_repository=benchmark_repository,
-            city_data_provider=city_data_provider,
-        )
+        try:
+            v2_scores = _compute_v2_scores_for_orchestrator(
+                niche_normalized=niche.strip().lower(),
+                cbsa_code=resolved.cbsa_code,
+                signals=signals,
+                population=resolved.population,
+                benchmark_repository=benchmark_repository,
+                city_data_provider=city_data_provider,
+            )
+        except Exception:
+            if collection_profile == "full":
+                raise
+            logger.warning(
+                "[%s] optional V2 benchmark unavailable for interactive report",
+                run_id,
+                exc_info=True,
+            )
 
     # --- M9 report assembly ---
     m9_start = time.monotonic()

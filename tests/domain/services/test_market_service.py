@@ -216,15 +216,24 @@ def test_interactive_score_drains_cost_context_without_optional_flush(
     kb: FakeKnowledgeStore,
     dfs: FakeDFSClient,
 ) -> None:
+    async def interactive_pipeline(**kwargs: Any) -> FakePipelineResult:
+        return FakePipelineResult(
+            report=make_fake_report(),
+            opportunity_score=72,
+            evidence=[],
+            seo_evidence_artifacts=[{"id": "optional-evidence"}],
+            local_pack_listing_facts=[{"cid": "optional-listing"}],
+        )
+
     service = MarketService(
-        pipeline_fn=fake_pipeline,
+        pipeline_fn=interactive_pipeline,
         dfs_client=dfs,
         llm_client=None,
         market_store=store,
         knowledge_store=kb,
     )
 
-    asyncio.run(
+    result = asyncio.run(
         service.score(
             ScoreRequest(
                 niche="plumbing",
@@ -237,6 +246,51 @@ def test_interactive_score_drains_cost_context_without_optional_flush(
 
     assert dfs.cost_tracker.flushed_report_ids == []
     assert dfs.cost_tracker.drained_context_ids == ["score-fake-1"]
+    assert result.report_id == "rpt-1"
+    assert result.entity_id is None
+    assert result.snapshot_id is None
+    assert result.persist_warning is None
+    assert "rpt-1" in store.reports
+    assert "seo_evidence_artifacts" not in store.reports["rpt-1"]
+    assert "local_pack_listing_facts" not in store.reports["rpt-1"]
+    assert kb.entities == {}
+    assert kb.snapshots == {}
+    assert kb.evidence == []
+    assert kb.links == []
+    assert kb.feedback_rows == []
+
+
+def test_interactive_core_report_ignores_optional_collaborator_failure(
+    store: FakeMarketStore,
+    dfs: FakeDFSClient,
+) -> None:
+    class ExplodingKnowledgeStore(FakeKnowledgeStore):
+        def upsert_entity(self, key: Any) -> str:
+            raise RuntimeError("optional collaborator unavailable")
+
+    service = MarketService(
+        pipeline_fn=fake_pipeline,
+        dfs_client=dfs,
+        llm_client=None,
+        market_store=store,
+        knowledge_store=ExplodingKnowledgeStore(),
+    )
+
+    result = asyncio.run(
+        service.score(
+            ScoreRequest(
+                niche="plumbing",
+                city="Boise",
+                state="ID",
+                collection_profile="interactive",
+            )
+        )
+    )
+
+    assert result.report_id == "rpt-1"
+    assert result.persist_warning is None
+    assert result.entity_id is None
+    assert result.snapshot_id is None
 
 
 def test_score_passes_v2_dependencies_to_pipeline(

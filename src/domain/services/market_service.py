@@ -177,10 +177,13 @@ class MarketService:
         if not request.dry_run:
             try:
                 persistence_report = deepcopy(result.report)
-                if getattr(result, "seo_evidence_artifacts", None):
-                    persistence_report["seo_evidence_artifacts"] = result.seo_evidence_artifacts
-                if getattr(result, "local_pack_listing_facts", None):
-                    persistence_report["local_pack_listing_facts"] = result.local_pack_listing_facts
+                if request.collection_profile == "full":
+                    if getattr(result, "seo_evidence_artifacts", None):
+                        persistence_report["seo_evidence_artifacts"] = result.seo_evidence_artifacts
+                    if getattr(result, "local_pack_listing_facts", None):
+                        persistence_report["local_pack_listing_facts"] = (
+                            result.local_pack_listing_facts
+                        )
                 report_id = self._store.persist_report(persistence_report)
             except Exception:
                 logger.exception(
@@ -210,7 +213,7 @@ class MarketService:
         # --- KB update ---
         entity_id: str | None = None
         snapshot_id: str | None = None
-        if not request.dry_run:
+        if not request.dry_run and request.collection_profile == "full":
             try:
                 entity_id = self._kb.upsert_entity(canonical)
                 snapshot_id = self._kb.create_snapshot(
@@ -241,7 +244,12 @@ class MarketService:
                 logger.exception("KB persistence failed for report_id=%s", report_id)
 
         # --- Feedback logging ---
-        if not request.dry_run and report_id and not persist_failed:
+        if (
+            not request.dry_run
+            and request.collection_profile == "full"
+            and report_id
+            and not persist_failed
+        ):
             try:
                 log_feedback(result.report, self._kb)
             except Exception:

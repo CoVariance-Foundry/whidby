@@ -1,9 +1,9 @@
 # Whidby Backend Execution and Render Memory Reliability Review
 
-- **Status:** Review artifact — production OOM confirmed; autocomplete catalog causal link high-confidence; implementation and acceptance not yet verified
+- **Status:** Local production-image remediation verified; live Render deployment remains unverified
 - **Date:** 2026-07-11
 - **Scope:** Consumer onboarding, place autocomplete, Vercel BFF routes, Render FastAPI, M4-M9 scoring, persistence, and production operations
-- **Decision requested:** Execute and measure the bounded synchronous first-report remediation; treat infrastructure scaling only as temporary containment
+- **Decision requested:** Deploy the verified remediation, then confirm the live Render revision and authenticated customer smoke
 
 ## Executive conclusion
 
@@ -25,7 +25,7 @@ Place autocomplete
   -> UI displays “Report could not be started.”
 ```
 
-The accepted response is layered:
+The response has now been implemented and verified locally in the production image:
 
 1. **Stop the high-confidence trigger path:** remove or gate DataForSEO catalog enrichment from interactive autocomplete and return Mapbox-only suggestions. The product already has MetroDB/state fallbacks for scoring.
 2. **Bound the customer pipeline:** use an explicit `interactive` profile with one volume batch, at most six eligible organic SERPs, one maps SERP, GBP info, business listings, no per-keyword LLM fanout, at most ten provider calls, and concurrency capped at eight.
@@ -54,8 +54,12 @@ These measurements are confirmed for their stated local live-provider or synthet
 | Confirmed integration observation | The configured M4 default model is unavailable, causing approximately 50 serial Haiku intent calls | Explains the observed M4 amplification; exact production contribution still requires the authoritative stage trace. |
 | Confirmed local synthetic measurement | M6-M9 over a synthetic 40-MB M5 payload completed in approximately 9 ms below 80 MB RSS | Rules out pure deterministic M6-M9 computation as the primary measured bottleneck; it does not measure provider or persistence work. |
 | Confirmed production event | The Render autocomplete process used more than 2 GB and was killed on July 10, with the same class of event on July 8 | Establishes the recurring production memory incident, separately from the local M4-M9 samples. |
+| **Verified production-image acceptance** | Five durable POST-plus-immediate-GET runs completed in `22.080604`, `15.618760`, `14.333455`, `14.126593`, and `13.017500` seconds; maximum cgroup peak was `142540800` bytes | Two fresh containers and one three-run sequential container passed every latency, schema, ID, persistence-warning, OOM, absolute-memory, and retained-growth gate. |
 
-The unoptimized authoritative baseline will be captured later by the production-image harness. Until that redacted result exists, the exact FastAPI-plus-persistence latency and cgroup peak for one scoring request remain unverified.
+The authoritative result is stored in ignored artifact
+`artifacts/performance/first-report-method-ab-core-only.json`. It verifies the
+local production image against staging providers and persistence; it does not
+prove that the same revision is deployed on live Render.
 
 ## Production incident timeline
 
@@ -141,7 +145,7 @@ This history raises the location bridge from a generic suspicion to a high-confi
 | Timeout guard failure | `asyncio.wait_for` surrounds synchronous Supabase/cache work, so it cannot enforce 1.5 seconds. | Confirmed from code. |
 | Blast radius | Autocomplete and scoring share one Uvicorn process and app-lifetime state. OOM removes both lightweight and heavy API traffic. | Confirmed from deployment/code. |
 | User failure | Vercel performs synchronous scoring with no upstream deadline and is killed at 300 seconds. | Confirmed from Vercel log/code. |
-| Architectural cause | The interactive request path has no enforced end-to-end product deadline, bounded collection profile, core-first persistence boundary, or retained-state cap. | Confirmed from architecture/code. |
+| Architectural cause | The failed production revision had no enforced end-to-end product deadline, bounded collection profile, core-first persistence boundary, or retained-state cap. | Confirmed in the incident revision; remediated and verified locally, not yet deployed. |
 
 ## Current backend system
 
@@ -185,9 +189,11 @@ The repository and live service do not describe the same deployment:
 
 Source-controlled infrastructure must be reconciled with the Render dashboard before any readiness claim.
 
-## Other memory and latency risks
+## Other memory and latency risks in the incident revision
 
-These did not precede `NICHES_SCORE` in this incident, but they can trigger later failures once autocomplete is repaired.
+These did not precede `NICHES_SCORE` in this incident. The bounded cache,
+context-scoped tracker, shared HTTP client, M4/M5 limits, and core-first path are
+now implemented locally; this table preserves why each control was required.
 
 | Risk | Evidence | Effect |
 | --- | --- | --- |
@@ -389,6 +395,34 @@ The first harness execution sampled only `/proc/1/status` and reported `1310720`
 
 Two attempts to rerun the literal wrapper command stalled before Python or Docker while Node was blocked in `read(2)` on the default source `.env`; no provider call occurred. The corrected measurement used the wrapper's supported `--source .env` option against the already-synced worktree copy. All benchmark flags, image, payload, staging-variable remapping, and limits were otherwise unchanged.
 
+## Verified Method A plus Method B result
+
+The final production-image run used the same canonical Tampa/Plumbing payload,
+decimal 500,000,000-byte memory and swap limits, two fresh containers, and one
+three-run sequential container. Every POST returned 200 with a non-null report
+ID and no `persist_warning`; every immediate GET returned 200, repeated the ID,
+and passed the required schema validation.
+
+| Signal | Verified result |
+| --- | ---: |
+| Fresh POST-plus-GET intervals | `22.080604s`, `15.618760s` |
+| Sequential POST-plus-GET intervals | `14.333455s`, `14.126593s`, `13.017500s` |
+| Maximum cgroup `memory.peak` | `142540800` bytes |
+| Maximum quiescent `memory.current` | `141750272` bytes |
+| Maximum aggregate service-process RSS | `159924224` bytes |
+| Run-one to run-three `memory.current` growth | `192512` bytes |
+| Run-one to run-three aggregate RSS growth | `0` bytes |
+| OOM state | `false` for all containers |
+| Overall verdict | **PASS** |
+
+Two staging schema drifts were exposed during the acceptance sequence and are
+now contained by the intended interactive boundary: optional V2 benchmark
+enrichment degrades when lineage columns are unavailable, and interactive core
+persistence does not attempt optional SEO-evidence or local-pack fact writes.
+The durable report, report keywords, metro signals, and metro scores remain
+synchronous and immediately readable. The comprehensive `full` profile retains
+the existing optional enrichment behavior.
+
 ## Decision record
 
 Approved direction:
@@ -419,15 +453,15 @@ Because the validator is unavailable locally, this task uses targeted consistenc
 ### Repository evidence
 
 - `apps/app/src/app/api/agent/places/suggest/route.ts` — bounded Vercel autocomplete proxy.
-- `apps/app/src/app/api/agent/scoring/route.ts` — quota consumption and unbounded Render fetch.
+- `apps/app/src/app/api/agent/scoring/route.ts` — quota consumption, explicit interactive profile, and 58-second Render abort.
 - `apps/app/src/app/api/onboarding/start-report/route.ts` — synchronous onboarding wrapper.
 - `src/research_agent/api.py` — FastAPI autocomplete, scoring endpoint, shared service/client wiring.
-- `src/research_agent/places.py` — global DataForSEO catalog hydration and retained index.
-- `src/clients/dataforseo/persistent_cache.py` and `cache.py` — synchronous full JSONB read and unbounded L1.
-- `src/clients/dataforseo/client.py` — catalog request, full-response hashing, per-call HTTP clients, shared cost tracking.
+- `src/research_agent/places.py` — Mapbox-only interactive autocomplete and bounded shared Mapbox client.
+- `src/clients/dataforseo/persistent_cache.py` and `cache.py` — bounded L1 and persistent-cache admission policy.
+- `src/clients/dataforseo/client.py` — locations exclusion, streaming response hashing, and shared HTTP pool.
 - `src/clients/llm/client.py` — synchronous Anthropic SDK call inside async methods.
-- `src/pipeline/batch_executor.py` — unbounded dependency-level `asyncio.gather`.
-- `src/domain/services/market_service.py` — report copy, persistence, KB, and cost lifecycle.
+- `src/pipeline/batch_executor.py` — shared concurrency gate and per-task deadlines.
+- `src/domain/services/market_service.py` — core-first interactive persistence and context drain.
 - `render.yaml` and `Dockerfile.api` — one public web service and one Uvicorn process.
 - Commits `42f4ac9`, `6ba4cf9`, and `fc2161c` — removal, reintroduction, and subsequent peak-memory amplification of the OOM path.
 

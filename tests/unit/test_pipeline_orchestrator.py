@@ -227,6 +227,10 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
 
 
 def test_interactive_profile_reaches_collection_and_uses_template_guidance() -> None:
+    class _UnavailableBenchmarkRepository:
+        def get(self, *, niche_normalized: str, population_class: str):
+            raise RuntimeError("benchmark schema drift")
+
     fake_dfs = _make_fake_dfs_client()
     collect = AsyncMock(return_value=_FAKE_RAW_COLLECTION)
     guidance = AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)
@@ -249,7 +253,7 @@ def test_interactive_profile_reaches_collection_and_uses_template_guidance() -> 
         ),
         patch("src.pipeline.orchestrator.classify_and_generate_guidance", new=guidance),
     ):
-        asyncio.run(
+        result = asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
                 city="Phoenix",
@@ -257,11 +261,13 @@ def test_interactive_profile_reaches_collection_and_uses_template_guidance() -> 
                 collection_profile="interactive",
                 llm_client="llm-client",
                 dataforseo_client=fake_dfs,
+                benchmark_repository=_UnavailableBenchmarkRepository(),
             )
         )
 
     assert collect.await_args.kwargs["collection_profile"] == "interactive"
     assert guidance.await_args.args[1] is None
+    assert "v2_scores" not in result.report["metros"][0]
 
 
 def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
