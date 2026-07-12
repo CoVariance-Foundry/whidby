@@ -22,7 +22,7 @@ Wire the existing pipeline into production paths so the user-facing flow — ent
 3. **FastAPI routes** `POST /api/niches/score` and `GET /api/niches/{id}` on `src/research_agent/api.py`.
 4. **Next.js admin proxies** rewritten: `/api/agent/scoring`, `/api/agent/exploration` now hit FastAPI. `response-adapter.ts` deleted.
 5. **Diagnostic routes** `/api/agent/health`. `/api/agent/exploration-chat` now surfaces upstream status + body.
-6. **Loading + error UI** on the admin exploration and home pages for the now-async (30-60s) scoring path.
+6. **Loading + error UI** on the admin exploration and home pages for the synchronous live scoring path. Customer first-report latency and durability are governed by Feature 016 rather than the former elapsed-time estimate.
 7. **Playwright E2E** at `apps/admin/e2e/niche-scoring.spec.ts` using `NEXT_PUBLIC_NICHE_DRY_RUN=1` on the Playwright `webServer`.
 
 ## Dependencies
@@ -36,7 +36,7 @@ Wire the existing pipeline into production paths so the user-facing flow — ent
 - `pytest tests/unit/ -q` — 290+ tests pass (baseline + new)
 - `ruff check src/ tests/` — clean
 - `cd apps/admin && npx vitest run src/app/api/agent/` — all route tests pass
-- Live smoke (`DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD`, `ANTHROPIC_API_KEY` set + FastAPI running): submitting Phoenix + roofing produces a non-stub score in 30-90s and writes a row to `reports`
+- Live acceptance is superseded by `specs/016-first-report-performance/spec.md`: the production-image gate must complete a successful scoring POST plus immediate schema-valid GET of the same durable report in `<= 60.0` seconds, without `persist_warning`, under the `500000000`-byte cgroup limit. The former 30-90-second allowance is retired.
 
 ## Plan
 

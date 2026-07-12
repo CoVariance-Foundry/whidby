@@ -1,8 +1,8 @@
 # Test Specification
 
-<!-- docguard:version 1.8.0 -->
+<!-- docguard:version 1.9.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-06-30 -->
+<!-- docguard:last-reviewed 2026-07-11 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file declares what tests MUST exist.
@@ -78,6 +78,45 @@ tests/
 | `src/research_agent/` | `tests/unit/test_research_agent_loop.py` | — | ✅ |
 | `src/research_agent/places.py` | `tests/unit/test_places_bridge.py`, `tests/unit/test_api_places_suggest.py` | — | ✅ |
 | `src/pipeline/orchestrator.py` | `tests/unit/test_pipeline_orchestrator.py` | — | ✅ |
+
+## First-Report Performance Test Obligations
+
+Feature 016 is accepted only by the production-image gate below. Unit, integration, and BFF tests are required supporting evidence but cannot substitute for it.
+
+| Scope | Required coverage | Required tests / evidence |
+| --- | --- | --- |
+| Authoritative Docker/cgroup gate | Build `Dockerfile.api` (or use the equivalent production image), map staging Supabase credentials through a mode-0600 temporary env file, opt in explicitly to paid calls, and launch with `--memory=500000000 --memory-swap=500000000`. Health startup has a 30-second bound and is excluded from report latency. | `scripts/perf/first_report_benchmark.py`, `tests/unit/test_first_report_benchmark.py`, redacted JSON under ignored `artifacts/performance/` |
+| Shared latency deadline | Start one monotonic 60.0-second deadline immediately before POST; give POST and then the immediate GET only the remaining time. Both responses are 2xx, POST has a non-null `report_id` and no `persist_warning`, GET repeats that exact ID, and parsed GET JSON contains `generated_at`, `spec_version`, `input`, `keyword_expansion`, `metros`, and `meta`. No HTTP request is unbounded. | Benchmark validator unit cases plus production-image result |
+| Cold-run rule | Run two fresh production-image containers with exactly one canonical Tampa/Plumbing `interactive` report each. Every POST/read pair and cgroup peak must pass independently. | Final benchmark uses `--fresh-containers 2` |
+| Repeated-state rule | Run three reports sequentially in one additional container. After each validated GET, wait five seconds, then capture cgroup `memory.current` and process-1 `VmRSS`; both stay below `500000000` bytes and neither run-three sample exceeds run one by more than `50000000` bytes. `memory.peak` stays at or below `500000000` bytes, and cache/tracker counts remain capped after every report. | Final benchmark uses `--sequential-runs 3 --quiescence-seconds 5 --max-retained-growth-bytes 50000000` plus bounded-state unit tests |
+| Degraded readable report | Upstream failures produce a durable, immediately readable complete report containing the normalized seed keyword, resolved target, complete schema, deterministic fallback signals and scores, low confidence, and structured provider failures without weakening either hard limit. | `tests/unit/test_keyword_expansion.py`, `tests/unit/test_batch_executor.py`, `tests/unit/test_pipeline_orchestrator.py`, `tests/unit/test_api_niches.py`, `tests/domain/services/test_market_service.py` |
+| Autocomplete no-catalog regression | Interactive `/api/places/suggest` returns usable Mapbox-only rows with a null DFS code and never calls or iterates `DataForSEOClient.locations()`, including when a 226,000-row sentinel catalog is available. | `tests/unit/test_api_places_suggest.py` |
+| M4 bounded fanout | Interactive expansion overlaps independent sources, completes within 8 seconds, preserves deterministic ordering, and makes zero per-keyword LLM classification calls even for 50 opaque suggestions. A source timeout retains at least the normalized seed keyword with low confidence. | `tests/unit/test_llm_client.py`, `tests/unit/test_keyword_expansion.py`, `tests/unit/test_intent_classifier.py` |
+| Interactive task cap | One metro plans at most ten actual provider calls: one all-keyword volume batch, at most six deterministic eligible organic SERPs, one maps SERP, GBP info, and business listings. It schedules no backlinks, Lighthouse, or Google reviews; `full` preserves existing acquisition behavior. | `tests/unit/test_collection_plan.py`, `tests/unit/test_data_collection.py`, `tests/unit/test_pipeline_orchestrator.py` |
+| Bounded execution | One semaphore caps M5 concurrency at eight. Live work is bounded at 12 seconds and queued work at 20 seconds; overruns become structured failures while successful siblings survive. | `tests/unit/test_batch_executor.py` |
+| Bounded provider state | L1 actively expires entries, retains at most 128 values, rejects values above 2,000,000 serialized bytes and `None`, and never caches the locations catalog. One provider HTTP client is reused and closed by FastAPI lifespan; response hashing does not create a second full byte buffer. | `tests/unit/test_response_cache.py`, `tests/unit/test_persistent_cache.py`, `tests/unit/test_dataforseo_client.py`, `tests/integration/test_dataforseo_integration.py` |
+| Context-scoped cost drain | The orchestrator exposes the exact `collection_context_id`; interactive completion drains only that context without a synchronous optional cost flush, while full-profile flushing inserts and drains only its own records. Three contexts produce `N`, `N`, `N`, never cumulative `N`, `2N`, `3N`. | `tests/unit/test_pipeline_orchestrator.py`, `tests/domain/services/test_market_service.py` |
+| Core-first interactive persistence | Before returning, `interactive` persists the durable report and critical score rows only. Cost logging, KB entity/snapshot/evidence writes, feedback logging, and generated guidance are not invoked synchronously or placed in an untracked in-process task; their absence cannot produce `persist_warning` after core durability. `full` behavior remains unchanged. | `tests/domain/services/test_market_service.py`, `tests/unit/test_pipeline_orchestrator.py` |
+| Customer BFF deadline | The consumer scoring proxy explicitly sends `collection_profile: "interactive"`, aborts the upstream request at exactly 58,000 ms, returns the existing unavailable response, and refunds consumed quota exactly once before the 60-second user boundary. | `apps/app/src/app/api/agent/scoring/route.test.ts` |
+
+Run the final authoritative gate from the repository root:
+
+```bash
+node scripts/dev/sync_worktree_env.mjs -- python3.11 scripts/perf/first_report_benchmark.py \
+  --dockerfile Dockerfile.api \
+  --image whidby-first-report-perf:local \
+  --fresh-containers 2 \
+  --sequential-runs 3 \
+  --timeout-seconds 60 \
+  --memory-bytes 500000000 \
+  --health-timeout-seconds 30 \
+  --quiescence-seconds 5 \
+  --max-retained-growth-bytes 50000000 \
+  --results artifacts/performance/first-report-final.json \
+  --allow-paid-provider-calls
+```
+
+`--fresh-containers N` means N containers with exactly one report each. `--sequential-runs N` means one additional container with N reports in sequence. The runner must redact output and delete its temporary env file even on failure.
 
 ## Explore Cities Test Obligations
 
@@ -480,3 +519,4 @@ npm run qa:visual:app
 | 1.7.8 | 2026-05-24 | WHI-127 evidence lineage schema | Added local-place identifier and raw SEO evidence artifact persistence test obligations |
 | 1.7.9 | 2026-05-31 | WHI-127 review fix | Added collection context id and non-fatal evidence side-channel failure test obligations |
 | 1.8.0 | 2026-06-30 | Synthesis Reflow | Added source-of-truth, agent-runbook, path, unlock, visual QA, and standard approval gate obligations |
+| 1.9.0 | 2026-07-11 | First-report performance | Added the production-image POST/read deadline, 500,000,000-byte cgroup gate, retained-state proof, bounded interactive pipeline, core-first persistence, and BFF abort/refund obligations |

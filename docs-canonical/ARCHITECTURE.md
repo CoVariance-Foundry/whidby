@@ -1,8 +1,8 @@
 # Architecture
 
-<!-- docguard:version 1.6.0 -->
+<!-- docguard:version 1.7.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-06-30 -->
+<!-- docguard:last-reviewed 2026-07-11 -->
 <!-- docguard:owner @widby-team -->
 
 > **Canonical document** — Design intent. This file describes WHAT the system is designed to be.
@@ -11,8 +11,8 @@
 | Metadata | Value |
 |----------|-------|
 | **Status** | approved |
-| **Version** | `1.6.0` |
-| **Last Updated** | 2026-06-30 |
+| **Version** | `1.7.0` |
+| **Last Updated** | 2026-07-11 |
 | **Owner** | @widby-team |
 
 ---
@@ -113,7 +113,7 @@ Onboarding API contracts:
 | `GET /api/onboarding/profile` | Return the current user's onboarding status, persisted answers, recommended strategy, selected target, and resume route. |
 | `POST /api/onboarding/profile` | Upsert profile answers (`intent`, `focus`, `coach_or_agency`, `referral_source`), compute `recommended_strategy_id`, and store `next_route`. |
 | `POST /api/onboarding/target` | Upsert selected strategy + service + geography, including `place_id`, `dataforseo_location_code`, `cbsa_code`, `state`, `geo_scope`, and `resolved_label` when available. |
-| `POST /api/onboarding/start-report` | Validate the saved target, apply the existing entitlement/quota rules, then invoke the existing scoring proxy contract and return a report redirect. |
+| `POST /api/onboarding/start-report` | Validate the saved target, apply the existing entitlement/quota rules, then invoke the synchronous `interactive` scoring contract and return a report redirect. Its scoring proxy must abort and refund consumed quota before the 60-second user boundary. |
 
 State machine:
 
@@ -129,6 +129,19 @@ anonymous
 
 Free users can complete onboarding and browse cached opportunities, but they cannot generate fresh reports. Plus and Pro users with remaining monthly quota can start a fresh report from onboarding. Researching users skip fresh-report prompts and land in `/explore`.
 
+#### First-report execution profiles
+
+The M4-M9 pipeline exposes two collection profiles with different product purposes:
+
+| Profile | Caller and purpose | Blocking evidence | Persistence and completion boundary |
+| --- | --- | --- | --- |
+| `interactive` | Customer-facing scoring and onboarding through the consumer BFF | Bounded attempts for one keyword-volume batch, at most six representative eligible organic SERPs, one maps SERP, GBP info, and business listings | Only the durable report and critical score rows block the response. The POST plus immediate schema-valid GET of the same `report_id` must complete within `60.0` seconds under one shared deadline; FastAPI targets 55 seconds so the BFF can abort at 58 seconds and refund quota. |
+| `full` | Offline, benchmark, backfill, and other non-interactive acquisition | Existing comprehensive M5 acquisition, including explicitly enabled enrichment | Preserves the broader acquisition and optional-persistence behavior; it is not the customer first-report profile. |
+
+Backlinks, Lighthouse, review-velocity acquisition, generated M8 copy, cost logging, knowledge-base evidence, and feedback logging are optional on `interactive` and cannot execute synchronously on its response path. They also cannot be moved to an untracked in-process task. If a provider fails, `interactive` still persists a complete report schema with the normalized seed keyword, resolved target, deterministic fallback signals and scores, low confidence, and structured provider failures. A successful POST cannot contain `persist_warning`, and the immediate GET must return the same `report_id` plus `generated_at`, `spec_version`, `input`, `keyword_expansion`, `metros`, and `meta`.
+
+The authoritative memory boundary is the production image running under cgroup v2 with `memory.peak <= 500000000` bytes. Three sequential reports in one container wait five seconds after each read; `memory.current` and process RSS must remain under the same hard limit, and neither may grow by more than `50000000` bytes from run one to run three. Increasing the live Render plan is temporary operational containment only and does not change this architecture contract.
+
 ### Niche Finder (both apps)
 
 Admin (`apps/admin`) hosts a **dual-surface niche finder**:
@@ -140,7 +153,7 @@ Admin also hosts billing operations visibility at `/billing`. The page reads `bi
 
 Consumer (`apps/app`) hosts scoring and discovery surfaces:
 
-- **Niche finder (`/niche-finder`)**: city + service input (city via `CityAutocomplete` backed by Mapbox Geocoding `/api/places/suggest` endpoint → autocompletes to `{city, region, country, place_id, dataforseo_location_code}` with global coverage; falls back to legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable). The DataForSEO location bridge (`src/research_agent/places.py::DataForSEOLocationBridge`) fetches the full ~95k location list via `GET /serp/google/locations`, caches it for 1 hour, and matches each Mapbox suggestion to a DFS location code using city-name matching with state-aware disambiguation (when multiple cities share a name, the state portion of the DFS `location_name` is compared against the Mapbox suggestion's `full_name`). Submit runs the full M4 → M9 orchestrator on the FastAPI bridge and renders the opportunity score + classification label. User-facing requests carry `metadata_source` (`typed`, `mapbox_selected`, `recent_history`, `fallback_cbsa`); backend operational seed requests may use `explicit_cbsa` when they preserve a verified production metro identity. Responses include `fallback_path` (`canonical_targeting`, `city_state`, `city_only`) plus `request_id` for cross-layer tracing. Place suggestions also expose `enrichment_status` (`enriched`, `mapbox_only`, `not_configured`, `timeout`, `degraded`) to make fallback behavior explicit. When a canonical `place_id` + `dataforseo_location_code` are available from autocomplete, scoring bypasses MetroDB seed lookup and targets DataForSEO directly. When no DFS code is available but a `state` is known, the orchestrator falls back to borrowing a DFS location code from the highest-population seeded metro in the same state (degraded but functional geotargeting).
+- **Niche finder (`/niche-finder`)**: city + service input uses `CityAutocomplete` backed by the Mapbox Geocoding `/api/places/suggest` endpoint for global city coverage and falls back to the legacy `/api/metros/suggest` CBSA seed if Mapbox is unavailable. Interactive autocomplete is Mapbox-only: it returns `{city, region, country, place_id, dataforseo_location_code: null}` with `enrichment_status=mapbox_only` and MUST NOT hydrate, cache, hash, or index the DataForSEO locations catalog. Scoring resolves the selected city/state through the existing MetroDB and state fallback; backend operational seed requests may still send `explicit_cbsa` with a verified production metro identity. Submit explicitly requests the synchronous `interactive` M4 → M9 profile and renders the opportunity score plus classification label. User-facing requests carry `metadata_source` (`typed`, `mapbox_selected`, `recent_history`, `fallback_cbsa`); responses include `fallback_path` (`canonical_targeting`, `city_state`, `city_only`) plus `request_id` for cross-layer tracing.
 - **Explore Cities (`/explore`)**: cached market-discovery surface backed by a backend Explore domain service, not by client-side table slicing. It lists all eligible metros from `public.metros`, joins cached service scores from `metro_score_v2` first and legacy `metro_scores` as a fallback, calculates density/growth from `census_cbp_establishments` and `niche_naics_mapping`, and applies filters server-side. Users can inspect cached service scores in a city drawer, run a new report for any city + service, or refresh an existing cached city + service target through the backend scoring bridge. Refresh control stores the 30-day default freshness policy in `explore_refresh_policies`, queues refresh runs through FastAPI `/api/explore/refresh/*` endpoints backed by `ExploreRefreshService`, and records normalized `explore_report_snapshots` for trend analysis. Consumer Next routes proxy manual runs, due runs, and status reads to FastAPI with bounded upstream response/error handling; the scheduled due check is configured in app-scoped `apps/app/vercel.json`, not root Vercel config.
 - **Multi-market (`/agency`)**: protected agency/operator batch configuration surface. The route lets authenticated users choose a launch-safe strategy lens, state and population filters, service set, and target cap, then resolves cached city-service targets through `apps/app /api/strategies/discover`. Confirmed batches queue through `apps/app /api/strategies/runs` in fresh mode with up to 100 explicit targets, preserving account/user injection, the existing fresh-report quota boundary, and backend `strategy_runs` lineage. The first implementation consumes one fresh-report scan per queued batch; deeper target-level fanout/progress/report linkage remains owned by the strategy-run backend.
 - **Reports (`/reports`)**: SSR Supabase read from the `reports` table, ordered by `created_at DESC limit 50`. Authenticated users can read shared cached reports plus reports owned by their account. Canonical report payload writes remain service-role only via the Python scoring engine; account-owned soft archive uses the scoped `archive_account_report(report_id)` RPC.
@@ -258,7 +271,7 @@ V2 benchmark inputs are stored in Supabase seo_benchmarks, recomputed from seo_f
 | V2 benchmark repository boundary | Repository contract and Supabase adapter for V2 `seo_benchmarks` cells used by scoring formulas | `src/scoring/benchmark_repository.py`, `src/clients/seo_benchmark_repository.py`, `src/scoring/v2.py` | `tests/scoring/test_benchmark_repository_contract.py`, `tests/clients/test_seo_benchmark_repository.py`, `tests/scoring/test_v2_scoring.py` |
 | Explore Cities domain service | Server-side cached market discovery, filters, density/growth metrics, score freshness, and run-report/refresh target resolution | `src/domain/explore/`, `src/domain/services/explore_city_service.py`, `src/clients/explore_repository.py` | `tests/unit/test_explore_city_service.py`, `tests/unit/test_explore_metrics.py`, app route/component tests |
 | FastAPI niche bridge | `POST /api/niches/score`, `GET /api/niches/{id}`, `GET /api/metros/suggest` | `src/research_agent/api.py` | `tests/unit/test_api_niches.py`, `test_api_metros_suggest.py` |
-| Mapbox places autocomplete | `GET /api/places/suggest` — Mapbox v6 forward geocoding + DataForSEO location bridge | `src/research_agent/api.py`, `src/research_agent/places.py` | `tests/unit/test_api_places_suggest.py`, `tests/unit/test_places_bridge.py` |
+| Mapbox places autocomplete | `GET /api/places/suggest` — Mapbox v6 forward geocoding only on the interactive path; scoring performs state/MetroDB target resolution without a locations-catalog request | `src/research_agent/api.py` | `tests/unit/test_api_places_suggest.py` |
 | Research Agent | Claude-native tool-use agent + Ralph loop for autonomous scoring improvement | `src/research_agent/` | `tests/unit/test_research_agent_loop.py`, `test_claude_agent.py`, `test_plugin_registry.py`, `test_scoring_plugin.py`, `test_experiment_runner.py` |
 | Marketing Site | Waitlist signup + analytics | `apps/web/` | — |
 
@@ -393,19 +406,19 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
                                                                       Confidence Level      →  Feedback Log Entry
 ```
 
-### Phase Latency Targets
+### First-report latency budget
 
-| Phase | Name | Input | Output | Latency Target |
-|-------|------|-------|--------|----------------|
-| 0 | Configuration | User input | Validated params | <1s |
-| 1 | Keyword Expansion | Niche keyword | Expanded keyword set with intent labels | 5-15s |
-| 2 | Data Collection | Keywords + Metros | Raw API responses | 2-8 min |
-| 3 | Signal Extraction | Raw responses | Derived signals per metro | <30s |
-| 4 | Scoring | Signals | Scores per metro | <5s |
-| 5 | Classification | Scores + signals | Archetypes + guidance | <5s |
-| 6 | Feedback Logging | Scores + input context | Logged tuple | <1s |
+| Boundary | `interactive` allocation | `full` behavior |
+| --- | ---: | --- |
+| M4 keyword expansion | 8 s | Existing comprehensive expansion behavior remains available outside the first-report path. |
+| M5 provider collection | 32 s | Existing broader collection plan remains available for offline and benchmark acquisition. |
+| M6-M9 deterministic work | 2 s | Existing report schema and deterministic formulas remain unchanged. |
+| Durable core persistence and immediate read | 5 s | Optional persistence may run only on the non-interactive profile. |
+| Safety margin | 8 s | Not applicable. |
+| FastAPI internal target | 55 s | Not a `full`-profile SLO. |
+| POST plus immediate GET hard maximum | 60 s | The former ten-minute planning target applies only to legacy full/offline acquisition and is not a customer first-report allowance. |
 
-**Total target: <10 minutes per report.**
+The timer begins immediately before `POST /api/niches/score` and ends after the immediate GET body has been parsed and validated. The POST and GET share one deadline; neither receives a fresh timeout window.
 
 ## Canonical Source Mapping
 
@@ -437,3 +450,4 @@ Geographic scope →     SERP Collection     →   SERP Parsing        →  Orga
 | 1.5.0 | 2026-05-16 | Strategy Discovery system design | Added strategy discovery architecture, repository boundary, source tables, and consumer data flow |
 | 1.5.1 | 2026-05-18 | Adapter boundary sync | Documented shared Supabase client accessor and consumer upstream proxy helper dependency |
 | 1.6.0 | 2026-06-30 | Synthesis Reflow | Canonicalized full replacement direction, segment routing, unlock contract, narrowed visible strategy catalog, and Report V1.1 scope |
+| 1.7.0 | 2026-07-11 | First-report performance | Added Mapbox-only interactive autocomplete, explicit `interactive`/`full` profiles, core-first persistence, and the synchronous 60-second/500,000,000-byte boundary |
