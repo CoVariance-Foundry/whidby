@@ -190,12 +190,22 @@ class MarketService:
                 report_id = result.report.get("report_id")
                 persist_failed = True
 
-        # --- Flush DFS costs ---
-        if not request.dry_run and self._dfs is not None and report_id:
-            try:
-                self._dfs.cost_tracker.flush_to_supabase(report_id)
-            except Exception:
-                logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
+        # --- Release run-scoped DFS telemetry ---
+        collection_context_id = getattr(result, "collection_context_id", None)
+        if not request.dry_run and self._dfs is not None:
+            tracker = self._dfs.cost_tracker
+            if request.collection_profile == "interactive":
+                if collection_context_id is not None:
+                    tracker.drain_context(collection_context_id)
+            elif report_id:
+                try:
+                    tracker.flush_to_supabase(
+                        report_id,
+                        context_id=collection_context_id,
+                        drain=collection_context_id is not None,
+                    )
+                except Exception:
+                    logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
 
         # --- KB update ---
         entity_id: str | None = None

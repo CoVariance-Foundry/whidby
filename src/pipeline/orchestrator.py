@@ -44,6 +44,7 @@ class ScoreNicheResult:
     evidence: list[dict[str, Any]]
     seo_evidence_artifacts: list[dict[str, Any]]
     local_pack_listing_facts: list[dict[str, Any]]
+    collection_context_id: str
 
 
 async def score_niche_for_metro(
@@ -252,12 +253,16 @@ async def score_niche_for_metro(
     m9_start = time.monotonic()
     logger.info("[%s] M9 report assembly START", run_id)
 
-    dfs_total_cost = getattr(dataforseo_client, "total_cost", raw.meta.total_cost_usd)
     dfs_cost_log = getattr(dataforseo_client, "cost_log", [])
-    dfs_total_calls = len(dfs_cost_log) if dfs_cost_log else raw.meta.total_api_calls
-    dfs_cached = sum(1 for r in dfs_cost_log if getattr(r, "cached", False))
-    dfs_tracker = getattr(dataforseo_client, "cost_tracker", None)
-    dfs_breakdown = dfs_tracker.cost_by_endpoint() if dfs_tracker else {}
+    current_cost_records = _cost_records_for_context(dfs_cost_log, run_id)
+    dfs_total_cost = (
+        sum(float(_record_value(record, "cost", 0.0)) for record in current_cost_records)
+        if current_cost_records
+        else raw.meta.total_cost_usd
+    )
+    dfs_total_calls = len(current_cost_records) or raw.meta.total_api_calls
+    dfs_cached = sum(bool(_record_value(record, "cached", False)) for record in current_cost_records)
+    dfs_breakdown = _cost_breakdown(current_cost_records)
 
     run_input = {
         "run_id": run_id,
@@ -300,7 +305,6 @@ async def score_niche_for_metro(
     }
 
     report = generate_report(run_input)
-    current_cost_records = _cost_records_for_context(dfs_cost_log, run_id)
     evidence_artifacts = build_seo_evidence_artifact_rows_from_cost_records(current_cost_records)
     local_pack_listing_facts = _build_local_pack_listing_facts(
         report=report,
@@ -342,6 +346,7 @@ async def score_niche_for_metro(
         evidence=evidence,
         seo_evidence_artifacts=evidence_artifacts,
         local_pack_listing_facts=local_pack_listing_facts,
+        collection_context_id=run_id,
     )
 
 
@@ -500,6 +505,7 @@ async def _dry_run_result(
         evidence=_build_evidence_from_signals(signals),
         seo_evidence_artifacts=[],
         local_pack_listing_facts=[],
+        collection_context_id=run_id,
     )
 
 
@@ -544,6 +550,24 @@ def _record_context_id(record: Any) -> str | None:
     else:
         value = getattr(record, "collection_context_id", None)
     return str(value) if value is not None else None
+
+
+def _record_value(record: Any, key: str, default: Any = None) -> Any:
+    if isinstance(record, dict):
+        return record.get(key, default)
+    return getattr(record, key, default)
+
+
+def _cost_breakdown(records: list[Any]) -> dict[str, dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for record in records:
+        endpoint = str(_record_value(record, "endpoint", "unknown"))
+        group = groups.setdefault(endpoint, {"calls": 0, "cost": 0.0, "cached": 0})
+        group["calls"] += 1
+        group["cost"] += float(_record_value(record, "cost", 0.0))
+        if bool(_record_value(record, "cached", False)):
+            group["cached"] += 1
+    return groups
 
 
 def _build_local_pack_listing_facts(

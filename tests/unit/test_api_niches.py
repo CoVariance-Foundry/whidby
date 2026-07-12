@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -77,6 +77,18 @@ def _make_test_market_service(
         market_store=FakeMarketStore(),
         knowledge_store=FakeKnowledgeStore(),
     )
+
+
+@pytest.mark.asyncio
+async def test_api_lifespan_closes_shared_dataforseo_client(monkeypatch: Any) -> None:
+    shared = AsyncMock()
+    monkeypatch.setattr(api_module, "_SHARED_DFS_CLIENT", shared)
+
+    async with api_module._api_lifespan(app):
+        pass
+
+    shared.aclose.assert_awaited_once()
+    assert api_module._SHARED_DFS_CLIENT is None
 
 
 def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: Any) -> None:

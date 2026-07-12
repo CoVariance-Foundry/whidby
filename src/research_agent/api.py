@@ -64,10 +64,17 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def _api_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    global _SHARED_DFS_CLIENT
     try:
         yield
     finally:
-        await close_mapbox_http_client()
+        shared_dfs = _SHARED_DFS_CLIENT
+        _SHARED_DFS_CLIENT = None
+        try:
+            if shared_dfs is not None:
+                await shared_dfs.aclose()
+        finally:
+            await close_mapbox_http_client()
 
 
 app = FastAPI(title="Widby Research Agent API", version="0.1.0", lifespan=_api_lifespan)

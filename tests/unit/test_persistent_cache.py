@@ -129,3 +129,12 @@ def test_db_hit_increments_hit_count() -> None:
 
     assert cache.get("serp/organic", params) == {"items": [1]}
     assert fake.tables["api_response_cache"][0]["hit_count"] == 3
+
+
+def test_none_is_not_written_to_persistent_cache() -> None:
+    fake = _FakeSupabase()
+    cache = PersistentResponseCache(ttl=3600, client=fake)
+
+    cache.put("serp/organic", {"keyword": "roofing"}, None)
+
+    assert fake.tables.get("api_response_cache", []) == []

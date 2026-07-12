@@ -81,13 +81,13 @@ class TestRealAPI:
         assert len(client.cost_log) >= 2
 
     @pytest.mark.asyncio
-    async def test_caching(self):
+    async def test_locations_catalog_is_not_cached(self):
         client = _real_client()
         first = await client.locations()
         assert first.status == "ok"
         second = await client.locations()
         assert second.status == "ok"
-        assert second.cached is True
+        assert second.cached is False
         assert second.cost == 0
 
     @pytest.mark.asyncio

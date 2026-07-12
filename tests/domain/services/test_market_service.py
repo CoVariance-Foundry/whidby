@@ -207,6 +207,36 @@ def test_score_flushes_dfs_costs(service: MarketService, dfs: FakeDFSClient) -> 
     req = ScoreRequest(niche="plumbing", city="Boise", state="ID")
     asyncio.run(service.score(req))
     assert dfs.cost_tracker.flushed_report_ids == ["rpt-1"]
+    assert dfs.cost_tracker.flushed_context_ids == ["score-fake-1"]
+    assert dfs.cost_tracker.drained_context_ids == ["score-fake-1"]
+
+
+def test_interactive_score_drains_cost_context_without_optional_flush(
+    store: FakeMarketStore,
+    kb: FakeKnowledgeStore,
+    dfs: FakeDFSClient,
+) -> None:
+    service = MarketService(
+        pipeline_fn=fake_pipeline,
+        dfs_client=dfs,
+        llm_client=None,
+        market_store=store,
+        knowledge_store=kb,
+    )
+
+    asyncio.run(
+        service.score(
+            ScoreRequest(
+                niche="plumbing",
+                city="Boise",
+                state="ID",
+                collection_profile="interactive",
+            )
+        )
+    )
+
+    assert dfs.cost_tracker.flushed_report_ids == []
+    assert dfs.cost_tracker.drained_context_ids == ["score-fake-1"]
 
 
 def test_score_passes_v2_dependencies_to_pipeline(

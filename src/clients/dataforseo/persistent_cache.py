@@ -86,6 +86,8 @@ class PersistentResponseCache:
             return None
 
     def put(self, endpoint: str, params: dict[str, Any], data: Any, *, cost: float = 0.0) -> None:
+        if data is None:
+            return
         self._memory.put(endpoint, params, data)
 
         if not self._db_available:

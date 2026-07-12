@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from src.clients.dataforseo.cost_tracker import CostTracker
 from src.pipeline.orchestrator import (
     ScoreNicheResult,
@@ -193,6 +195,7 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
         )
 
     assert isinstance(result, ScoreNicheResult)
+    assert result.collection_context_id.startswith("score-")
     assert result.report["spec_version"] == "1.1"
     assert result.report["input"]["niche_keyword"] == "roofing"
     assert result.report["input"]["geo_target"] == "Phoenix, AZ"
@@ -409,6 +412,8 @@ def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
         artifact["response_hash"] not in {"maps-other-hash", "reviews-other-hash"}
         for artifact in result.seo_evidence_artifacts
     )
+    assert result.report["meta"]["total_api_calls"] == 3
+    assert result.report["meta"]["total_cost_usd"] == 0.009
 
 
 def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> None:
@@ -875,6 +880,86 @@ def test_cost_tracker_flush_keeps_api_usage_log_shape() -> None:
         "parameters",
         "report_id",
     }
+
+
+def test_cost_tracker_flushes_and_drains_only_requested_context() -> None:
+    class _Table:
+        def __init__(self) -> None:
+            self.batches: list[list[dict[str, object]]] = []
+
+        def insert(self, rows):
+            self.batches.append(rows)
+            return self
+
+        def execute(self):
+            return None
+
+    class _Client:
+        def __init__(self) -> None:
+            self.table_obj = _Table()
+
+        def table(self, name: str) -> _Table:
+            assert name == "api_usage_log"
+            return self.table_obj
+
+    tracker = CostTracker()
+    for context_id in ("score-1", "score-2", "score-3"):
+        tracker.record(
+            "serp/google/maps/live/advanced",
+            f"task-{context_id}",
+            0.002,
+            False,
+            100,
+            collection_context_id=context_id,
+        )
+    client = _Client()
+
+    counts = [
+        tracker.flush_to_supabase(
+            f"report-{index}",
+            context_id=context_id,
+            drain=True,
+            client=client,
+        )
+        for index, context_id in enumerate(("score-1", "score-2", "score-3"), start=1)
+    ]
+
+    assert counts == [1, 1, 1]
+    assert [len(batch) for batch in client.table_obj.batches] == [1, 1, 1]
+    assert tracker.records == []
+
+
+def test_cost_tracker_does_not_drain_context_when_insert_fails() -> None:
+    class _Table:
+        def insert(self, _rows):
+            return self
+
+        def execute(self):
+            raise RuntimeError("database unavailable")
+
+    class _Client:
+        def table(self, _name: str) -> _Table:
+            return _Table()
+
+    tracker = CostTracker()
+    tracker.record(
+        "serp/google/maps/live/advanced",
+        "task-1",
+        0.002,
+        False,
+        100,
+        collection_context_id="score-1",
+    )
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        tracker.flush_to_supabase(
+            "report-1",
+            context_id="score-1",
+            drain=True,
+            client=_Client(),
+        )
+
+    assert len(tracker.records_for_context("score-1")) == 1
 
 
 def test_expansion_key_contract_matches_m4_output() -> None:
