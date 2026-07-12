@@ -25,6 +25,7 @@ M4_ALLOWED_AIO_RISK: tuple[str, ...] = ("low", "moderate", "high")
 M4_ALLOWED_SOURCES: tuple[str, ...] = ("input", "llm", "dataforseo_suggestions", "merged")
 
 M4_MAX_KEYWORDS = 50
+M4_INTERACTIVE_TIMEOUT_SECONDS = 8.0
 
 # Confidence mapping from LLM-vs-DFS overlap ratio.
 M4_CONFIDENCE_LOW_THRESHOLD = 0.30
@@ -102,7 +103,7 @@ DFS_COSTS: dict[str, float] = {
 }
 
 # --- LLM (M3 spec) ---
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 CLASSIFICATION_MODEL = "claude-haiku-4-5-20251001"
 
 # --- SERP Feature Keys (Algo Spec V1.1, §14) ---
