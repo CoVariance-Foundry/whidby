@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -44,12 +44,42 @@ CANONICAL_PAYLOAD = {
     "collection_profile": "interactive",
 }
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SAFE_DIAGNOSTICS = {
+    "container_cleanup_failed": "Container cleanup did not complete.",
+    "docker_build_failed": "Docker image build failed.",
+    "docker_build_timeout": "Docker image build timed out.",
+    "docker_command_failed": "Docker command failed.",
+    "docker_command_timeout": "Docker command timed out.",
+    "docker_exec_failed": "Docker container inspection failed.",
+    "docker_exec_timeout": "Docker container inspection timed out.",
+    "docker_inspect_failed": "Docker state inspection failed.",
+    "docker_inspect_timeout": "Docker state inspection timed out.",
+    "docker_port_failed": "Docker port lookup failed.",
+    "docker_port_timeout": "Docker port lookup timed out.",
+    "docker_port_unavailable": "Docker did not return a valid localhost port.",
+    "docker_rm_failed": "Docker container removal failed.",
+    "docker_rm_timeout": "Docker container removal timed out.",
+    "docker_run_failed": "Docker container launch failed.",
+    "docker_run_timeout": "Docker container launch timed out.",
+    "docker_unavailable": "Docker is unavailable.",
+    "docker_version_failed": "Docker daemon readiness check failed.",
+    "docker_version_timeout": "Docker daemon readiness check timed out.",
+    "env_file_cleanup_failed": "Temporary environment cleanup did not complete.",
+    "env_file_permissions": "Temporary environment permissions are invalid.",
+    "execution_timeout": "A bounded benchmark operation timed out.",
+    "health_timeout": "Container health did not pass before its deadline.",
+    "invalid_environment": "A benchmark environment value is invalid.",
+    "missing_environment": "Required benchmark environment variables are missing.",
+    "result_emission_failed": "The redacted result file could not be written.",
+    "unexpected_execution_error": "The benchmark stopped on an unexpected execution error.",
+}
 
 
 class BenchmarkError(RuntimeError):
     """A safe-to-report benchmark execution error."""
 
-    def __init__(self, code: str, detail: str) -> None:
+    def __init__(self, code: str) -> None:
+        detail = SAFE_DIAGNOSTICS.get(code, SAFE_DIAGNOSTICS["unexpected_execution_error"])
         super().__init__(detail)
         self.code = code
         self.detail = detail
@@ -81,6 +111,8 @@ def validation_failures(
     timeout_seconds: float = FIRST_REPORT_MAX_SECONDS,
     memory_limit_bytes: int = FIRST_REPORT_MAX_MEMORY_BYTES,
     max_retained_growth_bytes: int = FIRST_REPORT_MAX_RETAINED_GROWTH_BYTES,
+    persist_warning_checked: bool = True,
+    persist_warning_present: bool | None = None,
 ) -> tuple[str, ...]:
     """Return stable failure codes for one benchmark run."""
     failures: list[str] = []
@@ -116,7 +148,9 @@ def validation_failures(
         failures.append("report_id_mismatch")
     if required_read_paths_ok is not True:
         failures.append("read_body_invalid")
-    if persist_warning is not None:
+    if persist_warning_checked is not True:
+        failures.append("persist_warning_unknown")
+    elif persist_warning_present is True or persist_warning is not None:
         failures.append("persist_warning_present")
     if container_oom is not False:
         failures.append("container_oom_or_unknown")
@@ -152,6 +186,8 @@ def validate_run(
     timeout_seconds: float = FIRST_REPORT_MAX_SECONDS,
     memory_limit_bytes: int = FIRST_REPORT_MAX_MEMORY_BYTES,
     max_retained_growth_bytes: int = FIRST_REPORT_MAX_RETAINED_GROWTH_BYTES,
+    persist_warning_checked: bool = True,
+    persist_warning_present: bool | None = None,
 ) -> bool:
     """Return whether a run satisfies every latency, durability, and memory limit."""
     return not validation_failures(
@@ -172,6 +208,8 @@ def validate_run(
         timeout_seconds=timeout_seconds,
         memory_limit_bytes=memory_limit_bytes,
         max_retained_growth_bytes=max_retained_growth_bytes,
+        persist_warning_checked=persist_warning_checked,
+        persist_warning_present=persist_warning_present,
     )
 
 
@@ -180,27 +218,38 @@ def _docker(
     timeout: float = 30.0,
     check: bool = True,
     quiet: bool = False,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["docker", *args],
-        cwd=REPO_ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=timeout,
-        check=False,
-    )
+    operation = args[0] if args else "command"
+    try:
+        result = runner(
+            ["docker", *args],
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise BenchmarkError(f"docker_{operation}_timeout") from None
+    except FileNotFoundError:
+        raise BenchmarkError("docker_unavailable") from None
     if check and result.returncode != 0:
-        detail = result.stderr.strip().splitlines()[-1:] or ["docker command failed"]
-        raise BenchmarkError("docker_command_failed", detail[0][:500])
+        raise BenchmarkError(f"docker_{operation}_failed")
     if not quiet and result.stdout:
         print(result.stdout, end="")
     return result
 
 
-def _build_image(dockerfile: Path, image: str) -> None:
+def _build_image(
+    dockerfile: Path,
+    image: str,
+    *,
+    docker: Callable[..., subprocess.CompletedProcess[str]] = _docker,
+) -> None:
     print(f"Building production image {image} from {dockerfile}...")
-    _docker(
+    docker(
         "build",
         "--file",
         str(dockerfile),
@@ -222,10 +271,7 @@ def _container_env() -> dict[str, str]:
     }
     missing = [source for source in source_map.values() if not os.environ.get(source)]
     if missing:
-        raise BenchmarkError(
-            "missing_environment",
-            f"missing required environment variables: {', '.join(sorted(missing))}",
-        )
+        raise BenchmarkError("missing_environment")
     values = {runtime: os.environ[source] for runtime, source in source_map.items()}
     values["ENVIRONMENT"] = "staging"
     if os.environ.get("DATAFORSEO_BASE_URL"):
@@ -236,7 +282,7 @@ def _container_env() -> dict[str, str]:
 def _write_env_file(values: dict[str, str]) -> Path:
     for name, value in values.items():
         if "\n" in value or "\r" in value:
-            raise BenchmarkError("invalid_environment", f"{name} contains a newline")
+            raise BenchmarkError("invalid_environment")
     descriptor, raw_path = tempfile.mkstemp(prefix="whidby-first-report-", suffix=".env")
     try:
         os.fchmod(descriptor, 0o600)
@@ -245,7 +291,7 @@ def _write_env_file(values: dict[str, str]) -> Path:
                 handle.write(f"{name}={value}\n")
         path = Path(raw_path)
         if path.stat().st_mode & 0o777 != 0o600:
-            raise BenchmarkError("env_file_permissions", "temporary env file is not mode 0600")
+            raise BenchmarkError("env_file_permissions")
         return path
     except BaseException:
         try:
@@ -320,9 +366,10 @@ def _container_value(container_id: str, path: str) -> int | None:
         return None
 
 
-def aggregate_process_rss_bytes(status_by_pid: Mapping[str, str]) -> int:
+def aggregate_process_rss_bytes(status_by_pid: Mapping[str, str]) -> int | None:
     """Sum VmRSS for every numeric proc PID represented in a status mapping."""
     total_bytes = 0
+    valid_samples = 0
     for pid, status in status_by_pid.items():
         if not pid.isdecimal():
             continue
@@ -333,10 +380,11 @@ def aggregate_process_rss_bytes(status_by_pid: Mapping[str, str]) -> int:
             if len(fields) >= 3 and fields[2] == "kB":
                 try:
                     total_bytes += int(fields[1]) * 1024
+                    valid_samples += 1
                 except ValueError:
                     pass
             break
-    return total_bytes
+    return total_bytes if valid_samples else None
 
 
 def _aggregate_process_rss(container_id: str) -> int | None:
@@ -399,6 +447,12 @@ def _run_report(
     args: argparse.Namespace,
     run_index: int,
     quiesce: bool,
+    *,
+    request_json: Callable[..., tuple[int | None, Any, str | None, bool]] = _request_json,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+    memory_sample: Callable[[str, str], dict[str, Any]] = _memory_sample,
+    container_oom: Callable[[str], bool | None] = _container_oom,
 ) -> dict[str, Any]:
     payload = json.dumps(CANONICAL_PAYLOAD, separators=(",", ":")).encode("utf-8")
     post_request = Request(
@@ -407,14 +461,18 @@ def _run_report(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    started_at = time.monotonic()
+    started_at = monotonic()
     deadline = started_at + args.timeout_seconds
-    post_started_at = time.monotonic()
-    post_status, post_body, post_error, post_timeout = _request_json(
-        post_request, timeout=max(0.001, deadline - time.monotonic())
+    post_started_at = monotonic()
+    post_status, post_body, post_error, post_timeout = request_json(
+        post_request, timeout=max(0.001, deadline - monotonic())
     )
-    post_seconds = time.monotonic() - post_started_at
+    post_seconds = monotonic() - post_started_at
     post_report_id = post_body.get("report_id") if isinstance(post_body, dict) else None
+    persist_warning_checked = isinstance(post_body, dict)
+    persist_warning_present = (
+        "persist_warning" in post_body if isinstance(post_body, dict) else None
+    )
     persist_warning = post_body.get("persist_warning") if isinstance(post_body, dict) else None
 
     read_status: int | None = None
@@ -422,7 +480,7 @@ def _run_report(
     read_error: str | None = None
     read_timeout = False
     read_seconds: float | None = None
-    deadline_exhausted = post_timeout or time.monotonic() > deadline
+    deadline_exhausted = post_timeout or monotonic() > deadline
     if (
         isinstance(post_status, int)
         and 200 <= post_status < 300
@@ -430,23 +488,23 @@ def _run_report(
         and post_report_id
         and not deadline_exhausted
     ):
-        remaining = deadline - time.monotonic()
+        remaining = deadline - monotonic()
         if remaining <= 0:
             deadline_exhausted = True
         else:
-            read_started_at = time.monotonic()
+            read_started_at = monotonic()
             read_request = Request(
                 f"{base_url}/api/niches/{quote(post_report_id, safe='')}", method="GET"
             )
-            read_status, read_body, read_error, read_timeout = _request_json(
+            read_status, read_body, read_error, read_timeout = request_json(
                 read_request, timeout=remaining
             )
-            read_seconds = time.monotonic() - read_started_at
-            deadline_exhausted = read_timeout or time.monotonic() > deadline
+            read_seconds = monotonic() - read_started_at
+            deadline_exhausted = read_timeout or monotonic() > deadline
 
     read_report_id = read_body.get("report_id") if isinstance(read_body, dict) else None
     required_read_paths_ok = _read_body_valid(read_body)
-    elapsed_seconds = time.monotonic() - started_at
+    elapsed_seconds = monotonic() - started_at
     read_validated = (
         isinstance(read_status, int)
         and 200 <= read_status < 300
@@ -454,12 +512,12 @@ def _run_report(
         and required_read_paths_ok
     )
     if quiesce and read_validated:
-        time.sleep(args.quiescence_seconds)
+        sleep(args.quiescence_seconds)
         sample_phase = "post_quiescence"
     else:
         sample_phase = "immediate"
-    memory = _memory_sample(container_id, sample_phase)
-    container_oom = _container_oom(container_id)
+    memory = memory_sample(container_id, sample_phase)
+    oom_state = container_oom(container_id)
 
     failures = list(
         validation_failures(
@@ -473,11 +531,13 @@ def _run_report(
             read_report_id=read_report_id,
             required_read_paths_ok=required_read_paths_ok,
             persist_warning=persist_warning,
-            container_oom=container_oom,
+            container_oom=oom_state,
             deadline_exhausted=deadline_exhausted,
             timeout_seconds=args.timeout_seconds,
             memory_limit_bytes=args.memory_bytes,
             max_retained_growth_bytes=args.max_retained_growth_bytes,
+            persist_warning_checked=persist_warning_checked,
+            persist_warning_present=persist_warning_present,
         )
     )
     for error in (post_error, read_error):
@@ -494,26 +554,88 @@ def _run_report(
             "post_status": post_status,
             "read_status": read_status,
             "deadline_exhausted": deadline_exhausted,
-            "container_oom": container_oom,
+            "container_oom": oom_state,
         },
         "report_id": post_report_id,
         "read_contract": {
             "report_ids_match": bool(post_report_id and post_report_id == read_report_id),
             "required_paths_ok": required_read_paths_ok,
-            "persist_warning_present": persist_warning is not None,
+            "persist_warning_checked": persist_warning_checked,
+            "persist_warning_present": persist_warning_present,
         },
         "memory": memory,
         "verdict": {"status": "FAIL" if failures else "PASS", "failures": failures},
     }
 
 
-def _port_for_container(container_id: str) -> int:
-    result = _docker("port", container_id, "8000/tcp", quiet=True)
-    value = result.stdout.strip().splitlines()[0]
+def parse_docker_port(output: str) -> int:
+    """Parse a valid random host port from Docker's port output."""
+    for value in output.splitlines():
+        try:
+            host, raw_port = value.strip().rsplit(":", 1)
+            port = int(raw_port)
+        except (IndexError, ValueError):
+            continue
+        if host == "127.0.0.1" and 1 <= port <= 65_535:
+            return port
+    raise BenchmarkError("docker_port_unavailable")
+
+
+def _port_for_container(
+    container_id: str,
+    *,
+    docker: Callable[..., subprocess.CompletedProcess[str]] = _docker,
+) -> int:
+    result = docker("port", container_id, "8000/tcp", quiet=True)
+    return parse_docker_port(result.stdout)
+
+
+def aggregate_mode_verdict(containers: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate independent fresh and sequential container verdicts."""
+    failures = [
+        f"{container['mode']}_{container['container_index']}"
+        for container in containers
+        if container["verdict"]["status"] != "PASS"
+    ]
+    return {"status": "FAIL" if failures else "PASS", "failures": failures}
+
+
+def _cleanup_container(
+    target: str,
+    *,
+    docker: Callable[..., subprocess.CompletedProcess[str]] = _docker,
+) -> bool:
     try:
-        return int(value.rsplit(":", 1)[1])
-    except (IndexError, ValueError) as error:
-        raise BenchmarkError("docker_port_unavailable", "could not parse random port") from error
+        result = docker("rm", "--force", target, check=False, quiet=True)
+    except Exception:
+        return False
+    return result.returncode == 0
+
+
+def _failure_verdict(*codes: str) -> dict[str, Any]:
+    unique_codes = list(dict.fromkeys(codes))
+    return {
+        "status": "FAIL",
+        "failures": unique_codes,
+        "diagnostics": [
+            SAFE_DIAGNOSTICS.get(code, SAFE_DIAGNOSTICS["unexpected_execution_error"])
+            for code in unique_codes
+        ],
+    }
+
+
+def _append_failure(record: dict[str, Any], code: str) -> None:
+    existing = record.get("verdict", {}).get("failures", [])
+    record["verdict"] = _failure_verdict(*existing, code)
+
+
+def _skipped_run(run_index: int) -> dict[str, Any]:
+    return {
+        "run_index": run_index,
+        "status": {"skipped": True, "reason": "prior_run_failed"},
+        "memory": None,
+        "verdict": {"status": "SKIPPED", "failures": ["prior_run_failed"]},
+    }
 
 
 def _run_container(
@@ -522,6 +644,13 @@ def _run_container(
     run_count: int,
     env_file: Path,
     args: argparse.Namespace,
+    *,
+    docker: Callable[..., subprocess.CompletedProcess[str]] = _docker,
+    port_for_container: Callable[..., int] = _port_for_container,
+    wait_for_health: Callable[[str, float], tuple[bool, float]] = _wait_for_health,
+    memory_sample: Callable[[str, str], dict[str, Any]] = _memory_sample,
+    run_report: Callable[..., dict[str, Any]] = _run_report,
+    cleanup_container: Callable[..., bool] = _cleanup_container,
 ) -> dict[str, Any]:
     name = f"whidby-first-report-{uuid.uuid4().hex[:12]}"
     record: dict[str, Any] = {
@@ -534,7 +663,7 @@ def _run_container(
     }
     container_id: str | None = None
     try:
-        result = _docker(
+        result = docker(
             "run",
             "--detach",
             "--name",
@@ -548,80 +677,100 @@ def _run_container(
             args.image,
             quiet=True,
         )
-        container_id = result.stdout.strip()
-        base_url = f"http://127.0.0.1:{_port_for_container(container_id)}"
-        healthy, health_seconds = _wait_for_health(base_url, args.health_timeout_seconds)
+        container_id = result.stdout.strip() or None
+        container_ref = container_id or name
+        port = port_for_container(container_ref, docker=docker)
+        base_url = f"http://127.0.0.1:{port}"
+        healthy, health_seconds = wait_for_health(base_url, args.health_timeout_seconds)
         record["health"] = {
             "status": "PASS" if healthy else "FAIL",
             "elapsed_seconds": round(health_seconds, 6),
         }
         if not healthy:
-            raise BenchmarkError("health_timeout", "container health did not pass in time")
-        record["startup_memory"] = _memory_sample(container_id, "post_health")
+            raise BenchmarkError("health_timeout")
+        record["startup_memory"] = memory_sample(container_ref, "post_health")
         for run_index in range(1, run_count + 1):
-            record["runs"].append(
-                _run_report(
-                    container_id,
-                    base_url,
-                    args,
-                    run_index,
-                    quiesce=mode == "sequential",
+            run = run_report(
+                container_ref,
+                base_url,
+                args,
+                run_index,
+                quiesce=mode == "sequential",
+            )
+            record["runs"].append(run)
+            if run["verdict"]["status"] != "PASS":
+                record["runs"].extend(
+                    _skipped_run(skipped_index)
+                    for skipped_index in range(run_index + 1, run_count + 1)
                 )
-            )
+                break
 
-        if mode == "sequential" and len(record["runs"]) >= 3:
-            first_memory = record["runs"][0]["memory"]
-            third_memory = record["runs"][2]["memory"]
-            current_growth = _growth(
-                first_memory["memory_current_bytes"],
-                third_memory["memory_current_bytes"],
-            )
-            rss_growth = _growth(
-                first_memory["aggregate_process_rss_bytes"],
-                third_memory["aggregate_process_rss_bytes"],
-            )
-            growth_failures = []
-            if current_growth is None:
-                growth_failures.append("memory_current_growth_unavailable")
-            elif current_growth > args.max_retained_growth_bytes:
-                growth_failures.append("memory_current_retained_growth_exceeded")
-            if rss_growth is None:
-                growth_failures.append("aggregate_process_rss_growth_unavailable")
-            elif rss_growth > args.max_retained_growth_bytes:
-                growth_failures.append("aggregate_process_rss_retained_growth_exceeded")
-            record["retained_growth"] = {
-                "run_one_to_run_three": {
-                    "memory_current_bytes": current_growth,
-                    "aggregate_process_rss_bytes": rss_growth,
-                },
-                "max_bytes": args.max_retained_growth_bytes,
-                "verdict": {
-                    "status": "FAIL" if growth_failures else "PASS",
-                    "failures": growth_failures,
-                },
-            }
-            if growth_failures:
-                record["runs"][2]["verdict"]["status"] = "FAIL"
-                record["runs"][2]["verdict"]["failures"].extend(growth_failures)
+        if mode == "sequential" and run_count >= 3:
+            first_three = record["runs"][:3]
+            if all(run["verdict"]["status"] == "PASS" for run in first_three):
+                first_memory = first_three[0]["memory"]
+                third_memory = first_three[2]["memory"]
+                current_growth = _growth(
+                    first_memory["memory_current_bytes"],
+                    third_memory["memory_current_bytes"],
+                )
+                rss_growth = _growth(
+                    first_memory["aggregate_process_rss_bytes"],
+                    third_memory["aggregate_process_rss_bytes"],
+                )
+                growth_failures = []
+                if current_growth is None:
+                    growth_failures.append("memory_current_growth_unavailable")
+                elif current_growth > args.max_retained_growth_bytes:
+                    growth_failures.append("memory_current_retained_growth_exceeded")
+                if rss_growth is None:
+                    growth_failures.append("aggregate_process_rss_growth_unavailable")
+                elif rss_growth > args.max_retained_growth_bytes:
+                    growth_failures.append("aggregate_process_rss_retained_growth_exceeded")
+                record["retained_growth"] = {
+                    "run_one_to_run_three": {
+                        "memory_current_bytes": current_growth,
+                        "aggregate_process_rss_bytes": rss_growth,
+                    },
+                    "max_bytes": args.max_retained_growth_bytes,
+                    "verdict": {
+                        "status": "FAIL" if growth_failures else "PASS",
+                        "failures": growth_failures,
+                    },
+                }
+                if growth_failures:
+                    first_three[2]["verdict"] = _failure_verdict(*growth_failures)
+            else:
+                record["retained_growth"] = {
+                    "run_one_to_run_three": None,
+                    "max_bytes": args.max_retained_growth_bytes,
+                    "verdict": {
+                        "status": "SKIPPED",
+                        "failures": ["insufficient_successful_runs"],
+                    },
+                }
 
         failures = [
             f"run_{run['run_index']}"
             for run in record["runs"]
-            if run["verdict"]["status"] != "PASS"
+            if run["verdict"]["status"] == "FAIL"
         ]
         record["verdict"] = {
             "status": "FAIL" if failures else "PASS",
             "failures": failures,
         }
     except BenchmarkError as error:
-        record["verdict"] = {
-            "status": "FAIL",
-            "failures": [error.code],
-            "diagnostic": error.detail,
-        }
+        record["verdict"] = _failure_verdict(error.code)
+    except FileNotFoundError:
+        record["verdict"] = _failure_verdict("docker_unavailable")
+    except subprocess.TimeoutExpired:
+        record["verdict"] = _failure_verdict("execution_timeout")
+    except Exception:
+        record["verdict"] = _failure_verdict("unexpected_execution_error")
     finally:
-        if container_id:
-            _docker("rm", "--force", container_id, check=False, quiet=True)
+        cleanup_target = container_id or name
+        if not cleanup_container(cleanup_target, docker=docker):
+            _append_failure(record, "container_cleanup_failed")
     return record
 
 
@@ -678,9 +827,8 @@ def _write_results(path: Path, result: dict[str, Any]) -> None:
     resolved.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(sys.argv[1:] if argv is None else argv)
-    result: dict[str, Any] = {
+def _base_result(args: argparse.Namespace) -> dict[str, Any]:
+    return {
         "schema_version": 1,
         "benchmark": "first_report",
         "configuration": {
@@ -695,47 +843,87 @@ def main(argv: list[str] | None = None) -> int:
         "containers": [],
         "verdict": {"status": "FAIL", "failures": []},
     }
+
+
+def _exception_code(error: Exception) -> str:
+    if isinstance(error, BenchmarkError):
+        return error.code
+    if isinstance(error, FileNotFoundError):
+        return "docker_unavailable"
+    if isinstance(error, subprocess.TimeoutExpired):
+        return "execution_timeout"
+    return "unexpected_execution_error"
+
+
+def _execute_benchmark(
+    args: argparse.Namespace,
+    *,
+    docker: Callable[..., subprocess.CompletedProcess[str]] = _docker,
+    build_image: Callable[..., None] = _build_image,
+    container_env: Callable[[], dict[str, str]] = _container_env,
+    write_env_file: Callable[[dict[str, str]], Path] = _write_env_file,
+    run_container: Callable[..., dict[str, Any]] = _run_container,
+) -> dict[str, Any]:
+    result = _base_result(args)
     env_file: Path | None = None
     try:
-        _docker("version", "--format", "{{.Server.Version}}", timeout=15, quiet=True)
+        docker("version", "--format", "{{.Server.Version}}", timeout=15, quiet=True)
         if args.dockerfile is not None:
             dockerfile = args.dockerfile
             if not dockerfile.is_absolute():
                 dockerfile = REPO_ROOT / dockerfile
-            _build_image(dockerfile, args.image)
-        env_file = _write_env_file(_container_env())
+            build_image(dockerfile, args.image, docker=docker)
+        env_file = write_env_file(container_env())
         for container_index in range(1, args.fresh_containers + 1):
-            result["containers"].append(_run_container("fresh", container_index, 1, env_file, args))
+            result["containers"].append(
+                run_container("fresh", container_index, 1, env_file, args, docker=docker)
+            )
         if args.sequential_runs:
             result["containers"].append(
-                _run_container("sequential", 1, args.sequential_runs, env_file, args)
+                run_container(
+                    "sequential",
+                    1,
+                    args.sequential_runs,
+                    env_file,
+                    args,
+                    docker=docker,
+                )
             )
-        failures = [
-            f"{container['mode']}_{container['container_index']}"
-            for container in result["containers"]
-            if container["verdict"]["status"] != "PASS"
-        ]
-        result["verdict"] = {
-            "status": "FAIL" if failures else "PASS",
-            "failures": failures,
-        }
-    except (BenchmarkError, FileNotFoundError, subprocess.TimeoutExpired) as error:
-        if isinstance(error, BenchmarkError):
-            code, detail = error.code, error.detail
-        elif isinstance(error, FileNotFoundError):
-            code, detail = "docker_unavailable", "docker executable was not found"
-        else:
-            code, detail = "execution_timeout", "a bounded Docker command timed out"
-        result["verdict"] = {
-            "status": "FAIL",
-            "failures": [code],
-            "diagnostic": detail,
-        }
+        result["verdict"] = aggregate_mode_verdict(result["containers"])
+    except Exception as error:
+        result["verdict"] = _failure_verdict(_exception_code(error))
     finally:
         if env_file is not None:
-            env_file.unlink(missing_ok=True)
-        _write_results(args.results, result)
-    print(json.dumps(result, indent=2, sort_keys=True))
+            try:
+                env_file.unlink(missing_ok=True)
+            except OSError:
+                existing = result["verdict"].get("failures", [])
+                result["verdict"] = _failure_verdict(*existing, "env_file_cleanup_failed")
+    return result
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    execute_benchmark: Callable[[argparse.Namespace], dict[str, Any]] | None = None,
+    write_results: Callable[[Path, dict[str, Any]], None] | None = None,
+    emit: Callable[[str], None] | None = None,
+) -> int:
+    args = _parse_args(sys.argv[1:] if argv is None else argv)
+    execute = execute_benchmark or _execute_benchmark
+    writer = write_results or _write_results
+    output = emit or print
+    result = _base_result(args)
+    try:
+        result = execute(args)
+    except Exception as error:
+        result["verdict"] = _failure_verdict(_exception_code(error))
+    try:
+        writer(args.results, result)
+    except Exception:
+        existing = result["verdict"].get("failures", [])
+        result["verdict"] = _failure_verdict(*existing, "result_emission_failed")
+    output(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["verdict"]["status"] == "PASS" else 1
 
 
