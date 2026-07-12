@@ -12,7 +12,7 @@ A successful pipeline object is not enough. The customer needs the report to be 
 
 ## Goal
 
-Make the customer-facing `interactive` first-report path return a durable, immediately readable report within `60.0` seconds while the production API image stays at or below `500000000` bytes peak memory and retains no more than `50000000` bytes of additional quiescent state from the first to the third sequential run.
+Make the customer-facing `interactive` first-report path return a durable, immediately readable report within `60.0` seconds while the production API image keeps cgroup `memory.peak <= 500000000` bytes and retains no more than `50000000` bytes of additional quiescent state from the first to the third sequential run.
 
 ## User Stories
 
@@ -31,7 +31,7 @@ An accepted run satisfies all of the following:
 3. `GET /api/niches/{report_id}` begins immediately after POST, returns HTTP 2xx, repeats the exact POST `report_id`, and contains `generated_at`, `spec_version`, `input`, `keyword_expansion`, `metros`, and `meta`.
 4. The production image runs under cgroup v2 with `--memory=500000000 --memory-swap=500000000`; `memory.peak <= 500000000` bytes and the container is not OOM-killed.
 5. Two fresh containers each pass one cold canonical Tampa/Plumbing report.
-6. One additional container passes three reports sequentially. Five seconds after each validated GET, cgroup `memory.current` and process-1 RSS remain below `500000000` bytes. From run one to run three, neither quiescent value grows by more than `50000000` bytes.
+6. One additional container passes three reports sequentially. Five seconds after each validated GET, cgroup `memory.current <= 500000000` bytes and process-1 RSS `<= 500000000` bytes. From run one to run three, neither quiescent value grows by more than `50000000` bytes.
 7. The customer BFF sends `collection_profile: "interactive"`, aborts the upstream request at 58 seconds, and refunds consumed quota exactly once on timeout before the user-visible limit.
 
 Passing M4-M9 integration timing alone, increasing Render memory, returning an unreadable report, or persisting a report with `persist_warning` does not satisfy this contract.
@@ -42,6 +42,8 @@ Passing M4-M9 integration timing alone, increasing Render memory, returning an u
 | --- | --- |
 | `interactive` | Customer first-report profile. Make bounded attempts for one keyword-volume batch, at most six representative eligible organic SERPs, one maps SERP, GBP info, and business listings. Plan at most ten actual provider calls for one metro and execute at concurrency no greater than eight. |
 | `full` | Preserve the existing comprehensive non-interactive acquisition behavior for offline, benchmark, backfill, and explicitly requested enrichment runs. |
+
+Generic/domain `ScoreRequest` and M5 helpers default to `full` so Explore refresh and other internal callers preserve existing behavior. Public `NicheScoreRequest` selects `interactive`, and the customer BFF sends `collection_profile: "interactive"` explicitly.
 
 Backlinks, Lighthouse, Google review-velocity acquisition, and generated M8 copy are optional enrichment for `interactive` and cannot block the first readable report.
 

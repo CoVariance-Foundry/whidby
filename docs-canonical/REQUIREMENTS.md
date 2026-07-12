@@ -91,7 +91,7 @@
 | NFR-010 | Frontend QA | Every touched frontend state has Playwright coverage or an explicit no-frontend-change note plus desktop/mobile screenshot evidence when UI changes | Visual QA gate |
 | NFR-011 | Source of truth | Readiness claims MUST be based on current repo, CI, rendered UI, and live-provider evidence when relevant; memory-only claims are prohibited | Review gate |
 | NFR-012 | Memory | Every accepted cold or repeated interactive first-report run MUST keep cgroup v2 `memory.peak <= 500000000` bytes. | Production-image container launched with `--memory=500000000 --memory-swap=500000000` |
-| NFR-013 | Retained state | Three sequential interactive reports in one container MUST each pass NFR-001; after five seconds of quiescence following each report, both `memory.current` and process RSS MUST remain below `500000000` bytes, and neither run-three value may exceed its run-one value by more than `50000000` bytes. | Three-run production-image retained-state gate |
+| NFR-013 | Retained state | Three sequential interactive reports in one container MUST each pass NFR-001; after five seconds of quiescence following each report, `memory.current <= 500000000` bytes and process RSS `<= 500000000` bytes, and neither run-three value may exceed its run-one value by more than `50000000` bytes. | Three-run production-image retained-state gate |
 
 ## Success Criteria
 

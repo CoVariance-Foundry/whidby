@@ -36,7 +36,7 @@ Wire the existing pipeline into production paths so the user-facing flow — ent
 - `pytest tests/unit/ -q` — 290+ tests pass (baseline + new)
 - `ruff check src/ tests/` — clean
 - `cd apps/admin && npx vitest run src/app/api/agent/` — all route tests pass
-- Live acceptance is superseded by `specs/016-first-report-performance/spec.md`: the production-image gate must complete a successful scoring POST plus immediate schema-valid GET of the same durable report in `<= 60.0` seconds, without `persist_warning`, under the `500000000`-byte cgroup limit. The former 30-90-second allowance is retired.
+- Live acceptance is superseded by `specs/016-first-report-performance/spec.md`: the production-image gate must complete a successful scoring POST plus immediate schema-valid GET of the same durable report in `<= 60.0` seconds, without `persist_warning`, with cgroup `memory.peak <= 500000000` bytes. The former 30-90-second allowance is retired.
 
 ## Plan
 

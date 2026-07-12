@@ -1,17 +1,17 @@
 # Whidby Backend Execution and Render Memory Reliability Review
 
-- **Status:** Review artifact — root cause confirmed; synchronous remediation contract approved; implementation and acceptance not yet verified
+- **Status:** Review artifact — production OOM confirmed; autocomplete catalog causal link high-confidence; implementation and acceptance not yet verified
 - **Date:** 2026-07-11
 - **Scope:** Consumer onboarding, place autocomplete, Vercel BFF routes, Render FastAPI, M4-M9 scoring, persistence, and production operations
 - **Decision requested:** Execute and measure the bounded synchronous first-report remediation; treat infrastructure scaling only as temporary containment
 
 ## Executive conclusion
 
-The recurring Render out-of-memory failure is a regression in the place-autocomplete preflight, not an unproven M4-M9 allocation.
+The strongest supported explanation for the recurring Render out-of-memory failure is the place-autocomplete catalog regression, not an M4-M9 allocation. This is a high-confidence causal link: production sequence, code, and prior regression history agree, but no heap snapshot from the failed process proves exact byte ownership.
 
 `GET /api/places/suggest` enriches Mapbox suggestions by hydrating the entire DataForSEO Google locations catalog through the shared persistent cache. A prior fix, commit `42f4ac9`, removed this exact bridge because it downloaded approximately 226,000 rows and consumed approximately 2 GB when parsed on Render. Commit `6ba4cf9` later reintroduced the bridge behind `asyncio.wait_for(..., timeout=1.5)`. That timeout does not protect the service because the Supabase cache lookup and JSON materialization are synchronous and block the event loop before cancellation can run.
 
-The incident chain is therefore:
+The high-confidence causal reconstruction is therefore:
 
 ```text
 Place autocomplete
@@ -27,13 +27,13 @@ Place autocomplete
 
 The accepted response is layered:
 
-1. **Stop the known trigger:** remove or gate DataForSEO catalog enrichment from interactive autocomplete and return Mapbox-only suggestions. The product already has MetroDB/state fallbacks for scoring.
+1. **Stop the high-confidence trigger path:** remove or gate DataForSEO catalog enrichment from interactive autocomplete and return Mapbox-only suggestions. The product already has MetroDB/state fallbacks for scoring.
 2. **Bound the customer pipeline:** use an explicit `interactive` profile with one volume batch, at most six eligible organic SERPs, one maps SERP, GBP info, business listings, no per-keyword LLM fanout, at most ten provider calls, and concurrency capped at eight.
 3. **Bound process memory and retained state:** exclude the locations catalog from request caches and hashing, cap L1 at 128 entries and 2,000,000 bytes per admitted value, reuse provider clients, and drain cost records by collection context.
 4. **Persist core-first:** synchronously write only the durable report and critical score rows for `interactive`; cost, KB, feedback, and generated-guidance work cannot block the response or move to an untracked in-process task.
 5. **Enforce the customer deadline:** target 55 seconds inside FastAPI, abort the BFF request and refund consumed quota at 58 seconds, and require the POST plus immediate schema-valid GET to finish under one shared `<= 60.0`-second deadline.
 
-The accepted memory ceiling is cgroup v2 `memory.peak <= 500000000` bytes. Increasing the Render plan can be temporary incident containment, but it is not remediation evidence and does not alter the 500,000,000-byte acceptance gate. Increasing Vercel's timeout or adding instances likewise cannot substitute for a durable, immediately readable report inside the hard boundary.
+The accepted memory ceiling is cgroup v2 `memory.peak <= 500000000` bytes. Increasing the Render plan can be temporary incident containment, but it is not remediation evidence and does not alter the `memory.peak <= 500000000` acceptance gate. Increasing Vercel's timeout or adding instances likewise cannot substitute for a durable, immediately readable report inside the hard boundary.
 
 ## Evidence standard
 
@@ -130,14 +130,14 @@ sequenceDiagram
 | `6ba4cf9` — 2026-05-14 | Reintroduced `bridge.enrich()` to add metadata and diagnostics, guarded by a 1.5-second timeout | Restored the same allocation path without making the blocking cache read cancellable or memory-bounded. |
 | `fc2161c` — 2026-05-24 | Added response-lineage hashing through `_response_hash()` | Every successful locations response is serialized to a second full JSON byte buffer before SHA-256 hashing, increasing transient peak memory on the already oversized path. |
 
-This history converts the location bridge from a generic suspicion into the confirmed regression source. A heap profile is still required to assign exact byte ownership among Supabase decoding, Python objects, JSON hashing, and retained indexes.
+This history raises the location bridge from a generic suspicion to a high-confidence causal link. A heap profile is still required to prove exact byte ownership among Supabase decoding, Python objects, JSON hashing, and retained indexes.
 
 ## Root-cause hierarchy
 
 | Level | Cause | Status |
 | --- | --- | --- |
-| Trigger | Interactive autocomplete hydrates the global DataForSEO location catalog. | Confirmed by logs, code, and commit history. |
-| Process failure | Catalog parsing/retention pushes the Render process above 2 GB. | Confirmed at service level; exact allocation split needs a profile. |
+| Trigger | Interactive autocomplete hydrates the global DataForSEO location catalog immediately before the OOM. | High-confidence causal link from logs, code, and commit history; no failed-process heap snapshot exists. |
+| Process failure | Catalog parsing/retention is the leading explanation for the process crossing 2 GB. | OOM confirmed at service level; catalog byte ownership remains high-confidence pending a profile. |
 | Timeout guard failure | `asyncio.wait_for` surrounds synchronous Supabase/cache work, so it cannot enforce 1.5 seconds. | Confirmed from code. |
 | Blast radius | Autocomplete and scoring share one Uvicorn process and app-lifetime state. OOM removes both lightweight and heavy API traffic. | Confirmed from deployment/code. |
 | User failure | Vercel performs synchronous scoring with no upstream deadline and is killed at 300 seconds. | Confirmed from Vercel log/code. |
@@ -215,7 +215,7 @@ These did not precede `NICHES_SCORE` in this incident, but they can trigger late
 | Separate worker or managed workflow | Weeks | Potentially high under a different product contract | High | Deferred unless the stop rule proves the synchronous contract infeasible; requires a new architecture/data-model decision. |
 | Increase Vercel function duration | Minutes | Low | Low | Reject as a primary fix; it lengthens the wait and cannot prevent Render OOM. |
 
-Render scaling remains an operational option, not a correctness argument. The accepted design must pass in the production image constrained to 500,000,000 bytes.
+Render scaling remains an operational option, not a correctness argument. The accepted design must pass in the production image with cgroup `memory.peak <= 500000000` bytes.
 
 ## Accepted remediation boundary
 
@@ -260,7 +260,7 @@ A durable worker or managed workflow is a deferred alternative, not part of this
 4. Remove/expire the oversized production cache entry after the code no longer reloads it.
 5. Limit fresh scoring to one concurrent run per process until memory is measured.
 6. Alert on Render RSS/limit, instance failure/restart, and BFF abort/refund failures.
-7. Rotate the credential exposed in full outgoing URL logs and redact query strings from HTTP client logging.
+7. Audit outgoing HTTP logs for secret-bearing query strings, redact them, and rotate credentials only if exposure is confirmed.
 8. If emergency scaling is operationally necessary, label it temporary containment and do not use the larger plan as readiness evidence.
 
 ### P1 — repair the web process
@@ -279,13 +279,13 @@ A durable worker or managed workflow is a deferred alternative, not part of this
 1. Add the production-image harness with one shared 60-second POST/read deadline, exact GET schema validation, cgroup v2 readings, RSS, and OOM state.
 2. Make the Next.js scoring proxy abort at 58 seconds and refund consumed quota exactly once.
 3. Run two fresh-container cold reports and three sequential reports in one additional container.
-4. Wait five seconds after each read; enforce the 500,000,000-byte absolute limit and 50,000,000-byte first-to-third growth limit for both `memory.current` and RSS.
+4. Wait five seconds after each read; enforce `memory.current <= 500000000` bytes and process RSS `<= 500000000` bytes plus the 50,000,000-byte first-to-third growth limit for both metrics.
 5. If measured memory still fails, remove one profiler-identified retention copy and rerun the exact gate.
 6. If the bounded profile, core-first persistence, and targeted copy reduction still fail, record the measured infeasibility and stop. Do not raise either limit.
 
 ## Capacity and performance policy
 
-Do not select readiness from average RSS or the live Render plan. The hard gate runs the production image under a 500,000,000-byte cgroup limit. Temporary production scaling may provide incident headroom, but the remediation is not accepted until the constrained image passes.
+Do not select readiness from average RSS or the live Render plan. The hard gate requires the production image to keep cgroup `memory.peak <= 500000000` bytes. Temporary production scaling may provide incident headroom, but the remediation is not accepted until the constrained image passes.
 
 Accepted controls:
 
@@ -313,7 +313,7 @@ The former ten-minute canonical target and Feature 013's 30-90-second live-smoke
 | Durable first report | Successful POST plus immediate schema-valid GET of the same report in `<= 60.0` seconds |
 | Persistence integrity | Non-null `report_id`, no `persist_warning`, and required report fields readable immediately |
 | Peak memory | Cgroup v2 `memory.peak <= 500000000` bytes |
-| Repeated retained state | After five-second quiescence, `memory.current` and RSS remain below the hard limit and grow by no more than `50000000` bytes from run one to run three |
+| Repeated retained state | After five-second quiescence, `memory.current <= 500000000` bytes and process RSS `<= 500000000` bytes; each grows by no more than `50000000` bytes from run one to run three |
 | Partial provider availability | Complete durable low-confidence fallback report with structured failures under unchanged limits |
 | Optional enrichment | Does not block `interactive`; no untracked in-process task |
 
@@ -331,7 +331,7 @@ Every layer must carry the request identifier and collection context; after core
 | Quota | consume/refund outcome, units, and exactly-once result |
 | Persistence | `report_id`, core-write status, immediate-read status, required-field validation |
 
-Persist stage transitions before expensive calls. An OOM cannot run exception handlers or final log lines, so logs alone cannot be the source of truth.
+The `interactive` response path MUST NOT add synchronous stage-transition persistence. If persisted stage transitions are introduced for `full` or a future durable worker, record them before expensive calls; an OOM cannot run exception handlers or final log lines, so logs alone cannot be the source of truth.
 
 Alerts:
 

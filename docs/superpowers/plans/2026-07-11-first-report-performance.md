@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make one real first-report request return a durable, immediately readable report in no more than 60.0 seconds while the API container stays at or below 500,000,000 bytes peak memory.
+**Goal:** Make one real first-report request return a durable, immediately readable report in no more than 60.0 seconds while the API container keeps cgroup `memory.peak <= 500000000` bytes.
 
 **Architecture:** Keep the public request synchronous, but make it an explicit `interactive` collection profile with a bounded core evidence set. Remove the full DataForSEO location catalog from autocomplete, remove serial per-keyword LLM work, cap provider work and memory-retaining state, and measure the complete FastAPI plus persistence boundary in the production container. Preserve the current `full` collection profile for offline/benchmark acquisition. Optional enrichments may not block the first readable report.
 
@@ -16,11 +16,11 @@
 - The measured interval begins immediately before the POST and ends only after the successful report GET, including parsing and contract validation. One shared deadline covers both calls and it must be `<= 60.0` seconds.
 - The GET body must repeat the exact POST `report_id` and satisfy the existing required report paths: `generated_at`, `spec_version`, `input`, `keyword_expansion`, `metros`, and `meta`.
 - Container `memory.peak` from cgroup v2 must be `<= 500000000` bytes. Use decimal MB because that is stricter than 500 MiB.
-- Use a fresh production-image container for cold runs. Also run three reports sequentially in one container, wait five seconds after each run, and prove `memory.current` and process RSS remain below the hard limit while neither post-quiescence metric grows by more than 50,000,000 bytes from the first to the third run.
+- Use a fresh production-image container for cold runs. Also run three reports sequentially in one container, wait five seconds after each run, and prove `memory.current <= 500000000` bytes and process RSS `<= 500000000` bytes while neither post-quiescence metric grows by more than 50,000,000 bytes from the first to the third run.
 - Run paid acceptance calls against staging Supabase by mapping `STAGING_SUPABASE_URL` and `STAGING_SUPABASE_SERVICE_ROLE_KEY` to the runtime variable names. Never print or persist secret values.
 - A partial upstream failure may lower confidence, but may not make the report unreadable or silently weaken either performance limit.
 - Preserve snake_case wire payloads and the existing report schema.
-- Preserve the generic `full` M5 profile for non-interactive acquisition. The customer-facing scoring proxy must explicitly request `interactive`.
+- Preserve the generic `full` M5 profile for non-interactive acquisition. Generic/domain `ScoreRequest` and M5 helpers default to `full`; only public `NicheScoreRequest` and the customer-facing scoring proxy select `interactive`, with the BFF payload explicit.
 - Interactive persistence is core-first by contract: only the durable report and critical score rows may block the response. Cost logging, KB evidence, feedback logging, and generated guidance must not execute synchronously on the interactive response path. Do not replace them with an untracked in-process task.
 - The Next.js scoring proxy must abort its upstream request and refund consumed quota before the user-visible 60-second limit; a direct FastAPI benchmark alone is not sufficient customer-path coverage.
 - Do not touch or stage the user-owned `AGENTS.md` change.
@@ -33,7 +33,7 @@
 - Cold-ish live M4-M9 integration: `96.38s` pytest time, `154,386,432` bytes max RSS, `219,236,736` bytes peak footprint. This excludes persistence and FastAPI.
 - Warm live M4-M9 integration: `45.87s` pipeline, `223,150,080` bytes max RSS. M4 was `29.11s`; M5 was `16.27s`.
 - M4's default model is no longer available, which triggers about 50 serial Haiku intent calls.
-- Interactive autocomplete can hydrate and hash the full DataForSEO locations catalog, the confirmed production OOM trigger.
+- Interactive autocomplete can hydrate and hash the full DataForSEO locations catalog; production sequence, code history, and the prior identical regression make it a high-confidence causal link to the OOM, but no heap snapshot proves exact byte ownership.
 - Pure M6-M9 computation is not the bottleneck: a synthetic 40-MB M5 payload completed M6-M9 in about 9 ms under 80 MB RSS.
 
 ## Budget
@@ -221,7 +221,7 @@ git commit -m "test: add first-report performance gate"
 
 ---
 
-## Task 3: Remove the bulk-location OOM trigger from autocomplete
+## Task 3: Remove the bulk-location OOM risk path from autocomplete
 
 **Files:**
 - Modify: `tests/unit/test_api_places_suggest.py`
@@ -363,7 +363,7 @@ For `interactive`, assert one metro creates no more than ten actual calls:
 - GBP info and business listings dependents;
 - no backlinks, Lighthouse, or Google reviews.
 
-For `full`, assert existing behavior is unchanged. Assert the Next scoring proxy sends `collection_profile: "interactive"`, FastAPI validates that snake_case field, and `ScoreRequest` passes it to the orchestrator. Preserve the existing exact FastAPI response keys and report-read contract.
+For `full`, assert existing behavior is unchanged. Assert generic/domain `ScoreRequest` defaults to `full`, public `NicheScoreRequest` defaults to `interactive`, the Next scoring proxy sends `collection_profile: "interactive"`, FastAPI validates that snake_case field, and the selected profile reaches the orchestrator. Preserve the existing exact FastAPI response keys and report-read contract.
 
 - [ ] **Step 2: Write failing concurrency and timeout tests**
 
@@ -382,7 +382,7 @@ Expected: FAIL because profiles, task caps, timeouts, and bounded concurrency do
 
 - [ ] **Step 3: Implement profile propagation**
 
-Add `CollectionProfile = Literal["interactive", "full"]`. Keep generic M5 helpers defaulting to `full` for compatibility; make public `NicheScoreRequest` and `ScoreRequest` default to `interactive`, and make the Next BFF explicit. Set its upstream abort to exactly 58,000 ms so the 55-second FastAPI target leaves proxy/refund margin.
+Add `CollectionProfile = Literal["interactive", "full"]`. Keep generic M5 helpers and domain `ScoreRequest` defaulting to `full` so ExploreRefreshService and other non-customer callers preserve existing acquisition behavior. Make public `NicheScoreRequest` default to `interactive`, and make the Next BFF payload explicit. Set its upstream abort to exactly 58,000 ms so the 55-second FastAPI target leaves proxy/refund margin.
 
 - [ ] **Step 4: Implement deterministic interactive planning**
 
@@ -407,7 +407,7 @@ node scripts/dev/sync_worktree_env.mjs -- /usr/bin/time -l \
   -s --log-cli-level=INFO
 ```
 
-Expected: pipeline comfortably below 50 seconds and peak RSS below 500,000,000 bytes. This is directional only; Task 7 is authoritative.
+Expected: pipeline comfortably below 50 seconds and peak RSS `<= 500000000` bytes. This is directional only; Task 7 is authoritative.
 
 - [ ] **Step 8: Commit**
 
@@ -615,14 +615,14 @@ This work is complete only when the exact production-image acceptance run proves
 
 ```text
 cold POST + immediate GET <= 60.0 seconds
-cgroup memory.peak <= 500,000,000 bytes
+cgroup memory.peak <= 500000000 bytes
 HTTP POST/GET successful
 report_id non-null
 GET report_id matches POST and required report fields validate
 persist_warning absent
 three sequential reports pass
-post-quiescence memory.current and RSS stay under 500,000,000 bytes
-run-three memory.current and RSS growth from run one <= 50,000,000 bytes each
+post-quiescence memory.current and RSS <= 500000000 bytes
+run-three memory.current and RSS growth from run one <= 50000000 bytes each
 ```
 
 Passing unit tests, a faster M4-M9 integration test, a larger Render instance, or a report that is not immediately readable are not completion.
