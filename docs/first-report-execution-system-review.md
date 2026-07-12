@@ -367,6 +367,28 @@ Alerts:
 - The BFF sends `collection_profile=interactive`, aborts at 58 seconds, and refunds consumed quota exactly once.
 - The `full` profile retains existing comprehensive collection and optional-persistence behavior.
 
+## Pre-optimization production-image baseline
+
+The authoritative harness was added before pipeline optimization and exercised against the canonical Tampa/Plumbing payload in `Dockerfile.api` with a `500000000`-byte memory and swap limit. The corrected aggregate-RSS run exited 1 with the expected readable-report contract failure:
+
+| Signal | Baseline result |
+| --- | ---: |
+| Health startup, excluded from report latency | `0.784963` seconds, pass |
+| POST time | `60.003693` seconds, timed out |
+| Shared POST/read interval | `60.003726` seconds, fail |
+| POST/read outcome | No POST status or `report_id`; GET could not run |
+| Cgroup `memory.peak` | `153604096` bytes, pass |
+| Cgroup `memory.current` | `152801280` bytes, pass |
+| Aggregate service-container process RSS | `171040768` bytes, pass |
+| Container OOM state | `false`, pass |
+| Overall verdict | **FAIL** — no durable, immediately readable report inside the shared deadline |
+
+Because the POST did not return a body, this run could not evaluate `persist_warning` or the immediate-read schema. The redacted JSON is written to ignored `artifacts/performance/first-report-baseline.json` and is not committed.
+
+The first harness execution sampled only `/proc/1/status` and reported `1310720` bytes because `Dockerfile.api` uses a shell-form `CMD`; PID 1 is the shell wrapper, not the Python service. That RSS result is superseded. The corrected harness sums `VmRSS` across every numeric `/proc` PID and labels the value as aggregate service-container process RSS.
+
+Two attempts to rerun the literal wrapper command stalled before Python or Docker while Node was blocked in `read(2)` on the default source `.env`; no provider call occurred. The corrected measurement used the wrapper's supported `--source .env` option against the already-synced worktree copy. All benchmark flags, image, payload, staging-variable remapping, and limits were otherwise unchanged.
+
 ## Decision record
 
 Approved direction:

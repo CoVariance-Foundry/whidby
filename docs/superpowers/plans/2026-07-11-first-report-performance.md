@@ -159,7 +159,7 @@ The script must:
 5. Wait for `/health` without including warm-up in report latency.
 6. Set one monotonic deadline 60 seconds after the POST begins; pass only the remaining time to POST and then GET so their combined work cannot exceed it.
 7. Immediately GET `/api/niches/{report_id}`, parse the JSON, require the same ID, and validate `generated_at`, `spec_version`, `input`, `keyword_expansion`, `metros`, and `meta`.
-8. Read `/sys/fs/cgroup/memory.peak`, `/sys/fs/cgroup/memory.current`, process 1 `VmRSS`, and the container OOM state.
+8. Read `/sys/fs/cgroup/memory.peak`, `/sys/fs/cgroup/memory.current`, aggregate service-container process RSS by summing `VmRSS` for every numeric `/proc` PID, and the container OOM state.
 9. For sequential mode, wait `--quiescence-seconds 5` after each validated GET, capture `memory.current` and RSS, and fail if either run-three metric exceeds its run-one value by more than `--max-retained-growth-bytes 50000000`.
 10. Emit a redacted JSON result containing timings, status, report ID, memory samples, and verdict; never payload secrets.
 11. Define `--fresh-containers N` as N containers with exactly one report each. Define `--sequential-runs N` as one additional container with N reports in sequence.
