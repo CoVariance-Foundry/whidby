@@ -1,4 +1,5 @@
 """Unit tests for the FastAPI /api/niches routes."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,32 +21,54 @@ class _FakeScoreResult:
             "report_id": "abc",
             "generated_at": "2026-04-20T00:00:00+00:00",
             "spec_version": "1.1",
-            "input": {"niche_keyword": "roofing", "geo_scope": "city",
-                      "geo_target": "Phoenix, AZ", "report_depth": "standard",
-                      "strategy_profile": "balanced"},
+            "input": {
+                "niche_keyword": "roofing",
+                "geo_scope": "city",
+                "geo_target": "Phoenix, AZ",
+                "report_depth": "standard",
+                "strategy_profile": "balanced",
+            },
             "keyword_expansion": {"niche": "roofing", "expanded_keywords": []},
-            "metros": [{"cbsa_code": "38060", "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
-                         "population": 5000000,
-                         "scores": {"demand": 70, "organic_competition": 40,
-                                    "local_competition": 55, "monetization": 65,
-                                    "ai_resilience": 80, "opportunity": 72,
-                                    "confidence": {"score": 82, "flags": []}},
-                         "confidence": {"score": 82, "flags": []},
-                         "serp_archetype": "local_first",
-                         "ai_exposure": "low", "difficulty_tier": "T2",
-                         "signals": {}, "guidance": {}}],
-            "meta": {"total_api_calls": 0, "total_cost_usd": 0.0,
-                      "processing_time_seconds": 0.1, "feedback_log_id": "fb"},
+            "metros": [
+                {
+                    "cbsa_code": "38060",
+                    "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
+                    "population": 5000000,
+                    "scores": {
+                        "demand": 70,
+                        "organic_competition": 40,
+                        "local_competition": 55,
+                        "monetization": 65,
+                        "ai_resilience": 80,
+                        "opportunity": 72,
+                        "confidence": {"score": 82, "flags": []},
+                    },
+                    "confidence": {"score": 82, "flags": []},
+                    "serp_archetype": "local_first",
+                    "ai_exposure": "low",
+                    "difficulty_tier": "T2",
+                    "signals": {},
+                    "guidance": {},
+                }
+            ],
+            "meta": {
+                "total_api_calls": 0,
+                "total_cost_usd": 0.0,
+                "processing_time_seconds": 0.1,
+                "feedback_log_id": "fb",
+            },
         }
         self.opportunity_score = 72
-        self.evidence = [{"category": "demand", "label": "x", "value": 1.0,
-                           "source": "s", "is_available": True}]
+        self.evidence = [
+            {"category": "demand", "label": "x", "value": 1.0, "source": "s", "is_available": True}
+        ]
 
 
 def _make_test_market_service(
     pipeline_fn: Any | None = None,
 ) -> MarketService:
     """Build a MarketService with fakes for handler-level tests."""
+
     async def _default_pipeline(**kwargs: Any) -> _FakeScoreResult:
         return _FakeScoreResult()
 
@@ -65,6 +88,7 @@ def test_post_niches_score_dry_run_returns_report_and_opportunity(monkeypatch: A
         assert kwargs["cbsa_name"] == "Waco, TX"
         assert kwargs["population"] == 299217
         assert kwargs["request_id"] == "req-123"
+        assert kwargs["collection_profile"] == "interactive"
         return _FakeScoreResult()
 
     svc = _make_test_market_service(pipeline_fn=_fake_orchestrator)
@@ -154,13 +178,37 @@ def test_niche_score_request_accepts_explicit_cbsa_metadata_source() -> None:
     assert req.metadata_source == "explicit_cbsa"
 
 
+def test_niche_score_request_defaults_interactive_and_validates_profile() -> None:
+    assert NicheScoreRequest(niche="roofing", city="Phoenix").collection_profile == "interactive"
+    assert (
+        NicheScoreRequest(
+            niche="roofing",
+            city="Phoenix",
+            collection_profile="full",
+        ).collection_profile
+        == "full"
+    )
+    with pytest.raises(ValidationError):
+        NicheScoreRequest(
+            niche="roofing",
+            city="Phoenix",
+            collection_profile="invalid",
+        )
+
+
 def test_get_niches_report_reads_from_supabase(monkeypatch: Any) -> None:
     fake_row = {
-        "id": "abc", "niche_keyword": "roofing", "geo_target": "Phoenix, AZ",
+        "id": "abc",
+        "niche_keyword": "roofing",
+        "geo_target": "Phoenix, AZ",
         "metros": [{"cbsa_code": "38060", "scores": {"opportunity": 72}}],
-        "created_at": "2026-04-20T00:00:00+00:00", "spec_version": "1.1",
-        "keyword_expansion": {"keywords": []}, "meta": {}, "report_depth": "standard",
-        "strategy_profile": "balanced", "geo_scope": "city",
+        "created_at": "2026-04-20T00:00:00+00:00",
+        "spec_version": "1.1",
+        "keyword_expansion": {"keywords": []},
+        "meta": {},
+        "report_depth": "standard",
+        "strategy_profile": "balanced",
+        "geo_scope": "city",
     }
     with patch("src.research_agent.api._read_report_by_id", return_value=fake_row):
         client = TestClient(app)

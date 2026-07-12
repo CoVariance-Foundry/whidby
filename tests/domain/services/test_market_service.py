@@ -1,4 +1,5 @@
 """Tests for MarketService — scoring orchestration without infrastructure."""
+
 from __future__ import annotations
 
 import asyncio
@@ -24,9 +25,7 @@ class FakeBenchmarkRepository:
 
 
 class FakeCityDataProvider:
-    def get_business_density(
-        self, city_id: str, naics: str | None = None
-    ) -> dict[str, Any]:
+    def get_business_density(self, city_id: str, naics: str | None = None) -> dict[str, Any]:
         return {"establishments": 12}
 
 
@@ -93,9 +92,7 @@ def test_score_classification_label_high(service: MarketService) -> None:
 
 
 def test_score_classification_label_medium(service: MarketService) -> None:
-    result = asyncio.run(service.score(
-        ScoreRequest(niche="plumbing", city="Boise", state="ID")
-    ))
+    result = asyncio.run(service.score(ScoreRequest(niche="plumbing", city="Boise", state="ID")))
     assert result.classification_label == "Medium"
 
 
@@ -113,9 +110,7 @@ def test_score_classification_label_low() -> None:
     assert result.classification_label == "Low"
 
 
-def test_score_persists_report(
-    service: MarketService, store: FakeMarketStore
-) -> None:
+def test_score_persists_report(service: MarketService, store: FakeMarketStore) -> None:
     req = ScoreRequest(niche="plumbing", city="Boise", state="ID")
     result = asyncio.run(service.score(req))
     assert result.report_id == "rpt-1"
@@ -187,9 +182,7 @@ def test_score_keeps_seo_evidence_artifacts_private(store: FakeMarketStore) -> N
     assert "local_pack_listing_facts" not in stored["metros"][0]
 
 
-def test_score_updates_kb(
-    service: MarketService, kb: FakeKnowledgeStore
-) -> None:
+def test_score_updates_kb(service: MarketService, kb: FakeKnowledgeStore) -> None:
     req = ScoreRequest(niche="plumbing", city="Boise", state="ID")
     result = asyncio.run(service.score(req))
     assert result.entity_id is not None
@@ -210,9 +203,7 @@ def test_score_stores_two_evidence_artifacts(
     assert "keyword_expansion" in types
 
 
-def test_score_flushes_dfs_costs(
-    service: MarketService, dfs: FakeDFSClient
-) -> None:
+def test_score_flushes_dfs_costs(service: MarketService, dfs: FakeDFSClient) -> None:
     req = ScoreRequest(niche="plumbing", city="Boise", state="ID")
     asyncio.run(service.score(req))
     assert dfs.cost_tracker.flushed_report_ids == ["rpt-1"]
@@ -282,9 +273,7 @@ def test_dry_run_does_not_pass_v2_dependencies_to_pipeline(
     assert calls[0]["city_data_provider"] is None
 
 
-def test_score_logs_feedback(
-    service: MarketService, kb: FakeKnowledgeStore
-) -> None:
+def test_score_logs_feedback(service: MarketService, kb: FakeKnowledgeStore) -> None:
     req = ScoreRequest(niche="plumbing", city="Boise", state="ID")
     asyncio.run(service.score(req))
     assert len(kb.feedback_rows) >= 1
@@ -308,9 +297,7 @@ def test_dry_run_skips_persistence(
     assert len(dfs.cost_tracker.flushed_report_ids) == 0
 
 
-def test_persist_failure_returns_warning(
-    kb: FakeKnowledgeStore, dfs: FakeDFSClient
-) -> None:
+def test_persist_failure_returns_warning(kb: FakeKnowledgeStore, dfs: FakeDFSClient) -> None:
     failing_store = FakeMarketStore()
     failing_store.fail_persist = True
     svc = MarketService(
@@ -327,9 +314,7 @@ def test_persist_failure_returns_warning(
     assert result.report_id == "rpt-1"
 
 
-def test_persist_failure_skips_feedback(
-    kb: FakeKnowledgeStore, dfs: FakeDFSClient
-) -> None:
+def test_persist_failure_skips_feedback(kb: FakeKnowledgeStore, dfs: FakeDFSClient) -> None:
     failing_store = FakeMarketStore()
     failing_store.fail_persist = True
     svc = MarketService(
@@ -398,9 +383,7 @@ def test_score_passes_dry_run_to_pipeline() -> None:
 
     async def tracking_pipeline(**kwargs: Any) -> FakePipelineResult:
         calls.append(kwargs)
-        return FakePipelineResult(
-            report=make_fake_report(), opportunity_score=72, evidence=[]
-        )
+        return FakePipelineResult(report=make_fake_report(), opportunity_score=72, evidence=[])
 
     svc = MarketService(
         pipeline_fn=tracking_pipeline,
@@ -409,9 +392,7 @@ def test_score_passes_dry_run_to_pipeline() -> None:
         market_store=FakeMarketStore(),
         knowledge_store=FakeKnowledgeStore(),
     )
-    asyncio.run(svc.score(
-        ScoreRequest(niche="plumbing", city="Boise", state="ID", dry_run=True)
-    ))
+    asyncio.run(svc.score(ScoreRequest(niche="plumbing", city="Boise", state="ID", dry_run=True)))
     assert calls[0]["dry_run"] is True
     assert calls[0]["llm_client"] is None
     assert calls[0]["dataforseo_client"] is None
@@ -423,9 +404,7 @@ def test_score_passes_clients_to_pipeline_when_not_dry_run() -> None:
 
     async def tracking_pipeline(**kwargs: Any) -> FakePipelineResult:
         calls.append(kwargs)
-        return FakePipelineResult(
-            report=make_fake_report(), opportunity_score=72, evidence=[]
-        )
+        return FakePipelineResult(report=make_fake_report(), opportunity_score=72, evidence=[])
 
     svc = MarketService(
         pipeline_fn=tracking_pipeline,
@@ -434,9 +413,36 @@ def test_score_passes_clients_to_pipeline_when_not_dry_run() -> None:
         market_store=FakeMarketStore(),
         knowledge_store=FakeKnowledgeStore(),
     )
-    asyncio.run(svc.score(
-        ScoreRequest(niche="plumbing", city="Boise", state="ID")
-    ))
+    asyncio.run(svc.score(ScoreRequest(niche="plumbing", city="Boise", state="ID")))
     assert calls[0]["dataforseo_client"] is dfs
     assert calls[0]["llm_client"] == "fake-llm"
     assert "dry_run" not in calls[0] or calls[0].get("dry_run") is not True
+
+
+def test_score_request_defaults_full_and_passes_explicit_profile() -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def tracking_pipeline(**kwargs: Any) -> FakePipelineResult:
+        calls.append(kwargs)
+        return FakePipelineResult(report=make_fake_report(), opportunity_score=72, evidence=[])
+
+    assert ScoreRequest(niche="plumbing", city="Boise").collection_profile == "full"
+    svc = MarketService(
+        pipeline_fn=tracking_pipeline,
+        dfs_client=FakeDFSClient(),
+        llm_client=None,
+        market_store=FakeMarketStore(),
+        knowledge_store=FakeKnowledgeStore(),
+    )
+
+    asyncio.run(
+        svc.score(
+            ScoreRequest(
+                niche="plumbing",
+                city="Boise",
+                collection_profile="interactive",
+            )
+        )
+    )
+
+    assert calls[0]["collection_profile"] == "interactive"

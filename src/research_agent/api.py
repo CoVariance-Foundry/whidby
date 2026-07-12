@@ -76,6 +76,7 @@ app = FastAPI(title="Widby Research Agent API", version="0.1.0", lifespan=_api_l
 @app.exception_handler(RequestValidationError)
 async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Return 400 instead of 422 for Pydantic validation errors."""
+
     # Pydantic v2 ctx values may be non-JSON-serializable exceptions — flatten them.
     def _safe(obj: Any) -> Any:
         if isinstance(obj, dict):
@@ -90,11 +91,7 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     return JSONResponse(status_code=400, content={"detail": errors})
 
 
-_CORS_EXTRA = [
-    o.strip()
-    for o in os.environ.get("CORS_EXTRA_ORIGINS", "").split(",")
-    if o.strip()
-]
+_CORS_EXTRA = [o.strip() for o in os.environ.get("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -102,11 +99,10 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:3002",
         "https://app.thewidby.com",
-    ] + _CORS_EXTRA,
+    ]
+    + _CORS_EXTRA,
     allow_origin_regex=(
-        r"https://.*\.vercel\.app"
-        if os.environ.get("ENVIRONMENT") != "production"
-        else None
+        r"https://.*\.vercel\.app" if os.environ.get("ENVIRONMENT") != "production" else None
     ),
     allow_methods=["*"],
     allow_headers=["*"],
@@ -181,9 +177,7 @@ def _get_discovery_service() -> DiscoveryService:
     global _DISCOVERY_SERVICE
     if _DISCOVERY_SERVICE is None:
         persistence = SupabasePersistence()
-        _DISCOVERY_SERVICE = DiscoveryService(
-            market_store=StrategyRepository(persistence.client)
-        )
+        _DISCOVERY_SERVICE = DiscoveryService(market_store=StrategyRepository(persistence.client))
     return _DISCOVERY_SERVICE
 
 
@@ -274,11 +268,7 @@ class _SupabaseCompetitorIntelRepository:
         )
         if keyword:
             query = query.eq("keyword", keyword)
-        rows = _rows(
-            query.order("snapshot_date", desc=True)
-            .order("result_rank")
-            .execute()
-        )
+        rows = _rows(query.order("snapshot_date", desc=True).order("result_rank").execute())
         return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
 
     def fetch_local_pack_facts(
@@ -298,9 +288,7 @@ class _SupabaseCompetitorIntelRepository:
         )
         if keyword:
             query = query.eq("keyword", keyword)
-        rows = _rows(
-            query.order("snapshot_date", desc=True).order("listing_rank").execute()
-        )
+        rows = _rows(query.order("snapshot_date", desc=True).order("listing_rank").execute())
         return self._filter_rows_by_report_visibility(rows, account_id=account_id)[:limit]
 
     def fetch_report_context(
@@ -361,11 +349,7 @@ class _SupabaseCompetitorIntelRepository:
         account_id: str | None,
     ) -> list[dict[str, Any]]:
         report_ids = sorted(
-            {
-                str(row["report_id"])
-                for row in rows
-                if row.get("report_id") not in (None, "")
-            }
+            {str(row["report_id"]) for row in rows if row.get("report_id") not in (None, "")}
         )
         if not report_ids:
             return list(rows)
@@ -590,6 +574,7 @@ class NicheScoreRequest(BaseModel):
     dry_run: bool = False
     owner_account_id: str | None = None
     created_by_user_id: str | None = None
+    collection_profile: Literal["interactive", "full"] = "interactive"
 
     @field_validator("niche", "city")
     @classmethod
@@ -740,11 +725,7 @@ class StrategyRunRequest(BaseModel):
 
     @model_validator(mode="after")
     def _fresh_runs_need_targets(self) -> "StrategyRunRequest":
-        if (
-            self.mode == "fresh"
-            and not self.targets
-            and not (self.city and self.service)
-        ):
+        if self.mode == "fresh" and not self.targets and not (self.city and self.service):
             raise ValueError("Fresh strategy runs require at least one target.")
         return self
 
@@ -799,16 +780,10 @@ def _build_market_service() -> MarketService:
     try:
         persistence = SupabasePersistence()
         store = SupabaseMarketStore(persistence)
-        benchmark_repository = SupabaseSeoBenchmarkRepository(
-            client=persistence.client
-        )
-        city_data_provider = SupabaseCityDataProvider(
-            client=persistence.client
-        )
+        benchmark_repository = SupabaseSeoBenchmarkRepository(client=persistence.client)
+        city_data_provider = SupabaseCityDataProvider(client=persistence.client)
     except Exception:
-        logger.warning(
-            "Supabase unavailable; persistence and V2 Supabase scoring facts will fail"
-        )
+        logger.warning("Supabase unavailable; persistence and V2 Supabase scoring facts will fail")
     try:
         kb = KBKnowledgeStore(KBPersistence())
     except Exception:
@@ -868,6 +843,7 @@ def _read_report_by_id(report_id: str) -> dict[str, Any] | None:
         return svc._store.read_report(report_id)
     import os
     from supabase import create_client
+
     client = create_client(
         os.environ["NEXT_PUBLIC_SUPABASE_URL"],
         os.environ["SUPABASE_SERVICE_ROLE_KEY"],
@@ -1053,6 +1029,7 @@ async def niches_score(req: NicheScoreRequest, request: Request) -> dict[str, An
             dry_run=req.dry_run,
             owner_account_id=req.owner_account_id,
             created_by_user_id=req.created_by_user_id,
+            collection_profile=req.collection_profile,
         )
         result = await _market_service().score(score_request)
         logger.info(
@@ -1073,9 +1050,7 @@ async def niches_score(req: NicheScoreRequest, request: Request) -> dict[str, An
             req.city,
             req.metadata_source,
         )
-        raise HTTPException(
-            status_code=500, detail="Scoring pipeline failed unexpectedly"
-        )
+        raise HTTPException(status_code=500, detail="Scoring pipeline failed unexpectedly")
 
 
 @app.get("/api/niches/{report_id}")
@@ -1191,7 +1166,9 @@ def _explore_refresh_flags(payload: ExploreRefreshFlagsPayload) -> ExploreRefres
     )
 
 
-def _queued_refresh_response(result: str | dict[str, Any] | QueuedExploreRefreshRun) -> dict[str, str]:
+def _queued_refresh_response(
+    result: str | dict[str, Any] | QueuedExploreRefreshRun,
+) -> dict[str, str]:
     if isinstance(result, QueuedExploreRefreshRun):
         run_id = result.run_id
     elif isinstance(result, dict):
@@ -1405,9 +1382,7 @@ class ReportRequest(BaseModel):
     @classmethod
     def _recipe_id_safe(cls, v: str) -> str:
         if not _SAFE_ID_RE.match(v):
-            raise ValueError(
-                "recipe_id must contain only letters, digits, '-', or '_'"
-            )
+            raise ValueError("recipe_id must contain only letters, digits, '-', or '_'")
         return v
 
     @field_validator("run_id")
@@ -1416,9 +1391,7 @@ class ReportRequest(BaseModel):
         if v is None:
             return v
         if not _SAFE_ID_RE.match(v):
-            raise ValueError(
-                "run_id must contain only letters, digits, '-', or '_'"
-            )
+            raise ValueError("run_id must contain only letters, digits, '-', or '_'")
         return v
 
 
@@ -1478,9 +1451,7 @@ def _parse_report_filename(stem: str) -> tuple[str, str]:
         return stem, ""
     recipe_id, timestamp = stem.rsplit("_", 1)
     try:
-        parsed = datetime.strptime(timestamp, REPORT_TIMESTAMP_FORMAT).replace(
-            tzinfo=timezone.utc
-        )
+        parsed = datetime.strptime(timestamp, REPORT_TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
     except ValueError:
         return recipe_id, ""
     return recipe_id, parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1508,9 +1479,7 @@ def create_report(req: ReportRequest) -> ReportResponse:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        anthropic_client = anthropic.Anthropic(
-            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
-        )
+        anthropic_client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     except ValueError as exc:
         logger.warning("Anthropic client construction failed: %s", exc)
         raise HTTPException(400, f"Anthropic client error: {exc}") from exc
@@ -1597,9 +1566,7 @@ def get_report(
     _ensure_path_under(report_path, RUNS_DIR)
 
     if not report_path.is_file():
-        raise HTTPException(
-            404, f"Report '{report_id}' not found for run '{run_id}'"
-        )
+        raise HTTPException(404, f"Report '{report_id}' not found for run '{run_id}'")
 
     recipe_id, created_at = _parse_report_filename(report_id)
     html = report_path.read_text(encoding="utf-8")
@@ -1624,9 +1591,7 @@ def download_report(
     _ensure_path_under(report_path, RUNS_DIR)
 
     if not report_path.is_file():
-        raise HTTPException(
-            404, f"Report '{report_id}' not found for run '{run_id}'"
-        )
+        raise HTTPException(404, f"Report '{report_id}' not found for run '{run_id}'")
     return FileResponse(
         path=str(report_path),
         media_type="text/html",
@@ -1646,27 +1611,36 @@ def _demo_scoring_results() -> dict[str, Any]:
                 "cbsa_code": "38060",
                 "cbsa_name": "Phoenix-Mesa-Chandler, AZ",
                 "scores": {
-                    "demand": 72, "organic_competition": 45,
-                    "local_competition": 58, "monetization": 81,
-                    "ai_resilience": 92, "opportunity": 71,
+                    "demand": 72,
+                    "organic_competition": 45,
+                    "local_competition": 58,
+                    "monetization": 81,
+                    "ai_resilience": 92,
+                    "opportunity": 71,
                 },
             },
             {
                 "cbsa_code": "47900",
                 "cbsa_name": "Washington-Arlington-Alexandria, DC-VA-MD-WV",
                 "scores": {
-                    "demand": 85, "organic_competition": 30,
-                    "local_competition": 35, "monetization": 78,
-                    "ai_resilience": 88, "opportunity": 62,
+                    "demand": 85,
+                    "organic_competition": 30,
+                    "local_competition": 35,
+                    "monetization": 78,
+                    "ai_resilience": 88,
+                    "opportunity": 62,
                 },
             },
             {
                 "cbsa_code": "12060",
                 "cbsa_name": "Atlanta-Sandy Springs-Alpharetta, GA",
                 "scores": {
-                    "demand": 68, "organic_competition": 55,
-                    "local_competition": 62, "monetization": 70,
-                    "ai_resilience": 90, "opportunity": 69,
+                    "demand": 68,
+                    "organic_competition": 55,
+                    "local_competition": 62,
+                    "monetization": 70,
+                    "ai_resilience": 90,
+                    "opportunity": 69,
                 },
             },
         ]
@@ -1862,13 +1836,9 @@ async def discover(req: DiscoverRequest, request: Request) -> dict[str, Any]:
     lens = get_lens(req.lens_id)
 
     query = MarketQuery(
-        city_filters=[
-            CityFilter(f["field"], f["operator"], f["value"])
-            for f in req.city_filters
-        ],
+        city_filters=[CityFilter(f["field"], f["operator"], f["value"]) for f in req.city_filters],
         service_filters=[
-            ServiceFilter(f["field"], f["operator"], f["value"])
-            for f in req.service_filters
+            ServiceFilter(f["field"], f["operator"], f["value"]) for f in req.service_filters
         ],
         lens=lens,
         reference_city_id=req.reference_city_id,

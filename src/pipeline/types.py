@@ -16,6 +16,7 @@ TaskType = Literal[
     "backlinks",
     "lighthouse",
 ]
+CollectionProfile = Literal["interactive", "full"]
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class CollectionRequest:
     keywords: list[KeywordDescriptor]
     metros: list[MetroInput]
     strategy_profile: str
+    collection_profile: CollectionProfile = "full"
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,8 @@ def build_collection_request(
     keywords: list[dict[str, Any]],
     metros: list[dict[str, Any]],
     strategy_profile: str,
+    *,
+    collection_profile: CollectionProfile = "full",
 ) -> CollectionRequest:
     """Create validated collection request.
 
@@ -128,6 +132,8 @@ def build_collection_request(
         raise ValueError("keywords must be non-empty")
     if not metros:
         raise ValueError("metros must be non-empty")
+    if collection_profile not in {"interactive", "full"}:
+        raise ValueError("collection_profile must be interactive or full")
 
     keyword_models: list[KeywordDescriptor] = []
     for item in keywords:
@@ -166,6 +172,7 @@ def build_collection_request(
         keywords=keyword_models,
         metros=metro_models,
         strategy_profile=strategy_profile,
+        collection_profile=collection_profile,
     )
 
 
@@ -274,4 +281,3 @@ def coerce_numeric(value: Any, path: str, target_type: type) -> int | float:
         return target_type(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"invalid numeric value at {path}: {exc}") from exc
-

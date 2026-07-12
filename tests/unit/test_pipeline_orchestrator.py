@@ -4,6 +4,7 @@ Patches each M4-M9 entrypoint at the module level so this test validates
 composition and data flow only. Real M4-M9 behavior is covered by each
 module's own tests and by the live integration smoke in Task 6.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -22,8 +23,15 @@ from src.scoring.benchmark_repository import SeoBenchmarkCell
 _FAKE_KEYWORD_EXPANSION = {
     "niche": "roofing",
     "expanded_keywords": [
-        {"keyword": "roofing near me", "tier": 1, "intent": "transactional",
-         "source": "llm", "aio_risk": "low", "search_volume": 2000, "cpc": 12.5},
+        {
+            "keyword": "roofing near me",
+            "tier": 1,
+            "intent": "transactional",
+            "source": "llm",
+            "aio_risk": "low",
+            "search_volume": 2000,
+            "cpc": 12.5,
+        },
     ],
     "total_keywords": 1,
     "actionable_keywords": 1,
@@ -35,13 +43,20 @@ _FAKE_RAW_COLLECTION = RawCollectionResult(
     metros={
         "38060": MetroCollectionResult(
             metro_id="38060",
-            serp_organic=[], serp_maps=[], keyword_volume=[],
-            backlinks=[], lighthouse=[], google_reviews=[],
-            gbp_info=[], business_listings=[],
+            serp_organic=[],
+            serp_maps=[],
+            keyword_volume=[],
+            backlinks=[],
+            lighthouse=[],
+            google_reviews=[],
+            gbp_info=[],
+            business_listings=[],
         )
     },
     meta=RunMetadata(
-        total_api_calls=8, total_cost_usd=0.12, collection_time_seconds=3.1,
+        total_api_calls=8,
+        total_cost_usd=0.12,
+        collection_time_seconds=3.1,
     ),
 )
 
@@ -54,8 +69,12 @@ _FAKE_SIGNALS = {
 }
 
 _FAKE_SCORES = {
-    "demand": 70, "organic_competition": 40, "local_competition": 55,
-    "monetization": 65, "ai_resilience": 80, "opportunity": 72,
+    "demand": 70,
+    "organic_competition": 40,
+    "local_competition": 55,
+    "monetization": 65,
+    "ai_resilience": 80,
+    "opportunity": 72,
     "confidence": {"score": 82, "flags": []},
     "resolved_weights": {"organic": 0.6, "local": 0.4},
 }
@@ -137,21 +156,31 @@ class _FakeCityDataProvider:
 
 def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     fake_dfs = _make_fake_dfs_client()
-    with patch("src.pipeline.orchestrator.expand_keywords",
-               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
-         patch("src.pipeline.orchestrator.collect_data",
-               new=AsyncMock(return_value=_FAKE_RAW_COLLECTION)), \
-         patch("src.pipeline.orchestrator.extract_signals",
-               return_value=_FAKE_SIGNALS), \
-         patch("src.pipeline.orchestrator.compute_scores",
-               return_value=_FAKE_SCORES), \
-         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
-         patch("src.pipeline.orchestrator.classify_serp_archetype",
-               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
-         patch("src.pipeline.orchestrator.compute_difficulty_tier",
-               return_value=_FAKE_DIFFICULTY_RESULT), \
-         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
-               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch(
+            "src.pipeline.orchestrator.collect_data",
+            new=AsyncMock(return_value=_FAKE_RAW_COLLECTION),
+        ),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=_FAKE_SIGNALS),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.classify_and_generate_guidance",
+            new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE),
+        ),
+    ):
         result = asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
@@ -191,7 +220,45 @@ def test_score_niche_for_metro_composes_pipeline_and_returns_result() -> None:
     assert breakdown["serp/google/organic/task_post"]["calls"] == 2
     assert breakdown["serp/google/organic/task_post"]["cached"] == 1
     assert "seo_evidence_artifacts" not in result.report
-    assert result.seo_evidence_artifacts == []
+    assert len(result.seo_evidence_artifacts) == 2
+
+
+def test_interactive_profile_reaches_collection_and_uses_template_guidance() -> None:
+    fake_dfs = _make_fake_dfs_client()
+    collect = AsyncMock(return_value=_FAKE_RAW_COLLECTION)
+    guidance = AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch("src.pipeline.orchestrator.collect_data", new=collect),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=_FAKE_SIGNALS),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch("src.pipeline.orchestrator.classify_and_generate_guidance", new=guidance),
+    ):
+        asyncio.run(
+            score_niche_for_metro(
+                niche="roofing",
+                city="Phoenix",
+                state="AZ",
+                collection_profile="interactive",
+                llm_client="llm-client",
+                dataforseo_client=fake_dfs,
+            )
+        )
+
+    assert collect.await_args.kwargs["collection_profile"] == "interactive"
+    assert guidance.await_args.args[1] is None
 
 
 def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
@@ -293,21 +360,31 @@ def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
             ),
         )
 
-    with patch("src.pipeline.orchestrator.expand_keywords",
-               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
-         patch("src.pipeline.orchestrator.collect_data",
-               new=AsyncMock(side_effect=collect_with_current_cost)), \
-         patch("src.pipeline.orchestrator.extract_signals",
-               return_value=_FAKE_SIGNALS), \
-         patch("src.pipeline.orchestrator.compute_scores",
-               return_value=_FAKE_SCORES), \
-         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
-         patch("src.pipeline.orchestrator.classify_serp_archetype",
-               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
-         patch("src.pipeline.orchestrator.compute_difficulty_tier",
-               return_value=_FAKE_DIFFICULTY_RESULT), \
-         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
-               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch(
+            "src.pipeline.orchestrator.collect_data",
+            new=AsyncMock(side_effect=collect_with_current_cost),
+        ),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=_FAKE_SIGNALS),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.classify_and_generate_guidance",
+            new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE),
+        ),
+    ):
         result = asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
@@ -325,9 +402,7 @@ def test_score_niche_emits_private_artifacts_for_current_run_only() -> None:
         "backlinks",
         "reviews",
     ]
-    assert result.seo_evidence_artifacts[0]["endpoint_path"] == (
-        "serp/google/maps/live/advanced"
-    )
+    assert result.seo_evidence_artifacts[0]["endpoint_path"] == ("serp/google/maps/live/advanced")
     assert result.seo_evidence_artifacts[0]["request_hash"]
     assert result.seo_evidence_artifacts[0]["response_hash"] == "maps-current-hash"
     assert all(
@@ -401,21 +476,31 @@ def test_score_niche_emits_private_local_pack_listing_facts_from_raw_maps() -> N
         fake_dfs.cost_log = fake_dfs.cost_tracker.records
         return raw
 
-    with patch("src.pipeline.orchestrator.expand_keywords",
-               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
-         patch("src.pipeline.orchestrator.collect_data",
-               new=AsyncMock(side_effect=collect_with_maps_cost)), \
-         patch("src.pipeline.orchestrator.extract_signals",
-               return_value=_FAKE_SIGNALS), \
-         patch("src.pipeline.orchestrator.compute_scores",
-               return_value=_FAKE_SCORES), \
-         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
-         patch("src.pipeline.orchestrator.classify_serp_archetype",
-               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
-         patch("src.pipeline.orchestrator.compute_difficulty_tier",
-               return_value=_FAKE_DIFFICULTY_RESULT), \
-         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
-               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch(
+            "src.pipeline.orchestrator.collect_data",
+            new=AsyncMock(side_effect=collect_with_maps_cost),
+        ),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=_FAKE_SIGNALS),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.classify_and_generate_guidance",
+            new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE),
+        ),
+    ):
         result = asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
@@ -496,21 +581,31 @@ def test_score_niche_for_metro_attaches_v2_scores_when_repository_is_provided() 
         },
     }
 
-    with patch("src.pipeline.orchestrator.expand_keywords",
-               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
-         patch("src.pipeline.orchestrator.collect_data",
-               new=AsyncMock(return_value=_FAKE_RAW_COLLECTION)), \
-         patch("src.pipeline.orchestrator.extract_signals",
-               return_value=signals), \
-         patch("src.pipeline.orchestrator.compute_scores",
-               return_value=_FAKE_SCORES), \
-         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
-         patch("src.pipeline.orchestrator.classify_serp_archetype",
-               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
-         patch("src.pipeline.orchestrator.compute_difficulty_tier",
-               return_value=_FAKE_DIFFICULTY_RESULT), \
-         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
-               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch(
+            "src.pipeline.orchestrator.collect_data",
+            new=AsyncMock(return_value=_FAKE_RAW_COLLECTION),
+        ),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=signals),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.classify_and_generate_guidance",
+            new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE),
+        ),
+    ):
         result = asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
@@ -553,20 +648,28 @@ def test_score_niche_preserves_explicit_production_cbsa_target() -> None:
         )
     )
 
-    with patch("src.pipeline.orchestrator.expand_keywords",
-               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
-         patch("src.pipeline.orchestrator.collect_data", new=collect), \
-         patch("src.pipeline.orchestrator.extract_signals",
-               return_value=_FAKE_SIGNALS), \
-         patch("src.pipeline.orchestrator.compute_scores",
-               return_value=_FAKE_SCORES), \
-         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
-         patch("src.pipeline.orchestrator.classify_serp_archetype",
-               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
-         patch("src.pipeline.orchestrator.compute_difficulty_tier",
-               return_value=_FAKE_DIFFICULTY_RESULT), \
-         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
-               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch("src.pipeline.orchestrator.collect_data", new=collect),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=_FAKE_SIGNALS),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.classify_and_generate_guidance",
+            new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE),
+        ),
+    ):
         result = asyncio.run(
             score_niche_for_metro(
                 niche="roofing",
@@ -638,6 +741,7 @@ def test_score_niche_raises_valueerror_on_unknown_city() -> None:
     # unresolvable input: unknown city with no state supplied means Path 3
     # (state fallback) is skipped and GeoResolutionError fires.
     import pytest
+
     with pytest.raises(ValueError, match="no CBSA match"):
         asyncio.run(
             score_niche_for_metro(
@@ -654,28 +758,40 @@ def test_score_niche_resolves_state_from_city_when_state_absent() -> None:
     `state`. The orchestrator must search all seeded metros and resolve
     the correct state from the city name alone — e.g. Denver -> CO,
     Atlanta -> GA, Seattle -> WA — not assume AZ."""
-    with patch("src.pipeline.orchestrator.expand_keywords",
-               new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION)), \
-         patch("src.pipeline.orchestrator.collect_data",
-               new=AsyncMock(return_value=RawCollectionResult(
-                   metros={"19820": MetroCollectionResult(metro_id="19820")},
-                   meta=RunMetadata(
-                       total_api_calls=1,
-                       total_cost_usd=0.01,
-                       collection_time_seconds=0.1,
-                   ),
-               ))), \
-         patch("src.pipeline.orchestrator.extract_signals",
-               return_value=_FAKE_SIGNALS), \
-         patch("src.pipeline.orchestrator.compute_scores",
-               return_value=_FAKE_SCORES), \
-         patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"), \
-         patch("src.pipeline.orchestrator.classify_serp_archetype",
-               return_value=_FAKE_SERP_ARCHETYPE_RESULT), \
-         patch("src.pipeline.orchestrator.compute_difficulty_tier",
-               return_value=_FAKE_DIFFICULTY_RESULT), \
-         patch("src.pipeline.orchestrator.classify_and_generate_guidance",
-               new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE)):
+    with (
+        patch(
+            "src.pipeline.orchestrator.expand_keywords",
+            new=AsyncMock(return_value=_FAKE_KEYWORD_EXPANSION),
+        ),
+        patch(
+            "src.pipeline.orchestrator.collect_data",
+            new=AsyncMock(
+                return_value=RawCollectionResult(
+                    metros={"19820": MetroCollectionResult(metro_id="19820")},
+                    meta=RunMetadata(
+                        total_api_calls=1,
+                        total_cost_usd=0.01,
+                        collection_time_seconds=0.1,
+                    ),
+                )
+            ),
+        ),
+        patch("src.pipeline.orchestrator.extract_signals", return_value=_FAKE_SIGNALS),
+        patch("src.pipeline.orchestrator.compute_scores", return_value=_FAKE_SCORES),
+        patch("src.pipeline.orchestrator.classify_ai_exposure", return_value="low"),
+        patch(
+            "src.pipeline.orchestrator.classify_serp_archetype",
+            return_value=_FAKE_SERP_ARCHETYPE_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.compute_difficulty_tier",
+            return_value=_FAKE_DIFFICULTY_RESULT,
+        ),
+        patch(
+            "src.pipeline.orchestrator.classify_and_generate_guidance",
+            new=AsyncMock(return_value=_FAKE_GUIDANCE_BUNDLE),
+        ),
+    ):
         result = asyncio.run(
             score_niche_for_metro(
                 niche="landscaping",
@@ -789,18 +905,24 @@ def test_confidence_dict_shape_matches_m7_output() -> None:
 
     report = {
         "report_id": "contract-test",
-        "metros": [{
-            "cbsa_code": "00000",
-            "scores": {
-                "demand": 50, "organic_competition": 50, "local_competition": 50,
-                "monetization": 50, "ai_resilience": 50, "opportunity": 50,
-                "confidence": {"score": 75, "flags": [{"code": "test", "penalty": -10}]},
-            },
-            "serp_archetype": "local_first",
-            "ai_exposure": "low",
-            "difficulty_tier": "T2",
-            "guidance": {},
-        }],
+        "metros": [
+            {
+                "cbsa_code": "00000",
+                "scores": {
+                    "demand": 50,
+                    "organic_competition": 50,
+                    "local_competition": 50,
+                    "monetization": 50,
+                    "ai_resilience": 50,
+                    "opportunity": 50,
+                    "confidence": {"score": 75, "flags": [{"code": "test", "penalty": -10}]},
+                },
+                "serp_archetype": "local_first",
+                "ai_exposure": "low",
+                "difficulty_tier": "T2",
+                "guidance": {},
+            }
+        ],
     }
     rows = build_metro_score_rows(report)
     assert len(rows) == 1

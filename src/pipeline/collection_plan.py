@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import islice
 
+from src.config.constants import M5_INTERACTIVE_SERP_LIMIT
+
 from .task_graph import validate_task_graph
 from .types import CollectionRequest, CollectionTask, KeywordDescriptor
 
@@ -35,6 +37,8 @@ def build_collection_plan(request: CollectionRequest) -> CollectionPlan:
     for metro in request.metros:
         metro_keywords = [item.keyword for item in request.keywords]
         eligible = [item for item in request.keywords if item.is_serp_eligible]
+        if request.collection_profile == "interactive":
+            eligible = eligible[:M5_INTERACTIVE_SERP_LIMIT]
         keyword_batches = _chunked(metro_keywords, MAX_VOLUME_BATCH_SIZE)
 
         for batch_index, batch in enumerate(keyword_batches, start=1):
@@ -85,50 +89,72 @@ def build_collection_plan(request: CollectionRequest) -> CollectionPlan:
             )
 
             first_serp_task = serp_task_ids[0] if serp_task_ids else task_id
-            dependent_templates.extend(
-                [
-                    CollectionTask(
-                        task_id=f"tmpl-{metro.metro_id}-backlinks",
-                        metro_id=metro.metro_id,
-                        task_type="backlinks",
-                        payload={"source": "serp_organic"},
-                        depends_on=(first_serp_task,),
-                        dedup_key=f"{metro.metro_id}:backlinks",
-                    ),
-                    CollectionTask(
-                        task_id=f"tmpl-{metro.metro_id}-lighthouse",
-                        metro_id=metro.metro_id,
-                        task_type="lighthouse",
-                        payload={"source": "serp_organic"},
-                        depends_on=(first_serp_task,),
-                        dedup_key=f"{metro.metro_id}:lighthouse",
-                    ),
-                    CollectionTask(
-                        task_id=f"tmpl-{metro.metro_id}-gbp",
-                        metro_id=metro.metro_id,
-                        task_type="gbp_info",
-                        payload={"source": "serp_maps"},
-                        depends_on=(task_id,),
-                        dedup_key=f"{metro.metro_id}:gbp_info",
-                    ),
-                    CollectionTask(
-                        task_id=f"tmpl-{metro.metro_id}-reviews",
-                        metro_id=metro.metro_id,
-                        task_type="google_reviews",
-                        payload={"source": "serp_maps"},
-                        depends_on=(task_id,),
-                        dedup_key=f"{metro.metro_id}:google_reviews",
-                    ),
-                    CollectionTask(
-                        task_id=f"tmpl-{metro.metro_id}-listings",
-                        metro_id=metro.metro_id,
-                        task_type="business_listings",
-                        payload={"source": "serp_maps"},
-                        depends_on=(task_id,),
-                        dedup_key=f"{metro.metro_id}:business_listings",
-                    ),
-                ]
-            )
+            if request.collection_profile == "interactive":
+                dependent_templates.extend(
+                    [
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-gbp",
+                            metro_id=metro.metro_id,
+                            task_type="gbp_info",
+                            payload={"source": "serp_maps"},
+                            depends_on=(task_id,),
+                            dedup_key=f"{metro.metro_id}:gbp_info",
+                        ),
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-listings",
+                            metro_id=metro.metro_id,
+                            task_type="business_listings",
+                            payload={"source": "serp_maps"},
+                            depends_on=(task_id,),
+                            dedup_key=f"{metro.metro_id}:business_listings",
+                        ),
+                    ]
+                )
+            else:
+                dependent_templates.extend(
+                    [
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-backlinks",
+                            metro_id=metro.metro_id,
+                            task_type="backlinks",
+                            payload={"source": "serp_organic"},
+                            depends_on=(first_serp_task,),
+                            dedup_key=f"{metro.metro_id}:backlinks",
+                        ),
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-lighthouse",
+                            metro_id=metro.metro_id,
+                            task_type="lighthouse",
+                            payload={"source": "serp_organic"},
+                            depends_on=(first_serp_task,),
+                            dedup_key=f"{metro.metro_id}:lighthouse",
+                        ),
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-gbp",
+                            metro_id=metro.metro_id,
+                            task_type="gbp_info",
+                            payload={"source": "serp_maps"},
+                            depends_on=(task_id,),
+                            dedup_key=f"{metro.metro_id}:gbp_info",
+                        ),
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-reviews",
+                            metro_id=metro.metro_id,
+                            task_type="google_reviews",
+                            payload={"source": "serp_maps"},
+                            depends_on=(task_id,),
+                            dedup_key=f"{metro.metro_id}:google_reviews",
+                        ),
+                        CollectionTask(
+                            task_id=f"tmpl-{metro.metro_id}-listings",
+                            metro_id=metro.metro_id,
+                            task_type="business_listings",
+                            payload={"source": "serp_maps"},
+                            depends_on=(task_id,),
+                            dedup_key=f"{metro.metro_id}:business_listings",
+                        ),
+                    ]
+                )
 
     validate_task_graph(base_tasks)
     return CollectionPlan(base_tasks=base_tasks, dependent_templates=dependent_templates)
@@ -149,4 +175,3 @@ def _select_maps_keyword(keywords: list[KeywordDescriptor]) -> KeywordDescriptor
     """Select head keyword for maps pull."""
     tier_one = next((item for item in keywords if item.tier == 1), None)
     return tier_one or keywords[0]
-

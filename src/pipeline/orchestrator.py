@@ -1,4 +1,5 @@
 """End-to-end niche-scoring orchestrator (M4 -> M9) for a single metro."""
+
 from __future__ import annotations
 
 import logging
@@ -26,6 +27,7 @@ from src.pipeline.domain_classifier import normalize_domain
 from src.pipeline.keyword_expansion import expand_keywords
 from src.pipeline.report_generator import generate_report
 from src.pipeline.signal_extraction import extract_signals
+from src.pipeline.types import CollectionProfile
 from src.scoring.benchmark_repository import SeoBenchmarkRepository
 from src.scoring.engine import compute_scores
 from src.scoring.v2 import compute_v2_scores
@@ -55,6 +57,7 @@ async def score_niche_for_metro(
     cbsa_name: str | None = None,
     population: int | None = None,
     strategy_profile: str = "balanced",
+    collection_profile: CollectionProfile = "full",
     llm_client: Any,
     dataforseo_client: Any,
     metro_db: MetroDB | None = None,
@@ -76,7 +79,11 @@ async def score_niche_for_metro(
     started = time.monotonic()
     logger.info(
         "score_niche_for_metro START request_id=%s niche=%r city=%r state=%r dry_run=%s",
-        request_id, niche, city, state, dry_run,
+        request_id,
+        niche,
+        city,
+        state,
+        dry_run,
     )
     resolved = _explicit_target(
         city=city,
@@ -99,7 +106,12 @@ async def score_niche_for_metro(
         )
     resolved_state = resolved.state_code
 
-    logger.info("Metro resolved: cbsa=%s name=%r state=%s", resolved.cbsa_code, resolved.metro_name, resolved_state)
+    logger.info(
+        "Metro resolved: cbsa=%s name=%r state=%s",
+        resolved.cbsa_code,
+        resolved.metro_name,
+        resolved_state,
+    )
 
     if dry_run:
         return await _dry_run_result(
@@ -137,8 +149,10 @@ async def score_niche_for_metro(
         m4_ms = int((time.monotonic() - m4_start) * 1000)
         logger.info(
             "[%s] M4 keyword expansion DONE — %d keywords, confidence=%s, duration_ms=%d",
-            run_id, len(expansion.get("expanded_keywords", [])),
-            expansion.get("expansion_confidence"), m4_ms,
+            run_id,
+            len(expansion.get("expanded_keywords", [])),
+            expansion.get("expansion_confidence"),
+            m4_ms,
         )
 
         # --- M5 data collection ---
@@ -149,11 +163,15 @@ async def score_niche_for_metro(
             metros=[m5_metro_input],
             strategy_profile=strategy_profile,
             client=dataforseo_client,
+            collection_profile=collection_profile,
         )
         m5_ms = int((time.monotonic() - m5_start) * 1000)
         logger.info(
             "[%s] M5 data collection DONE — api_calls=%d cost=$%.4f duration_ms=%d",
-            run_id, raw.meta.total_api_calls, raw.meta.total_cost_usd, m5_ms,
+            run_id,
+            raw.meta.total_api_calls,
+            raw.meta.total_cost_usd,
+            m5_ms,
         )
 
     # --- M6 signal extraction ---
@@ -180,8 +198,12 @@ async def score_niche_for_metro(
         strategy_profile=strategy_profile,
     )
     m7_ms = int((time.monotonic() - m7_start) * 1000)
-    logger.info("[%s] M7 scoring DONE — opportunity=%s duration_ms=%d",
-                run_id, scores.get("opportunity"), m7_ms)
+    logger.info(
+        "[%s] M7 scoring DONE — opportunity=%s duration_ms=%d",
+        run_id,
+        scores.get("opportunity"),
+        m7_ms,
+    )
 
     # --- M8 classification + guidance ---
     m8_start = time.monotonic()
@@ -193,8 +215,13 @@ async def score_niche_for_metro(
         signals=signals,
     )
 
-    logger.info("[%s] M8 classification: ai_exposure=%s serp_archetype=%s difficulty=%s",
-                run_id, ai_exposure, serp_archetype, difficulty)
+    logger.info(
+        "[%s] M8 classification: ai_exposure=%s serp_archetype=%s difficulty=%s",
+        run_id,
+        ai_exposure,
+        serp_archetype,
+        difficulty,
+    )
 
     classification_input: dict[str, Any] = {
         "niche": niche,
@@ -205,7 +232,7 @@ async def score_niche_for_metro(
     }
     guidance_bundle = await classify_and_generate_guidance(
         classification_input,
-        llm_client,
+        None if collection_profile == "interactive" else llm_client,
     )
     m8_ms = int((time.monotonic() - m8_start) * 1000)
     logger.info("[%s] M8 guidance generation DONE duration_ms=%d", run_id, m8_ms)
@@ -283,16 +310,29 @@ async def score_niche_for_metro(
         maps_evidence_artifact_ids=_maps_evidence_artifact_ids(evidence_artifacts),
     )
     m9_ms = int((time.monotonic() - m9_start) * 1000)
-    logger.info("[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
-                run_id, report.get("report_id"), m9_ms)
+    logger.info(
+        "[%s] M9 report assembly DONE — report_id=%s duration_ms=%d",
+        run_id,
+        report.get("report_id"),
+        m9_ms,
+    )
 
     elapsed = time.monotonic() - started
-    _log_dfs_cost_summary(run_id, dfs_total_calls, dfs_total_cost, dfs_cached, dfs_breakdown, elapsed)
+    _log_dfs_cost_summary(
+        run_id, dfs_total_calls, dfs_total_cost, dfs_cached, dfs_breakdown, elapsed
+    )
     logger.info(
         "score_niche_for_metro DONE in %.2fs — opportunity=%s request_id=%s "
         "stage_ms={m4=%d, m5=%d, m6=%d, m7=%d, m8=%d, m9=%d}",
-        elapsed, scores.get("opportunity"), rid,
-        m4_ms, m5_ms, m6_ms, m7_ms, m8_ms, m9_ms,
+        elapsed,
+        scores.get("opportunity"),
+        rid,
+        m4_ms,
+        m5_ms,
+        m6_ms,
+        m7_ms,
+        m8_ms,
+        m9_ms,
     )
 
     evidence = _build_evidence_from_signals(signals)
@@ -322,14 +362,10 @@ def _explicit_target(
     if not isinstance(dataforseo_location_code, int) or dataforseo_location_code <= 0:
         raise ValueError("cbsa_code requires a positive dataforseo_location_code")
     if population is None or population <= 0:
-        raise ValueError(
-            "cbsa_code requires a positive population for benchmark class resolution"
-        )
+        raise ValueError("cbsa_code requires a positive population for benchmark class resolution")
 
     state_code = state.strip().upper() if isinstance(state, str) and state.strip() else ""
-    metro_name = str(cbsa_name or "").strip() or (
-        f"{city}, {state_code}" if state_code else city
-    )
+    metro_name = str(cbsa_name or "").strip() or (f"{city}, {state_code}" if state_code else city)
     population_value = int(population)
     city_record = City(
         city_id=cleaned_cbsa,
@@ -475,9 +511,7 @@ def _log_dfs_cost_summary(
     breakdown: dict[str, dict[str, Any]],
     elapsed: float,
 ) -> None:
-    parts = [
-        f"[{run_id}] DFS COST: {total_calls} calls, ${total_cost:.4f}, {cached} cached"
-    ]
+    parts = [f"[{run_id}] DFS COST: {total_calls} calls, ${total_cost:.4f}, {cached} cached"]
     if breakdown:
         ep_parts = []
         for ep, info in sorted(breakdown.items(), key=lambda x: -x[1]["cost"]):
@@ -496,11 +530,7 @@ def _cost_capture_context(dataforseo_client: Any, run_id: str) -> Any:
 
 
 def _cost_records_for_context(records: list[Any], context_id: str) -> list[Any]:
-    filtered = [
-        record
-        for record in records
-        if _record_context_id(record) == context_id
-    ]
+    filtered = [record for record in records if _record_context_id(record) == context_id]
     if filtered or not records:
         return filtered
     if all(_record_context_id(record) is None for record in records):

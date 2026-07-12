@@ -51,13 +51,14 @@ class TestOrchestrator:
 
     @pytest.mark.asyncio
     async def test_end_to_end_plumbing_denver(self) -> None:
-        """Smoke test: score plumbing niche in Denver, CO with live APIs."""
+        """Smoke test the customer-facing interactive profile with live APIs."""
         dfs = _get_real_dfs_client()
         llm = LLMClient()
         result = await score_niche_for_metro(
             niche="plumbing",
             city="Denver",
             state="CO",
+            collection_profile="interactive",
             llm_client=llm,
             dataforseo_client=dfs,
         )

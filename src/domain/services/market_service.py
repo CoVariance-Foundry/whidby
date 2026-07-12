@@ -3,6 +3,7 @@
 Extracted from the niches_score handler in api.py.
 Coordinates: canonical key → pipeline execution → persistence → KB update → feedback.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +16,7 @@ from uuid import uuid4
 from src.domain.ports import CityDataProvider
 from src.pipeline.canonical_key import resolve_canonical_key
 from src.pipeline.feedback_logger import log_feedback
+from src.pipeline.types import CollectionProfile
 from src.scoring.benchmark_repository import SeoBenchmarkRepository
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,7 @@ class ScoreRequest:
     dry_run: bool = False
     owner_account_id: str | None = None
     created_by_user_id: str | None = None
+    collection_profile: CollectionProfile = "full"
 
 
 @dataclass
@@ -133,6 +136,7 @@ class MarketService:
                 cbsa_name=request.cbsa_name,
                 population=request.population,
                 strategy_profile=request.strategy_profile,
+                collection_profile=request.collection_profile,
                 llm_client=None,
                 dataforseo_client=None,
                 dry_run=True,
@@ -151,6 +155,7 @@ class MarketService:
                 cbsa_name=request.cbsa_name,
                 population=request.population,
                 strategy_profile=request.strategy_profile,
+                collection_profile=request.collection_profile,
                 llm_client=self._llm,
                 dataforseo_client=self._dfs,
                 request_id=request_id,
@@ -173,13 +178,9 @@ class MarketService:
             try:
                 persistence_report = deepcopy(result.report)
                 if getattr(result, "seo_evidence_artifacts", None):
-                    persistence_report["seo_evidence_artifacts"] = (
-                        result.seo_evidence_artifacts
-                    )
+                    persistence_report["seo_evidence_artifacts"] = result.seo_evidence_artifacts
                 if getattr(result, "local_pack_listing_facts", None):
-                    persistence_report["local_pack_listing_facts"] = (
-                        result.local_pack_listing_facts
-                    )
+                    persistence_report["local_pack_listing_facts"] = result.local_pack_listing_facts
                 report_id = self._store.persist_report(persistence_report)
             except Exception:
                 logger.exception(
@@ -194,9 +195,7 @@ class MarketService:
             try:
                 self._dfs.cost_tracker.flush_to_supabase(report_id)
             except Exception:
-                logger.exception(
-                    "Failed to flush DFS cost log for report_id=%s", report_id
-                )
+                logger.exception("Failed to flush DFS cost log for report_id=%s", report_id)
 
         # --- KB update ---
         entity_id: str | None = None
@@ -229,18 +228,14 @@ class MarketService:
                         payload=result.report["keyword_expansion"],
                     )
             except Exception:
-                logger.exception(
-                    "KB persistence failed for report_id=%s", report_id
-                )
+                logger.exception("KB persistence failed for report_id=%s", report_id)
 
         # --- Feedback logging ---
         if not request.dry_run and report_id and not persist_failed:
             try:
                 log_feedback(result.report, self._kb)
             except Exception:
-                logger.exception(
-                    "Feedback logging failed for report_id=%s", report_id
-                )
+                logger.exception("Feedback logging failed for report_id=%s", report_id)
 
         total_ms = int((time.monotonic() - handler_start) * 1000)
         logger.info(
