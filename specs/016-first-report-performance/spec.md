@@ -2,11 +2,20 @@
 
 ## Status
 
-Planned. This specification defines the acceptance boundary before production-code remediation begins. Current measurements are baselines, not proof that the contract passes.
+Implemented and verified in the local production image against staging providers
+and persistence on 2026-07-11. Live Render deployment and authenticated
+production smoke remain pending.
+
+The authoritative two-fresh plus three-sequential run passed with POST-plus-GET
+intervals from `13.017500` to `22.080604` seconds, maximum cgroup
+`memory.peak=142540800` bytes, run-one to run-three
+`memory.current` growth of `192512` bytes, and aggregate RSS growth of `0`
+bytes. The redacted result is the ignored artifact
+`artifacts/performance/first-report-method-ab-core-only.json`.
 
 ## Problem
 
-The customer first-report path is synchronous but its previous documentation allowed up to ten minutes and its older operational smoke accepted 30-90 seconds. The current path can also hydrate the complete DataForSEO locations catalog during autocomplete, fan out unbounded provider work, retain app-lifetime state, and perform optional persistence before returning. Production has already recorded a recurring over-2-GB Render OOM, while the user-facing BFF waited until a 300-second host timeout.
+The customer first-report path is synchronous but its previous documentation allowed up to ten minutes and its older operational smoke accepted 30-90 seconds. The incident revision could also hydrate the complete DataForSEO locations catalog during autocomplete, fan out unbounded provider work, retain app-lifetime state, and perform optional persistence before returning. Production recorded a recurring over-2-GB Render OOM, while the user-facing BFF waited until a 300-second host timeout. Those paths are remediated in the verified local revision but remain live until the new revision is deployed.
 
 A successful pipeline object is not enough. The customer needs the report to be durable and readable immediately, the quota path must settle correctly, and the serving process must remain bounded across repeated reports.
 

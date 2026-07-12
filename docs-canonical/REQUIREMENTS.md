@@ -57,7 +57,7 @@
 |----|----------|-------------|--------|
 | FR-040 | P1 | System MUST assemble a complete report matching the output schema (Algo Spec §10) | Pending |
 | FR-041 | P1 | System MUST persist reports and feedback logs to Supabase | Pending |
-| FR-042 | P1 | Interactive first reports MUST make bounded attempts for one keyword-volume batch, at most six representative eligible organic SERPs, one maps SERP, GBP info, and business listings. Backlinks, Lighthouse, review-velocity acquisition, and generated M8 copy are optional enrichment and MUST NOT block the first readable report. If providers fail, the system MUST persist and immediately read a complete degraded report containing the normalized seed keyword, resolved target, complete report schema, deterministic fallback signals and scores, low confidence, and structured provider failures. | Planned (Feature 016) |
+| FR-042 | P1 | Interactive first reports MUST make bounded attempts for one keyword-volume batch, at most six representative eligible organic SERPs, one maps SERP, GBP info, and business listings. Backlinks, Lighthouse, review-velocity acquisition, and generated M8 copy are optional enrichment and MUST NOT block the first readable report. If providers fail, the system MUST persist and immediately read a complete degraded report containing the normalized seed keyword, resolved target, complete report schema, deterministic fallback signals and scores, low confidence, and structured provider failures. | Verified in local production-image gate; live deployment pending |
 
 ### Consumer Synthesis Reflow
 

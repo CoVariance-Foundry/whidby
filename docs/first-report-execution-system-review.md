@@ -459,7 +459,7 @@ Because the validator is unavailable locally, this task uses targeted consistenc
 - `src/research_agent/places.py` — Mapbox-only interactive autocomplete and bounded shared Mapbox client.
 - `src/clients/dataforseo/persistent_cache.py` and `cache.py` — bounded L1 and persistent-cache admission policy.
 - `src/clients/dataforseo/client.py` — locations exclusion, streaming response hashing, and shared HTTP pool.
-- `src/clients/llm/client.py` — synchronous Anthropic SDK call inside async methods.
+- `src/clients/llm/client.py` — bounded async Anthropic call with retries disabled.
 - `src/pipeline/batch_executor.py` — shared concurrency gate and per-task deadlines.
 - `src/domain/services/market_service.py` — core-first interactive persistence and context drain.
 - `render.yaml` and `Dockerfile.api` — one public web service and one Uvicorn process.

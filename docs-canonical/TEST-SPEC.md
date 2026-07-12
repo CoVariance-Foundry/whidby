@@ -103,7 +103,7 @@ Feature 016 is accepted only by the production-image gate below. Unit, integrati
 Run the final authoritative gate from the repository root:
 
 ```bash
-node scripts/dev/sync_worktree_env.mjs -- python3.11 scripts/perf/first_report_benchmark.py \
+node scripts/dev/sync_worktree_env.mjs --source .env -- python3.11 scripts/perf/first_report_benchmark.py \
   --dockerfile Dockerfile.api \
   --image whidby-first-report-perf:local \
   --fresh-containers 2 \

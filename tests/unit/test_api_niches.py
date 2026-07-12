@@ -82,12 +82,15 @@ def _make_test_market_service(
 @pytest.mark.asyncio
 async def test_api_lifespan_closes_shared_dataforseo_client(monkeypatch: Any) -> None:
     shared = AsyncMock()
+    close_mapbox = AsyncMock()
     monkeypatch.setattr(api_module, "_SHARED_DFS_CLIENT", shared)
+    monkeypatch.setattr(api_module, "close_mapbox_http_client", close_mapbox)
 
     async with api_module._api_lifespan(app):
         pass
 
     shared.aclose.assert_awaited_once()
+    close_mapbox.assert_awaited_once()
     assert api_module._SHARED_DFS_CLIENT is None
 
 
