@@ -5,7 +5,6 @@ Run with: uvicorn src.research_agent.api:app --reload --port 8000
 
 from __future__ import annotations
 
-import asyncio
 import hmac
 import json
 import logging
@@ -51,7 +50,6 @@ from src.research_agent.memory.graph_store import ResearchGraphStore
 from src.research_agent.plugins.registry_builder import build_plugin_registry
 from src.research_agent.plugins.report_plugin import REPORT_TIMESTAMP_FORMAT
 from src.research_agent.places import (
-    DataForSEOLocationBridge,
     MapboxPlacesError,
     PlaceSuggestion,
     close_mapbox_http_client,
@@ -62,7 +60,6 @@ from src.research_agent.recipes.runner import RecipeRunner, RecipeRunnerError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-_DFS_ENRICH_TIMEOUT_SECONDS = 1.5
 
 
 @asynccontextmanager
@@ -116,7 +113,6 @@ app.add_middleware(
 )
 
 _METRO_DB: MetroDB | None = None
-_PLACES_DATAFORSEO_BRIDGE: DataForSEOLocationBridge | None = None
 _SHARED_DFS_CLIENT: DataForSEOClient | None = None
 _STRATEGY_DISCOVERY_INTERNAL_TOKEN_ENV = "STRATEGY_DISCOVERY_INTERNAL_TOKEN"
 
@@ -141,20 +137,6 @@ def _shared_dfs_client() -> DataForSEOClient | None:
 
     _SHARED_DFS_CLIENT = DataForSEOClient(login=login, password=password)
     return _SHARED_DFS_CLIENT
-
-
-def _places_dataforseo_bridge() -> DataForSEOLocationBridge | None:
-    """Build a cached DataForSEO bridge if credentials are configured."""
-    global _PLACES_DATAFORSEO_BRIDGE
-    if _PLACES_DATAFORSEO_BRIDGE is not None:
-        return _PLACES_DATAFORSEO_BRIDGE
-
-    dfs = _shared_dfs_client()
-    if dfs is None:
-        return None
-
-    _PLACES_DATAFORSEO_BRIDGE = DataForSEOLocationBridge(dfs)
-    return _PLACES_DATAFORSEO_BRIDGE
 
 
 def _apply_places_enrichment_status(
@@ -497,7 +479,7 @@ async def places_suggest(
     country: str | None = None,
     language: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Autocomplete places with bounded, best-effort DFS enrichment."""
+    """Autocomplete places through the Mapbox-only interactive path."""
     request_id = request.headers.get("x-request-id", "unknown")
     started_at = time.perf_counter()
     q_norm = q.strip()
@@ -549,56 +531,18 @@ async def places_suggest(
             detail="Mapbox autocomplete failed unexpectedly.",
         ) from None
 
-    bridge = _places_dataforseo_bridge()
-    if bridge is None:
-        suggestions = _apply_places_enrichment_status(
-            suggestions,
-            status="not_configured",
-            reason="DataForSEO credentials unavailable.",
-        )
-        rows = [row.to_dict() for row in suggestions]
-        logger.info(
-            "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s mapbox_ms=%d duration_ms=%d",
-            request_id,
-            len(rows),
-            "not_configured",
-            mapbox_ms,
-            int((time.perf_counter() - started_at) * 1000),
-        )
-        return rows
-
-    try:
-        suggestions = await asyncio.wait_for(
-            bridge.enrich(suggestions),
-            timeout=_DFS_ENRICH_TIMEOUT_SECONDS,
-        )
-        for suggestion in suggestions:
-            if suggestion.dataforseo_location_code is not None:
-                suggestion.enrichment_status = "enriched"
-                suggestion.enrichment_reason = None
-            else:
-                suggestion.enrichment_status = "mapbox_only"
-                suggestion.enrichment_reason = "No confident DataForSEO match."
-    except TimeoutError:
-        logger.warning("DFS place enrichment timed out q=%r", q_norm)
-        suggestions = _apply_places_enrichment_status(
-            suggestions,
-            status="timeout",
-            reason="DataForSEO enrichment timed out.",
-        )
-    except Exception:
-        logger.warning("DFS place enrichment degraded unexpectedly", exc_info=True)
-        suggestions = _apply_places_enrichment_status(
-            suggestions,
-            status="degraded",
-            reason="DataForSEO enrichment failed unexpectedly.",
-        )
+    suggestions = _apply_places_enrichment_status(
+        suggestions,
+        status="mapbox_only",
+        reason="Interactive autocomplete uses Mapbox only; scoring resolves city/state targeting.",
+    )
 
     rows = [row.to_dict() for row in suggestions]
     logger.info(
-        "[%s] PLACES_SUGGEST DONE rows=%d mapbox_ms=%d duration_ms=%d",
+        "[%s] PLACES_SUGGEST DONE rows=%d enrichment_status=%s mapbox_ms=%d duration_ms=%d",
         request_id,
         len(rows),
+        "mapbox_only",
         mapbox_ms,
         int((time.perf_counter() - started_at) * 1000),
     )
