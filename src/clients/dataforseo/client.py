@@ -75,6 +75,7 @@ class DataForSEOClient:
         cache_ttl: int = DFS_CACHE_TTL,
         rate_limit: int = DFS_RATE_LIMIT,
         persistent_cache: bool = True,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         creds = base64.b64encode(f"{login}:{password}".encode()).decode()
         self._auth_header = f"Basic {creds}"
@@ -85,6 +86,10 @@ class DataForSEOClient:
             self._cache = ResponseCache(ttl=cache_ttl)
         self._tracker = CostTracker()
         self._rate_limiter = _RateLimiter(rate_limit)
+        self._http = http_client or httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=3.0, read=10.0, write=5.0, pool=3.0),
+            limits=httpx.Limits(max_connections=8, max_keepalive_connections=8),
+        )
 
     # -- Public properties ---------------------------------------------------
 
@@ -99,6 +104,10 @@ class DataForSEOClient:
     @property
     def cost_tracker(self) -> CostTracker:
         return self._tracker
+
+    async def aclose(self) -> None:
+        """Close the app-lifetime provider HTTP connection pool."""
+        await self._http.aclose()
 
     # -- High-level API methods ----------------------------------------------
 
@@ -468,7 +477,8 @@ class DataForSEOClient:
     ) -> APIResponse:
         """Live-mode flow: single POST (or GET) → immediate response."""
         cp = cache_params or (payload[0] if payload else {})
-        cached = self._cache.get(endpoint.post_path, cp)
+        cacheable = endpoint.post_path != ep.LOCATIONS.post_path
+        cached = self._cache.get(endpoint.post_path, cp) if cacheable else None
         if cached is not None:
             self._record_cost(endpoint.post_path, "cached", 0, True, 0, cp, response_data=cached)
             return APIResponse(status="ok", data=cached, cost=0, cached=True)
@@ -485,7 +495,8 @@ class DataForSEOClient:
             first = tasks[0] if tasks and isinstance(tasks[0], dict) else {}
             data = first.get("result", body)
             ms = self._elapsed_ms(start)
-            self._cache.put(endpoint.post_path, cp, data)
+            if cacheable:
+                self._cache.put(endpoint.post_path, cp, data)
             self._record_cost(endpoint.post_path, "direct", 0, False, ms, cp, response_data=data)
             return APIResponse(status="ok", data=data, cost=0, latency_ms=ms)
 
@@ -496,7 +507,8 @@ class DataForSEOClient:
         cost = task.get("cost", endpoint.cost_per_call)
         task_id = task.get("id", "unknown")
         ms = self._elapsed_ms(start)
-        self._cache.put(endpoint.post_path, cp, data)
+        if cacheable:
+            self._cache.put(endpoint.post_path, cp, data)
         self._record_cost(endpoint.post_path, task_id, cost, False, ms, cp, response_data=data)
         if ms > 5_000:
             logger.info(
@@ -558,13 +570,12 @@ class DataForSEOClient:
         await self._rate_limiter.acquire()
         url = self._base_url + path
         headers = {"Authorization": self._auth_header, "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=60) as http:
-            if method == "GET":
-                resp = await http.get(url, headers=headers)
-            else:
-                resp = await http.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            return resp.json()
+        if method == "GET":
+            resp = await self._http.get(url, headers=headers)
+        else:
+            resp = await self._http.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        return resp.json()
 
     # -- Internal: response helpers ------------------------------------------
 
@@ -601,14 +612,14 @@ class DataForSEOClient:
         )
 
 
-def _json_bytes(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()
-
-
 def _response_hash(value: Any) -> str | None:
     if value is None:
         return None
-    return hashlib.sha256(_json_bytes(value)).hexdigest()
+    digest = hashlib.sha256()
+    encoder = json.JSONEncoder(sort_keys=True, separators=(",", ":"), default=str)
+    for chunk in encoder.iterencode(value):
+        digest.update(chunk.encode())
+    return digest.hexdigest()
 
 
 def _response_payload_summary(value: Any, response_hash: str | None) -> dict[str, Any] | None:

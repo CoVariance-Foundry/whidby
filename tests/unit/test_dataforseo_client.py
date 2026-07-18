@@ -8,10 +8,12 @@ Tests are mocked — no network calls. Covers:
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.clients.dataforseo.client import DataForSEOClient
+from src.clients.dataforseo.client import _response_hash
 from src.clients.dataforseo.types import APIResponse
 from tests.fixtures.dataforseo_fixtures import (
     BUSINESS_LISTINGS_RESPONSE,
@@ -229,6 +231,18 @@ class TestCaching:
         assert r1.cached is False
         assert r2.cached is False
 
+    @pytest.mark.asyncio
+    async def test_locations_catalog_is_not_cached(self, mocker):
+        client = _make_client(cache_ttl=300)
+        post = mocker.patch.object(client, "_post", return_value=SERP_LIVE_RESPONSE)
+
+        first = await client.locations()
+        second = await client.locations()
+
+        assert first.cached is False
+        assert second.cached is False
+        assert post.await_count == 2
+
 
 # ---------------------------------------------------------------------------
 # Cost tracking
@@ -331,6 +345,37 @@ class TestErrorHandling:
 
         result = await client.keyword_volume(keywords=["plumber"], location_code=1012873)
         assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_http_client_is_reused_and_closed() -> None:
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {"tasks": []}
+    http = AsyncMock()
+    http.post.return_value = response
+    client = DataForSEOClient(
+        login="test_user",
+        password="test_pass",
+        persistent_cache=False,
+        http_client=http,
+    )
+
+    await client._raw_post("one", [])
+    await client._raw_post("two", [])
+    await client.aclose()
+
+    assert http.post.await_count == 2
+    http.aclose.assert_awaited_once()
+
+
+def test_response_hash_streams_without_full_bytes_helper(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.clients.dataforseo.client.json.dumps",
+        lambda _value: (_ for _ in ()).throw(AssertionError("full byte copy")),
+    )
+
+    assert _response_hash({"items": [{"rank": 1}]}) is not None
 
 
 # ---------------------------------------------------------------------------

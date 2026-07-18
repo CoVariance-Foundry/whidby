@@ -1,5 +1,6 @@
 """Unit tests for M4 keyword expansion orchestration."""
 
+import asyncio
 from copy import deepcopy
 
 import pytest
@@ -21,7 +22,10 @@ async def test_returns_non_empty_result_with_required_fields() -> None:
     assert result["niche"] == "plumber"
     assert result["total_keywords"] > 0
     assert "expanded_keywords" in result
-    assert result["actionable_keywords"] + result["informational_keywords_excluded"] <= result["total_keywords"]
+    assert (
+        result["actionable_keywords"] + result["informational_keywords_excluded"]
+        <= result["total_keywords"]
+    )
 
 
 @pytest.mark.asyncio
@@ -130,3 +134,92 @@ async def test_contract_shape_and_counter_reconciliation() -> None:
     }
     assert set(result.keys()) == required_top
     assert result["total_keywords"] == len(result["expanded_keywords"])
+
+
+@pytest.mark.asyncio
+async def test_llm_and_dfs_sources_overlap() -> None:
+    llm_started = asyncio.Event()
+    dfs_started = asyncio.Event()
+
+    class OverlapLLM(FakeLLMClient):
+        observed_peer = False
+
+        async def keyword_expansion(self, niche: str):
+            llm_started.set()
+            await asyncio.wait_for(dfs_started.wait(), timeout=0.1)
+            self.observed_peer = True
+            return await super().keyword_expansion(niche)
+
+    class OverlapDFS(FakeDataForSEOClient):
+        observed_peer = False
+
+        async def keyword_suggestions(self, **kwargs):
+            dfs_started.set()
+            await asyncio.wait_for(llm_started.wait(), timeout=0.1)
+            self.observed_peer = True
+            return await super().keyword_suggestions(**kwargs)
+
+    llm = OverlapLLM()
+    dfs = OverlapDFS()
+
+    result = await expand_keywords("plumber", llm_client=llm, dataforseo_client=dfs)
+
+    assert result["total_keywords"] > 0
+    assert llm.observed_peer is True
+    assert dfs.observed_peer is True
+
+
+@pytest.mark.asyncio
+async def test_opaque_dfs_suggestions_do_not_fan_out_to_llm_classifier() -> None:
+    class CountingLLM(FakeLLMClient):
+        classify_calls = 0
+
+        async def classify_intent(self, query: str) -> str:
+            self.classify_calls += 1
+            return await super().classify_intent(query)
+
+    llm = CountingLLM()
+    dfs = FakeDataForSEOClient(keywords=[f"opaque candidate {index}" for index in range(50)])
+
+    result = await expand_keywords("plumber", llm_client=llm, dataforseo_client=dfs)
+
+    assert result["total_keywords"] == 50
+    assert llm.classify_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_source_timeout_returns_seed_keyword_with_low_confidence(monkeypatch) -> None:
+    class HangingLLM:
+        async def keyword_expansion(self, _niche: str):
+            await asyncio.Event().wait()
+
+    class HangingDFS:
+        async def keyword_suggestions(self, **_kwargs):
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(
+        "src.pipeline.keyword_expansion.M4_INTERACTIVE_TIMEOUT_SECONDS",
+        0.01,
+        raising=False,
+    )
+
+    result = await asyncio.wait_for(
+        expand_keywords(
+            "  Plumber  ",
+            llm_client=HangingLLM(),
+            dataforseo_client=HangingDFS(),
+        ),
+        timeout=0.1,
+    )
+
+    assert result["expansion_confidence"] == "low"
+    assert result["expanded_keywords"] == [
+        {
+            "keyword": "plumber",
+            "tier": 1,
+            "intent": "commercial",
+            "source": "input",
+            "aio_risk": "moderate",
+            "actionable": True,
+        }
+    ]

@@ -10,6 +10,11 @@ from typing import Any
 from urllib.parse import urlunsplit, urlsplit
 
 from src.clients.dataforseo.types import APIResponse
+from src.config.constants import (
+    M5_LIVE_TASK_TIMEOUT_SECONDS,
+    M5_MAX_CONCURRENCY,
+    M5_QUEUED_TASK_TIMEOUT_SECONDS,
+)
 from src.pipeline.domain_classifier import is_aggregator, normalize_domain
 
 from .collection_plan import CollectionPlan
@@ -50,16 +55,17 @@ async def execute_collection_plan(
         Execution state with task outcomes.
     """
     state = ExecutionState()
+    semaphore = asyncio.Semaphore(M5_MAX_CONCURRENCY)
 
     base_start = time.monotonic()
-    await _execute_tasks(plan.base_tasks, client, state)
+    await _execute_tasks(plan.base_tasks, client, state, semaphore)
     base_ms = int((time.monotonic() - base_start) * 1000)
     logger.info("M5 base phase DONE tasks=%d duration_ms=%d", len(plan.base_tasks), base_ms)
 
     dependent_tasks = _materialize_dependent_tasks(plan, request, state)
 
     dep_start = time.monotonic()
-    await _execute_tasks(dependent_tasks, client, state)
+    await _execute_tasks(dependent_tasks, client, state, semaphore)
     dep_ms = int((time.monotonic() - dep_start) * 1000)
     logger.info("M5 dependent phase DONE tasks=%d duration_ms=%d", len(dependent_tasks), dep_ms)
 
@@ -198,6 +204,7 @@ async def _execute_tasks(
     tasks: list[CollectionTask],
     client: Any,
     state: ExecutionState,
+    semaphore: asyncio.Semaphore,
 ) -> None:
     """Execute tasks with dependency-safe parallelism."""
     if not tasks:
@@ -208,19 +215,47 @@ async def _execute_tasks(
         task_types = {}
         for t in level:
             task_types[t.task_type] = task_types.get(t.task_type, 0) + 1
-        await asyncio.gather(*[_run_task(task, client, state) for task in level])
+        await asyncio.gather(*[_run_task(task, client, state, semaphore) for task in level])
         level_ms = int((time.monotonic() - level_start) * 1000)
         logger.info(
             "M5 exec level=%d tasks=%d types=%s duration_ms=%d",
-            level_idx, len(level), task_types, level_ms,
+            level_idx,
+            len(level),
+            task_types,
+            level_ms,
         )
 
 
-async def _run_task(task: CollectionTask, client: Any, state: ExecutionState) -> None:
+async def _run_task(
+    task: CollectionTask,
+    client: Any,
+    state: ExecutionState,
+    semaphore: asyncio.Semaphore,
+) -> None:
     """Run one task and capture result or failure."""
     response: APIResponse
     try:
-        response = await _dispatch_task(task, client)
+        timeout = (
+            M5_QUEUED_TASK_TIMEOUT_SECONDS
+            if task.task_type in {"keyword_volume", "google_reviews"}
+            else M5_LIVE_TASK_TIMEOUT_SECONDS
+        )
+        async with semaphore:
+            response = await asyncio.wait_for(
+                _dispatch_task(task, client),
+                timeout=timeout,
+            )
+    except TimeoutError:
+        state.failures.append(
+            FailureRecord(
+                task_id=task.task_id,
+                task_type=task.task_type,
+                metro_id=task.metro_id,
+                message=f"provider task timed out after {timeout:.1f}s",
+                is_retryable=True,
+            )
+        )
+        return
     except Exception as exc:  # pragma: no cover - defensive path
         state.failures.append(failure_from_exception(task, exc))
         return

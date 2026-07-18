@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TypedDict
@@ -17,10 +18,15 @@ from src.config.constants import (
     M4_CONFIDENCE_HIGH_THRESHOLD,
     M4_CONFIDENCE_LOW_THRESHOLD,
     M4_INTENT_PRIORITY,
+    M4_INTERACTIVE_TIMEOUT_SECONDS,
     M4_MAX_KEYWORDS,
 )
 
-from .intent_classifier import aio_risk_for_intent, classify_keyword_intent, is_actionable_intent
+from .intent_classifier import (
+    aio_risk_for_intent,
+    infer_intent_from_rules,
+    is_actionable_intent,
+)
 from .keyword_deduplication import CandidateKeyword, dedupe_candidate_keywords, normalize_keyword
 
 logger = logging.getLogger(__name__)
@@ -106,6 +112,72 @@ def _infer_tier(keyword: str, niche: str) -> int:
     return 3
 
 
+async def _load_llm_candidates(
+    niche: str,
+    llm_client: object | None,
+) -> tuple[list[CandidateKeyword], bool, int]:
+    """Load and normalize the structured LLM expansion source."""
+    started = time.monotonic()
+    candidates: list[CandidateKeyword] = []
+    if llm_client is None or not hasattr(llm_client, "keyword_expansion"):
+        return candidates, False, 0
+
+    try:
+        result = await llm_client.keyword_expansion(niche)
+        data = getattr(result, "data", None)
+        if not getattr(result, "success", False) or not isinstance(data, dict):
+            return candidates, False, int((time.monotonic() - started) * 1000)
+
+        raw_keywords = data.get("expanded_keywords", [])
+        if isinstance(raw_keywords, list):
+            for item in raw_keywords:
+                if not isinstance(item, dict):
+                    continue
+                keyword = item.get("keyword")
+                if not isinstance(keyword, str) or not keyword.strip():
+                    continue
+                candidate: CandidateKeyword = {"keyword": keyword, "source": "llm"}
+                if item.get("intent") in M4_ALLOWED_INTENTS:
+                    candidate["intent"] = item["intent"]
+                if item.get("tier") in M4_ALLOWED_TIERS:
+                    candidate["tier"] = item["tier"]
+                if item.get("aio_risk") in M4_ALLOWED_AIO_RISK:
+                    candidate["aio_risk"] = item["aio_risk"]
+                candidates.append(candidate)
+        return candidates, True, int((time.monotonic() - started) * 1000)
+    except Exception:
+        logger.warning("M4 LLM expansion source failed", exc_info=True)
+        return [], False, int((time.monotonic() - started) * 1000)
+
+
+async def _load_dfs_keywords(
+    niche: str,
+    dataforseo_client: object | None,
+    *,
+    location_name: str,
+    suggestions_limit: int,
+) -> tuple[list[str], bool, int]:
+    """Load and normalize the DataForSEO suggestions source."""
+    started = time.monotonic()
+    if dataforseo_client is None or not hasattr(dataforseo_client, "keyword_suggestions"):
+        return [], False, 0
+
+    try:
+        response = await dataforseo_client.keyword_suggestions(
+            keyword=niche,
+            location_name=location_name,
+            limit=suggestions_limit,
+        )
+        return (
+            _extract_dfs_keywords(response),
+            response.status == "ok",
+            int((time.monotonic() - started) * 1000),
+        )
+    except Exception:
+        logger.warning("M4 DataForSEO suggestions source failed", exc_info=True)
+        return [], False, int((time.monotonic() - started) * 1000)
+
+
 async def expand_keywords(
     niche: str,
     *,
@@ -119,53 +191,35 @@ async def expand_keywords(
     if not niche_norm:
         raise ValueError("niche must be a non-empty string")
 
+    llm_task = asyncio.create_task(_load_llm_candidates(niche_norm, llm_client))
+    dfs_task = asyncio.create_task(
+        _load_dfs_keywords(
+            niche_norm,
+            dataforseo_client,
+            location_name=location_name,
+            suggestions_limit=suggestions_limit,
+        )
+    )
+    done, pending = await asyncio.wait(
+        {llm_task, dfs_task},
+        timeout=M4_INTERACTIVE_TIMEOUT_SECONDS,
+    )
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
     llm_candidates: list[CandidateKeyword] = []
-    dfs_keywords: list[str] = []
     llm_success = False
+    llm_ms = int(M4_INTERACTIVE_TIMEOUT_SECONDS * 1000) if llm_task in pending else 0
+    if llm_task in done:
+        llm_candidates, llm_success, llm_ms = llm_task.result()
+
+    dfs_keywords: list[str] = []
     dfs_success = False
-
-    llm_start = time.monotonic()
-    if llm_client is not None and hasattr(llm_client, "keyword_expansion"):
-        try:
-            llm_result = await llm_client.keyword_expansion(niche_norm)
-            if getattr(llm_result, "success", False) and isinstance(llm_result.data, dict):
-                raw_keywords = llm_result.data.get("expanded_keywords", [])
-                if isinstance(raw_keywords, list):
-                    for item in raw_keywords:
-                        if not isinstance(item, dict):
-                            continue
-                        keyword = item.get("keyword")
-                        if not isinstance(keyword, str) or not keyword.strip():
-                            continue
-                        candidate: CandidateKeyword = {
-                            "keyword": keyword,
-                            "source": "llm",
-                        }
-                        if item.get("intent") in M4_ALLOWED_INTENTS:
-                            candidate["intent"] = item["intent"]
-                        if item.get("tier") in M4_ALLOWED_TIERS:
-                            candidate["tier"] = item["tier"]
-                        if item.get("aio_risk") in M4_ALLOWED_AIO_RISK:
-                            candidate["aio_risk"] = item["aio_risk"]
-                        llm_candidates.append(candidate)
-                llm_success = True
-        except Exception:
-            llm_success = False
-    llm_ms = int((time.monotonic() - llm_start) * 1000)
-
-    dfs_start = time.monotonic()
-    if dataforseo_client is not None and hasattr(dataforseo_client, "keyword_suggestions"):
-        try:
-            dfs_response = await dataforseo_client.keyword_suggestions(
-                keyword=niche_norm,
-                location_name=location_name,
-                limit=suggestions_limit,
-            )
-            dfs_keywords = _extract_dfs_keywords(dfs_response)
-            dfs_success = dfs_response.status == "ok"
-        except Exception:
-            dfs_success = False
-    dfs_ms = int((time.monotonic() - dfs_start) * 1000)
+    dfs_ms = int(M4_INTERACTIVE_TIMEOUT_SECONDS * 1000) if dfs_task in pending else 0
+    if dfs_task in done:
+        dfs_keywords, dfs_success, dfs_ms = dfs_task.result()
 
     dfs_candidates: list[CandidateKeyword] = [
         {"keyword": keyword, "source": "dataforseo_suggestions"} for keyword in dfs_keywords
@@ -180,11 +234,9 @@ async def expand_keywords(
         if not keyword:
             continue
 
-        intent = await classify_keyword_intent(
-            keyword,
-            llm_client=llm_client,
-            llm_intent=candidate.get("intent"),
-        )
+        intent = candidate.get("intent")
+        if intent not in M4_ALLOWED_INTENTS:
+            intent = infer_intent_from_rules(keyword) or "commercial"
         if intent not in M4_ALLOWED_INTENTS:
             intent = "commercial"
 
@@ -242,8 +294,14 @@ async def expand_keywords(
     logger.info(
         "M4 expand_keywords DONE niche=%r total=%d deduped=%d "
         "llm_ok=%s dfs_ok=%s llm_ms=%d dfs_ms=%d intent_ms=%d",
-        niche_norm, total_keywords, len(deduped),
-        llm_success, dfs_success, llm_ms, dfs_ms, intent_ms,
+        niche_norm,
+        total_keywords,
+        len(deduped),
+        llm_success,
+        dfs_success,
+        llm_ms,
+        dfs_ms,
+        intent_ms,
     )
 
     return {

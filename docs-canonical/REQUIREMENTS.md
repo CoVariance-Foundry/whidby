@@ -1,8 +1,8 @@
 # Requirements
 
-<!-- docguard:version 1.1.0 -->
+<!-- docguard:version 1.2.0 -->
 <!-- docguard:status approved -->
-<!-- docguard:last-reviewed 2026-06-30 -->
+<!-- docguard:last-reviewed 2026-07-11 -->
 <!-- docguard:owner @widby-team -->
 
 > Tracks functional requirements, non-functional requirements, and success criteria.
@@ -57,6 +57,7 @@
 |----|----------|-------------|--------|
 | FR-040 | P1 | System MUST assemble a complete report matching the output schema (Algo Spec §10) | Pending |
 | FR-041 | P1 | System MUST persist reports and feedback logs to Supabase | Pending |
+| FR-042 | P1 | Interactive first reports MUST make bounded attempts for one keyword-volume batch, at most six representative eligible organic SERPs, one maps SERP, GBP info, and business listings. Backlinks, Lighthouse, review-velocity acquisition, and generated M8 copy are optional enrichment and MUST NOT block the first readable report. If providers fail, the system MUST persist and immediately read a complete degraded report containing the normalized seed keyword, resolved target, complete report schema, deterministic fallback signals and scores, low confidence, and structured provider failures. | Verified in local production-image gate; live deployment pending |
 
 ### Consumer Synthesis Reflow
 
@@ -78,7 +79,7 @@
 
 | ID | Category | Requirement | Metric |
 |----|----------|-------------|--------|
-| NFR-001 | Performance | Total report generation time < 10 minutes | Measured via `meta.processing_time_seconds` |
+| NFR-001 | Performance | Interactive first-report acceptance MUST return a successful `POST /api/niches/score` with a non-null `report_id` and no `persist_warning`, then immediately return a successful, schema-valid `GET /api/niches/{report_id}` for that same ID within `<= 60.0` seconds under one shared deadline measured from immediately before POST through GET parsing and validation. | Production-image Docker acceptance gate |
 | NFR-002 | Performance | Keyword expansion completes within 5-15 seconds | Measured via pipeline timing |
 | NFR-003 | Determinism | Identical inputs MUST produce identical outputs at temperature=0 | Verified by repeated-run tests |
 | NFR-004 | Cost | Standard 20-metro report < $5.00 API cost | Tracked by CostTracker |
@@ -89,6 +90,8 @@
 | NFR-009 | Execution | Every synthesis reflow child ticket records exact tests, visual evidence paths, and residual risks in Linear before closeout | Linear handoff gate |
 | NFR-010 | Frontend QA | Every touched frontend state has Playwright coverage or an explicit no-frontend-change note plus desktop/mobile screenshot evidence when UI changes | Visual QA gate |
 | NFR-011 | Source of truth | Readiness claims MUST be based on current repo, CI, rendered UI, and live-provider evidence when relevant; memory-only claims are prohibited | Review gate |
+| NFR-012 | Memory | Every accepted cold or repeated interactive first-report run MUST keep cgroup v2 `memory.peak <= 500000000` bytes. | Production-image container launched with `--memory=500000000 --memory-swap=500000000` |
+| NFR-013 | Retained state | Three sequential interactive reports in one container MUST each pass NFR-001; after five seconds of quiescence following each report, `memory.current <= 500000000` bytes and process RSS `<= 500000000` bytes, and neither run-three value may exceed its run-one value by more than `50000000` bytes. | Three-run production-image retained-state gate |
 
 ## Success Criteria
 
@@ -172,3 +175,4 @@
 | 0.1.0 | 2026-04-05 | DocGuard Init | Initial template |
 | 1.0.0 | 2026-04-05 | Migration | Populated from `docs/algo_spec_v1_1.md`, `docs/product_breakdown.md` |
 | 1.1.0 | 2026-06-30 | Synthesis Reflow | Added product replacement, segment routing, unlock, catalog, Report V1.1, and agent execution requirements |
+| 1.2.0 | 2026-07-11 | First-report performance | Replaced the stale ten-minute target with the synchronous 60-second readable-report contract, bounded interactive evidence, 500,000,000-byte peak, and repeated-state limits |

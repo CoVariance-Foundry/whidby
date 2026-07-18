@@ -11,7 +11,11 @@ import os
 
 import anthropic
 
-from src.config.constants import CLASSIFICATION_MODEL, DEFAULT_MODEL
+from src.config.constants import (
+    CLASSIFICATION_MODEL,
+    DEFAULT_MODEL,
+    M4_INTERACTIVE_TIMEOUT_SECONDS,
+)
 
 from .output_parsers import parse_json_response
 from .prompts import intent_classification, keyword_expansion
@@ -38,7 +42,11 @@ class LLMClient:
         classification_model: str = CLASSIFICATION_MODEL,
     ) -> None:
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        self._anthropic = anthropic.Anthropic(api_key=self._api_key)
+        self._anthropic = anthropic.AsyncAnthropic(
+            api_key=self._api_key,
+            timeout=M4_INTERACTIVE_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
         self._default_model = default_model
         self._classification_model = classification_model
         self.tracker = TokenTracker()
@@ -129,7 +137,7 @@ class LLMClient:
     ) -> LLMResult:
         """Execute a single Claude API call with error handling and tracking."""
         try:
-            message = self._anthropic.messages.create(
+            message = await self._anthropic.messages.create(
                 model=model,
                 max_tokens=max_tokens,
                 temperature=temperature,

@@ -69,6 +69,18 @@ class CostTracker:
     def records(self) -> list[CostRecord]:
         return list(self._records)
 
+    def records_for_context(self, context_id: str) -> list[CostRecord]:
+        """Return a snapshot of records owned by one scoring run."""
+        return [record for record in self._records if record.collection_context_id == context_id]
+
+    def drain_context(self, context_id: str) -> int:
+        """Remove and count records owned by one completed scoring run."""
+        before = len(self._records)
+        self._records = [
+            record for record in self._records if record.collection_context_id != context_id
+        ]
+        return before - len(self._records)
+
     @property
     def total_cost(self) -> float:
         return sum(r.cost for r in self._records)
@@ -81,7 +93,7 @@ class CostTracker:
     def cached_calls(self) -> int:
         return sum(1 for r in self._records if r.cached)
 
-    def cost_by_endpoint(self) -> dict[str, dict[str, Any]]:
+    def cost_by_endpoint(self, context_id: str | None = None) -> dict[str, dict[str, Any]]:
         """Aggregate cost and call counts grouped by endpoint path.
 
         Returns a dict like::
@@ -91,7 +103,8 @@ class CostTracker:
         groups: dict[str, dict[str, Any]] = defaultdict(
             lambda: {"calls": 0, "cost": 0.0, "cached": 0}
         )
-        for r in self._records:
+        records = self._records if context_id is None else self.records_for_context(context_id)
+        for r in records:
             g = groups[r.endpoint]
             g["calls"] += 1
             g["cost"] += r.cost
@@ -99,17 +112,27 @@ class CostTracker:
                 g["cached"] += 1
         return dict(groups)
 
-    def flush_to_supabase(self, report_id: str, *, client: Any = None) -> int:
-        """Batch-insert all accumulated records into the ``api_usage_log`` table.
+    def flush_to_supabase(
+        self,
+        report_id: str,
+        *,
+        context_id: str | None = None,
+        drain: bool = False,
+        client: Any = None,
+    ) -> int:
+        """Batch-insert selected records into the ``api_usage_log`` table.
 
         Args:
             report_id: UUID of the report these calls belong to.
+            context_id: Optional scoring-run context to isolate.
+            drain: Remove that context after a successful insert.
             client: Supabase client instance. If *None*, one is created from env vars.
 
         Returns:
             Number of rows inserted.
         """
-        if not self._records:
+        records = self._records if context_id is None else self.records_for_context(context_id)
+        if not records:
             return 0
 
         if client is None:
@@ -125,7 +148,7 @@ class CostTracker:
             client = create_client(url, key)
 
         rows = []
-        for r in self._records:
+        for r in records:
             rows.append(
                 {
                     "endpoint": r.endpoint,
@@ -140,5 +163,7 @@ class CostTracker:
 
         client.table("api_usage_log").insert(rows).execute()
         count = len(rows)
+        if drain and context_id is not None:
+            self.drain_context(context_id)
         logger.info("Flushed %d DFS cost records to api_usage_log for report %s", count, report_id)
         return count

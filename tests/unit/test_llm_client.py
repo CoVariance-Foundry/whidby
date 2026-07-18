@@ -7,6 +7,8 @@ token tracking, output parsing.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.clients.llm.client import LLMClient
@@ -24,12 +26,15 @@ from tests.fixtures.llm_fixtures import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _mock_llm(mocker, response_text: str) -> LLMClient:
     """Create an LLMClient with a mocked Anthropic messages.create call."""
     client = LLMClient(api_key="sk-test-fake")
     msg = make_anthropic_message(response_text)
     mocker.patch.object(
-        client._anthropic.messages, "create", return_value=msg
+        client._anthropic.messages,
+        "create",
+        new=AsyncMock(return_value=msg),
     )
     return client
 
@@ -38,7 +43,36 @@ def _mock_llm(mocker, response_text: str) -> LLMClient:
 # Keyword Expansion
 # ---------------------------------------------------------------------------
 
+
 class TestKeywordExpansion:
+    @pytest.mark.asyncio
+    async def test_uses_bounded_async_anthropic_client(self, mocker):
+        message = make_anthropic_message(KEYWORD_EXPANSION_JSON)
+        sync_client = mocker.Mock()
+        sync_client.messages.create.return_value = message
+        mocker.patch(
+            "src.clients.llm.client.anthropic.Anthropic",
+            return_value=sync_client,
+        )
+        anthropic_client = mocker.Mock()
+        anthropic_client.messages.create = AsyncMock(return_value=message)
+        constructor = mocker.patch(
+            "src.clients.llm.client.anthropic.AsyncAnthropic",
+            return_value=anthropic_client,
+        )
+
+        client = LLMClient(api_key="sk-test-fake")
+        result = await client.keyword_expansion(niche="plumber")
+
+        constructor.assert_called_once_with(
+            api_key="sk-test-fake",
+            timeout=8.0,
+            max_retries=0,
+        )
+        anthropic_client.messages.create.assert_awaited_once()
+        assert client._default_model == "claude-sonnet-4-6"
+        assert result.success is True
+
     @pytest.mark.asyncio
     async def test_returns_valid_schema(self, mocker):
         client = _mock_llm(mocker, KEYWORD_EXPANSION_JSON)
@@ -64,6 +98,7 @@ class TestKeywordExpansion:
 # Intent Classification
 # ---------------------------------------------------------------------------
 
+
 class TestIntentClassification:
     @pytest.mark.asyncio
     async def test_transactional(self, mocker):
@@ -82,6 +117,7 @@ class TestIntentClassification:
 # Error Handling
 # ---------------------------------------------------------------------------
 
+
 class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_malformed_json_returns_error(self, mocker):
@@ -94,7 +130,9 @@ class TestErrorHandling:
     async def test_api_exception_returns_error(self, mocker):
         client = LLMClient(api_key="sk-test-fake")
         mocker.patch.object(
-            client._anthropic.messages, "create", side_effect=Exception("API down")
+            client._anthropic.messages,
+            "create",
+            new=AsyncMock(side_effect=Exception("API down")),
         )
         result = await client.keyword_expansion(niche="plumber")
         assert result.success is False
@@ -104,6 +142,7 @@ class TestErrorHandling:
 # ---------------------------------------------------------------------------
 # Free-form Generation (audit copy)
 # ---------------------------------------------------------------------------
+
 
 class TestGeneration:
     @pytest.mark.asyncio
@@ -121,6 +160,7 @@ class TestGeneration:
 # ---------------------------------------------------------------------------
 # Token Tracker
 # ---------------------------------------------------------------------------
+
 
 class TestTokenTracker:
     @pytest.mark.asyncio

@@ -25,6 +25,14 @@ M4_ALLOWED_AIO_RISK: tuple[str, ...] = ("low", "moderate", "high")
 M4_ALLOWED_SOURCES: tuple[str, ...] = ("input", "llm", "dataforseo_suggestions", "merged")
 
 M4_MAX_KEYWORDS = 50
+M4_INTERACTIVE_TIMEOUT_SECONDS = 8.0
+
+# --- M5 interactive collection budgets ---
+M5_INTERACTIVE_TIMEOUT_SECONDS = 32.0
+M5_INTERACTIVE_SERP_LIMIT = 6
+M5_MAX_CONCURRENCY = 8
+M5_LIVE_TASK_TIMEOUT_SECONDS = 12.0
+M5_QUEUED_TASK_TIMEOUT_SECONDS = 20.0
 
 # Confidence mapping from LLM-vs-DFS overlap ratio.
 M4_CONFIDENCE_LOW_THRESHOLD = 0.30
@@ -84,6 +92,8 @@ DFS_DEFAULT_LANGUAGE_CODE = "en"
 DFS_DEFAULT_LOCATION_NAME = "United States"
 DFS_RATE_LIMIT = 2000  # calls per minute
 DFS_CACHE_TTL = 86400  # 24 hours in seconds
+DFS_CACHE_MAX_ENTRIES = 128
+DFS_CACHE_MAX_VALUE_BYTES = 2_000_000
 DFS_MAX_RETRIES = 3
 DFS_QUEUE_POLL_INTERVAL = 2  # seconds between queue polls
 DFS_QUEUE_MAX_WAIT = 120  # 2 minutes max for standard queue
@@ -102,7 +112,7 @@ DFS_COSTS: dict[str, float] = {
 }
 
 # --- LLM (M3 spec) ---
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 CLASSIFICATION_MODEL = "claude-haiku-4-5-20251001"
 
 # --- SERP Feature Keys (Algo Spec V1.1, §14) ---

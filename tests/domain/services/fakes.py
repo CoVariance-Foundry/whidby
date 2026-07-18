@@ -12,6 +12,7 @@ class FakePipelineResult:
     evidence: list[dict[str, Any]]
     seo_evidence_artifacts: list[dict[str, Any]] = field(default_factory=list)
     local_pack_listing_facts: list[dict[str, Any]] = field(default_factory=list)
+    collection_context_id: str | None = "score-fake-1"
 
 
 def make_fake_report(
@@ -144,6 +145,21 @@ class FakeDFSClient:
 class _FakeCostTracker:
     def __init__(self) -> None:
         self.flushed_report_ids: list[str] = []
+        self.flushed_context_ids: list[str | None] = []
+        self.drained_context_ids: list[str] = []
 
-    def flush_to_supabase(self, report_id: str) -> None:
+    def flush_to_supabase(
+        self,
+        report_id: str,
+        *,
+        context_id: str | None = None,
+        drain: bool = False,
+    ) -> None:
         self.flushed_report_ids.append(report_id)
+        self.flushed_context_ids.append(context_id)
+        if drain and context_id is not None:
+            self.drained_context_ids.append(context_id)
+
+    def drain_context(self, context_id: str) -> int:
+        self.drained_context_ids.append(context_id)
+        return 0

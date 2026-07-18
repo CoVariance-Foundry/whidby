@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
+  createAdminClient: vi.fn(),
   resolveEntitlementContext: vi.fn(),
   consumeReportQuota: vi.fn(),
   refundReportQuota: vi.fn(),
@@ -11,6 +12,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: mocks.createClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: mocks.createAdminClient,
 }));
 
 vi.mock("@/lib/account/entitlements", () => {
@@ -53,6 +58,7 @@ describe("POST /api/agent/scoring", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createClient.mockResolvedValue({ rpc: vi.fn() });
+    mocks.createAdminClient.mockReturnValue({ rpc: vi.fn() });
     mocks.resolveEntitlementContext.mockResolvedValue({
       user: { id: "44444444-4444-4444-4444-444444444444", email: "user@example.com" },
       entitlement,
@@ -92,6 +98,7 @@ describe("POST /api/agent/scoring", () => {
     const sent = JSON.parse((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).body as string);
     expect(sent.owner_account_id).toBe("33333333-3333-3333-3333-333333333333");
     expect(sent.created_by_user_id).toBe("44444444-4444-4444-4444-444444444444");
+    expect(sent.collection_profile).toBe("interactive");
   });
 
   it("blocks free users before calling FastAPI", async () => {
@@ -273,6 +280,49 @@ describe("POST /api/agent/scoring", () => {
       metadata_source: "fallback_cbsa",
       owner_account_id: "33333333-3333-3333-3333-333333333333",
       created_by_user_id: "44444444-4444-4444-4444-444444444444",
+      collection_profile: "interactive",
     });
+  });
+
+  it("aborts FastAPI after 58 seconds and refunds quota once", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((milliseconds: number) => {
+        setTimeout(() => {
+          controller.abort(new DOMException("upstream timeout", "TimeoutError"));
+        }, milliseconds);
+        return controller.signal;
+      });
+    global.fetch = vi.fn((_url, init) => {
+      const signal = (init as RequestInit).signal as AbortSignal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }) as typeof fetch;
+    const req = new Request("http://localhost/api/agent/scoring", {
+      method: "POST",
+      body: JSON.stringify({ city: "Phoenix", service: "roofing", state: "AZ" }),
+    });
+
+    try {
+      const pending = POST(req as never);
+      await vi.advanceTimersByTimeAsync(57_999);
+      expect(mocks.refundReportQuota).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      const response = await pending;
+
+      expect(timeout).toHaveBeenCalledWith(58_000);
+      expect(response.status).toBe(502);
+      expect(mocks.refundReportQuota).toHaveBeenCalledTimes(1);
+      expect(mocks.refundReportQuota).toHaveBeenCalledWith(
+        expect.any(Object),
+        entitlement.account_id,
+      );
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

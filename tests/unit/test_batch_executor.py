@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from src.clients.dataforseo.types import APIResponse
 from src.pipeline.batch_executor import execute_collection_plan
-from src.pipeline.collection_plan import build_collection_plan
-from src.pipeline.types import build_collection_request
-from tests.fixtures.m5_collection_fixtures import FakeDataForSEOClient, SAMPLE_KEYWORDS, SAMPLE_METROS
+from src.pipeline.collection_plan import CollectionPlan, build_collection_plan
+from src.pipeline.types import CollectionTask, build_collection_request
+from tests.fixtures.m5_collection_fixtures import (
+    FakeDataForSEOClient,
+    SAMPLE_KEYWORDS,
+    SAMPLE_METROS,
+)
 
 
 class OrganicResultsClient(FakeDataForSEOClient):
@@ -105,9 +111,7 @@ async def test_executor_prefers_maps_identifiers_for_reviews_and_preserves_gbp_p
 
     state = await execute_collection_plan(plan, request, client)
 
-    review_payloads = [
-        payload for name, payload in client.calls if name == "google_reviews"
-    ]
+    review_payloads = [payload for name, payload in client.calls if name == "google_reviews"]
     assert review_payloads == [
         {
             "keyword": "cid-1",
@@ -312,3 +316,105 @@ async def test_executor_maintains_multi_metro_state_partition() -> None:
     state = await execute_collection_plan(plan, request, client)
 
     assert {"38060", "49740"}.issubset(set(state.task_metros.values()))
+
+
+@pytest.mark.asyncio
+async def test_executor_caps_provider_concurrency_at_eight() -> None:
+    release = asyncio.Event()
+    at_limit = asyncio.Event()
+
+    class ConcurrencyClient:
+        active = 0
+        peak = 0
+
+        async def serp_organic(self, keyword: str, location_code: int) -> APIResponse:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+            if self.active == 8:
+                at_limit.set()
+            await release.wait()
+            self.active -= 1
+            return APIResponse(status="ok", data=[{"keyword": keyword, "items": []}])
+
+    request = build_collection_request(
+        [{"keyword": "service", "tier": 1, "intent": "transactional"}],
+        [SAMPLE_METROS[0]],
+        "balanced",
+    )
+    plan = CollectionPlan(
+        base_tasks=[
+            CollectionTask(
+                task_id=f"task-{index}",
+                metro_id="38060",
+                task_type="serp_organic",
+                payload={"keyword": f"service-{index}", "location_code": 1012873},
+            )
+            for index in range(12)
+        ],
+        dependent_templates=[],
+    )
+    client = ConcurrencyClient()
+
+    running = asyncio.create_task(execute_collection_plan(plan, request, client))
+    await asyncio.wait_for(at_limit.wait(), timeout=0.1)
+    await asyncio.sleep(0)
+    assert client.peak == 8
+    release.set()
+    state = await running
+    assert state.total_api_calls == 12
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("slow_task_type", "fast_task_type"),
+    [("keyword_volume", "serp_organic"), ("serp_organic", "keyword_volume")],
+)
+async def test_executor_converts_task_timeout_to_failure_and_keeps_siblings(
+    monkeypatch: pytest.MonkeyPatch,
+    slow_task_type: str,
+    fast_task_type: str,
+) -> None:
+    monkeypatch.setattr("src.pipeline.batch_executor.M5_LIVE_TASK_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("src.pipeline.batch_executor.M5_QUEUED_TASK_TIMEOUT_SECONDS", 0.01)
+
+    class TimeoutClient:
+        async def keyword_volume(self, keywords: list[str], location_code: int) -> APIResponse:
+            if slow_task_type == "keyword_volume":
+                await asyncio.Event().wait()
+            return APIResponse(status="ok", data=[{"keywords": keywords}])
+
+        async def serp_organic(self, keyword: str, location_code: int) -> APIResponse:
+            if slow_task_type == "serp_organic":
+                await asyncio.Event().wait()
+            return APIResponse(status="ok", data=[{"keyword": keyword, "items": []}])
+
+    request = build_collection_request(
+        [{"keyword": "service", "tier": 1, "intent": "transactional"}],
+        [SAMPLE_METROS[0]],
+        "balanced",
+    )
+    plan = CollectionPlan(
+        base_tasks=[
+            CollectionTask(
+                task_id="queued",
+                metro_id="38060",
+                task_type="keyword_volume",
+                payload={"keywords": ["service"], "location_code": 1012873},
+            ),
+            CollectionTask(
+                task_id="live",
+                metro_id="38060",
+                task_type="serp_organic",
+                payload={"keyword": "service", "location_code": 1012873},
+            ),
+        ],
+        dependent_templates=[],
+    )
+
+    state = await asyncio.wait_for(
+        execute_collection_plan(plan, request, TimeoutClient()),
+        timeout=0.1,
+    )
+
+    assert any(failure.task_type == slow_task_type for failure in state.failures)
+    assert fast_task_type in state.task_categories.values()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -50,33 +51,33 @@ class _FakeMapboxAsyncClient:
         return _FakeMapboxResponse(_FakeMapboxAsyncClient.payload, _FakeMapboxAsyncClient.status_code)
 
 
-class _FakeDataForSEOClientNoMatch:
-    async def locations(self) -> APIResponse:
-        return APIResponse(
-            status="ok",
-            data=[
-                {
-                    "location_code": 9001,
-                    "location_name": "Berlin, Germany",
-                    "country_iso_code": "DE",
-                }
-            ],
-        )
+class _LazySyntheticLocationRows:
+    def __init__(self, row_count: int) -> None:
+        self._row_count = row_count
+        self.iterated_rows = 0
+
+    def __len__(self) -> int:
+        return self._row_count
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        for index in range(self._row_count):
+            self.iterated_rows += 1
+            yield {
+                "location_code": index,
+                "location_name": f"Synthetic City {index},United States",
+                "country_iso_code": "US",
+                "location_type": "City",
+            }
 
 
-class _FakeDataForSEOClientWithPhoenix:
+class _DataForSEOCatalogSentinel:
+    def __init__(self) -> None:
+        self.rows = _LazySyntheticLocationRows(226_000)
+        self.locations_calls = 0
+
     async def locations(self) -> APIResponse:
-        return APIResponse(
-            status="ok",
-            data=[
-                {
-                    "location_code": 1013211,
-                    "location_name": "Phoenix,Arizona,United States",
-                    "country_iso_code": "US",
-                    "location_type": "City",
-                }
-            ],
-        )
+        self.locations_calls += 1
+        raise AssertionError("Interactive autocomplete must not request the locations catalog")
 
 
 class _FakeDataForSEOClientEmpty:
@@ -144,8 +145,6 @@ def test_places_suggest_mapbox_success_normalizes_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
-    monkeypatch.setattr(api_module, "_PLACES_DATAFORSEO_BRIDGE", None)
-    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: None)
     monkeypatch.setattr(
         "src.research_agent.places.httpx.AsyncClient",
         _FakeMapboxAsyncClient,
@@ -172,8 +171,8 @@ def test_places_suggest_mapbox_success_normalizes_output(
     assert top["longitude"] == pytest.approx(-112.074)
     assert top["dataforseo_location_code"] is None
     assert top["dataforseo_match_confidence"] is None
-    assert top["enrichment_status"] == "not_configured"
-    assert "credentials" in (top["enrichment_reason"] or "").lower()
+    assert top["enrichment_status"] == "mapbox_only"
+    assert "scoring" in (top["enrichment_reason"] or "").lower()
 
     assert _FakeMapboxAsyncClient.captured_params["types"] == "place"
     assert _FakeMapboxAsyncClient.captured_params["autocomplete"] == "true"
@@ -183,7 +182,7 @@ def test_places_suggest_mapbox_success_normalizes_output(
     assert _FakeMapboxAsyncClient.captured_params["language"] == "en"
 
 
-def test_places_suggest_bridge_returns_null_when_no_match(
+def test_places_suggest_does_not_iterate_dataforseo_locations_catalog(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -193,10 +192,15 @@ def test_places_suggest_bridge_returns_null_when_no_match(
         _FakeMapboxAsyncClient,
     )
     _FakeMapboxAsyncClient.payload = _mapbox_feature_payload()
-    bridge = DataForSEOLocationBridge(_FakeDataForSEOClientNoMatch())
-    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: bridge)
+    catalog_sentinel = _DataForSEOCatalogSentinel()
+    monkeypatch.setattr(api_module, "_PLACES_DATAFORSEO_BRIDGE", None, raising=False)
+    monkeypatch.setattr(api_module, "_shared_dfs_client", lambda: catalog_sentinel)
 
     response = client.get("/api/places/suggest", params={"q": "phoe"})
+
+    assert len(catalog_sentinel.rows) == 226_000
+    assert catalog_sentinel.locations_calls == 0
+    assert catalog_sentinel.rows.iterated_rows == 0
     assert response.status_code == 200
     row = response.json()[0]
     assert row["dataforseo_location_code"] is None
@@ -204,33 +208,11 @@ def test_places_suggest_bridge_returns_null_when_no_match(
     assert row["enrichment_status"] == "mapbox_only"
 
 
-def test_places_suggest_bridge_marks_enriched_when_match_found(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
-    monkeypatch.setattr(
-        "src.research_agent.places.httpx.AsyncClient",
-        _FakeMapboxAsyncClient,
-    )
-    _FakeMapboxAsyncClient.payload = _mapbox_feature_payload()
-    bridge = DataForSEOLocationBridge(_FakeDataForSEOClientWithPhoenix())
-    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: bridge)
-
-    response = client.get("/api/places/suggest", params={"q": "phoe"})
-    assert response.status_code == 200
-    row = response.json()[0]
-    assert row["dataforseo_location_code"] == 1013211
-    assert row["enrichment_status"] == "enriched"
-
-
 def test_places_suggest_region_prefers_trailing_region_code_segment(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
-    monkeypatch.setattr(api_module, "_PLACES_DATAFORSEO_BRIDGE", None)
-    monkeypatch.setattr(api_module, "_places_dataforseo_bridge", lambda: None)
     monkeypatch.setattr(
         "src.research_agent.places.httpx.AsyncClient",
         _FakeMapboxAsyncClient,
@@ -241,27 +223,7 @@ def test_places_suggest_region_prefers_trailing_region_code_segment(
     assert response.status_code == 200
     row = response.json()[0]
     assert row["region"] == "AZ"
-    assert row["enrichment_status"] == "not_configured"
-
-
-def test_places_suggest_returns_null_dfs_code_without_bridge(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Autocomplete skips DFS bridge enrichment to avoid OOM on Render."""
-    monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token")
-    monkeypatch.setattr(
-        "src.research_agent.places.httpx.AsyncClient",
-        _FakeMapboxAsyncClient,
-    )
-    _FakeMapboxAsyncClient.payload = _mapbox_feature_payload()
-
-    response = client.get("/api/places/suggest", params={"q": "phoe"})
-    assert response.status_code == 200
-    row = response.json()[0]
-    assert row["dataforseo_location_code"] is None
-    assert row["city"] == "Phoenix"
-    assert row["enrichment_status"] == "not_configured"
+    assert row["enrichment_status"] == "mapbox_only"
 
 
 @pytest.mark.asyncio

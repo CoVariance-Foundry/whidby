@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const SCORING_UPSTREAM_TIMEOUT_MS = 58_000;
 
 function createRequestId() {
   return crypto.randomUUID();
@@ -167,6 +168,7 @@ export async function POST(req: NextRequest) {
     const upstream = await fetch(`${API_BASE}/api/niches/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-request-id": requestId },
+      signal: AbortSignal.timeout(SCORING_UPSTREAM_TIMEOUT_MS),
       body: JSON.stringify({
         niche: normalizedService,
         city: normalizedCity,
@@ -180,6 +182,7 @@ export async function POST(req: NextRequest) {
         dry_run: dryRun,
         owner_account_id: entitlement.account_id,
         created_by_user_id: user.id,
+        collection_profile: "interactive",
       }),
     });
 

@@ -51,3 +51,52 @@ def test_plan_is_partitioned_for_multiple_metros() -> None:
     assert metro_ids == {"38060", "49740"}
     assert len([task for task in plan.base_tasks if task.task_type == "keyword_volume"]) == 2
 
+
+def test_interactive_plan_caps_serps_and_excludes_optional_enrichment() -> None:
+    keywords = [
+        {"keyword": f"service-{index}", "tier": 1, "intent": "transactional"} for index in range(12)
+    ]
+    request = build_collection_request(
+        keywords,
+        [SAMPLE_METROS[0]],
+        "balanced",
+        collection_profile="interactive",
+    )
+
+    plan = build_collection_plan(request)
+
+    base_types = [task.task_type for task in plan.base_tasks]
+    dependent_types = [task.task_type for task in plan.dependent_templates]
+    volume = [task for task in plan.base_tasks if task.task_type == "keyword_volume"]
+    organic = [task for task in plan.base_tasks if task.task_type == "serp_organic"]
+    assert len(volume) == 1
+    assert volume[0].payload["keywords"] == [f"service-{index}" for index in range(12)]
+    assert [task.payload["keyword"] for task in organic] == [
+        f"service-{index}" for index in range(6)
+    ]
+    assert base_types.count("serp_maps") == 1
+    assert dependent_types == ["gbp_info", "business_listings"]
+    assert len(plan.base_tasks) + len(plan.dependent_templates) <= 10
+
+
+def test_full_plan_preserves_all_eligible_and_optional_enrichment() -> None:
+    keywords = [
+        {"keyword": f"service-{index}", "tier": 1, "intent": "transactional"} for index in range(8)
+    ]
+    request = build_collection_request(
+        keywords,
+        [SAMPLE_METROS[0]],
+        "balanced",
+        collection_profile="full",
+    )
+
+    plan = build_collection_plan(request)
+
+    assert len([task for task in plan.base_tasks if task.task_type == "serp_organic"]) == 8
+    assert {task.task_type for task in plan.dependent_templates} == {
+        "backlinks",
+        "lighthouse",
+        "gbp_info",
+        "google_reviews",
+        "business_listings",
+    }
